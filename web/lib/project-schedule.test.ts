@@ -1,29 +1,29 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { stubModules } from '../testing/stub-modules.ts'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { stubModules } from "../testing/stub-modules.ts";
 
 interface Query {
-  strings: string[]
-  values: unknown[]
+  strings: string[];
+  values: unknown[];
 }
 
 interface TestState {
-  orgTransactionCalls: number
-  rootExecuteCalls: number
-  transactionCalls: number
-  commits: number
-  rollbacks: number
-  committedTaskInserts: number
-  txQueries: Query[]
-  calendarTargetExists: boolean
-  resourceTargetExists: boolean
+  orgTransactionCalls: number;
+  rootExecuteCalls: number;
+  transactionCalls: number;
+  commits: number;
+  rollbacks: number;
+  committedTaskInserts: number;
+  txQueries: Query[];
+  calendarTargetExists: boolean;
+  resourceTargetExists: boolean;
   /** Row the in-transaction project lock sees (null = missing project). */
-  projectRow: { id: string; subsidiaryId: string | null } | null
-  allowedSubsidiaryIds: Set<string> | null
+  projectRow: { id: string; subsidiaryId: string | null } | null;
+  allowedSubsidiaryIds: Set<string> | null;
 }
 
-const stateKey = Symbol.for('openbooks.project-schedule-test')
+const stateKey = Symbol.for("openbooks.project-schedule-test");
 const state: TestState = {
   orgTransactionCalls: 0,
   rootExecuteCalls: 0,
@@ -34,26 +34,23 @@ const state: TestState = {
   txQueries: [],
   calendarTargetExists: false,
   resourceTargetExists: false,
-  projectRow: { id: 'project-a', subsidiaryId: 'sub-a' },
+  projectRow: { id: "project-a", subsidiaryId: "sub-a" },
   allowedSubsidiaryIds: null,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:drizzle',
+    "mock:drizzle",
     `
       export function sql(strings, ...values) { return { strings, values } }
       sql.raw = (value) => ({ raw: value })
       sql.join = (parts, separator) => ({ parts, separator })
     `,
   ],
+  ["mock:scheduling", `export function wouldCreateDependencyCycle() { return false }`],
   [
-    'mock:scheduling',
-    `export function wouldCreateDependencyCycle() { return false }`,
-  ],
-  [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.project-schedule-test')]
       function text(query) {
@@ -130,252 +127,363 @@ const mockSources = new Map<string, string>([
       export { withOrgTransaction }
     `,
   ],
-])
+]);
 
-stubModules({ navigation: false, intl: false, authz: false, features: false, extra: {
-    './features': 'export async function isFeatureEnabled() { return true }; export async function acquireFeatureGateLock() {}',
-  } });
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "./features":
+      "export async function isFeatureEnabled() { return true }; export async function acquireFeatureGateLock() {}",
+  },
+});
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
-    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/organization/org-feature-lock') return { url: 'mock:org-feature-lock', shortCircuit: true }
-    if (specifier === '@braedonsaunders/appkit-scheduling') return { url: 'mock:scheduling', shortCircuit: true }
-    return nextResolve(specifier, _context)
+    if (specifier === "drizzle-orm") return { url: "mock:drizzle", shortCircuit: true };
+    if (specifier === "@openbooks/engine/platform/db")
+      return { url: "mock:db", shortCircuit: true };
+    if (specifier === "@openbooks/engine/organization/org-feature-lock")
+      return { url: "mock:org-feature-lock", shortCircuit: true };
+    if (specifier === "@braedonsaunders/appkit-scheduling")
+      return { url: "mock:scheduling", shortCircuit: true };
+    return nextResolve(specifier, _context);
   },
   load(url, _context, nextLoad) {
-    if (url === 'mock:org-feature-lock') return { format: 'module', source: 'export async function lockAndCheckOrgFeature() { return true }', shortCircuit: true }
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, _context)
+    if (url === "mock:org-feature-lock")
+      return {
+        format: "module",
+        source: "export async function lockAndCheckOrgFeature() { return true }",
+        shortCircuit: true,
+      };
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, _context);
   },
-})
+});
 
-const scheduleUrl = './project-schedule.ts?project-schedule-regression'
-const schedule = (await import(scheduleUrl)) as typeof import('./project-schedule.ts')
-hooks.deregister()
+const scheduleUrl = "./project-schedule.ts?project-schedule-regression";
+const schedule = (await import(scheduleUrl)) as typeof import("./project-schedule.ts");
+hooks.deregister();
 
-const ORG_ID = 'org-1'
-const PROJECT_A = 'project-a'
+const ORG_ID = "org-1";
+const PROJECT_A = "project-a";
 
 function reset() {
-  state.orgTransactionCalls = 0
-  state.rootExecuteCalls = 0
-  state.transactionCalls = 0
-  state.commits = 0
-  state.rollbacks = 0
-  state.committedTaskInserts = 0
-  state.txQueries = []
-  state.calendarTargetExists = false
-  state.resourceTargetExists = false
-  state.projectRow = { id: 'project-a', subsidiaryId: 'sub-a' }
-  state.allowedSubsidiaryIds = null
+  state.orgTransactionCalls = 0;
+  state.rootExecuteCalls = 0;
+  state.transactionCalls = 0;
+  state.commits = 0;
+  state.rollbacks = 0;
+  state.committedTaskInserts = 0;
+  state.txQueries = [];
+  state.calendarTargetExists = false;
+  state.resourceTargetExists = false;
+  state.projectRow = { id: "project-a", subsidiaryId: "sub-a" };
+  state.allowedSubsidiaryIds = null;
 }
 
-test('creating a task rolls back its insert when the patch fails', async () => {
-  reset()
+test("creating a task rolls back its insert when the patch fails", async () => {
+  reset();
 
   await assert.rejects(
     schedule.createScheduleTask(
       ORG_ID,
       PROJECT_A,
-      { name: 'Broken task', resourceAssignments: [{ resourceId: 'resource-1', units: 0 }] } as never,
-      'user-1',
+      {
+        name: "Broken task",
+        resourceAssignments: [{ resourceId: "resource-1", units: 0 }],
+      } as never,
+      "user-1",
       null,
     ),
-    (error: unknown) => error instanceof schedule.ScheduleError && (error as { status?: number }).status === 422,
-  )
+    (error: unknown) =>
+      error instanceof schedule.ScheduleError && (error as { status?: number }).status === 422,
+  );
 
-  assert.equal(state.transactionCalls, 1)
-  assert.equal(state.orgTransactionCalls, 1)
-  assert.equal(state.commits, 0)
-  assert.equal(state.rollbacks, 1)
-  assert.equal(state.committedTaskInserts, 0)
-  assert.equal(state.rootExecuteCalls, 0)
-  assert.ok(state.txQueries.some((query) => /insert into project_tasks/i.test(query.strings.join(' '))))
-})
+  assert.equal(state.transactionCalls, 1);
+  assert.equal(state.orgTransactionCalls, 1);
+  assert.equal(state.commits, 0);
+  assert.equal(state.rollbacks, 1);
+  assert.equal(state.committedTaskInserts, 0);
+  assert.equal(state.rootExecuteCalls, 0);
+  assert.ok(
+    state.txQueries.some((query) => /insert into project_tasks/i.test(query.strings.join(" "))),
+  );
+});
 
-test('single-task resource replacement is atomic when a later assignment is invalid', async () => {
-  reset()
+test("single-task resource replacement is atomic when a later assignment is invalid", async () => {
+  reset();
 
   await assert.rejects(
     schedule.updateScheduleTask(
       ORG_ID,
       PROJECT_A,
-      'task-1',
-      { resourceAssignments: [
-        { resourceId: 'resource-1', units: 1 },
-        { resourceId: 'resource-2', units: 0 },
-      ] } as never,
-      'user-1',
+      "task-1",
+      {
+        resourceAssignments: [
+          { resourceId: "resource-1", units: 1 },
+          { resourceId: "resource-2", units: 0 },
+        ],
+      } as never,
+      "user-1",
       null,
     ),
-    (error: unknown) => error instanceof schedule.ScheduleError && (error as { status?: number }).status === 422,
-  )
+    (error: unknown) =>
+      error instanceof schedule.ScheduleError && (error as { status?: number }).status === 422,
+  );
 
-  assert.equal(state.transactionCalls, 1, 'the replacement must run inside one transaction')
-  assert.equal(state.commits, 0)
-  assert.equal(state.rollbacks, 1)
-  assert.ok(state.txQueries.some((query) => /delete from schedule_task_assignments/i.test(query.strings.join(' '))))
-  assert.ok(!state.rootExecuteCalls || state.rootExecuteCalls === 1, 'only the authorization read may use the root executor')
-})
+  assert.equal(state.transactionCalls, 1, "the replacement must run inside one transaction");
+  assert.equal(state.commits, 0);
+  assert.equal(state.rollbacks, 1);
+  assert.ok(
+    state.txQueries.some((query) =>
+      /delete from schedule_task_assignments/i.test(query.strings.join(" ")),
+    ),
+  );
+  assert.ok(
+    !state.rootExecuteCalls || state.rootExecuteCalls === 1,
+    "only the authorization read may use the root executor",
+  );
+});
 
-test('a project default changes only that project’s calendars and preserves company production defaults', async () => {
-  reset()
-  state.calendarTargetExists = true
-  await schedule.upsertScheduleCalendar(ORG_ID, PROJECT_A, { id: 'calendar-a', isDefault: true }, 'user-1', null)
-  const clear = state.txQueries.find(query => /update schedule_calendars set is_default = false/i.test(query.strings.join(' ')))
-  assert.ok(clear)
-  assert.match(clear.strings.join(' '), /and project_id =/)
-  assert.doesNotMatch(clear.strings.join(' '), /project_id is null/)
-  assert.equal(state.orgTransactionCalls, 1)
-  assert.equal(state.commits, 1)
-})
+test("a project default changes only that project’s calendars and preserves company production defaults", async () => {
+  reset();
+  state.calendarTargetExists = true;
+  await schedule.upsertScheduleCalendar(
+    ORG_ID,
+    PROJECT_A,
+    { id: "calendar-a", isDefault: true },
+    "user-1",
+    null,
+  );
+  const clear = state.txQueries.find((query) =>
+    /update schedule_calendars set is_default = false/i.test(query.strings.join(" ")),
+  );
+  assert.ok(clear);
+  assert.match(clear.strings.join(" "), /and project_id =/);
+  assert.doesNotMatch(clear.strings.join(" "), /project_id is null/);
+  assert.equal(state.orgTransactionCalls, 1);
+  assert.equal(state.commits, 1);
+});
 
-test('calendar updates and deletes require the authorized project', async () => {
-  reset()
+test("calendar updates and deletes require the authorized project", async () => {
+  reset();
 
   await assert.rejects(
-    schedule.upsertScheduleCalendar(ORG_ID, PROJECT_A, { id: 'calendar-from-b', name: 'Nope' }, 'user-1', null),
+    schedule.upsertScheduleCalendar(
+      ORG_ID,
+      PROJECT_A,
+      { id: "calendar-from-b", name: "Nope" },
+      "user-1",
+      null,
+    ),
     (error: unknown) => (error as { status?: number }).status === 404,
-  )
-  assert.equal(state.orgTransactionCalls, 1)
-  assert.equal(state.commits, 0)
-  assert.equal(state.rollbacks, 1)
-  assert.ok(state.txQueries.some((query) => /select 1 from schedule_calendars/i.test(query.strings.join(' '))))
-  assert.ok(!state.txQueries.some((query) => /update schedule_calendars/i.test(query.strings.join(' '))))
+  );
+  assert.equal(state.orgTransactionCalls, 1);
+  assert.equal(state.commits, 0);
+  assert.equal(state.rollbacks, 1);
+  assert.ok(
+    state.txQueries.some((query) =>
+      /select 1 from schedule_calendars/i.test(query.strings.join(" ")),
+    ),
+  );
+  assert.ok(
+    !state.txQueries.some((query) => /update schedule_calendars/i.test(query.strings.join(" "))),
+  );
 
-  reset()
+  reset();
   await assert.rejects(
-    schedule.deleteScheduleCalendar(ORG_ID, PROJECT_A, 'calendar-from-b', null),
+    schedule.deleteScheduleCalendar(ORG_ID, PROJECT_A, "calendar-from-b", null),
     (error: unknown) => (error as { status?: number }).status === 404,
-  )
-  assert.equal(state.orgTransactionCalls, 1)
-  assert.equal(state.commits, 0)
-  assert.equal(state.rollbacks, 1)
-  assert.ok(state.txQueries.some((query) => /select 1 from schedule_calendars/i.test(query.strings.join(' '))))
-  assert.ok(!state.txQueries.some((query) => /update project_tasks|update schedule_resources|delete from schedule_calendars/i.test(query.strings.join(' '))))
+  );
+  assert.equal(state.orgTransactionCalls, 1);
+  assert.equal(state.commits, 0);
+  assert.equal(state.rollbacks, 1);
+  assert.ok(
+    state.txQueries.some((query) =>
+      /select 1 from schedule_calendars/i.test(query.strings.join(" ")),
+    ),
+  );
+  assert.ok(
+    !state.txQueries.some((query) =>
+      /update project_tasks|update schedule_resources|delete from schedule_calendars/i.test(
+        query.strings.join(" "),
+      ),
+    ),
+  );
 
-  reset()
-  state.calendarTargetExists = true
+  reset();
+  state.calendarTargetExists = true;
   assert.equal(
-    await schedule.upsertScheduleCalendar(ORG_ID, PROJECT_A, { id: 'calendar-a', name: 'Updated' }, 'user-1', null),
-    'calendar-target',
-  )
-  assert.equal(state.orgTransactionCalls, 1)
-  assert.equal(state.commits, 1)
-})
+    await schedule.upsertScheduleCalendar(
+      ORG_ID,
+      PROJECT_A,
+      { id: "calendar-a", name: "Updated" },
+      "user-1",
+      null,
+    ),
+    "calendar-target",
+  );
+  assert.equal(state.orgTransactionCalls, 1);
+  assert.equal(state.commits, 1);
+});
 
-test('resource updates and deletes require the authorized project', async () => {
-  reset()
+test("resource updates and deletes require the authorized project", async () => {
+  reset();
 
   await assert.rejects(
-    schedule.upsertScheduleResource(ORG_ID, PROJECT_A, { id: 'resource-from-b', name: 'Nope' }, 'user-1', null),
+    schedule.upsertScheduleResource(
+      ORG_ID,
+      PROJECT_A,
+      { id: "resource-from-b", name: "Nope" },
+      "user-1",
+      null,
+    ),
     (error: unknown) => (error as { status?: number }).status === 404,
-  )
-  assert.equal(state.orgTransactionCalls, 1)
-  assert.equal(state.commits, 0)
-  assert.equal(state.rollbacks, 1)
-  assert.ok(state.txQueries.some((query) => /select 1 from schedule_resources/i.test(query.strings.join(' '))))
-  assert.ok(!state.txQueries.some((query) => /update schedule_resources/i.test(query.strings.join(' '))))
+  );
+  assert.equal(state.orgTransactionCalls, 1);
+  assert.equal(state.commits, 0);
+  assert.equal(state.rollbacks, 1);
+  assert.ok(
+    state.txQueries.some((query) =>
+      /select 1 from schedule_resources/i.test(query.strings.join(" ")),
+    ),
+  );
+  assert.ok(
+    !state.txQueries.some((query) => /update schedule_resources/i.test(query.strings.join(" "))),
+  );
 
-  reset()
+  reset();
   await assert.rejects(
-    schedule.deleteScheduleResource(ORG_ID, PROJECT_A, 'resource-from-b', null),
+    schedule.deleteScheduleResource(ORG_ID, PROJECT_A, "resource-from-b", null),
     (error: unknown) => (error as { status?: number }).status === 404,
-  )
-  assert.equal(state.orgTransactionCalls, 1)
-  assert.equal(state.commits, 0)
-  assert.equal(state.rollbacks, 1)
-  assert.ok(state.txQueries.some((query) => /select 1 from schedule_resources/i.test(query.strings.join(' '))))
-  assert.ok(!state.txQueries.some((query) => /delete from schedule_task_assignments|delete from schedule_resources/i.test(query.strings.join(' '))))
+  );
+  assert.equal(state.orgTransactionCalls, 1);
+  assert.equal(state.commits, 0);
+  assert.equal(state.rollbacks, 1);
+  assert.ok(
+    state.txQueries.some((query) =>
+      /select 1 from schedule_resources/i.test(query.strings.join(" ")),
+    ),
+  );
+  assert.ok(
+    !state.txQueries.some((query) =>
+      /delete from schedule_task_assignments|delete from schedule_resources/i.test(
+        query.strings.join(" "),
+      ),
+    ),
+  );
 
-  reset()
-  state.resourceTargetExists = true
+  reset();
+  state.resourceTargetExists = true;
   assert.equal(
-    await schedule.upsertScheduleResource(ORG_ID, PROJECT_A, { id: 'resource-a', name: 'Updated' }, 'user-1', null),
-    'resource-target',
-  )
-  assert.equal(state.orgTransactionCalls, 1)
-  assert.equal(state.commits, 1)
-})
+    await schedule.upsertScheduleResource(
+      ORG_ID,
+      PROJECT_A,
+      { id: "resource-a", name: "Updated" },
+      "user-1",
+      null,
+    ),
+    "resource-target",
+  );
+  assert.equal(state.orgTransactionCalls, 1);
+  assert.equal(state.commits, 1);
+});
 
-test('a write for an out-of-scope project refuses inside the transaction', async () => {
-  reset()
+test("a write for an out-of-scope project refuses inside the transaction", async () => {
+  reset();
 
   // The project sits in sub-a; the caller sees only sub-b. The lock runs
   // inside the write transaction, so nothing is written and the denial
   // answers exactly like the route's own 404.
-  state.allowedSubsidiaryIds = new Set(['sub-b'])
+  state.allowedSubsidiaryIds = new Set(["sub-b"]);
   await assert.rejects(
     schedule.createScheduleTask(
       ORG_ID,
       PROJECT_A,
-      { name: 'Foreign task' } as never,
-      'user-1',
-      new Set(['sub-b']),
+      { name: "Foreign task" } as never,
+      "user-1",
+      new Set(["sub-b"]),
     ),
-    (error: unknown) => error instanceof schedule.ScheduleError && (error as { status?: number }).status === 404,
-  )
-  assert.equal(state.commits, 0)
-  assert.equal(state.rollbacks, 1)
-  assert.ok(!state.txQueries.some((query) => /insert into project_tasks/i.test(query.strings.join(' '))))
-})
+    (error: unknown) =>
+      error instanceof schedule.ScheduleError && (error as { status?: number }).status === 404,
+  );
+  assert.equal(state.commits, 0);
+  assert.equal(state.rollbacks, 1);
+  assert.ok(
+    !state.txQueries.some((query) => /insert into project_tasks/i.test(query.strings.join(" "))),
+  );
+});
 
-test('a write for a missing project refuses inside the transaction', async () => {
-  reset()
-  state.projectRow = null
+test("a write for a missing project refuses inside the transaction", async () => {
+  reset();
+  state.projectRow = null;
 
   await assert.rejects(
-    schedule.deleteScheduleCalendar(ORG_ID, PROJECT_A, 'calendar-a', new Set(['sub-a'])),
-    (error: unknown) => error instanceof schedule.ScheduleError && (error as { status?: number }).status === 404,
-  )
-  assert.equal(state.commits, 0)
-  assert.equal(state.rollbacks, 1)
-})
+    schedule.deleteScheduleCalendar(ORG_ID, PROJECT_A, "calendar-a", new Set(["sub-a"])),
+    (error: unknown) =>
+      error instanceof schedule.ScheduleError && (error as { status?: number }).status === 404,
+  );
+  assert.equal(state.commits, 0);
+  assert.equal(state.rollbacks, 1);
+});
 
-test('an in-scope write still commits', async () => {
-  reset()
-  state.calendarTargetExists = true
+test("an in-scope write still commits", async () => {
+  reset();
+  state.calendarTargetExists = true;
   assert.equal(
-    await schedule.upsertScheduleCalendar(ORG_ID, PROJECT_A, { id: 'calendar-a', name: 'Updated' }, 'user-1', new Set(['sub-a'])),
-    'calendar-target',
-  )
-  assert.equal(state.commits, 1)
-})
+    await schedule.upsertScheduleCalendar(
+      ORG_ID,
+      PROJECT_A,
+      { id: "calendar-a", name: "Updated" },
+      "user-1",
+      new Set(["sub-a"]),
+    ),
+    "calendar-target",
+  );
+  assert.equal(state.commits, 1);
+});
 
-test('an out-of-scope project refuses before reading schedule children', async () => {
+test("an out-of-scope project refuses before reading schedule children", async () => {
   for (const attempt of [
-    () => schedule.deleteScheduleTask(ORG_ID, PROJECT_A, 'task-from-b', new Set(['sub-a'])),
-    () => schedule.batchUpdateScheduleTasks(
-      ORG_ID,
-      PROJECT_A,
-      [{ id: 'task-from-b', name: 'Changed' }],
-      'user-1',
-      new Set(['sub-a']),
-    ),
-    () => schedule.createScheduleDependency(
-      ORG_ID,
-      PROJECT_A,
-      { predecessorId: 'task-from-b', successorId: 'other-task' },
-      'user-1',
-      new Set(['sub-a']),
-    ),
+    () => schedule.deleteScheduleTask(ORG_ID, PROJECT_A, "task-from-b", new Set(["sub-a"])),
+    () =>
+      schedule.batchUpdateScheduleTasks(
+        ORG_ID,
+        PROJECT_A,
+        [{ id: "task-from-b", name: "Changed" }],
+        "user-1",
+        new Set(["sub-a"]),
+      ),
+    () =>
+      schedule.createScheduleDependency(
+        ORG_ID,
+        PROJECT_A,
+        { predecessorId: "task-from-b", successorId: "other-task" },
+        "user-1",
+        new Set(["sub-a"]),
+      ),
   ]) {
-    reset()
-    state.projectRow = { id: PROJECT_A, subsidiaryId: 'sub-b' }
-    state.allowedSubsidiaryIds = new Set(['sub-a'])
+    reset();
+    state.projectRow = { id: PROJECT_A, subsidiaryId: "sub-b" };
+    state.allowedSubsidiaryIds = new Set(["sub-a"]);
 
     await assert.rejects(
       attempt(),
-      (error: unknown) => error instanceof schedule.ScheduleError && (error as { status?: number }).status === 404,
-    )
-    assert.equal(state.commits, 0)
-    assert.equal(state.rollbacks, 1)
-    assert.equal(state.rootExecuteCalls, 0, 'no child lookup may run outside the checked snapshot')
-    assert.ok(!state.txQueries.some((query) =>
-      /project_tasks|time_entries|schedule_dependencies/i.test(query.strings.join(' '))),
-    'the project scope refusal must happen before a task or schedule lookup')
+      (error: unknown) =>
+        error instanceof schedule.ScheduleError && (error as { status?: number }).status === 404,
+    );
+    assert.equal(state.commits, 0);
+    assert.equal(state.rollbacks, 1);
+    assert.equal(state.rootExecuteCalls, 0, "no child lookup may run outside the checked snapshot");
+    assert.ok(
+      !state.txQueries.some((query) =>
+        /project_tasks|time_entries|schedule_dependencies/i.test(query.strings.join(" ")),
+      ),
+      "the project scope refusal must happen before a task or schedule lookup",
+    );
   }
-})
+});

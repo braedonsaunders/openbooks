@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { TableCell, TableRow } from '@openbooks/ui'
-import { PagedTable } from '../../../../../components/paged-table'
-import { useMoney } from '../../../../../components/money-provider'
-import { useLocale } from 'next-intl'
-import { decimalLabel } from '../../../../../lib/format'
+import { TableCell, TableRow } from "@openbooks/ui";
+import { PagedTable } from "../../../../../components/paged-table";
+import { useMoney } from "../../../../../components/money-provider";
+import { useLocale } from "next-intl";
+import { decimalLabel } from "../../../../../lib/format";
 
 /**
  * The rows a derived earnings rule WOULD pay over a period — one line per
@@ -13,14 +13,14 @@ import { decimalLabel } from '../../../../../lib/format'
  */
 
 export interface PreviewRow {
-  employeePartyId: string
-  employeeName: string
-  jobTitle: string | null
-  day: string
-  quantity: string
-  amount: string
-  projectId: string | null
-  projectName: string | null
+  employeePartyId: string;
+  employeeName: string;
+  jobTitle: string | null;
+  day: string;
+  quantity: string;
+  amount: string;
+  projectId: string | null;
+  projectName: string | null;
 }
 
 export function DerivedRulePreviewTable({
@@ -28,57 +28,57 @@ export function DerivedRulePreviewTable({
   total,
   labels,
 }: {
-  rows: PreviewRow[]
+  rows: PreviewRow[];
   /** Exact engine total — never re-summed here, floats do not add up money. */
-  total: string
+  total: string;
   labels: {
-    employee: string
-    jobTitle: string
-    day: string
-    project: string
-    quantity: string
-    amount: string
-    total: string
-    empty: string
-  }
+    employee: string;
+    jobTitle: string;
+    day: string;
+    project: string;
+    quantity: string;
+    amount: string;
+    total: string;
+    empty: string;
+  };
 }) {
-  const { money } = useMoney()
-  const locale = useLocale()
+  const { money } = useMoney();
+  const locale = useLocale();
 
   return (
     <PagedTable
       rows={rows}
-      rowKey={(row, index) => `${row.employeePartyId}-${row.day}-${row.projectId ?? ''}-${index}`}
+      rowKey={(row, index) => `${row.employeePartyId}-${row.day}-${row.projectId ?? ""}-${index}`}
       pageSize={25}
       searchable
       empty={<p className="p-4 text-sm text-slate-500 dark:text-slate-400">{labels.empty}</p>}
       columns={[
         {
-          key: 'employee',
+          key: "employee",
           header: labels.employee,
           cell: (row) => row.employeeName,
           search: (row) => row.employeeName,
         },
         {
-          key: 'jobTitle',
+          key: "jobTitle",
           header: labels.jobTitle,
-          cell: (row) => row.jobTitle ?? '—',
-          search: (row) => row.jobTitle ?? '',
+          cell: (row) => row.jobTitle ?? "—",
+          search: (row) => row.jobTitle ?? "",
         },
-        { key: 'day', header: labels.day, cell: (row) => row.day, search: (row) => row.day },
+        { key: "day", header: labels.day, cell: (row) => row.day, search: (row) => row.day },
         {
-          key: 'project',
+          key: "project",
           header: labels.project,
-          cell: (row) => row.projectName ?? '—',
-          search: (row) => row.projectName ?? '',
+          cell: (row) => row.projectName ?? "—",
+          search: (row) => row.projectName ?? "",
         },
         {
-          key: 'quantity',
+          key: "quantity",
           header: labels.quantity,
-          align: 'right',
+          align: "right",
           cell: (row) => decimalLabel(Number(row.quantity), locale, 0, 2),
         },
-        { key: 'amount', header: labels.amount, align: 'right', cell: (row) => money(row.amount) },
+        { key: "amount", header: labels.amount, align: "right", cell: (row) => money(row.amount) },
       ]}
       footer={
         <TableRow className="font-medium">
@@ -87,5 +87,5 @@ export function DerivedRulePreviewTable({
         </TableRow>
       }
     />
-  )
+  );
 }

@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useTranslations } from 'next-intl'
-import { Sparkles, Wand2 } from 'lucide-react'
-import { Button } from '@openbooks/ui'
-import { PayrollOnboardingWizard, type VendorKeysByCountry } from './PayrollOnboardingWizard'
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import { Sparkles, Wand2 } from "lucide-react";
+import { Button } from "@openbooks/ui";
+import { PayrollOnboardingWizard, type VendorKeysByCountry } from "./PayrollOnboardingWizard";
 
 /**
  * The "Set up payroll" call-to-action and the wizard mount point. `banner`
@@ -13,18 +13,18 @@ import { PayrollOnboardingWizard, type VendorKeysByCountry } from './PayrollOnbo
  * revisiting a step) in the settings page header.
  */
 export function PayrollSetupLauncher(props: {
-  variant: 'banner' | 'button'
+  variant: "banner" | "button";
   /** Failing check count from payrollSetupState — the banner's subtitle. */
-  missing: number
-  vendorKeysByCountry: VendorKeysByCountry
-  frequencies: { value: string; labelKey: string }[]
-  canManageEntities: boolean
-  schedules: { id: string; name: string }[]
-  subsidiaries: { id: string; name: string }[]
-  bankProfiles: { id: string; name: string; format: string; configured: boolean }[]
+  missing: number;
+  vendorKeysByCountry: VendorKeysByCountry;
+  frequencies: { value: string; labelKey: string }[];
+  canManageEntities: boolean;
+  schedules: { id: string; name: string }[];
+  subsidiaries: { id: string; name: string }[];
+  bankProfiles: { id: string; name: string; format: string; configured: boolean }[];
 }) {
-  const t = useTranslations('payroll.setupWizard')
-  const [open, setOpen] = useState(false)
+  const t = useTranslations("payroll.setupWizard");
+  const [open, setOpen] = useState(false);
 
   const wizard = open ? (
     <PayrollOnboardingWizard
@@ -36,17 +36,17 @@ export function PayrollSetupLauncher(props: {
       subsidiaries={props.subsidiaries}
       bankProfiles={props.bankProfiles}
     />
-  ) : null
+  ) : null;
 
-  if (props.variant === 'button') {
+  if (props.variant === "button") {
     return (
       <>
         <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-          <Wand2 size={14} aria-hidden /> {t('cta.relaunch')}
+          <Wand2 size={14} aria-hidden /> {t("cta.relaunch")}
         </Button>
         {wizard}
       </>
-    )
+    );
   }
 
   return (
@@ -56,19 +56,21 @@ export function PayrollSetupLauncher(props: {
           <Sparkles size={18} aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cta.title')}</p>
+          <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {t("cta.title")}
+          </p>
           <p className="text-xs text-slate-600 dark:text-slate-400">
-            {t('cta.description')}{' '}
+            {t("cta.description")}{" "}
             <span className="font-medium text-amber-700 dark:text-amber-400">
-              {t('cta.missing', { count: props.missing })}
+              {t("cta.missing", { count: props.missing })}
             </span>
           </p>
         </div>
         <Button onClick={() => setOpen(true)}>
-          <Sparkles size={14} aria-hidden /> {t('cta.start')}
+          <Sparkles size={14} aria-hidden /> {t("cta.start")}
         </Button>
       </div>
       {wizard}
     </>
-  )
+  );
 }

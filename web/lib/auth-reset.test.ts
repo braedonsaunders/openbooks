@@ -38,7 +38,8 @@ const state: ResetHarnessState = {
   passwordHashes: 0,
   networkResetCount: 0,
   async execute(query, mode?: string) {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     this.queries.push(query);
     if (query.text.includes("from users u")) {
       return inMode({ rows: this.user ? [this.user] : [] });
@@ -60,7 +61,7 @@ const state: ResetHarnessState = {
 };
 
 const stateKey = Symbol.for("openbooks.auth-reset-test");
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
   [
@@ -171,7 +172,9 @@ registerHooks({
 });
 
 const authResetModuleUrl = "./auth-reset.ts?auth-reset-test";
-const { requestPasswordReset, completePasswordReset } = await import(authResetModuleUrl) as typeof import("./auth-reset");
+const { requestPasswordReset, completePasswordReset } = (await import(
+  authResetModuleUrl
+)) as typeof import("./auth-reset");
 
 function resetState(): void {
   state.user = {
@@ -203,7 +206,10 @@ test("a network past its reset-request cap is refused before the user lookup", a
   state.user = { id: "user-1", org_id: "org-1", name: "Ada Example", email: "ada@example.test" };
   state.transport = { provider: "smtp" };
   state.networkResetCount = 20;
-  await requestPasswordReset("ada@example.test", { networkAddress: "192.0.2.1", userAgent: "probe" });
+  await requestPasswordReset("ada@example.test", {
+    networkAddress: "192.0.2.1",
+    userAgent: "probe",
+  });
   assert.equal(state.transportLookups.length, 0, "no user or transport work past the network cap");
   assert.equal(resetMutations().length, 0, "no bearer credential minted past the network cap");
   assert.equal(state.emailLogs.length, 0);
@@ -211,16 +217,20 @@ test("a network past its reset-request cap is refused before the user lookup", a
 
 test("unknown reset credentials do not consume the shared password KDF", async () => {
   resetState();
-  const outcome = await completePasswordReset("unknown-credential-with-valid-length", "Valid password 8914");
+  const outcome = await completePasswordReset(
+    "unknown-credential-with-valid-length",
+    "Valid password 8914",
+  );
   assert.deepEqual(outcome, { ok: false, reason: "invalid_token" });
   assert.equal(state.passwordHashes, 0);
 });
 
 function resetMutations(): Query[] {
-  return state.queries.filter(({ text }) => (
-    text.includes("insert into auth_password_resets")
-    || text.includes("update auth_password_resets")
-  ));
+  return state.queries.filter(
+    ({ text }) =>
+      text.includes("insert into auth_password_resets") ||
+      text.includes("update auth_password_resets"),
+  );
 }
 
 test("missing email transport neither issues nor logs a reset bearer credential", async (t) => {
@@ -235,21 +245,25 @@ test("missing email transport neither issues nor logs a reset bearer credential"
 
   const resetUrl = state.messageInputs[0]?.resetUrl;
   const rawToken = resetUrl ? new URL(resetUrl).searchParams.get("token") : null;
-  assert.deepEqual({
-    result,
-    resetMutations: resetMutations().length,
-    resetMessages: state.messageInputs.length,
-    leakedCredential: warnings.some((warning) => (
-      warning.includes("/login/reset")
-      || warning.includes("token=")
-      || Boolean(rawToken && warning.includes(rawToken))
-    )),
-  }, {
-    result: undefined,
-    resetMutations: 0,
-    resetMessages: 0,
-    leakedCredential: false,
-  });
+  assert.deepEqual(
+    {
+      result,
+      resetMutations: resetMutations().length,
+      resetMessages: state.messageInputs.length,
+      leakedCredential: warnings.some(
+        (warning) =>
+          warning.includes("/login/reset") ||
+          warning.includes("token=") ||
+          Boolean(rawToken && warning.includes(rawToken)),
+      ),
+    },
+    {
+      result: undefined,
+      resetMutations: 0,
+      resetMessages: 0,
+      leakedCredential: false,
+    },
+  );
   assert.deepEqual(state.transportLookups, ["org-1"]);
   assert.equal(state.deliveries.length, 0);
 });
@@ -267,15 +281,19 @@ test("configured email transport delivers a hashed one-use credential without en
   assert.equal(state.messageInputs.length, 1);
   assert.equal(state.deliveries.length, 1);
   assert.equal(state.emailLogs.length, 1);
-  assert.deepEqual(state.sentMarks, [{
-    orgId: "org-1",
-    logId: "email-log-1",
-    providerMessageId: "provider-message-1",
-  }]);
+  assert.deepEqual(state.sentMarks, [
+    {
+      orgId: "org-1",
+      logId: "email-log-1",
+      providerMessageId: "provider-message-1",
+    },
+  ]);
   const resetUrl = state.messageInputs[0]!.resetUrl;
   const rawToken = new URL(resetUrl).searchParams.get("token");
   assert.ok(rawToken);
-  const insert = state.queries.find(({ text }) => text.includes("insert into auth_password_resets"));
+  const insert = state.queries.find(({ text }) =>
+    text.includes("insert into auth_password_resets"),
+  );
   assert.ok(insert);
   assert.ok(insert.values.includes(createHash("sha256").update(rawToken).digest("hex")));
   assert.ok(!insert.values.includes(rawToken));
@@ -290,5 +308,8 @@ test("configured email transport delivers a hashed one-use credential without en
   // Two queries now: the network-cap count (new) plus the user lookup. The
   // cap is the point — an anonymous prober's requests stop at counting its
   // own network's attempts once the window is spent.
-  assert.equal(state.queries.length + state.deliveries.length + state.emailLogs.length, sideEffectCount + 2);
+  assert.equal(
+    state.queries.length + state.deliveries.length + state.emailLogs.length,
+    sideEffectCount + 2,
+  );
 });

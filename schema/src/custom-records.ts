@@ -1,12 +1,4 @@
-import {
-  bigint,
-  index,
-  jsonb,
-  pgTable,
-  text,
-  uniqueIndex,
-  uuid
-} from "drizzle-orm/pg-core";
+import { bigint, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
 export const CUSTOM_RECORD_STATUSES = ["draft", "active", "inactive"] as const;

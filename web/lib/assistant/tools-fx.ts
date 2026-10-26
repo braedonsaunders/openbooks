@@ -28,10 +28,12 @@ const listCurrencies: AssistantToolDef = {
   execute: async (_raw, authz): Promise<ToolResult> => {
     const [currencies, org] = await Promise.all([
       db.execute<{ code: string; name: string; minor_units: number }>(
-        sql`select code, name, minor_units from currencies order by code`, "objects",
+        sql`select code, name, minor_units from currencies order by code`,
+        "objects",
       ),
       db.execute<{ base_currency: string }>(
-        sql`select base_currency from orgs where id = ${authz.user.orgId}`, "objects",
+        sql`select base_currency from orgs where id = ${authz.user.orgId}`,
+        "objects",
       ),
     ]);
     return {
@@ -59,8 +61,14 @@ const listFxRates: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["gl.read", "close.read"] },
   feature: "multiCurrency",
   inputSchema: z.object({
-    fromCurrency: z.string().regex(/^[A-Z]{3}$/, "ISO code").describe("Source currency ISO code, e.g. USD"),
-    toCurrency: z.string().regex(/^[A-Z]{3}$/, "ISO code").describe("Target currency ISO code, e.g. CAD"),
+    fromCurrency: z
+      .string()
+      .regex(/^[A-Z]{3}$/, "ISO code")
+      .describe("Source currency ISO code, e.g. USD"),
+    toCurrency: z
+      .string()
+      .regex(/^[A-Z]{3}$/, "ISO code")
+      .describe("Target currency ISO code, e.g. CAD"),
     asOf: dateInput.optional().describe("Latest date to include; defaults to today"),
     rateType: z.string().max(20).optional().describe("Rate type, e.g. spot; omit for all types"),
     limit: z.number().int().min(1).max(100).optional().describe("Max rows, default 20"),
@@ -69,23 +77,37 @@ const listFxRates: AssistantToolDef = {
     if (!(await isFeatureEnabled(authz.user.orgId, "multiCurrency"))) {
       return { ok: false, error: "multi_currency_feature_disabled" };
     }
-    const a = raw as { fromCurrency: string; toCurrency: string; asOf?: string; rateType?: string; limit?: number };
+    const a = raw as {
+      fromCurrency: string;
+      toCurrency: string;
+      asOf?: string;
+      rateType?: string;
+      limit?: number;
+    };
     const limit = Math.min(a.limit ?? 20, 100);
     let where = sql`org_id = ${authz.user.orgId} and from_currency = ${a.fromCurrency} and to_currency = ${a.toCurrency}`;
     if (a.asOf) where = sql`${where} and as_of <= ${a.asOf}`;
     if (a.rateType) where = sql`${where} and rate_type = ${a.rateType}`;
     // Fetch one row past the limit plus an authoritative count so `total`
     // and `truncated` never mistake an exactly-full page for truncation.
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select from_currency, to_currency, as_of, rate_type, rate::text as rate, source, imported_at, created_at
         from fx_rates
        where ${where}
        order by as_of desc, created_at desc
        limit ${limit + 1}
-    `, "objects"));
-    const count = (await db.execute<{ total: number }>(sql`
+    `,
+      "objects",
+    );
+    const count = (
+      await db.execute<{ total: number }>(
+        sql`
       select count(*)::int as total from fx_rates where ${where}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     const page = assistantListPage(rows, limit, Number(count?.total ?? 0));
     return {
       ok: true,
@@ -129,7 +151,8 @@ const listFxRevaluations: AssistantToolDef = {
     const scope = subsidiaryVisibleFilter(sql`e.subsidiary_id`, authz.allowedSubsidiaryIds);
     let where = sql`e.org_id = ${authz.user.orgId} and e.origin = 'fx_revaluation' and e.status in ('posted', 'reversed')${scope}`;
     if (a.periodId) where = sql`${where} and e.period_id = ${a.periodId}`;
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = await db.execute<Record<string, unknown>>(
+      sql`
       select e.id, e.entry_number, e.posting_date, e.memo,
              ${canonicalPeriodLabelSql("p")} as period_name, b.name as book_name, b.code as book_code,
              s.name as subsidiary_name,
@@ -148,14 +171,19 @@ const listFxRevaluations: AssistantToolDef = {
        group by e.id, p.id, b.name, b.code, s.name, m.entry_number
        order by e.posting_date desc, e.entry_number desc
        limit ${limit}
-    `, "objects"));
-    const c = (await db.execute<{ n: string; sum_debits: string }>(sql`
+    `,
+      "objects",
+    );
+    const c = await db.execute<{ n: string; sum_debits: string }>(
+      sql`
       select count(distinct e.id) as n,
              coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as sum_debits
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
        where ${where}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const total = Number(c[0]?.n ?? 0);
     return {
       ok: true,
@@ -197,14 +225,20 @@ const getConsolidationView: AssistantToolDef = {
     const denied = closeScopeDenied(authz);
     if (denied) return denied;
     const a = raw as { periodId: string };
-    const period = (await db.execute<Record<string, unknown>>(sql`
+    const period = (
+      await db.execute<Record<string, unknown>>(
+        sql`
       select p.id, ${canonicalPeriodLabelSql("p")} as name, p.starts_on, p.ends_on, p.fiscal_year
         from accounting_periods p
        where p.id = ${a.periodId} and p.org_id = ${authz.user.orgId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!period) return { ok: false, error: "period_not_found" };
     const [rates, runs, entries] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select count(*) over() as total_count, from_currency, to_currency, current_rate::text as current_rate,
                average_rate::text as average_rate, historical_rate::text as historical_rate,
                source, updated_at
@@ -212,15 +246,21 @@ const getConsolidationView: AssistantToolDef = {
          where org_id = ${authz.user.orgId} and period_id = ${a.periodId}
          order by from_currency, to_currency
          limit 201
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select count(*) over() as total_count, id, status, error, started_at, finished_at
           from ownership_consolidation_runs
          where org_id = ${authz.user.orgId} and period_id = ${a.periodId}
          order by started_at desc
          limit 21
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select count(*) over() as total_count, e.kind, j.entry_number, j.posting_date, j.status
           from ownership_consolidation_entries e
           join journal_entries j on j.id = e.journal_entry_id and j.org_id = e.org_id
@@ -228,7 +268,9 @@ const getConsolidationView: AssistantToolDef = {
          where e.org_id = ${authz.user.orgId} and r.period_id = ${a.periodId}
          order by j.posting_date desc, j.entry_number desc
          limit 101
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const ratesMapped = rates.map((r) => ({
       fromCurrency: r.from_currency,
@@ -258,13 +300,34 @@ const getConsolidationView: AssistantToolDef = {
     return {
       ok: true,
       data: {
-        period: { id: period.id, name: period.name, startsOn: period.starts_on, endsOn: period.ends_on, fiscalYear: period.fiscal_year },
+        period: {
+          id: period.id,
+          name: period.name,
+          startsOn: period.starts_on,
+          endsOn: period.ends_on,
+          fiscalYear: period.fiscal_year,
+        },
         rates: ratesPage.items,
-        ratesPage: { total: ratesPage.total, returned: ratesPage.returned, truncated: ratesPage.truncated, dropped: ratesPage.dropped },
+        ratesPage: {
+          total: ratesPage.total,
+          returned: ratesPage.returned,
+          truncated: ratesPage.truncated,
+          dropped: ratesPage.dropped,
+        },
         runs: runsPage.items,
-        runsPage: { total: runsPage.total, returned: runsPage.returned, truncated: runsPage.truncated, dropped: runsPage.dropped },
+        runsPage: {
+          total: runsPage.total,
+          returned: runsPage.returned,
+          truncated: runsPage.truncated,
+          dropped: runsPage.dropped,
+        },
         entries: entriesPage.items,
-        entriesPage: { total: entriesPage.total, returned: entriesPage.returned, truncated: entriesPage.truncated, dropped: entriesPage.dropped },
+        entriesPage: {
+          total: entriesPage.total,
+          returned: entriesPage.returned,
+          truncated: entriesPage.truncated,
+          dropped: entriesPage.dropped,
+        },
         href: "/close",
       },
     };

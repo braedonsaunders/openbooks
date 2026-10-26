@@ -53,13 +53,16 @@ test("exceptionGroupKey pins similar orders to one stable key", () => {
 });
 
 test("unmapped item grouping follows the line named by the exception reason", () => {
-  assert.equal(exceptionGroupKeyForRow(
-    "unmapped_item",
-    'Order #42 line "Missing item" names SKU MISSING-2 with no matching item.',
-    [
-      { sku: "MAPPED-1", variantExternalId: null },
-      { sku: "MISSING-2", variantExternalId: "variant-2" },
-    ],
-    [],
-  ), "unmapped_item:variant:variant-2");
+  assert.equal(
+    exceptionGroupKeyForRow(
+      "unmapped_item",
+      'Order #42 line "Missing item" names SKU MISSING-2 with no matching item.',
+      [
+        { sku: "MAPPED-1", variantExternalId: null },
+        { sku: "MISSING-2", variantExternalId: "variant-2" },
+      ],
+      [],
+    ),
+    "unmapped_item:variant:variant-2",
+  );
 });

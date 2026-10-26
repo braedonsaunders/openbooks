@@ -3,14 +3,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrgReporting,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-const FORMAT_CONSTRAINTS = ["pay_run_bank_files_format", "pay_run_bank_files_format_numbering"] as const;
+const FORMAT_CONSTRAINTS = [
+  "pay_run_bank_files_format",
+  "pay_run_bank_files_format_numbering",
+] as const;
 
 /**
  * pay_run_bank_files admits each payroll bank-file format through two
@@ -166,96 +165,160 @@ async function insertArtifact(
   return artifactId;
 }
 
-test("both format constraints are installed, validated and free of a permissive catch-all", { skip: !DB }, async () => {
-  const constraints = await db.execute<{ name: string; validated: boolean; def: string }>(sql`
+test(
+  "both format constraints are installed, validated and free of a permissive catch-all",
+  { skip: !DB },
+  async () => {
+    const constraints = await db.execute<{ name: string; validated: boolean; def: string }>(
+      sql`
     select conname as name, convalidated as validated, pg_get_constraintdef(oid) as def
       from pg_constraint
      where conrelid = 'public.pay_run_bank_files'::regclass
        and conname = any(${`{${FORMAT_CONSTRAINTS.join(",")}}`}::text[])
-     order by conname`, "objects");
-  assert.deepEqual(constraints.map(({ name, validated }) => ({ name, validated })),
-    FORMAT_CONSTRAINTS.map((name) => ({ name, validated: true })));
-  // Every numbering arm names the formats it admits; an exclusion list would
-  // silently admit any format the gate later widens to.
-  const numbering = constraints.find((row) => row.name === "pay_run_bank_files_format_numbering")!;
-  assert.doesNotMatch(numbering.def, /NOT IN|<> ALL/i);
-});
+     order by conname`,
+      "objects",
+    );
+    assert.deepEqual(
+      constraints.map(({ name, validated }) => ({ name, validated })),
+      FORMAT_CONSTRAINTS.map((name) => ({ name, validated: true })),
+    );
+    // Every numbering arm names the formats it admits; an exclusion list would
+    // silently admit any format the gate later widens to.
+    const numbering = constraints.find(
+      (row) => row.name === "pay_run_bank_files_format_numbering",
+    )!;
+    assert.doesNotMatch(numbering.def, /NOT IN|<> ALL/i);
+  },
+);
 
-test("sepa and cemtex artifacts insert with the writer's null-null numbering shape", { skip: !DB }, async () => {
-  const fx = await bankFileParents("sepa-cemtex-ok");
-  try {
-    const sepaId = await insertArtifact(fx, {
-      format: "sepa", sequenceNumber: 1, sequenceValue: 7,
-      fileCreationNumber: null, fileIdModifier: null,
-    });
-    const cemtexId = await insertArtifact(fx, {
-      format: "cemtex", sequenceNumber: 2, sequenceValue: 8,
-      fileCreationNumber: null, fileIdModifier: null,
-    });
-    const rows = (await db.execute<{
-      id: string; format: string; sequenceValue: number;
-      fileCreationNumber: number | null; fileIdModifier: string | null;
-    }>(sql`
+test(
+  "sepa and cemtex artifacts insert with the writer's null-null numbering shape",
+  { skip: !DB },
+  async () => {
+    const fx = await bankFileParents("sepa-cemtex-ok");
+    try {
+      const sepaId = await insertArtifact(fx, {
+        format: "sepa",
+        sequenceNumber: 1,
+        sequenceValue: 7,
+        fileCreationNumber: null,
+        fileIdModifier: null,
+      });
+      const cemtexId = await insertArtifact(fx, {
+        format: "cemtex",
+        sequenceNumber: 2,
+        sequenceValue: 8,
+        fileCreationNumber: null,
+        fileIdModifier: null,
+      });
+      const rows = (
+        await db.execute<{
+          id: string;
+          format: string;
+          sequenceValue: number;
+          fileCreationNumber: number | null;
+          fileIdModifier: string | null;
+        }>(sql`
       select id, format, sequence_value as "sequenceValue",
              file_creation_number as "fileCreationNumber",
              file_id_modifier as "fileIdModifier"
         from pay_run_bank_files
        where org_id = ${fx.org.orgId} and id in (${sepaId}, ${cemtexId})
-       order by sequence_number`)).rows;
-    assert.deepEqual(rows, [
-      { id: sepaId, format: "sepa", sequenceValue: 7, fileCreationNumber: null, fileIdModifier: null },
-      { id: cemtexId, format: "cemtex", sequenceValue: 8, fileCreationNumber: null, fileIdModifier: null },
-    ]);
-  } finally {
-    await dropScratchOrgReporting(fx.org.orgId);
-  }
-});
+       order by sequence_number`)
+      ).rows;
+      assert.deepEqual(rows, [
+        {
+          id: sepaId,
+          format: "sepa",
+          sequenceValue: 7,
+          fileCreationNumber: null,
+          fileIdModifier: null,
+        },
+        {
+          id: cemtexId,
+          format: "cemtex",
+          sequenceValue: 8,
+          fileCreationNumber: null,
+          fileIdModifier: null,
+        },
+      ]);
+    } finally {
+      await dropScratchOrgReporting(fx.org.orgId);
+    }
+  },
+);
 
 test("the cpa005 and nacha arms still admit their own shapes", { skip: !DB }, async () => {
   const fx = await bankFileParents("legacy-ok");
   try {
     const cpaId = await insertArtifact(fx, {
-      format: "cpa005", sequenceNumber: 1, sequenceValue: 1,
-      fileCreationNumber: 7, fileIdModifier: null,
+      format: "cpa005",
+      sequenceNumber: 1,
+      sequenceValue: 1,
+      fileCreationNumber: 7,
+      fileIdModifier: null,
     });
     const nachaId = await insertArtifact(fx, {
-      format: "nacha", sequenceNumber: 2, sequenceValue: 2,
-      fileCreationNumber: null, fileIdModifier: "B",
+      format: "nacha",
+      sequenceNumber: 2,
+      sequenceValue: 2,
+      fileCreationNumber: null,
+      fileIdModifier: "B",
     });
-    const rows = (await db.execute<{ id: string; format: string }>(sql`
+    const rows = (
+      await db.execute<{ id: string; format: string }>(sql`
       select id, format from pay_run_bank_files
-       where org_id = ${fx.org.orgId} and id in (${cpaId}, ${nachaId})`)).rows;
+       where org_id = ${fx.org.orgId} and id in (${cpaId}, ${nachaId})`)
+    ).rows;
     assert.equal(rows.length, 2);
   } finally {
     await dropScratchOrgReporting(fx.org.orgId);
   }
 });
 
-test("bacs artifacts insert with the writer's null-null numbering shape", { skip: !DB }, async () => {
-  const fx = await bankFileParents("bacs-ok");
-  try {
-    // sequence_value 9 derives bacsVolSerial 000009 / bacsFileNumber 009 in
-    // the file bytes; the ROW carries NULL/NULL, the Cemtex precedent.
-    const bacsId = await insertArtifact(fx, {
-      format: "bacs", sequenceNumber: 1, sequenceValue: 9,
-      fileCreationNumber: null, fileIdModifier: null,
-    });
-    const rows = (await db.execute<{
-      id: string; format: string; sequenceValue: number;
-      fileCreationNumber: number | null; fileIdModifier: string | null;
-    }>(sql`
+test(
+  "bacs artifacts insert with the writer's null-null numbering shape",
+  { skip: !DB },
+  async () => {
+    const fx = await bankFileParents("bacs-ok");
+    try {
+      // sequence_value 9 derives bacsVolSerial 000009 / bacsFileNumber 009 in
+      // the file bytes; the ROW carries NULL/NULL, the Cemtex precedent.
+      const bacsId = await insertArtifact(fx, {
+        format: "bacs",
+        sequenceNumber: 1,
+        sequenceValue: 9,
+        fileCreationNumber: null,
+        fileIdModifier: null,
+      });
+      const rows = (
+        await db.execute<{
+          id: string;
+          format: string;
+          sequenceValue: number;
+          fileCreationNumber: number | null;
+          fileIdModifier: string | null;
+        }>(sql`
       select id, format, sequence_value as "sequenceValue",
              file_creation_number as "fileCreationNumber",
              file_id_modifier as "fileIdModifier"
         from pay_run_bank_files
-       where org_id = ${fx.org.orgId} and id = ${bacsId}`)).rows;
-    assert.deepEqual(rows, [
-      { id: bacsId, format: "bacs", sequenceValue: 9, fileCreationNumber: null, fileIdModifier: null },
-    ]);
-  } finally {
-    await dropScratchOrgReporting(fx.org.orgId);
-  }
-});
+       where org_id = ${fx.org.orgId} and id = ${bacsId}`)
+      ).rows;
+      assert.deepEqual(rows, [
+        {
+          id: bacsId,
+          format: "bacs",
+          sequenceValue: 9,
+          fileCreationNumber: null,
+          fileIdModifier: null,
+        },
+      ]);
+    } finally {
+      await dropScratchOrgReporting(fx.org.orgId);
+    }
+  },
+);
 
 test("malformed bank-file rows are still refused by constraint name", { skip: !DB }, async () => {
   const fx = await bankFileParents("refused");
@@ -263,8 +326,11 @@ test("malformed bank-file rows are still refused by constraint name", { skip: !D
     // sepa must not carry a cpa005 number: its arm states null-null.
     await assert.rejects(
       insertArtifact(fx, {
-        format: "sepa", sequenceNumber: 11, sequenceValue: 11,
-        fileCreationNumber: 1, fileIdModifier: null,
+        format: "sepa",
+        sequenceNumber: 11,
+        sequenceValue: 11,
+        fileCreationNumber: 1,
+        fileIdModifier: null,
       }),
       (error) => errorChain(error).includes("pay_run_bank_files_format_numbering"),
       "sepa with a file_creation_number must be refused",
@@ -272,8 +338,11 @@ test("malformed bank-file rows are still refused by constraint name", { skip: !D
     // cemtex must not carry a nacha modifier either.
     await assert.rejects(
       insertArtifact(fx, {
-        format: "cemtex", sequenceNumber: 12, sequenceValue: 12,
-        fileCreationNumber: null, fileIdModifier: "A",
+        format: "cemtex",
+        sequenceNumber: 12,
+        sequenceValue: 12,
+        fileCreationNumber: null,
+        fileIdModifier: "A",
       }),
       (error) => errorChain(error).includes("pay_run_bank_files_format_numbering"),
       "cemtex with a file_id_modifier must be refused",
@@ -282,24 +351,33 @@ test("malformed bank-file rows are still refused by constraint name", { skip: !D
     // and nacha with a number are all still refused.
     await assert.rejects(
       insertArtifact(fx, {
-        format: "cpa005", sequenceNumber: 13, sequenceValue: 13,
-        fileCreationNumber: 0, fileIdModifier: null,
+        format: "cpa005",
+        sequenceNumber: 13,
+        sequenceValue: 13,
+        fileCreationNumber: 0,
+        fileIdModifier: null,
       }),
       (error) => errorChain(error).includes("pay_run_bank_files_format_numbering"),
       "cpa005 with file_creation_number = 0 must be refused",
     );
     await assert.rejects(
       insertArtifact(fx, {
-        format: "cpa005", sequenceNumber: 14, sequenceValue: 14,
-        fileCreationNumber: 3, fileIdModifier: "A",
+        format: "cpa005",
+        sequenceNumber: 14,
+        sequenceValue: 14,
+        fileCreationNumber: 3,
+        fileIdModifier: "A",
       }),
       (error) => errorChain(error).includes("pay_run_bank_files_format_numbering"),
       "cpa005 with a file_id_modifier must be refused",
     );
     await assert.rejects(
       insertArtifact(fx, {
-        format: "nacha", sequenceNumber: 15, sequenceValue: 15,
-        fileCreationNumber: 5, fileIdModifier: "A",
+        format: "nacha",
+        sequenceNumber: 15,
+        sequenceValue: 15,
+        fileCreationNumber: 5,
+        fileIdModifier: "A",
       }),
       (error) => errorChain(error).includes("pay_run_bank_files_format_numbering"),
       "nacha with a file_creation_number must be refused",
@@ -307,8 +385,11 @@ test("malformed bank-file rows are still refused by constraint name", { skip: !D
     // And the format gate still closes on unknown rails.
     await assert.rejects(
       insertArtifact(fx, {
-        format: "swift", sequenceNumber: 16, sequenceValue: 16,
-        fileCreationNumber: null, fileIdModifier: null,
+        format: "swift",
+        sequenceNumber: 16,
+        sequenceValue: 16,
+        fileCreationNumber: null,
+        fileIdModifier: null,
       }),
       (error) => errorChain(error).includes("pay_run_bank_files_format"),
       "an unknown format must be refused by the format gate",
@@ -317,16 +398,22 @@ test("malformed bank-file rows are still refused by constraint name", { skip: !D
     // arm states null-null, the writer never allocates either for bacs.
     await assert.rejects(
       insertArtifact(fx, {
-        format: "bacs", sequenceNumber: 17, sequenceValue: 17,
-        fileCreationNumber: 4, fileIdModifier: null,
+        format: "bacs",
+        sequenceNumber: 17,
+        sequenceValue: 17,
+        fileCreationNumber: 4,
+        fileIdModifier: null,
       }),
       (error) => errorChain(error).includes("pay_run_bank_files_format_numbering"),
       "bacs with a file_creation_number must be refused",
     );
     await assert.rejects(
       insertArtifact(fx, {
-        format: "bacs", sequenceNumber: 18, sequenceValue: 18,
-        fileCreationNumber: null, fileIdModifier: "C",
+        format: "bacs",
+        sequenceNumber: 18,
+        sequenceValue: 18,
+        fileCreationNumber: null,
+        fileIdModifier: "C",
       }),
       (error) => errorChain(error).includes("pay_run_bank_files_format_numbering"),
       "bacs with a file_id_modifier must be refused",
@@ -335,60 +422,95 @@ test("malformed bank-file rows are still refused by constraint name", { skip: !D
     // and neither writer allocates either column.
     await assert.rejects(
       insertArtifact(fx, {
-        format: "zengin", sequenceNumber: 19, sequenceValue: 19,
-        fileCreationNumber: 6, fileIdModifier: null,
+        format: "zengin",
+        sequenceNumber: 19,
+        sequenceValue: 19,
+        fileCreationNumber: 6,
+        fileIdModifier: null,
       }),
       (error) => errorChain(error).includes("pay_run_bank_files_format_numbering"),
       "zengin with a file_creation_number must be refused",
     );
     await assert.rejects(
       insertArtifact(fx, {
-        format: "cnab240", sequenceNumber: 20, sequenceValue: 20,
-        fileCreationNumber: null, fileIdModifier: "D",
+        format: "cnab240",
+        sequenceNumber: 20,
+        sequenceValue: 20,
+        fileCreationNumber: null,
+        fileIdModifier: "D",
       }),
       (error) => errorChain(error).includes("pay_run_bank_files_format_numbering"),
       "cnab240 with a file_id_modifier must be refused",
     );
     // None of the refused rows may have landed.
-    const count = (await db.execute<{ count: string }>(sql`
+    const count = (
+      await db.execute<{ count: string }>(sql`
       select count(*) as count from pay_run_bank_files
-       where org_id = ${fx.org.orgId}`)).rows[0]!;
+       where org_id = ${fx.org.orgId}`)
+    ).rows[0]!;
     assert.equal(count.count, "0");
   } finally {
     await dropScratchOrgReporting(fx.org.orgId);
   }
 });
 
-test("zengin and cnab240 artifacts insert with the writer's null-null numbering shape", { skip: !DB }, async () => {
-  const fx = await bankFileParents("zengin-cnab240-ok");
-  try {
-    // zengin's bank-facing identity is a renderer local derived from the
-    // same sequenceValue allocation and lives in the file bytes; cnab240's
-    // NSA arquivo sequence (sequence_value 7 derives NSA 000007) likewise.
-    // Both ROWS carry NULL/NULL, the sepa/cemtex/bacs precedent.
-    const zenginId = await insertArtifact(fx, {
-      format: "zengin", sequenceNumber: 1, sequenceValue: 7,
-      fileCreationNumber: null, fileIdModifier: null,
-    });
-    const cnabId = await insertArtifact(fx, {
-      format: "cnab240", sequenceNumber: 2, sequenceValue: 8,
-      fileCreationNumber: null, fileIdModifier: null,
-    });
-    const rows = (await db.execute<{
-      id: string; format: string; sequenceValue: number;
-      fileCreationNumber: number | null; fileIdModifier: string | null;
-    }>(sql`
+test(
+  "zengin and cnab240 artifacts insert with the writer's null-null numbering shape",
+  { skip: !DB },
+  async () => {
+    const fx = await bankFileParents("zengin-cnab240-ok");
+    try {
+      // zengin's bank-facing identity is a renderer local derived from the
+      // same sequenceValue allocation and lives in the file bytes; cnab240's
+      // NSA arquivo sequence (sequence_value 7 derives NSA 000007) likewise.
+      // Both ROWS carry NULL/NULL, the sepa/cemtex/bacs precedent.
+      const zenginId = await insertArtifact(fx, {
+        format: "zengin",
+        sequenceNumber: 1,
+        sequenceValue: 7,
+        fileCreationNumber: null,
+        fileIdModifier: null,
+      });
+      const cnabId = await insertArtifact(fx, {
+        format: "cnab240",
+        sequenceNumber: 2,
+        sequenceValue: 8,
+        fileCreationNumber: null,
+        fileIdModifier: null,
+      });
+      const rows = (
+        await db.execute<{
+          id: string;
+          format: string;
+          sequenceValue: number;
+          fileCreationNumber: number | null;
+          fileIdModifier: string | null;
+        }>(sql`
       select id, format, sequence_value as "sequenceValue",
              file_creation_number as "fileCreationNumber",
              file_id_modifier as "fileIdModifier"
         from pay_run_bank_files
        where org_id = ${fx.org.orgId} and id in (${zenginId}, ${cnabId})
-       order by sequence_number`)).rows;
-    assert.deepEqual(rows, [
-      { id: zenginId, format: "zengin", sequenceValue: 7, fileCreationNumber: null, fileIdModifier: null },
-      { id: cnabId, format: "cnab240", sequenceValue: 8, fileCreationNumber: null, fileIdModifier: null },
-    ]);
-  } finally {
-    await dropScratchOrgReporting(fx.org.orgId);
-  }
-});
+       order by sequence_number`)
+      ).rows;
+      assert.deepEqual(rows, [
+        {
+          id: zenginId,
+          format: "zengin",
+          sequenceValue: 7,
+          fileCreationNumber: null,
+          fileIdModifier: null,
+        },
+        {
+          id: cnabId,
+          format: "cnab240",
+          sequenceValue: 8,
+          fileCreationNumber: null,
+          fileIdModifier: null,
+        },
+      ]);
+    } finally {
+      await dropScratchOrgReporting(fx.org.orgId);
+    }
+  },
+);

@@ -10,7 +10,12 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture, seedVacationTerms } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -51,7 +56,9 @@ test(
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
         wagesTo: "expense",
-        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } }
+        slotAccounts: {
+          CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable },
+        },
       });
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
@@ -101,27 +108,44 @@ test(
       };
       const coveredId = await hire("Cara Covered", true, { exempt: false, reason: null });
       const undecidedId = await hire("Uli Undecided", false, { exempt: false, reason: null });
-      const exemptId = await hire("Erin Exempt", false, { exempt: true, reason: "owner not covered by the employer account" });
+      const exemptId = await hire("Erin Exempt", false, {
+        exempt: true,
+        reason: "owner not covered by the employer account",
+      });
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2025-10-11", periodEnd: "2025-10-24",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2025-10-11",
+        periodEnd: "2025-10-24",
       });
 
       // Before calculate: one blocker naming only the undecided employee,
       // with both remedies and the link to the payroll tab.
       const readiness = await payRunReadiness(org.orgId, run.documentId);
       const coverage = readiness.items.filter((item) => item.code === "employee.noWorkerComp");
-      assert.equal(coverage.length, 1, `one coverage blocker, got ${JSON.stringify(readiness.items.map((i) => i.code))}`);
+      assert.equal(
+        coverage.length,
+        1,
+        `one coverage blocker, got ${JSON.stringify(readiness.items.map((i) => i.code))}`,
+      );
       assert.equal(coverage[0]!.severity, "blocker");
-      assert.deepEqual(coverage[0]!.employees.map((e) => e.name), ["Uli Undecided"]);
+      assert.deepEqual(
+        coverage[0]!.employees.map((e) => e.name),
+        ["Uli Undecided"],
+      );
       assert.match(coverage[0]!.detail ?? "", /rate class/);
       assert.match(coverage[0]!.detail ?? "", /exempt/);
       assert.equal(coverage[0]!.href, "/entities/employees");
 
       // Calculate: the undecided employee is refused by name; the other two
       // stubs land with the covered one priced and the exempt one premium-free.
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       const refusals = result.errors.filter((e) => e.kind === "refusal");
       assert.equal(refusals.length, 1, `one refusal, got ${JSON.stringify(result.errors)}`);
       assert.equal(refusals[0]!.employee, "Uli Undecided");
@@ -129,16 +153,26 @@ test(
       assert.match(refusals[0]!.message, /Payroll tab/);
       assert.equal(result.employees, 2);
 
-      const stubs = (await db.execute<{ employee_party_id: string; factors: Record<string, string> }>(sql`
+      const stubs = await db.execute<{
+        employee_party_id: string;
+        factors: Record<string, string>;
+      }>(
+        sql`
         select employee_party_id, factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects"));
-      const stubFor = (employeeId: string) => stubs.find((row) => row.employee_party_id === employeeId);
+      `,
+        "objects",
+      );
+      const stubFor = (employeeId: string) =>
+        stubs.find((row) => row.employee_party_id === employeeId);
       assert.ok(stubFor(coveredId), "the covered employee has a stub");
       assert.equal(stubFor(coveredId)!.factors.WCB_EARN, "1000.0000");
       assert.equal(stubFor(coveredId)!.factors.WCB, "18.4000");
       assert.ok(stubFor(exemptId), "the exempt employee has a stub");
-      assert.ok(!("WCB" in (stubFor(exemptId)!.factors ?? {})), "the exempt employee accrues no premium");
+      assert.ok(
+        !("WCB" in (stubFor(exemptId)!.factors ?? {})),
+        "the exempt employee accrues no premium",
+      );
       assert.equal(stubFor(undecidedId), undefined, "a refused employee leaves no partial stub");
 
       // The remedy clears it: recording the exemption prices no premium and
@@ -147,8 +181,16 @@ test(
         update employee_payroll_profiles set wcb_exempt = true,
           wcb_exempt_reason = 'owner not covered by the employer account'
          where org_id = ${org.orgId} and employee_party_id = ${undecidedId}`);
-      const retry = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      assert.deepEqual(retry.errors, [], `remedied calculation refused: ${JSON.stringify(retry.errors)}`);
+      const retry = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
+      assert.deepEqual(
+        retry.errors,
+        [],
+        `remedied calculation refused: ${JSON.stringify(retry.errors)}`,
+      );
       assert.equal(retry.employees, 3);
     } finally {
       await dropScratchOrgReporting(org.orgId);

@@ -6,10 +6,21 @@ import { toChartNumber } from "../chart-number";
 import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { statementBookExpr } from "../gl-summary";
 import { isFeatureEnabled } from "../features";
-import { getMoneyFormatter } from '../money-server'
+import { getMoneyFormatter } from "../money-server";
 import { sql } from "drizzle-orm";
 import { utcDateFromParts } from "@openbooks/engine/platform/business-date/module";
-import { add, cmp, div, fromUnits, mulDecimal, mulRatio, neg, normalizeMoney, roundDiv, toUnits } from "@openbooks/engine/money/money";
+import {
+  add,
+  cmp,
+  div,
+  fromUnits,
+  mulDecimal,
+  mulRatio,
+  neg,
+  normalizeMoney,
+  roundDiv,
+  toUnits,
+} from "@openbooks/engine/money/money";
 import {
   deriveOverheadCategoryDeptRates,
   deriveOverheadOverallRate,
@@ -173,8 +184,18 @@ export interface CustomCategory {
   allocationBase: AllocationBase;
   rateFormat: RateFormat;
   includeInComposite: boolean;
-  manualConfig?: { entryMode?: "fixed_total" | "by_dept" | "per_unit"; fixedTotal?: number | string; byDeptAmounts?: Record<string, number | string>; unitType?: AllocationBase; perUnitRate?: number | string };
-  derivedConfig?: { sourceCategory?: string; percentage?: number | string; allocationBase?: AllocationBase | "same" };
+  manualConfig?: {
+    entryMode?: "fixed_total" | "by_dept" | "per_unit";
+    fixedTotal?: number | string;
+    byDeptAmounts?: Record<string, number | string>;
+    unitType?: AllocationBase;
+    perUnitRate?: number | string;
+  };
+  derivedConfig?: {
+    sourceCategory?: string;
+    percentage?: number | string;
+    allocationBase?: AllocationBase | "same";
+  };
   formulaConfig?: { formula?: string };
 }
 
@@ -197,7 +218,11 @@ export interface TrueCostProfile {
   baseLaborRate: number | string; // cascading base
   categorySettings: Record<string, CategorySettings>;
   customCategories: CustomCategory[];
-  baseOverrides: { squareFeet?: Record<string, number>; units?: Record<string, number>; custom?: Record<string, number> };
+  baseOverrides: {
+    squareFeet?: Record<string, number>;
+    units?: Record<string, number>;
+    custom?: Record<string, number>;
+  };
 }
 
 export interface TrueCostConfig {
@@ -262,7 +287,20 @@ export interface TrueCostData {
   unassigned: BurdenAccount[];
   /** Per-department and Overall composites; null wherever that scope refuses. */
   totals: { byDept: Record<string, number | null>; overall: number | null };
-  labor: { employees: EmployeeRate[]; count: number; min: number; max: number; weighted: number; unratedHours: string; premiumPresets: { id: string; name: string; classification: "overtime" | "double_time"; multiplier: string }[] };
+  labor: {
+    employees: EmployeeRate[];
+    count: number;
+    min: number;
+    max: number;
+    weighted: number;
+    unratedHours: string;
+    premiumPresets: {
+      id: string;
+      name: string;
+      classification: "overtime" | "double_time";
+      multiplier: string;
+    }[];
+  };
   monthly: MonthPoint[];
   forecast: { month: string; label: string; rate: number }[];
   hasBurdenGL: boolean; // the configured application account carries applied postings
@@ -381,15 +419,27 @@ export const DEFAULT_PROFILE: TrueCostProfile = {
 };
 
 /** Load the True Cost engine config and resolve the active profile (). */
-export async function loadTrueCostConfig(orgId: string): Promise<{ activeProfileId: string; profiles: TrueCostProfile[]; profile: TrueCostProfile }> {
+export async function loadTrueCostConfig(
+  orgId: string,
+): Promise<{ activeProfileId: string; profiles: TrueCostProfile[]; profile: TrueCostProfile }> {
   const r = await analyticsQuery(sql`
     select settings -> 'analytics' -> 'trueCost' as cfg from orgs where id = ${orgId}
   `);
   const raw = r.rows[0]?.cfg as Partial<TrueCostConfig> | null;
-  const profiles: TrueCostProfile[] = Array.isArray(raw?.profiles) && raw!.profiles.length
-    ? raw!.profiles.map((p) => ({ ...DEFAULT_PROFILE, ...p, categorySettings: p.categorySettings ?? {}, customCategories: p.customCategories ?? [], baseOverrides: p.baseOverrides ?? {} }))
-    : [DEFAULT_PROFILE];
-  const activeProfileId = raw?.activeProfileId && profiles.some((p) => p.id === raw!.activeProfileId) ? raw!.activeProfileId : profiles[0]!.id;
+  const profiles: TrueCostProfile[] =
+    Array.isArray(raw?.profiles) && raw!.profiles.length
+      ? raw!.profiles.map((p) => ({
+          ...DEFAULT_PROFILE,
+          ...p,
+          categorySettings: p.categorySettings ?? {},
+          customCategories: p.customCategories ?? [],
+          baseOverrides: p.baseOverrides ?? {},
+        }))
+      : [DEFAULT_PROFILE];
+  const activeProfileId =
+    raw?.activeProfileId && profiles.some((p) => p.id === raw!.activeProfileId)
+      ? raw!.activeProfileId
+      : profiles[0]!.id;
   const profile = profiles.find((p) => p.id === activeProfileId) ?? profiles[0]!;
   return { activeProfileId, profiles, profile };
 }
@@ -401,23 +451,32 @@ export async function trueCostData(
   strings: TrueCostStrings = trueCostStrings(englishCatalogMessage, "en"),
   options: { includePriorComparison?: boolean } = {},
 ): Promise<TrueCostData> {
-  if (!(await isFeatureEnabled(orgId, "projects"))) throw new Error("projects feature is disabled")
-  const ids = allowedSubsidiaryIds === null ? null : [...allowedSubsidiaryIds]
-  const allowed = ids?.length ? sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `) : sql`null`
+  if (!(await isFeatureEnabled(orgId, "projects"))) throw new Error("projects feature is disabled");
+  const ids = allowedSubsidiaryIds === null ? null : [...allowedSubsidiaryIds];
+  const allowed = ids?.length
+    ? sql.join(
+        ids.map((id) => sql`${id}::uuid`),
+        sql`, `,
+      )
+    : sql`null`;
   const ledgerScope = sql`and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
     and ${excludePeriodEndJournals(sql`e.origin`)}
-    ${ids === null ? sql`` : sql`and l.subsidiary_id in (${allowed})`}`
+    ${ids === null ? sql`` : sql`and l.subsidiary_id in (${allowed})`}`;
   // Approved time only, on every labour leg: draft, submitted and rejected
   // hours are not worked reality — the same approved-only rule as
   // utilization, project profitability hours and the time drill-down. The
   // status gate is unconditional; only the subsidiary fence is optional.
-  const timeScope = sql`and t.status = 'approved' ${ids === null ? sql`` : sql`and exists (
+  const timeScope = sql`and t.status = 'approved' ${
+    ids === null
+      ? sql``
+      : sql`and exists (
     select 1 from parties scope_employee
     left join projects scope_project on scope_project.id = t.project_id and scope_project.org_id = t.org_id
     where scope_employee.id = t.employee_party_id and scope_employee.org_id = t.org_id
       and coalesce(scope_project.subsidiary_id, scope_employee.subsidiary_id) in (${allowed})
-  )`}`
-  const { money } = await getMoneyFormatter(orgId)
+  )`
+  }`;
+  const { money } = await getMoneyFormatter(orgId);
   const { from, to } = period;
   const start = new Date(from + "T00:00:00Z");
   const end = new Date(to + "T00:00:00Z");
@@ -425,7 +484,12 @@ export async function trueCostData(
   const priorFrom = new Date(start.getTime() - days * 86_400_000).toISOString().slice(0, 10);
   const priorTo = new Date(start.getTime() - 86_400_000).toISOString().slice(0, 10);
 
-  const monthCount = Math.max(1, (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + (end.getUTCMonth() - start.getUTCMonth()) + 1);
+  const monthCount = Math.max(
+    1,
+    (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
+      (end.getUTCMonth() - start.getUTCMonth()) +
+      1,
+  );
 
   // Classification owners resolve before any scan: the direct-labour
   // account set (rule plus pin) and the configured overhead application
@@ -439,12 +503,18 @@ export async function trueCostData(
   const burdenGroups = classifications.get("burden")!;
   const poolGroups = classifications.get("cost_pool")!;
   const directLaborIds = new Set(
-    [...poolGroups.byAccount.entries()].filter(([, g]) => g.key === "direct_labor").map(([id]) => id),
+    [...poolGroups.byAccount.entries()]
+      .filter(([, g]) => g.key === "direct_labor")
+      .map(([id]) => id),
   );
   const laborIdList = [...directLaborIds];
-  const laborFilter = laborIdList.length > 0
-    ? sql`l.account_id in (${sql.join(laborIdList.map((id) => sql`${id}::uuid`), sql`, `)})`
-    : sql`1 = 0`;
+  const laborFilter =
+    laborIdList.length > 0
+      ? sql`l.account_id in (${sql.join(
+          laborIdList.map((id) => sql`${id}::uuid`),
+          sql`, `,
+        )})`
+      : sql`1 = 0`;
   // Applied legs are identified by the posting origin, never by the
   // CURRENT application account: a changed account keeps its history, and
   // the pair's offsetting untagged leg nets to zero on the same account, so
@@ -454,16 +524,33 @@ export async function trueCostData(
   const appliedFilter = sql`e.origin = 'overhead_applied' and l.project_id is not null`;
   // Employee facts also supply the measured labour base and annual-hours
   // divisor. A selected view may omit selling rows, but not policy inputs.
-  const annualHoursRequired = Object.values(cfg.profile.categorySettings).some((setting) => setting.rateFormat === "per_fte")
-    || cfg.profile.customCategories.some((category) => category.rateFormat === "per_fte");
-  const employeeInputsRequired = analyticsSection('true-cost', ["selling"])
-    || cfg.profile.compositeMethod === "cascading"
-    || annualHoursRequired;
+  const annualHoursRequired =
+    Object.values(cfg.profile.categorySettings).some(
+      (setting) => setting.rateFormat === "per_fte",
+    ) || cfg.profile.customCategories.some((category) => category.rateFormat === "per_fte");
+  const employeeInputsRequired =
+    analyticsSection("true-cost", ["selling"]) ||
+    cfg.profile.compositeMethod === "cascading" ||
+    annualHoursRequired;
   // Setup presents current allocation and publication inputs, without the
   // dashboard comparison chip. Its prior utilization window remains required.
-  const priorComparisonRequired = options.includePriorComparison !== false
-    && analyticsSection('true-cost', ["absorption", "selling"]);
-  const [acctRows, hoursRows, empRows, priorRows, priorTimeRows, appliedRows, cardPricedRows, priorDeptHoursRows, deptRows, baseRows, hcRows, premiumRows] = await Promise.all([
+  const priorComparisonRequired =
+    options.includePriorComparison !== false &&
+    analyticsSection("true-cost", ["absorption", "selling"]);
+  const [
+    acctRows,
+    hoursRows,
+    empRows,
+    priorRows,
+    priorTimeRows,
+    appliedRows,
+    cardPricedRows,
+    priorDeptHoursRows,
+    deptRows,
+    baseRows,
+    hcRows,
+    premiumRows,
+  ] = await Promise.all([
     // Expense account totals per account × department × month × functional —
     // journal legs arrive stamped in their line entity's functional and
     // translate to presentation before the burden math ever sees them.
@@ -506,7 +593,8 @@ export async function trueCostData(
     // Per-employee weighted labour rate + dominant dept/labour class. Cost
     // legs arrive per (employee, functional) so the rate translates before
     // the division — a cross-currency average of raw rates is meaningless.
-    (employeeInputsRequired ? analyticsQuery(sql`
+    employeeInputsRequired
+      ? analyticsQuery(sql`
       with per_emp as (
         select t.employee_party_id, coalesce(p.display_name, 'Unknown') as name,
           coalesce(t.cost_rate_currency, crs.base_currency, o.base_currency) as func,
@@ -540,9 +628,11 @@ export async function trueCostData(
       left join departments d on d.id = dd.department_id and d.org_id = ${orgId}
       left join dom_item di on di.employee_party_id = pe.employee_party_id
       where pe.hours > 0
-    `) : Promise.resolve({rows:[]})),
+    `)
+      : Promise.resolve({ rows: [] }),
     // Prior equal window: per-account expense (classified below) + billed hours.
-    (priorComparisonRequired ? analyticsQuery(sql`
+    priorComparisonRequired
+      ? analyticsQuery(sql`
       select l.account_id, sub.base_currency as func, max(e.posting_date)::text as late,
         sum(l.amount) as amount,
         (select coalesce(sum(t.hours) filter (where t.is_billable), 0) from time_entries t
@@ -555,10 +645,12 @@ export async function trueCostData(
         and a.is_summary = false and l.posting_date >= ${priorFrom} and l.posting_date <= ${priorTo}
         and e.posting_date >= ${priorFrom} and e.posting_date <= ${priorTo}
       group by 1, 2
-    `) : Promise.resolve({rows:[]})),
+    `)
+      : Promise.resolve({ rows: [] }),
     // Prior-window non-billable labour cost per functional: the scalar
     // subselect above cannot carry legs, so it travels on its own query.
-    (priorComparisonRequired ? analyticsQuery(sql`
+    priorComparisonRequired
+      ? analyticsQuery(sql`
       select coalesce(t.cost_rate_currency, crs.base_currency, o.base_currency) as func,
         max(t.worked_on)::text as late,
         coalesce(sum(t.hours * coalesce(t.cost_rate, 0)) filter (where t.is_billable is not true), 0) as nonbill_cost
@@ -567,7 +659,8 @@ export async function trueCostData(
       join orgs o on o.id = t.org_id
       where t.org_id = ${orgId} ${timeScope} and t.worked_on >= ${priorFrom} and t.worked_on <= ${priorTo}
       group by 1
-    `) : Promise.resolve({rows:[]})),
+    `)
+      : Promise.resolve({ rows: [] }),
     // Applied burden: project-tagged legs with origin 'overhead_applied' —
     // the same legs listOverheadApplications sums. The pair's offsetting
     // untagged leg nets to zero on the same account, so it is excluded by
@@ -627,11 +720,15 @@ export async function trueCostData(
         select coalesce(sum(r.rate_percent), 0) as rate
           from overhead_rates r
          where r.rate_kind = 'per_hour'
-           and ${overheadRateAppliesToDriver("r", {
-             orgId: sql`t.org_id`,
-             workedOn: sql`t.worked_on`,
-             departmentId: sql`t.department_id`,
-           }, { method: "standard" })}
+           and ${overheadRateAppliesToDriver(
+             "r",
+             {
+               orgId: sql`t.org_id`,
+               workedOn: sql`t.worked_on`,
+               departmentId: sql`t.department_id`,
+             },
+             { method: "standard" },
+           )}
       ) card on true
     `),
     // Prior-window billed/total hours per department: the utilization scope
@@ -682,22 +779,28 @@ export async function trueCostData(
     // Headcount aggregates once per department, outside any currency
     // grouping: a department with GL activity in N currencies counts its
     // people once, not once per currency.
-    db.execute(sql`
+    db.execute(
+      sql`
       select t.department_id, count(distinct t.employee_party_id) as headcount
         from time_entries t
        where t.org_id = ${orgId} ${timeScope} and t.department_id is not null
          and t.worked_on >= ${from} and t.worked_on <= ${to}
        group by t.department_id
-    `, "objects"),
+    `,
+      "objects",
+    ),
     // Premium-rate presets for the selling planner: the org's own overtime /
     // double-time cost multipliers (time_types owners), never assumed ×1.5/×2.
-    db.execute(sql`
+    db.execute(
+      sql`
       select id, name, classification, cost_multiplier
         from time_types
        where org_id = ${orgId} and is_active
          and classification in ('overtime', 'double_time')
        order by classification, name
-    `, "objects"),
+    `,
+      "objects",
+    ),
   ]);
   const profile = cfg.profile;
 
@@ -710,16 +813,41 @@ export async function trueCostData(
   const hourLegs = hoursRows.rows as unknown as HoursSqlRow[];
   const empLegs = empRows.rows as unknown as EmployeeRateSqlRow[];
   const priorLegs = priorRows.rows as unknown as PriorBurdenSqlRow[];
-  const priorTimeLegs = priorTimeRows.rows as unknown as { func: string | null; late: string | null; nonbill_cost: TrueCostSqlNumeric }[];
-  const appliedLegs = appliedRows.rows as unknown as { func: string | null; late: string | null; applied: TrueCostSqlNumeric; lines: string | number }[];
-  const baseLegs = baseRows.rows as unknown as { dept_id: string; func: string | null; late: string | null; labor_dollars: TrueCostSqlNumeric; revenue: TrueCostSqlNumeric; direct_cost: TrueCostSqlNumeric }[];
-  const headcountRows = hcRows as unknown as { department_id: string; headcount: string | number }[];
+  const priorTimeLegs = priorTimeRows.rows as unknown as {
+    func: string | null;
+    late: string | null;
+    nonbill_cost: TrueCostSqlNumeric;
+  }[];
+  const appliedLegs = appliedRows.rows as unknown as {
+    func: string | null;
+    late: string | null;
+    applied: TrueCostSqlNumeric;
+    lines: string | number;
+  }[];
+  const baseLegs = baseRows.rows as unknown as {
+    dept_id: string;
+    func: string | null;
+    late: string | null;
+    labor_dollars: TrueCostSqlNumeric;
+    revenue: TrueCostSqlNumeric;
+    direct_cost: TrueCostSqlNumeric;
+  }[];
+  const headcountRows = hcRows as unknown as {
+    department_id: string;
+    headcount: string | number;
+  }[];
   const tcCtx = await flowRates(orgId, [
     ...acctLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
     ...hourLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
     ...empLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
-    ...priorLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? priorTo).slice(0, 10) })),
-    ...priorTimeLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? priorTo).slice(0, 10) })),
+    ...priorLegs.map((r) => ({
+      func: r.func ?? null,
+      date: String(r.late ?? priorTo).slice(0, 10),
+    })),
+    ...priorTimeLegs.map((r) => ({
+      func: r.func ?? null,
+      date: String(r.late ?? priorTo).slice(0, 10),
+    })),
     ...appliedLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
     ...baseLegs.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
   ]);
@@ -731,7 +859,15 @@ export async function trueCostData(
     for (const r of acctLegs) {
       const key = JSON.stringify([r.account_id, r.month, r.department_id]);
       const prev = byKey.get(key) ?? { ...r, amount: "0" };
-      prev.amount = add(String(prev.amount), translateLeg(String(r.amount ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
+      prev.amount = add(
+        String(prev.amount),
+        translateLeg(
+          String(r.amount ?? 0),
+          r.func ?? null,
+          String(r.late ?? to).slice(0, 10),
+          tcRateAt,
+        ),
+      );
       byKey.set(key, prev);
     }
     for (const v of byKey.values()) acctTranslated.push(v);
@@ -745,20 +881,54 @@ export async function trueCostData(
   const unratedHoursByDept = new Map<string, string>();
   let unratedHoursExact = "0.0000";
   {
-    const byKey = new Map<string, HoursSqlRow & { billed: number; total: number; nonbill: string; billedExact: string; totalExact: string; unratedExact: string }>();
+    const byKey = new Map<
+      string,
+      HoursSqlRow & {
+        billed: number;
+        total: number;
+        nonbill: string;
+        billedExact: string;
+        totalExact: string;
+        unratedExact: string;
+      }
+    >();
     for (const r of hourLegs) {
       const key = JSON.stringify([r.department_id, r.month]);
-      const prev = byKey.get(key) ?? { ...r, billed: 0, total: 0, nonbill: "0", billedExact: "0.0000", totalExact: "0.0000", unratedExact: "0.0000" };
+      const prev = byKey.get(key) ?? {
+        ...r,
+        billed: 0,
+        total: 0,
+        nonbill: "0",
+        billedExact: "0.0000",
+        totalExact: "0.0000",
+        unratedExact: "0.0000",
+      };
       prev.billed += Number(r.billed_hours ?? 0);
       prev.total += Number(r.total_hours ?? 0);
       prev.billedExact = add(prev.billedExact, normalizeMoney(String(r.billed_hours ?? 0)));
       prev.totalExact = add(prev.totalExact, normalizeMoney(String(r.total_hours ?? 0)));
       prev.unratedExact = add(prev.unratedExact, normalizeMoney(String(r.unrated_hours ?? 0)));
-      prev.nonbill = add(String(prev.nonbill), translateLeg(String(r.nonbill_cost ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
+      prev.nonbill = add(
+        String(prev.nonbill),
+        translateLeg(
+          String(r.nonbill_cost ?? 0),
+          r.func ?? null,
+          String(r.late ?? to).slice(0, 10),
+          tcRateAt,
+        ),
+      );
       byKey.set(key, prev);
     }
     for (const v of byKey.values()) {
-      hourTranslated.push({ ...v, billed_hours: v.billed, total_hours: v.total, nonbill_cost: v.nonbill, billed_hours_exact: v.billedExact, total_hours_exact: v.totalExact, unrated_hours_exact: v.unratedExact });
+      hourTranslated.push({
+        ...v,
+        billed_hours: v.billed,
+        total_hours: v.total,
+        nonbill_cost: v.nonbill,
+        billed_hours_exact: v.billedExact,
+        total_hours_exact: v.totalExact,
+        unrated_hours_exact: v.unratedExact,
+      });
     }
   }
   for (const r of hourTranslated) {
@@ -766,7 +936,8 @@ export async function trueCostData(
     const unrated = r.unrated_hours_exact ?? "0.0000";
     if (cmp(unrated, "0") === 0) continue;
     unratedHoursExact = add(unratedHoursExact, unrated);
-    if (dept !== "none") unratedHoursByDept.set(dept, add(unratedHoursByDept.get(dept) ?? "0.0000", unrated));
+    if (dept !== "none")
+      unratedHoursByDept.set(dept, add(unratedHoursByDept.get(dept) ?? "0.0000", unrated));
   }
   // Employee legs merged to one presentation row each: the rate is
   // translated cost over rated hours, never an average of raw rates.
@@ -780,14 +951,39 @@ export async function trueCostData(
   let overallLaborCostExact = "0.0000";
   let overallLaborRatedExact = "0.0000";
   {
-    const byId = new Map<string, { base: EmployeeRateSqlRow; hours: number; hoursExact: string; cost: string; rated: number; ratedExact: string }>();
+    const byId = new Map<
+      string,
+      {
+        base: EmployeeRateSqlRow;
+        hours: number;
+        hoursExact: string;
+        cost: string;
+        rated: number;
+        ratedExact: string;
+      }
+    >();
     for (const r of empLegs) {
-      const prev = byId.get(r.id) ?? { base: r, hours: 0, hoursExact: "0.0000", cost: "0", rated: 0, ratedExact: "0.0000" };
+      const prev = byId.get(r.id) ?? {
+        base: r,
+        hours: 0,
+        hoursExact: "0.0000",
+        cost: "0",
+        rated: 0,
+        ratedExact: "0.0000",
+      };
       prev.hours += Number(r.hours ?? 0);
       prev.hoursExact = add(prev.hoursExact, normalizeMoney(String(r.hours ?? 0)));
       prev.rated += Number(r.rated_hours ?? 0);
       prev.ratedExact = add(prev.ratedExact, normalizeMoney(String(r.rated_hours ?? 0)));
-      prev.cost = add(String(prev.cost), translateLeg(String(r.cost ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
+      prev.cost = add(
+        String(prev.cost),
+        translateLeg(
+          String(r.cost ?? 0),
+          r.func ?? null,
+          String(r.late ?? to).slice(0, 10),
+          tcRateAt,
+        ),
+      );
       byId.set(r.id, prev);
     }
     for (const v of byId.values()) {
@@ -826,24 +1022,40 @@ export async function trueCostData(
     if (annualHoursRequired && empIds.length > 0) {
       const [rateAnnual, roleRows, schedules] = await Promise.all([
         resolveAnnualHoursMany(orgId, empIds, to),
-        db.execute<{ party_id: string; job_title: string | null; trade_id: string | null; department_id: string | null; subsidiary_id: string | null }>(sql`
+        db.execute<{
+          party_id: string;
+          job_title: string | null;
+          trade_id: string | null;
+          department_id: string | null;
+          subsidiary_id: string | null;
+        }>(
+          sql`
           select distinct on (er.party_id) er.party_id, er.job_title, er.trade_id, er.department_id, p.subsidiary_id
             from employee_roles er
             join parties p on p.id = er.party_id and p.org_id = er.org_id
-           where er.org_id = ${orgId} and er.party_id in (${sql.join(empIds.map((id) => sql`${id}::uuid`), sql`, `)})`, "objects"),
+           where er.org_id = ${orgId} and er.party_id in (${sql.join(
+             empIds.map((id) => sql`${id}::uuid`),
+             sql`, `,
+           )})`,
+          "objects",
+        ),
         loadWorkSchedules(db, orgId, allowedSubsidiaryIds),
       ]);
       const keysByEmp = new Map(roleRows.map((r) => [r.party_id, r]));
       const annualByEmp = new Map<string, string>();
       for (const id of empIds) {
         const keys = keysByEmp.get(id);
-        const schedule = pickWorkSchedule(schedules, {
-          employeePartyId: id,
-          jobTitle: keys?.job_title ?? null,
-          tradeId: keys?.trade_id ?? null,
-          departmentId: keys?.department_id ?? null,
-          subsidiaryId: keys?.subsidiary_id ?? null,
-        }, to);
+        const schedule = pickWorkSchedule(
+          schedules,
+          {
+            employeePartyId: id,
+            jobTitle: keys?.job_title ?? null,
+            tradeId: keys?.trade_id ?? null,
+            departmentId: keys?.department_id ?? null,
+            subsidiaryId: keys?.subsidiary_id ?? null,
+          },
+          to,
+        );
         // Annualize from the schedule's own cycle: its hours repeat every
         // cycleDays days, so a common year carries 365 ÷ cycleDays repeats —
         // never a bare ×52, which assumes a 7-day cycle and a 364-day year.
@@ -851,16 +1063,19 @@ export async function trueCostData(
         // The cycle total sums the resolved day hours exactly (the same sum
         // the payroll cycle helper owns; only the public weekly figure is
         // exported, so the loader totals its own divisor here).
-        const cycleHours = schedule && schedule.pattern === "cycle"
-          ? schedule.days.reduce((sum, day) => add(sum, day.hours), "0.0000")
-          : null;
+        const cycleHours =
+          schedule && schedule.pattern === "cycle"
+            ? schedule.days.reduce((sum, day) => add(sum, day.hours), "0.0000")
+            : null;
         const cycleDays = schedule?.cycleDays ?? null;
-        const fromSchedule = cycleHours === null || cycleDays === null || cycleDays <= 0 || cmp(cycleHours, "0") <= 0
-          ? null
-          : div(mulDecimal(cycleHours, "365"), String(cycleDays));
-        const annual = fromSchedule !== null && cmp(fromSchedule, "0") > 0
-          ? fromSchedule
-          : (rateAnnual.get(id) ?? null);
+        const fromSchedule =
+          cycleHours === null || cycleDays === null || cycleDays <= 0 || cmp(cycleHours, "0") <= 0
+            ? null
+            : div(mulDecimal(cycleHours, "365"), String(cycleDays));
+        const annual =
+          fromSchedule !== null && cmp(fromSchedule, "0") > 0
+            ? fromSchedule
+            : (rateAnnual.get(id) ?? null);
         if (annual !== null && cmp(annual, "0") > 0) annualByEmp.set(id, annual);
       }
       // Hours-weighted exact mean per scope, in bigint units throughout.
@@ -894,25 +1109,52 @@ export async function trueCostData(
     for (const r of priorLegs) {
       priorBilledHours = Number(r.billed_hours ?? 0);
       const prev = byAccount.get(r.account_id) ?? { ...r, amount: "0" };
-      prev.amount = add(String(prev.amount), translateLeg(String(r.amount ?? 0), r.func ?? null, String(r.late ?? priorTo).slice(0, 10), tcRateAt));
+      prev.amount = add(
+        String(prev.amount),
+        translateLeg(
+          String(r.amount ?? 0),
+          r.func ?? null,
+          String(r.late ?? priorTo).slice(0, 10),
+          tcRateAt,
+        ),
+      );
       byAccount.set(r.account_id, prev);
     }
     for (const v of byAccount.values()) priorTranslated.push(v);
   }
   let priorNonbillCost = "0";
   for (const r of priorTimeLegs) {
-    priorNonbillCost = add(priorNonbillCost, translateLeg(String(r.nonbill_cost ?? 0), r.func ?? null, String(r.late ?? priorTo).slice(0, 10), tcRateAt));
+    priorNonbillCost = add(
+      priorNonbillCost,
+      translateLeg(
+        String(r.nonbill_cost ?? 0),
+        r.func ?? null,
+        String(r.late ?? priorTo).slice(0, 10),
+        tcRateAt,
+      ),
+    );
   }
   // Burden-applied mechanism merged to one presentation total; lines re-added.
   let appliedTotal = "0";
   let appliedLines = 0;
   for (const r of appliedLegs) {
     appliedLines += Number(r.lines ?? 0);
-    appliedTotal = add(appliedTotal, translateLeg(String(r.applied ?? 0), r.func ?? null, String(r.late ?? to).slice(0, 10), tcRateAt));
+    appliedTotal = add(
+      appliedTotal,
+      translateLeg(
+        String(r.applied ?? 0),
+        r.func ?? null,
+        String(r.late ?? to).slice(0, 10),
+        tcRateAt,
+      ),
+    );
   }
   // Standard-card pricing of eligible project time (org-base denominated, so
   // no translation): the fallback source when no applied legs posted.
-  const cardPricedLegs = cardPricedRows.rows as unknown as { priced: TrueCostSqlNumeric; entries: string | number }[];
+  const cardPricedLegs = cardPricedRows.rows as unknown as {
+    priced: TrueCostSqlNumeric;
+    entries: string | number;
+  }[];
   let cardPricedTotal = "0";
   let cardPricedEntries = 0;
   for (const r of cardPricedLegs) {
@@ -922,25 +1164,59 @@ export async function trueCostData(
   // Prior-window billed/total hours per department for the no-bill rule.
   const priorDeptBilled = new Map<string, string>();
   const priorDeptTotal = new Map<string, string>();
-  for (const r of (priorDeptHoursRows.rows as unknown as { department_id: string | null; billed_hours: TrueCostSqlNumeric; total_hours: TrueCostSqlNumeric }[])) {
+  for (const r of priorDeptHoursRows.rows as unknown as {
+    department_id: string | null;
+    billed_hours: TrueCostSqlNumeric;
+    total_hours: TrueCostSqlNumeric;
+  }[]) {
     const key = r.department_id ?? "none";
-    priorDeptBilled.set(key, add(priorDeptBilled.get(key) ?? "0.0000", normalizeMoney(String(r.billed_hours ?? 0))));
-    priorDeptTotal.set(key, add(priorDeptTotal.get(key) ?? "0.0000", normalizeMoney(String(r.total_hours ?? 0))));
+    priorDeptBilled.set(
+      key,
+      add(priorDeptBilled.get(key) ?? "0.0000", normalizeMoney(String(r.billed_hours ?? 0))),
+    );
+    priorDeptTotal.set(
+      key,
+      add(priorDeptTotal.get(key) ?? "0.0000", normalizeMoney(String(r.total_hours ?? 0))),
+    );
   }
   // Allocation bases merged per department; headcount joins once per
   // department from its own currency-blind scan (never summed per leg).
-  type BaseCell = { labor_dollars: string; headcount: number; revenue: string; direct_cost: string };
+  type BaseCell = {
+    labor_dollars: string;
+    headcount: number;
+    revenue: string;
+    direct_cost: string;
+  };
   const baseTranslated = new Map<string, BaseCell>();
   for (const r of baseLegs) {
-    const prev = baseTranslated.get(r.dept_id) ?? { labor_dollars: "0", headcount: 0, revenue: "0", direct_cost: "0" };
+    const prev = baseTranslated.get(r.dept_id) ?? {
+      labor_dollars: "0",
+      headcount: 0,
+      revenue: "0",
+      direct_cost: "0",
+    };
     const date = String(r.late ?? to).slice(0, 10);
-    prev.labor_dollars = add(prev.labor_dollars, translateLeg(String(r.labor_dollars ?? 0), r.func ?? null, date, tcRateAt));
-    prev.revenue = add(prev.revenue, translateLeg(String(r.revenue ?? 0), r.func ?? null, date, tcRateAt));
-    prev.direct_cost = add(prev.direct_cost, translateLeg(String(r.direct_cost ?? 0), r.func ?? null, date, tcRateAt));
+    prev.labor_dollars = add(
+      prev.labor_dollars,
+      translateLeg(String(r.labor_dollars ?? 0), r.func ?? null, date, tcRateAt),
+    );
+    prev.revenue = add(
+      prev.revenue,
+      translateLeg(String(r.revenue ?? 0), r.func ?? null, date, tcRateAt),
+    );
+    prev.direct_cost = add(
+      prev.direct_cost,
+      translateLeg(String(r.direct_cost ?? 0), r.func ?? null, date, tcRateAt),
+    );
     baseTranslated.set(r.dept_id, prev);
   }
   for (const h of headcountRows) {
-    const prev = baseTranslated.get(h.department_id) ?? { labor_dollars: "0", headcount: 0, revenue: "0", direct_cost: "0" };
+    const prev = baseTranslated.get(h.department_id) ?? {
+      labor_dollars: "0",
+      headcount: 0,
+      revenue: "0",
+      direct_cost: "0",
+    };
     prev.headcount = Number(h.headcount ?? 0);
     baseTranslated.set(h.department_id, prev);
   }
@@ -953,7 +1229,8 @@ export async function trueCostData(
   // resolves in the twin loop below).
   const nonbillCostByMonth = new Map<string, number>();
   const nonbillCostByDeptMonth = new Map<string, number>(); // `${dept}|${month}`
-  let billedHours = 0, totalHours = 0;
+  let billedHours = 0,
+    totalHours = 0;
   // Exact twins of the billed/total hour aggregates: the rate engine's
   // allocation denominators, never a float.
   const deptBilledExact = new Map<string, string>();
@@ -972,15 +1249,24 @@ export async function trueCostData(
     billedHoursExact = add(billedHoursExact, billedExact);
     totalHoursExact = add(totalHoursExact, totalExact);
     const dh = deptHours.get(dept) ?? { billed: 0, total: 0 };
-    dh.billed += billed; dh.total += total;
+    dh.billed += billed;
+    dh.total += total;
     deptHours.set(dept, dh);
     const mh = monthHours.get(r.month) ?? { billed: 0, total: 0 };
-    mh.billed += billed; mh.total += total;
+    mh.billed += billed;
+    mh.total += total;
     monthHours.set(r.month, mh);
-    deptMonthBilled.set(`${dept}|${r.month}`, (deptMonthBilled.get(`${dept}|${r.month}`) ?? 0) + billed);
+    deptMonthBilled.set(
+      `${dept}|${r.month}`,
+      (deptMonthBilled.get(`${dept}|${r.month}`) ?? 0) + billed,
+    );
     nonbillCostByMonth.set(r.month, (nonbillCostByMonth.get(r.month) ?? 0) + nonbill);
-    nonbillCostByDeptMonth.set(`${dept}|${r.month}`, (nonbillCostByDeptMonth.get(`${dept}|${r.month}`) ?? 0) + nonbill);
-    billedHours += billed; totalHours += total;
+    nonbillCostByDeptMonth.set(
+      `${dept}|${r.month}`,
+      (nonbillCostByDeptMonth.get(`${dept}|${r.month}`) ?? 0) + nonbill,
+    );
+    billedHours += billed;
+    totalHours += total;
   }
 
   // Utilization scope = the Utilization dashboard's no-bill rule: a named
@@ -992,47 +1278,78 @@ export async function trueCostData(
   for (const [dept, currTotal] of deptTotalExact) {
     if (dept === "none") continue;
     const total = add(currTotal, priorDeptTotal.get(dept) ?? "0.0000");
-    const billed = add(deptBilledExact.get(dept) ?? "0.0000", priorDeptBilled.get(dept) ?? "0.0000");
+    const billed = add(
+      deptBilledExact.get(dept) ?? "0.0000",
+      priorDeptBilled.get(dept) ?? "0.0000",
+    );
     if (cmp(total, "0") > 0 && cmp(billed, "0") === 0) noBillDeptIds.add(dept);
   }
-  let utilBilledHours = 0, utilTotalHours = 0;
+  let utilBilledHours = 0,
+    utilTotalHours = 0;
   let utilBilledHoursExact = "0.0000";
   for (const [dept, h] of deptHours) {
     if (noBillDeptIds.has(dept)) continue;
-    utilBilledHours += h.billed; utilTotalHours += h.total;
+    utilBilledHours += h.billed;
+    utilTotalHours += h.total;
     utilBilledHoursExact = add(utilBilledHoursExact, deptBilledExact.get(dept) ?? "0.0000");
   }
 
   // Burden centres = departments with BILLED hours (a dept that bills nothing
   // has no rate denominator; its tagged burden is reallocated like untagged).
   const departmentsBase = (deptRows.rows as unknown as DepartmentSqlRow[])
-    .map((d) => ({ id: d.id as string, name: d.name as string, hours: deptHours.get(d.id) ?? { billed: 0, total: 0 } }))
+    .map((d) => ({
+      id: d.id as string,
+      name: d.name as string,
+      hours: deptHours.get(d.id) ?? { billed: 0, total: 0 },
+    }))
     .filter((d) => d.hours.billed > 0)
     .sort((a, b) => b.hours.billed - a.hours.billed);
-  const billedShare = new Map(departmentsBase.map((d) => [d.id, billedHours > 0 ? d.hours.billed / billedHours : 0]));
+  const billedShare = new Map(
+    departmentsBase.map((d) => [d.id, billedHours > 0 ? d.hours.billed / billedHours : 0]),
+  );
 
   // ---- allocation-base bundle () -----------------
   const deptIds = departmentsBase.map((d) => d.id);
   const baseMap = baseTranslated;
-  const sumBase = (field: keyof BaseCell) => deptIds.reduce((s, id) => s + Number(baseMap.get(id)?.[field] ?? 0), 0);
+  const sumBase = (field: keyof BaseCell) =>
+    deptIds.reduce((s, id) => s + Number(baseMap.get(id)?.[field] ?? 0), 0);
   const byDeptBase = (field: keyof BaseCell): Record<string, number> =>
     Object.fromEntries(deptIds.map((id) => [id, Number(baseMap.get(id)?.[field] ?? 0)]));
   const bases: AllocationBaseBundle = {
     hours: {
       total: totalHours,
       totalBilled: billedHours,
-      byDept: Object.fromEntries(departmentsBase.map((d) => [d.id, { total: d.hours.total, billed: d.hours.billed }])),
+      byDept: Object.fromEntries(
+        departmentsBase.map((d) => [d.id, { total: d.hours.total, billed: d.hours.billed }]),
+      ),
     },
     laborDollars: { total: sumBase("labor_dollars"), byDept: byDeptBase("labor_dollars") },
     headcount: { total: sumBase("headcount"), byDept: byDeptBase("headcount") },
     revenue: { total: sumBase("revenue"), byDept: byDeptBase("revenue") },
     directCost: { total: sumBase("direct_cost"), byDept: byDeptBase("direct_cost") },
-    squareFeet: { total: Object.values(profile.baseOverrides.squareFeet ?? {}).reduce((s, v) => s + Number(v || 0), 0), byDept: profile.baseOverrides.squareFeet ?? {} },
-    units: { total: Object.values(profile.baseOverrides.units ?? {}).reduce((s, v) => s + Number(v || 0), 0), byDept: profile.baseOverrides.units ?? {} },
-    custom: { total: Object.values(profile.baseOverrides.custom ?? {}).reduce((s, v) => s + Number(v || 0), 0), byDept: profile.baseOverrides.custom ?? {} },
+    squareFeet: {
+      total: Object.values(profile.baseOverrides.squareFeet ?? {}).reduce(
+        (s, v) => s + Number(v || 0),
+        0,
+      ),
+      byDept: profile.baseOverrides.squareFeet ?? {},
+    },
+    units: {
+      total: Object.values(profile.baseOverrides.units ?? {}).reduce(
+        (s, v) => s + Number(v || 0),
+        0,
+      ),
+      byDept: profile.baseOverrides.units ?? {},
+    },
+    custom: {
+      total: Object.values(profile.baseOverrides.custom ?? {}).reduce(
+        (s, v) => s + Number(v || 0),
+        0,
+      ),
+      byDept: profile.baseOverrides.custom ?? {},
+    },
     monthCount,
   };
-
 
   const settingsOf = (id: string): CategorySettings => profile.categorySettings[id] ?? {};
 
@@ -1046,15 +1363,33 @@ export async function trueCostData(
     const byDept: Record<string, string> = {};
     for (const d of departmentsBase) {
       switch (base) {
-        case "billed_hours": byDept[d.id] = deptBilledExact.get(d.id) ?? "0.0000"; break;
-        case "total_hours": byDept[d.id] = deptTotalExact.get(d.id) ?? "0.0000"; break;
-        case "labor_dollars": byDept[d.id] = baseTranslated.get(d.id)?.labor_dollars ?? "0.0000"; break;
-        case "headcount": byDept[d.id] = String(baseTranslated.get(d.id)?.headcount ?? 0); break;
-        case "revenue": byDept[d.id] = baseTranslated.get(d.id)?.revenue ?? "0.0000"; break;
-        case "direct_cost": byDept[d.id] = baseTranslated.get(d.id)?.direct_cost ?? "0.0000"; break;
-        case "square_feet": byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.squareFeet?.[d.id] ?? 0); break;
-        case "units": byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.units?.[d.id] ?? 0); break;
-        case "custom": byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.custom?.[d.id] ?? 0); break;
+        case "billed_hours":
+          byDept[d.id] = deptBilledExact.get(d.id) ?? "0.0000";
+          break;
+        case "total_hours":
+          byDept[d.id] = deptTotalExact.get(d.id) ?? "0.0000";
+          break;
+        case "labor_dollars":
+          byDept[d.id] = baseTranslated.get(d.id)?.labor_dollars ?? "0.0000";
+          break;
+        case "headcount":
+          byDept[d.id] = String(baseTranslated.get(d.id)?.headcount ?? 0);
+          break;
+        case "revenue":
+          byDept[d.id] = baseTranslated.get(d.id)?.revenue ?? "0.0000";
+          break;
+        case "direct_cost":
+          byDept[d.id] = baseTranslated.get(d.id)?.direct_cost ?? "0.0000";
+          break;
+        case "square_feet":
+          byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.squareFeet?.[d.id] ?? 0);
+          break;
+        case "units":
+          byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.units?.[d.id] ?? 0);
+          break;
+        case "custom":
+          byDept[d.id] = quantizeOverheadMoney(profile.baseOverrides.custom?.[d.id] ?? 0);
+          break;
       }
     }
     return byDept;
@@ -1090,7 +1425,10 @@ export async function trueCostData(
   const directLabor = directLaborIds;
 
   interface CatAgg {
-    id: string; key: string; name: string; color: string | null;
+    id: string;
+    key: string;
+    name: string;
+    color: string | null;
     /** Exact category total (decimal string). */
     total: string;
     accounts: Map<string, BurdenAccount>;
@@ -1101,7 +1439,17 @@ export async function trueCostData(
   }
   const cats = new Map<string, CatAgg>();
   for (const g of burdenGroups.groups) {
-    cats.set(g.id, { id: g.id, key: g.key, name: g.name, color: g.color, total: "0.0000", accounts: new Map(), byDeptTaggedExact: new Map(), untaggedExact: "0.0000", byMonth: new Map() });
+    cats.set(g.id, {
+      id: g.id,
+      key: g.key,
+      name: g.name,
+      color: g.color,
+      total: "0.0000",
+      accounts: new Map(),
+      byDeptTaggedExact: new Map(),
+      untaggedExact: "0.0000",
+      byMonth: new Map(),
+    });
   }
   const unassignedMap = new Map<string, BurdenAccount>();
   const monthBurden = new Map<string, string>();
@@ -1119,12 +1467,20 @@ export async function trueCostData(
 
     if (!group) {
       const u = unassignedMap.get(r.account_id) ?? {
-        id: r.account_id, number: r.number, name: r.name, amount: "0.0000",
-        pinned: false, deptAmounts: {} as Record<string, string>, untaggedAmount: "0.0000",
+        id: r.account_id,
+        number: r.number,
+        name: r.name,
+        amount: "0.0000",
+        pinned: false,
+        deptAmounts: {} as Record<string, string>,
+        untaggedAmount: "0.0000",
       };
       u.amount = add(u.amount, amountExact);
       if (r.department_id && billedShare.has(r.department_id)) {
-        u.deptAmounts[r.department_id] = add(u.deptAmounts[r.department_id] ?? "0.0000", amountExact);
+        u.deptAmounts[r.department_id] = add(
+          u.deptAmounts[r.department_id] ?? "0.0000",
+          amountExact,
+        );
       } else {
         u.untaggedAmount = add(u.untaggedAmount, amountExact);
       }
@@ -1135,12 +1491,20 @@ export async function trueCostData(
     if (!cat) continue;
     cat.total = add(cat.total, amountExact);
     const acct = cat.accounts.get(r.account_id) ?? {
-      id: r.account_id, number: r.number, name: r.name, amount: "0.0000",
-      pinned: burdenGroups.pinned.has(r.account_id), deptAmounts: {} as Record<string, string>, untaggedAmount: "0.0000",
+      id: r.account_id,
+      number: r.number,
+      name: r.name,
+      amount: "0.0000",
+      pinned: burdenGroups.pinned.has(r.account_id),
+      deptAmounts: {} as Record<string, string>,
+      untaggedAmount: "0.0000",
     };
     acct.amount = add(acct.amount, amountExact);
     if (r.department_id && billedShare.has(r.department_id)) {
-      acct.deptAmounts[r.department_id] = add(acct.deptAmounts[r.department_id] ?? "0.0000", amountExact);
+      acct.deptAmounts[r.department_id] = add(
+        acct.deptAmounts[r.department_id] ?? "0.0000",
+        amountExact,
+      );
     } else {
       acct.untaggedAmount = add(acct.untaggedAmount, amountExact);
     }
@@ -1148,7 +1512,9 @@ export async function trueCostData(
     cat.byMonth.set(r.month, (cat.byMonth.get(r.month) ?? 0) + amount);
     monthBurden.set(r.month, add(monthBurden.get(r.month) ?? "0.0000", amountExact));
     if (!monthCatRate.has(r.month)) monthCatRate.set(r.month, new Map());
-    monthCatRate.get(r.month)!.set(cat.key, (monthCatRate.get(r.month)!.get(cat.key) ?? 0) + amount);
+    monthCatRate
+      .get(r.month)!
+      .set(cat.key, (monthCatRate.get(r.month)!.get(cat.key) ?? 0) + amount);
 
     // Department attribution: tagged stays; untagged follows the category's
     // own allocation base. Exact per-department amounts resolve once below
@@ -1163,7 +1529,10 @@ export async function trueCostData(
     const catShares = sharesForBase(catBase);
     if (r.department_id && billedShare.has(r.department_id)) {
       spread(r.department_id, amount);
-      cat.byDeptTaggedExact.set(r.department_id, add(cat.byDeptTaggedExact.get(r.department_id) ?? "0.0000", amountExact));
+      cat.byDeptTaggedExact.set(
+        r.department_id,
+        add(cat.byDeptTaggedExact.get(r.department_id) ?? "0.0000", amountExact),
+      );
     } else {
       for (const d of departmentsBase) spread(d.id, amount * (catShares.get(d.id) ?? 0));
       // Exact untagged attribution happens once below (splitUntaggedExact):
@@ -1179,13 +1548,26 @@ export async function trueCostData(
    * allocation (mulRatio, halves away), so the published rate compounds
    * rounding exactly once.
    */
-  const splitUntaggedExact = (tagged: Map<string, string>, untagged: string, base: AllocationBase): Map<string, string> => {
+  const splitUntaggedExact = (
+    tagged: Map<string, string>,
+    untagged: string,
+    base: AllocationBase,
+  ): Map<string, string> => {
     const out = new Map<string, string>();
     const exact = baseExactFor(base);
-    const entries = departmentsBase.map((d) => ({ id: d.id, units: toUnits(exact[d.id] ?? "0.0000") }));
+    const entries = departmentsBase.map((d) => ({
+      id: d.id,
+      units: toUnits(exact[d.id] ?? "0.0000"),
+    }));
     const totalUnits = entries.reduce((sum, e) => sum + e.units, 0n);
     for (const e of entries) {
-      out.set(e.id, add(tagged.get(e.id) ?? "0.0000", totalUnits === 0n ? "0.0000" : mulRatio(untagged, e.units, totalUnits)));
+      out.set(
+        e.id,
+        add(
+          tagged.get(e.id) ?? "0.0000",
+          totalUnits === 0n ? "0.0000" : mulRatio(untagged, e.units, totalUnits),
+        ),
+      );
     }
     return out;
   };
@@ -1234,18 +1616,27 @@ export async function trueCostData(
     if (dept !== "none" && billedShare.has(dept)) md.set(dept, (md.get(dept) ?? 0) + cost);
     else {
       const timeShares = sharesForBase(timeBase);
-      for (const d of departmentsBase) md.set(d.id, (md.get(d.id) ?? 0) + cost * (timeShares.get(d.id) ?? 0));
+      for (const d of departmentsBase)
+        md.set(d.id, (md.get(d.id) ?? 0) + cost * (timeShares.get(d.id) ?? 0));
     }
   }
 
-  const totalOverheadExact = [...cats.values()].reduce((total, category) => add(total, category.total), timeTotalExact);
+  const totalOverheadExact = [...cats.values()].reduce(
+    (total, category) => add(total, category.total),
+    timeTotalExact,
+  );
   const totalOverhead = toChartNumber(totalOverheadExact);
 
   // Preview and publication share exact category rates; non-hourly units
   // remain explicitly blocked from the hourly publication card.
-  const exactRatesByCat = new Map<string, { rates: Record<string, string | null>;
+  const exactRatesByCat = new Map<
+    string,
+    {
+      rates: Record<string, string | null>;
       overall: string | null;
-      expenses: Record<string, string> }>();
+      expenses: Record<string, string>;
+    }
+  >();
 
   // Refusals recorded while building categories, keyed by scope. A refused
   // rate is data, never an exception: the category still renders with its
@@ -1257,12 +1648,16 @@ export async function trueCostData(
       if (!overallRefusals.has(catId)) overallRefusals.set(catId, refusal);
     } else {
       let byDept = deptRefusals.get(catId);
-      if (!byDept) { byDept = new Map(); deptRefusals.set(catId, byDept); }
+      if (!byDept) {
+        byDept = new Map();
+        deptRefusals.set(catId, byDept);
+      }
       if (!byDept.has(deptId)) byDept.set(deptId, refusal);
     }
     return null;
   };
-  const deptNameOf = (deptId: string): string => departmentsBase.find((d) => d.id === deptId)?.name ?? deptId;
+  const deptNameOf = (deptId: string): string =>
+    departmentsBase.find((d) => d.id === deptId)?.name ?? deptId;
 
   // Apply the rate engine to one category's expense-by-dept: allocation
   // base × method → raw rate, then formatted per the category's rate format.
@@ -1270,9 +1665,15 @@ export async function trueCostData(
   // yields a null rate — it never throws, so one refusing scope cannot hide
   // the rest of the dashboard or its editors.
   function buildCategory(
-    id: string, key: string, name: string, color: string | null,
-    categoryType: BurdenCategory["categoryType"], match: BurdenCategory["match"],
-    expenseByDept: Record<string, number>, total: number, accounts: BurdenAccount[],
+    id: string,
+    key: string,
+    name: string,
+    color: string | null,
+    categoryType: BurdenCategory["categoryType"],
+    match: BurdenCategory["match"],
+    expenseByDept: Record<string, number>,
+    total: number,
+    accounts: BurdenAccount[],
     expenseExactByDept: Record<string, string>,
     unratedHours?: string,
   ): BurdenCategory {
@@ -1284,42 +1685,45 @@ export async function trueCostData(
     const baseExact = baseExactFor(allocationBase);
     const byDept: Record<string, { amount: number; rate: number | null }> = {};
     const rateInput = {
-        id, allocationMethod, allocationTiers: s.allocationTiers,
+      id,
+      allocationMethod,
+      allocationTiers: s.allocationTiers,
       allocationWeights: s.allocationWeights,
-      expenseByDept: expenseExactByDept, baseByDept: baseExact,
-      };
+      expenseByDept: expenseExactByDept,
+      baseByDept: baseExact,
+    };
     const rawDeptRates = deriveOverheadCategoryDeptRates(rateInput);
     const exactRates: Record<string, string | null> = {};
     const sumExact = (values: Record<string, string>) =>
-      Object.values(values).reduce(
-        (total, value) => add(total, value),
-        "0.0000",
-      );
+      Object.values(values).reduce((total, value) => add(total, value), "0.0000");
     // The drawer's untagged split, computed here from the same exact base
     // values splitUntaggedExact uses: share = base ÷ base total, one exact
     // quotient (no base → every share is zero, never a fallback base).
     const baseTotalExact = sumExact(baseExact);
     const deptShare: Record<string, string> = {};
     for (const d of departmentsBase) {
-      deptShare[d.id] = cmp(baseTotalExact, "0") === 0 ? "0" : div(baseExact[d.id] ?? "0.0000", baseTotalExact);
+      deptShare[d.id] =
+        cmp(baseTotalExact, "0") === 0 ? "0" : div(baseExact[d.id] ?? "0.0000", baseTotalExact);
     }
     const laborBase = baseExactFor("labor_dollars");
     const costBase = baseExactFor("direct_cost");
     const unitBase = baseExactFor("units");
-    const displayRate = (
-      rawRate: string,
-      expense: string,
-      deptId?: string,
-    )
-      : string | null => {
+    const displayRate = (rawRate: string, expense: string, deptId?: string): string | null => {
       if (rateFormat === "per_fte") {
         // A department resolves its own annual FTE hours only — borrowing
         // the org mean would price the department in hours it never worked.
         const annual = deptId ? (annualHoursByDept.get(deptId) ?? null) : overallAnnualHours;
         if (annual === null)
-          return recordRefusal(id, deptId ?? null, deptId
-            ? { code: "perFteNoHoursDept", message: strings.refusalPerFteNoHoursDept(name, deptNameOf(deptId)) }
-            : { code: "perFteNoHours", message: strings.refusalPerFteNoHours(name) });
+          return recordRefusal(
+            id,
+            deptId ?? null,
+            deptId
+              ? {
+                  code: "perFteNoHoursDept",
+                  message: strings.refusalPerFteNoHoursDept(name, deptNameOf(deptId)),
+                }
+              : { code: "perFteNoHours", message: strings.refusalPerFteNoHours(name) },
+          );
       }
       const value = deriveOverheadDisplayRate({
         rawRate,
@@ -1328,12 +1732,17 @@ export async function trueCostData(
         laborDollars: deptId ? (laborBase[deptId] ?? "0") : sumExact(laborBase),
         directCost: deptId ? (costBase[deptId] ?? "0") : sumExact(costBase),
         units: deptId ? (unitBase[deptId] ?? "0") : sumExact(unitBase),
-        annualFteHours: (deptId ? (annualHoursByDept.get(deptId) ?? null) : overallAnnualHours) ?? undefined,
+        annualFteHours:
+          (deptId ? (annualHoursByDept.get(deptId) ?? null) : overallAnnualHours) ?? undefined,
       });
       if (value === null)
         return recordRefusal(id, deptId ?? null, {
           code: "missingBase",
-          message: strings.refusalMissingBase(name, strings.rateFormatLabel(rateFormat), strings.allocationBaseLabel(allocationBase)),
+          message: strings.refusalMissingBase(
+            name,
+            strings.rateFormatLabel(rateFormat),
+            strings.allocationBaseLabel(allocationBase),
+          ),
         });
       return value;
     };
@@ -1344,38 +1753,69 @@ export async function trueCostData(
         d.id,
       );
       exactRates[d.id] = exact;
-      byDept[d.id] = { amount: expenseByDept[d.id] ?? 0, rate: exact === null ? null : toChartNumber(exact) };
+      byDept[d.id] = {
+        amount: expenseByDept[d.id] ?? 0,
+        rate: exact === null ? null : toChartNumber(exact),
+      };
     }
     const overallExpense = sumExact(expenseExactByDept);
     const rawRateExact = deriveOverheadOverallRate(rateInput);
     const overall = displayRate(rawRateExact, overallExpense);
-    exactRatesByCat.set(id, { rates: exactRates,
-      overall,
-      expenses: expenseExactByDept });
+    exactRatesByCat.set(id, { rates: exactRates, overall, expenses: expenseExactByDept });
     if (overall === null) {
       const refusal = overallRefusals.get(id);
       return {
-        id, key, name, color, categoryType, match,
-        totalAmount: total, rawRate: null, rate: null, rateDisplay: refusal?.message ?? "",
-        allocationBase, allocationMethod, rateFormat, includeInComposite,
-        accounts, byDept, deptShare,
+        id,
+        key,
+        name,
+        color,
+        categoryType,
+        match,
+        totalAmount: total,
+        rawRate: null,
+        rate: null,
+        rateDisplay: refusal?.message ?? "",
+        allocationBase,
+        allocationMethod,
+        rateFormat,
+        includeInComposite,
+        accounts,
+        byDept,
+        deptShare,
         ...(unratedHours !== undefined && cmp(unratedHours, "0") > 0 ? { unratedHours } : {}),
       };
     }
     const rawRate = Number(rawRateExact);
     const formatted = formatRate(
-      rawRateExact, rateFormat,
+      rawRateExact,
+      rateFormat,
       {
         laborDollars: sumExact(laborBase),
         directCost: sumExact(costBase),
         units: { total: sumExact(unitBase) },
         annualFteHours: overallAnnualHours ?? undefined,
-      }, { totalExpense: overallExpense }, (value, options) => money(value, options));
+      },
+      { totalExpense: overallExpense },
+      (value, options) => money(value, options),
+    );
     return {
-      id, key, name, color, categoryType, match,
-      totalAmount: total, rawRate, rate: formatted.value, rateDisplay: formatted.display,
-      allocationBase, allocationMethod, rateFormat, includeInComposite,
-      accounts, byDept, deptShare,
+      id,
+      key,
+      name,
+      color,
+      categoryType,
+      match,
+      totalAmount: total,
+      rawRate,
+      rate: formatted.value,
+      rateDisplay: formatted.display,
+      allocationBase,
+      allocationMethod,
+      rateFormat,
+      includeInComposite,
+      accounts,
+      byDept,
+      deptShare,
       ...(unratedHours !== undefined && cmp(unratedHours, "0") > 0 ? { unratedHours } : {}),
     };
   }
@@ -1388,7 +1828,10 @@ export async function trueCostData(
     const category = values["category"] ?? "";
     switch (code) {
       case "formulaReference":
-        return { code, message: strings.refusalFormulaReference(category, values["reference"] ?? "") };
+        return {
+          code,
+          message: strings.refusalFormulaReference(category, values["reference"] ?? ""),
+        };
       case "formulaNegative":
         return { code, message: strings.refusalFormulaNegative(category, values["amount"] ?? "") };
       case "perFteNoHours":
@@ -1402,7 +1845,11 @@ export async function trueCostData(
       case "missingBase":
         return {
           code,
-          message: strings.refusalMissingBase(category, values["format"] ?? "", values["base"] ?? ""),
+          message: strings.refusalMissingBase(
+            category,
+            values["format"] ?? "",
+            values["base"] ?? "",
+          ),
         };
       default:
         return { code: "unreadableAmount", message: strings.refusalUnreadableAmount(category) };
@@ -1415,20 +1862,41 @@ export async function trueCostData(
     if (error instanceof OverheadCalculationError && error.code) {
       recordRefusal(catId, null, refuseFromValues(error.code, { ...error.values, category: name }));
     } else if (error instanceof OverheadCalculationError) {
-      recordRefusal(catId, null, { code: "unreadableAmount", message: strings.refusalUnreadableAmount(name) });
+      recordRefusal(catId, null, {
+        code: "unreadableAmount",
+        message: strings.refusalUnreadableAmount(name),
+      });
     } else throw error;
     return null;
   };
   const expenseCategories: BurdenCategory[] = [];
   for (const g of burdenGroups.groups) {
     const c = cats.get(g.id)!;
-    const exactByDept = Object.fromEntries(splitUntaggedExact(c.byDeptTaggedExact, c.untaggedExact, settingsOf(g.id)?.allocationBase ?? "billed_hours"));
+    const exactByDept = Object.fromEntries(
+      splitUntaggedExact(
+        c.byDeptTaggedExact,
+        c.untaggedExact,
+        settingsOf(g.id)?.allocationBase ?? "billed_hours",
+      ),
+    );
     // Display numerics cross from exact through Number at this boundary; the
     // exact maps flow separately for accumulation and the per-hour contract.
-    const expenseByDept = Object.fromEntries(Object.entries(exactByDept).map(([k, v]): [string, number] => [k, Number(v)]));
+    const expenseByDept = Object.fromEntries(
+      Object.entries(exactByDept).map(([k, v]): [string, number] => [k, Number(v)]),
+    );
     try {
-      const built = buildCategory(c.id, c.key, c.name, c.color, "expense", g.match ?? {}, expenseByDept,
-        toChartNumber(c.total), [...c.accounts.values()].sort((a, b) => cmp(b.amount, a.amount)), exactByDept);
+      const built = buildCategory(
+        c.id,
+        c.key,
+        c.name,
+        c.color,
+        "expense",
+        g.match ?? {},
+        expenseByDept,
+        toChartNumber(c.total),
+        [...c.accounts.values()].sort((a, b) => cmp(b.amount, a.amount)),
+        exactByDept,
+      );
       if (built.totalAmount !== 0) expenseCategories.push(built);
     } catch (error) {
       refuseCategory(error, c.id, c.name);
@@ -1440,9 +1908,25 @@ export async function trueCostData(
   // of non-billable hours, spread over billed hours like every other rate.
   const timeCategories: BurdenCategory[] = [];
   if (cmp(timeTotalExact, "0") > 0 || cmp(unratedHoursExact, "0") > 0) {
-    const timeExpenseByDept = Object.fromEntries([...timeExpenseExactByDept].map(([k, v]): [string, number] => [k, Number(v)]));
+    const timeExpenseByDept = Object.fromEntries(
+      [...timeExpenseExactByDept].map(([k, v]): [string, number] => [k, Number(v)]),
+    );
     try {
-      timeCategories.push(buildCategory(TIME_ID, TIME_KEY, strings.timeCategoryName, "#8b5cf6", "time", {}, timeExpenseByDept, Number(timeTotalExact), [], Object.fromEntries(timeExpenseExactByDept), unratedHoursExact));
+      timeCategories.push(
+        buildCategory(
+          TIME_ID,
+          TIME_KEY,
+          strings.timeCategoryName,
+          "#8b5cf6",
+          "time",
+          {},
+          timeExpenseByDept,
+          Number(timeTotalExact),
+          [],
+          Object.fromEntries(timeExpenseExactByDept),
+          unratedHoursExact,
+        ),
+      );
     } catch (error) {
       refuseCategory(error, TIME_ID, strings.timeCategoryName);
     }
@@ -1454,7 +1938,8 @@ export async function trueCostData(
   // ledger produced. The float bundle still feeds display only.
   const categoryTotals: Record<string, { expenseOverall: string }> = {};
   for (const g of burdenGroups.groups) {
-    if (expenseCategories.some((e) => e.id === g.id)) categoryTotals[g.id] = { expenseOverall: cats.get(g.id)!.total };
+    if (expenseCategories.some((e) => e.id === g.id))
+      categoryTotals[g.id] = { expenseOverall: cats.get(g.id)!.total };
   }
   if (timeCategories.length > 0) categoryTotals[TIME_ID] = { expenseOverall: timeTotalExact };
   // Exact per-department base maps for the shares custom categories divide by.
@@ -1475,27 +1960,76 @@ export async function trueCostData(
     // customs referencing it refuse in turn, each naming its own break, and
     // the stored record stays in the profile config for its editor.
     try {
-      let calc: { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number };
-      if (cc.type === "manual") calc = calculateManualCategoryData(cc.manualConfig ?? {}, cc.allocationBase, deptIds, bases, basesExact);
-      else if (cc.type === "derived") calc = calculateDerivedCategoryData(cc.derivedConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases, basesExact);
-      else calc = calculateFormulaCategoryData(cc.formulaConfig ?? {}, categoryTotals, cc.allocationBase, deptIds, bases, basesExact);
+      let calc: {
+        expense: Record<string, number>;
+        expenseExact?: Record<string, string>;
+        totalExpense: number;
+      };
+      if (cc.type === "manual")
+        calc = calculateManualCategoryData(
+          cc.manualConfig ?? {},
+          cc.allocationBase,
+          deptIds,
+          bases,
+          basesExact,
+        );
+      else if (cc.type === "derived")
+        calc = calculateDerivedCategoryData(
+          cc.derivedConfig ?? {},
+          categoryTotals,
+          cc.allocationBase,
+          deptIds,
+          bases,
+          basesExact,
+        );
+      else
+        calc = calculateFormulaCategoryData(
+          cc.formulaConfig ?? {},
+          categoryTotals,
+          cc.allocationBase,
+          deptIds,
+          bases,
+          basesExact,
+        );
       let customOverall = "0.0000";
-      for (const d of departmentsBase) customOverall = add(customOverall, calc.expenseExact?.[d.id] ?? "0.0000");
+      for (const d of departmentsBase)
+        customOverall = add(customOverall, calc.expenseExact?.[d.id] ?? "0.0000");
       categoryTotals[cc.id] = { expenseOverall: customOverall };
       // Custom category settings live on the category record itself.
-      profile.categorySettings[cc.id] = { allocationBase: cc.allocationBase, rateFormat: cc.rateFormat, includeInComposite: cc.includeInComposite };
+      profile.categorySettings[cc.id] = {
+        allocationBase: cc.allocationBase,
+        rateFormat: cc.rateFormat,
+        includeInComposite: cc.includeInComposite,
+      };
       // Synthetic expenses cross from float-land through exact shortest-repr
       // quantization (a no-op for ordinary config decimals like 100.50).
       const customExpenseExact: Record<string, string> = {};
-      for (const d of departmentsBase) customExpenseExact[d.id] = calc.expenseExact?.[d.id] ?? quantizeOverheadMoney(calc.expense[d.id] ?? 0);
-      const built = buildCategory(cc.id, cc.id, cc.name, cc.color, cc.type, {}, calc.expense, calc.totalExpense, [], customExpenseExact);
+      for (const d of departmentsBase)
+        customExpenseExact[d.id] =
+          calc.expenseExact?.[d.id] ?? quantizeOverheadMoney(calc.expense[d.id] ?? 0);
+      const built = buildCategory(
+        cc.id,
+        cc.id,
+        cc.name,
+        cc.color,
+        cc.type,
+        {},
+        calc.expense,
+        calc.totalExpense,
+        [],
+        customExpenseExact,
+      );
       if (Math.abs(built.totalAmount) > 0) customCategories.push(built);
     } catch (error) {
       refuseCategory(error, cc.id, cc.name);
     }
   }
 
-  const categories: BurdenCategory[] = [...expenseCategories, ...timeCategories, ...customCategories];
+  const categories: BurdenCategory[] = [
+    ...expenseCategories,
+    ...timeCategories,
+    ...customCategories,
+  ];
 
   // ---- composite rate via the configured method () ---
   // The labor rate is measured (costed time) or explicitly configured on the
@@ -1505,11 +2039,14 @@ export async function trueCostData(
   const typedEmployeeRows = empTranslated;
   const overallLaborRateExact: string | null =
     overallLaborRatedExact === "0.0000"
-      ? (profile.baseLaborRate === "" || profile.baseLaborRate == null
+      ? profile.baseLaborRate === "" || profile.baseLaborRate == null
         ? null
-        : quantizeOverheadMoney(profile.baseLaborRate))
+        : quantizeOverheadMoney(profile.baseLaborRate)
       : div(overallLaborCostExact, overallLaborRatedExact);
-  const compositeInputOf = (rateOf: (id: string) => string | null, expenseOf: (id: string) => string) =>
+  const compositeInputOf = (
+    rateOf: (id: string) => string | null,
+    expenseOf: (id: string) => string,
+  ) =>
     categories.map((category) => ({
       id: category.id,
       name: category.name,
@@ -1525,11 +2062,16 @@ export async function trueCostData(
     );
   // An included category whose Overall rate refused voids the headline
   // blend: the composite would price without it.
-  const blockedOverall = categories.find((c) => c.includeInComposite && (exactRatesByCat.get(c.id)?.overall ?? null) === null);
+  const blockedOverall = categories.find(
+    (c) => c.includeInComposite && (exactRatesByCat.get(c.id)?.overall ?? null) === null,
+  );
   // Translate a coded engine blend refusal with the loader's own names and
   // translated format labels — the engine message stays the contract-test
   // diagnostic, never user copy.
-  const blendRefusal = (error: OverheadCalculationError, deptName?: string): TrueCostRefusal | null => {
+  const blendRefusal = (
+    error: OverheadCalculationError,
+    deptName?: string,
+  ): TrueCostRefusal | null => {
     if (error.code === "mixedUnits") {
       const byFormat = new Map<string, string[]>();
       for (const c of categories) {
@@ -1553,21 +2095,30 @@ export async function trueCostData(
   let compositeFormat: RateFormat | null = null;
   let overallBlendRefusal: TrueCostRefusal | null = null;
   if (blockedOverall) {
-    overallBlendRefusal = overallRefusals.get(blockedOverall.id)
-      ?? { code: "unreadableAmount", message: strings.refusalUnreadableAmount(blockedOverall.name) };
+    overallBlendRefusal = overallRefusals.get(blockedOverall.id) ?? {
+      code: "unreadableAmount",
+      message: strings.refusalUnreadableAmount(blockedOverall.name),
+    };
   } else if (profile.compositeMethod === "cascading" && overallLaborRateExact === null) {
     overallBlendRefusal = { code: "cascadingNoLabor", message: strings.refusalCascadingNoLabor() };
   } else {
     try {
       const compositeRateExact = deriveOverheadDeptComposite({
-        compositeMethod: profile.compositeMethod, baseLaborRate: overallLaborRateExact ?? undefined,
-        categories: compositeInputOf((id) => exactRatesByCat.get(id)?.overall ?? null, overallExpenseOf),
+        compositeMethod: profile.compositeMethod,
+        baseLaborRate: overallLaborRateExact ?? undefined,
+        categories: compositeInputOf(
+          (id) => exactRatesByCat.get(id)?.overall ?? null,
+          overallExpenseOf,
+        ),
       });
       compositeRate = toChartNumber(compositeRateExact);
       // The blend only succeeds when every included category shares one rate
       // format (mixedUnits refuses otherwise), so the first included format
       // is the composite family's display format.
-      compositeFormat = categories.find((c) => c.includeInComposite && (exactRatesByCat.get(c.id)?.overall ?? null) !== null)?.rateFormat ?? null;
+      compositeFormat =
+        categories.find(
+          (c) => c.includeInComposite && (exactRatesByCat.get(c.id)?.overall ?? null) !== null,
+        )?.rateFormat ?? null;
     } catch (error) {
       if (error instanceof OverheadCalculationError && error.code) {
         const refusal = blendRefusal(error);
@@ -1590,19 +2141,31 @@ export async function trueCostData(
   // All preview composites use the exact contract. Non-hourly units still
   // refuse publication to an hourly rate card.
   const publishBlockers = overheadPublishBlockers(
-    categories.map((c) => ({ id: c.id, name: c.name, rateFormat: c.rateFormat, includeInComposite: c.includeInComposite })),
+    categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      rateFormat: c.rateFormat,
+      includeInComposite: c.includeInComposite,
+    })),
   );
   const exactSupported = publishBlockers.length === 0;
   const departments: Dept[] = departmentsBase.map((d) => {
     let compositeValue: string | null = null;
     let compositeExact = "";
-    const blocked = categories.find((c) => c.includeInComposite && (exactRatesByCat.get(c.id)?.rates[d.id] ?? null) === null);
+    const blocked = categories.find(
+      (c) => c.includeInComposite && (exactRatesByCat.get(c.id)?.rates[d.id] ?? null) === null,
+    );
     if (blocked) {
-      const refusal = deptRefusals.get(blocked.id)?.get(d.id)
-        ?? { code: "unreadableAmount" as const, message: strings.refusalUnreadableAmount(blocked.name) };
+      const refusal = deptRefusals.get(blocked.id)?.get(d.id) ?? {
+        code: "unreadableAmount" as const,
+        message: strings.refusalUnreadableAmount(blocked.name),
+      };
       deptBlendRefusals.set(d.id, refusal);
     } else if (profile.compositeMethod === "cascading" && deptLaborRateExact(d.id) === null) {
-      const refusal: TrueCostRefusal = { code: "cascadingNoLaborDept", message: strings.refusalCascadingNoLaborDept(d.name) };
+      const refusal: TrueCostRefusal = {
+        code: "cascadingNoLaborDept",
+        message: strings.refusalCascadingNoLaborDept(d.name),
+      };
       deptBlendRefusals.set(d.id, refusal);
     } else {
       try {
@@ -1614,9 +2177,7 @@ export async function trueCostData(
             (id) => exactRatesByCat.get(id)?.expenses[d.id] ?? "0.0000",
           ),
         });
-        compositeExact = exactSupported
-          ? formatOverheadPublishRate(composite4)
-          : "";
+        compositeExact = exactSupported ? formatOverheadPublishRate(composite4) : "";
         compositeValue = composite4;
       } catch (error) {
         if (error instanceof OverheadCalculationError && error.code) {
@@ -1628,11 +2189,21 @@ export async function trueCostData(
     }
     const composite = compositeValue === null ? null : toChartNumber(compositeValue);
     totalsByDept[d.id] = composite;
-    return { id: d.id, name: d.name, billedHours: d.hours.billed, totalHours: d.hours.total, unratedHours: toChartNumber(unratedHoursByDept.get(d.id) ?? "0.0000"), compositeValue, composite, compositeExact };
+    return {
+      id: d.id,
+      name: d.name,
+      billedHours: d.hours.billed,
+      totalHours: d.hours.total,
+      unratedHours: toChartNumber(unratedHoursByDept.get(d.id) ?? "0.0000"),
+      compositeValue,
+      composite,
+      compositeExact,
+    };
   });
   // The Overall headline refusal wins the single slot; otherwise the first
   // department-scope refusal in department order.
-  const firstDeptRefusal = departmentsBase.map((d) => deptBlendRefusals.get(d.id)).find((r) => r !== undefined) ?? null;
+  const firstDeptRefusal =
+    departmentsBase.map((d) => deptBlendRefusals.get(d.id)).find((r) => r !== undefined) ?? null;
   const compositeRefusal: TrueCostRefusal | null = overallBlendRefusal ?? firstDeptRefusal;
 
   // ---- absorption (actual applied burden only) ---------------------------------
@@ -1642,9 +2213,14 @@ export async function trueCostData(
   // until the display boundary: a float gap would read a 0.30/0.30 period
   // as under-absorbed by a rounding hair.
   const postedAvailable = appliedLines > 0 && cmp(appliedTotal, "0") !== 0;
-  const cardAvailable = !postedAvailable && cardPricedEntries > 0 && cmp(cardPricedTotal, "0") !== 0;
+  const cardAvailable =
+    !postedAvailable && cardPricedEntries > 0 && cmp(cardPricedTotal, "0") !== 0;
   const appliedExact = postedAvailable ? appliedTotal : cardAvailable ? cardPricedTotal : null;
-  const appliedSource: "postings" | "standard-cards" | null = postedAvailable ? "postings" : cardAvailable ? "standard-cards" : null;
+  const appliedSource: "postings" | "standard-cards" | null = postedAvailable
+    ? "postings"
+    : cardAvailable
+      ? "standard-cards"
+      : null;
   const hasBurdenGL = appliedExact !== null;
   const utilization = utilTotalHours > 0 ? utilBilledHours / utilTotalHours : 0;
   const burdenApplied = appliedExact === null ? null : toChartNumber(appliedExact);
@@ -1660,9 +2236,13 @@ export async function trueCostData(
     if (burdenGroups.byAccount.has(r.account_id))
       priorBurdenExact = add(priorBurdenExact, String(r.amount ?? 0));
   }
-  const priorComposite = priorBilled > 0 ? toChartNumber(div(priorBurdenExact, quantizeOverheadMoney(priorBilled))) : 0;
+  const priorComposite =
+    priorBilled > 0 ? toChartNumber(div(priorBurdenExact, quantizeOverheadMoney(priorBilled))) : 0;
   // An unresolved composite has no change to report, only its refusal.
-  const compositeRateChangePct = priorComposite > 0 && compositeRate !== null ? ((compositeRate - priorComposite) / priorComposite) * 100 : null;
+  const compositeRateChangePct =
+    priorComposite > 0 && compositeRate !== null
+      ? ((compositeRate - priorComposite) / priorComposite) * 100
+      : null;
 
   // ---- monthly history + linear forecast ---------------------------------------------
   const months = [...new Set([...monthBurden.keys(), ...monthHours.keys()])].sort();
@@ -1671,7 +2251,8 @@ export async function trueCostData(
     const billed = monthHours.get(m)?.billed ?? 0;
     const catAmounts = monthCatRate.get(m);
     const byCategory: Record<string, number> = {};
-    if (catAmounts) for (const [k, amt] of catAmounts) byCategory[k] = billed > 0 ? amt / billed : 0;
+    if (catAmounts)
+      for (const [k, amt] of catAmounts) byCategory[k] = billed > 0 ? amt / billed : 0;
     const deptAmounts = monthDeptBurden.get(m);
     const byDept: Record<string, number> = {};
     if (deptAmounts) {
@@ -1680,7 +2261,15 @@ export async function trueCostData(
         byDept[deptId] = db_ > 0 ? amt / db_ : 0;
       }
     }
-    return { month: m, label: strings.monthLabel(m), burden, billedHours: billed, rate: billed > 0 ? Number(burden) / billed : 0, byCategory, byDept };
+    return {
+      month: m,
+      label: strings.monthLabel(m),
+      burden,
+      billedHours: billed,
+      rate: billed > 0 ? Number(burden) / billed : 0,
+      byCategory,
+      byDept,
+    };
   });
 
   // Linear regression over monthly composite → next 3 months. Outlier months
@@ -1693,12 +2282,23 @@ export async function trueCostData(
   if (fitPoints.length >= 3 && months.length > 0) {
     const sortedRates = fitPoints.map((p) => p.rate).sort((a, b) => a - b);
     const median = sortedRates[Math.floor(sortedRates.length / 2)]!;
-    const mad = fitPoints.map((p) => Math.abs(p.rate - median)).sort((a, b) => a - b)[Math.floor(fitPoints.length / 2)] || 1;
+    const mad =
+      fitPoints.map((p) => Math.abs(p.rate - median)).sort((a, b) => a - b)[
+        Math.floor(fitPoints.length / 2)
+      ] || 1;
     const clean = fitPoints.filter((p) => Math.abs(p.rate - median) <= 3 * mad);
     const pts = clean.length >= 3 ? clean : fitPoints;
     const n = pts.length;
-    let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-    for (const p of pts) { sumX += p.i; sumY += p.rate; sumXY += p.i * p.rate; sumXX += p.i * p.i; }
+    let sumX = 0,
+      sumY = 0,
+      sumXY = 0,
+      sumXX = 0;
+    for (const p of pts) {
+      sumX += p.i;
+      sumY += p.rate;
+      sumXY += p.i * p.rate;
+      sumXX += p.i * p.i;
+    }
     const denom = n * sumXX - sumX * sumX;
     const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
     const intercept = (sumY - slope * sumX) / n;
@@ -1710,15 +2310,24 @@ export async function trueCostData(
       // remap onto 1900-1999.
       const d = utcDateFromParts(ly!, lm! - 1 + i, 1);
       const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-      forecast.push({ month: ym, label: strings.monthLabel(ym), rate: Math.max(0, intercept + slope * (lastIdx + i)) });
+      forecast.push({
+        month: ym,
+        label: strings.monthLabel(ym),
+        rate: Math.max(0, intercept + slope * (lastIdx + i)),
+      });
     }
   }
 
   // ---- labour rates ------------------------------------------------------------------------
   const employees: EmployeeRate[] = typedEmployeeRows
     .map((r) => ({
-      id: r.id, name: strings.displayEmployeeName(r.name), deptId: r.dept_id, deptName: r.dept_name, title: r.title,
-      rate: toChartNumber(String(r.rate ?? 0)), hours: Number(r.hours ?? 0),
+      id: r.id,
+      name: strings.displayEmployeeName(r.name),
+      deptId: r.dept_id,
+      deptName: r.dept_name,
+      title: r.title,
+      rate: toChartNumber(String(r.rate ?? 0)),
+      hours: Number(r.hours ?? 0),
     }))
     .filter((e) => e.rate > 0);
   // Hours-weighted average over the rated-employee pool, in exact decimals:
@@ -1726,12 +2335,33 @@ export async function trueCostData(
   // (whose size `count` reports) is rated employees only. This is the
   // planner's pool average, not the costed-time Overall rate above.
   const laborHoursExact = employees.reduce((s, e) => add(s, String(e.hours)), "0.0000");
-  const weighted = cmp(laborHoursExact, "0") > 0
-    ? toChartNumber(div(employees.reduce((s, e) => add(s, mulDecimal(String(e.rate), String(e.hours))), "0.0000"), laborHoursExact))
-    : 0;
-  const premiumPresets = (premiumRows as unknown as { id: string; name: string; classification: string; cost_multiplier: string }[])
+  const weighted =
+    cmp(laborHoursExact, "0") > 0
+      ? toChartNumber(
+          div(
+            employees.reduce(
+              (s, e) => add(s, mulDecimal(String(e.rate), String(e.hours))),
+              "0.0000",
+            ),
+            laborHoursExact,
+          ),
+        )
+      : 0;
+  const premiumPresets = (
+    premiumRows as unknown as {
+      id: string;
+      name: string;
+      classification: string;
+      cost_multiplier: string;
+    }[]
+  )
     .filter((r) => r.classification === "overtime" || r.classification === "double_time")
-    .map((r) => ({ id: r.id, name: r.name, classification: r.classification as "overtime" | "double_time", multiplier: normalizeMoney(r.cost_multiplier) }));
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      classification: r.classification as "overtime" | "double_time",
+      multiplier: normalizeMoney(r.cost_multiplier),
+    }));
 
   return {
     period,
@@ -1745,15 +2375,23 @@ export async function trueCostData(
       overheadAccounts: categories.reduce((s, c) => s + c.accounts.length, 0),
       burdenApplied,
       gap,
-      gapPerHour: gapExact === null || cmp(utilBilledHoursExact, "0") <= 0 ? null : toChartNumber(div(gapExact, utilBilledHoursExact)),
-      absorptionPct: appliedExact === null || cmp(totalOverheadExact, "0") <= 0 ? null : toChartNumber(div(mulDecimal(appliedExact, "100"), totalOverheadExact)),
+      gapPerHour:
+        gapExact === null || cmp(utilBilledHoursExact, "0") <= 0
+          ? null
+          : toChartNumber(div(gapExact, utilBilledHoursExact)),
+      absorptionPct:
+        appliedExact === null || cmp(totalOverheadExact, "0") <= 0
+          ? null
+          : toChartNumber(div(mulDecimal(appliedExact, "100"), totalOverheadExact)),
       billedHours: utilBilledHours,
       totalHours: utilTotalHours,
       utilization,
       employeeCount: employees.length,
     },
     categories,
-    unassigned: [...unassignedMap.values()].filter((u) => cmp(u.amount, "0") !== 0).sort((a, b) => cmp(b.amount, a.amount)),
+    unassigned: [...unassignedMap.values()]
+      .filter((u) => cmp(u.amount, "0") !== 0)
+      .sort((a, b) => cmp(b.amount, a.amount)),
     totals: { byDept: totalsByDept, overall: compositeRate },
     labor: {
       employees: employees.sort((a, b) => b.hours - a.hours),
@@ -1782,7 +2420,11 @@ export async function trueCostData(
       compositeMethod: profile.compositeMethod,
       baseLaborRate: profile.baseLaborRate,
       categorySettings: profile.categorySettings,
-      profiles: cfg.profiles.map((p) => ({ id: p.id, name: strings.displayProfileName(p.name), color: p.color })),
+      profiles: cfg.profiles.map((p) => ({
+        id: p.id,
+        name: strings.displayProfileName(p.name),
+        color: p.color,
+      })),
       customCategories: profile.customCategories,
       matrixBandPp: dashboardConfig.matrixUnderperformPct!,
     },

@@ -14,10 +14,7 @@ export const POST = defineRoute({
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = params;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "window id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "window id must be a uuid" }, { status: 400 });
     try {
       const window = await openEnrollmentWindow({
         orgId: gate.user.orgId,

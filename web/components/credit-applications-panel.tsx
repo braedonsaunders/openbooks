@@ -1,6 +1,13 @@
 "use client";
 
-import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
+import {
+  Table as SharedTable,
+  TableHeader as SharedTableHeader,
+  TableRow as SharedTableRow,
+  TableHead as SharedTableHead,
+  TableBody as SharedTableBody,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { fetchAction } from "@braedonsaunders/appkit-errors";
@@ -154,7 +161,9 @@ export function CreditApplicationsPanel({
   async function apply() {
     if (!state || !partyId) return;
     const unreadable = Object.values(amounts).find(
-      (amount) => amount.trim() !== "" && moneyFieldError("Application amount", "a money amount", amount) !== null,
+      (amount) =>
+        amount.trim() !== "" &&
+        moneyFieldError("Application amount", "a money amount", amount) !== null,
     );
     if (unreadable !== undefined) {
       setError(moneyFieldError("Application amount", "a money amount", unreadable)!);
@@ -230,14 +239,23 @@ export function CreditApplicationsPanel({
     <section className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          {source === "payment" ? t(side === "ar" ? "unappliedCreditTitle" : "prepaymentTitle") : t("title")}
+          {source === "payment"
+            ? t(side === "ar" ? "unappliedCreditTitle" : "prepaymentTitle")
+            : t("title")}
         </h3>
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500 tabular-nums dark:text-slate-400">
-            {source === "payment" ? t("unappliedRemaining", { amount: money(state.open, { currency }) }) : t("remaining", { amount: money(state.open, { currency }) })}
+            {source === "payment"
+              ? t("unappliedRemaining", { amount: money(state.open, { currency }) })
+              : t("remaining", { amount: money(state.open, { currency }) })}
           </span>
           {canApply && remainingSign > 0 && openItems === null ? (
-            <Button size="sm" variant="outline" disabled={busy || !partyId} onClick={() => void startApply()}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy || !partyId}
+              onClick={() => void startApply()}
+            >
               {t("apply")}
             </Button>
           ) : null}
@@ -258,15 +276,26 @@ export function CreditApplicationsPanel({
             <SharedTable className="w-full text-sm">
               <SharedTableHeader>
                 <SharedTableRow className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                  <SharedTableHead className="px-2 py-1 font-medium">{t("document")}</SharedTableHead>
-                  <SharedTableHead className="px-2 py-1 font-medium">{tCommon("labels.dueDate")}</SharedTableHead>
-                  <SharedTableHead className="px-2 py-1 text-right font-medium">{t("openAmount")}</SharedTableHead>
-                  <SharedTableHead className="px-2 py-1 text-right font-medium">{t("applyAmount")}</SharedTableHead>
+                  <SharedTableHead className="px-2 py-1 font-medium">
+                    {t("document")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-2 py-1 font-medium">
+                    {tCommon("labels.dueDate")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-2 py-1 text-right font-medium">
+                    {t("openAmount")}
+                  </SharedTableHead>
+                  <SharedTableHead className="px-2 py-1 text-right font-medium">
+                    {t("applyAmount")}
+                  </SharedTableHead>
                 </SharedTableRow>
               </SharedTableHeader>
               <SharedTableBody>
                 {openItems.map((item) => (
-                  <SharedTableRow key={item.lineId} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
+                  <SharedTableRow
+                    key={item.lineId}
+                    className="border-b border-slate-100 last:border-0 dark:border-slate-800"
+                  >
                     <SharedTableCell className="px-2 py-1 font-medium tabular-nums">
                       {item.documentNumber ?? item.entryNumber}
                     </SharedTableCell>
@@ -297,7 +326,11 @@ export function CreditApplicationsPanel({
             <Button size="sm" variant="ghost" disabled={busy} onClick={() => setOpenItems(null)}>
               {tCommon("actions.cancel")}
             </Button>
-            <Button size="sm" disabled={busy || openItems.length === 0} onClick={() => void apply()}>
+            <Button
+              size="sm"
+              disabled={busy || openItems.length === 0}
+              onClick={() => void apply()}
+            >
               {t("confirmApply")}
             </Button>
           </div>
@@ -310,8 +343,12 @@ export function CreditApplicationsPanel({
             <SharedTableHeader>
               <SharedTableRow className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
                 <SharedTableHead className="px-3 py-2 font-medium">{t("document")}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2 font-medium">{t("appliedOn")}</SharedTableHead>
-                <SharedTableHead className="px-3 py-2 text-right font-medium">{tCommon("labels.amount")}</SharedTableHead>
+                <SharedTableHead className="px-3 py-2 font-medium">
+                  {t("appliedOn")}
+                </SharedTableHead>
+                <SharedTableHead className="px-3 py-2 text-right font-medium">
+                  {tCommon("labels.amount")}
+                </SharedTableHead>
                 <SharedTableHead className="px-3 py-2" />
               </SharedTableRow>
             </SharedTableHeader>

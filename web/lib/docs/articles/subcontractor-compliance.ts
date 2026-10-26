@@ -1,29 +1,29 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const subcontractorCompliance: DocArticle = {
-  slug: 'subcontractor-compliance',
-  title: 'Subcontractor Compliance',
-  category: 'projects',
+  slug: "subcontractor-compliance",
+  title: "Subcontractor Compliance",
+  category: "projects",
   order: 6,
   summary:
-    'Track certificates of insurance and exchange lien waivers for payment — with payment holds when a subcontractor’s coverage lapses.',
-  updated: '2026-10-09',
+    "Track certificates of insurance and exchange lien waivers for payment — with payment holds when a subcontractor’s coverage lapses.",
+  updated: "2026-10-09",
   keywords: [
-    'compliance',
-    'certificate of insurance',
-    'COI',
-    'lien waiver',
-    'W-9',
-    '1099',
-    '1099-NEC',
-    '1099-MISC',
-    'T4A',
-    'information return',
-    'subcontractor',
-    'additional insured',
-    'backup withholding',
+    "compliance",
+    "certificate of insurance",
+    "COI",
+    "lien waiver",
+    "W-9",
+    "1099",
+    "1099-NEC",
+    "1099-MISC",
+    "T4A",
+    "information return",
+    "subcontractor",
+    "additional insured",
+    "backup withholding",
   ],
-  related: ['project-types', 'field-tickets', 'purchasing-workflow', 'contractor-withholding'],
+  related: ["project-types", "field-tickets", "purchasing-workflow", "contractor-withholding"],
   body: `# Subcontractor Compliance
 
 The Subcontractor Compliance module applies insurance and lien-waiver controls
@@ -249,4 +249,4 @@ Five permissions separate the relevant duties:
 Recording evidence is not verifying it, granting an exception to a payment block
 is neither, and transmitting a statutory filing is its own authority.
 `,
-}
+};

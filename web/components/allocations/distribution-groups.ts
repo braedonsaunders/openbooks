@@ -13,31 +13,39 @@
  * floats, never `Number(amount)` arithmetic.
  */
 
-import { add, apportion, cmp, fromUnits, mulPercent, sum, toUnits } from '@openbooks/engine/money/money'
+import {
+  add,
+  apportion,
+  cmp,
+  fromUnits,
+  mulPercent,
+  sum,
+  toUnits,
+} from "@openbooks/engine/money/money";
 
 /** Minimal row shape the group model reads. LineGrid rows and drawer LineRows both satisfy it. */
 export interface DistributionGroupRow {
-  distributionGroupId?: string | null
-  distributionLocked?: boolean | null
-  amount?: string | null
+  distributionGroupId?: string | null;
+  distributionLocked?: boolean | null;
+  amount?: string | null;
 }
 
 /** One entry-mode rule offered for a line, as returned by entry-candidates. */
 export interface EntryDistributionCandidate {
-  ruleId: string
-  ruleKey: string
-  ruleName: string
-  applyPolicy: 'automatic' | 'suggest' | 'manual'
-  versionId: string
-  recommended: boolean
+  ruleId: string;
+  ruleKey: string;
+  ruleName: string;
+  applyPolicy: "automatic" | "suggest" | "manual";
+  versionId: string;
+  recommended: boolean;
 }
 
 /** Stable blank: a row with no (or a blank) group id stands alone. */
 export function groupIdOf(row: DistributionGroupRow): string | null {
-  const raw = row.distributionGroupId
-  if (typeof raw !== 'string') return null
-  const trimmed = raw.trim()
-  return trimmed === '' ? null : trimmed
+  const raw = row.distributionGroupId;
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed === "" ? null : trimmed;
 }
 
 /** Every row that belongs to `groupId`, in grid order, with grid indexes. */
@@ -45,19 +53,17 @@ export function groupMembers<Row extends DistributionGroupRow>(
   rows: readonly Row[],
   groupId: string,
 ): { row: Row; index: number }[] {
-  return rows
-    .map((row, index) => ({ row, index }))
-    .filter(({ row }) => groupIdOf(row) === groupId)
+  return rows.map((row, index) => ({ row, index })).filter(({ row }) => groupIdOf(row) === groupId);
 }
 
 /** Distinct group ids in first-appearance order. */
 export function groupIdsInOrder<Row extends DistributionGroupRow>(rows: readonly Row[]): string[] {
-  const seen: string[] = []
+  const seen: string[] = [];
   for (const row of rows) {
-    const id = groupIdOf(row)
-    if (id !== null && !seen.includes(id)) seen.push(id)
+    const id = groupIdOf(row);
+    if (id !== null && !seen.includes(id)) seen.push(id);
   }
-  return seen
+  return seen;
 }
 
 /** Display total of a group: Σ(child amounts). Blank cells count as zero so a
@@ -66,15 +72,15 @@ export function groupIdsInOrder<Row extends DistributionGroupRow>(rows: readonly
 export function groupTotal<Row extends DistributionGroupRow>(members: readonly Row[]): string {
   return sum(
     members.map((row) => {
-      const raw = String(row.amount ?? '').trim()
-      if (raw === '') return '0.0000'
+      const raw = String(row.amount ?? "").trim();
+      if (raw === "") return "0.0000";
       try {
-        return add(raw, '0')
+        return add(raw, "0");
       } catch {
-        return '0.0000'
+        return "0.0000";
       }
     }),
-  )
+  );
 }
 
 /**
@@ -84,7 +90,7 @@ export function groupTotal<Row extends DistributionGroupRow>(members: readonly R
  * discard their edits.
  */
 export function isGroupLocked<Row extends DistributionGroupRow>(members: readonly Row[]): boolean {
-  return members.some((row) => row.distributionLocked === true)
+  return members.some((row) => row.distributionLocked === true);
 }
 
 /**
@@ -97,16 +103,16 @@ export function isGroupLocked<Row extends DistributionGroupRow>(members: readonl
  * (`first_target` fallback) instead of dividing by zero.
  */
 export function reapportionGroupTotal(amounts: readonly string[], total: string): string[] {
-  if (amounts.length === 0) return []
-  const totalUnits = toUnits(total)
+  if (amounts.length === 0) return [];
+  const totalUnits = toUnits(total);
   const weightUnits = amounts.map((raw) => {
-    const units = toUnits(raw.trim() === '' ? '0' : raw)
-    return units < 0n ? -units : units
-  })
+    const units = toUnits(raw.trim() === "" ? "0" : raw);
+    return units < 0n ? -units : units;
+  });
   if (weightUnits.every((w) => w === 0n)) {
-    return amounts.map((_, i) => (i === 0 ? fromUnits(totalUnits) : fromUnits(0n)))
+    return amounts.map((_, i) => (i === 0 ? fromUnits(totalUnits) : fromUnits(0n)));
   }
-  return apportion(totalUnits, weightUnits).map(fromUnits)
+  return apportion(totalUnits, weightUnits).map(fromUnits);
 }
 
 /**
@@ -119,10 +125,10 @@ export function unsplitGroup<Row extends DistributionGroupRow>(
   rows: readonly Row[],
   groupId: string,
 ): { keepIndex: number; total: string } | null {
-  const members = groupMembers(rows, groupId)
-  if (members.length === 0) return null
-  const first = members[0]!
-  return { keepIndex: first.index, total: groupTotal(members.map((m) => m.row)) }
+  const members = groupMembers(rows, groupId);
+  if (members.length === 0) return null;
+  const first = members[0]!;
+  return { keepIndex: first.index, total: groupTotal(members.map((m) => m.row)) };
 }
 
 /**
@@ -131,28 +137,28 @@ export function unsplitGroup<Row extends DistributionGroupRow>(
  * read path starts joining it (A4); the header still renders with the total.
  */
 export interface GroupHeaderModel {
-  key: string
-  firstIndex: number
-  memberCount: number
-  total: string
-  locked: boolean
-  ruleName: string | null
+  key: string;
+  firstIndex: number;
+  memberCount: number;
+  total: string;
+  locked: boolean;
+  ruleName: string | null;
 }
 
 export function groupHeaderModels<Row extends DistributionGroupRow>(
   rows: readonly Row[],
   opts: {
-    totalOf?: (members: Row[]) => string
-    lockedOf?: (members: Row[]) => boolean
-    ruleNameOf?: (member: Row) => string | null
+    totalOf?: (members: Row[]) => string;
+    lockedOf?: (members: Row[]) => boolean;
+    ruleNameOf?: (member: Row) => string | null;
   } = {},
 ): GroupHeaderModel[] {
-  const models: GroupHeaderModel[] = []
+  const models: GroupHeaderModel[] = [];
   for (const key of groupIdsInOrder(rows)) {
-    const members = groupMembers(rows, key)
-    const first = members[0]
-    if (!first) continue
-    const memberRows = members.map((m) => m.row)
+    const members = groupMembers(rows, key);
+    const first = members[0];
+    if (!first) continue;
+    const memberRows = members.map((m) => m.row);
     models.push({
       key,
       firstIndex: first.index,
@@ -160,9 +166,9 @@ export function groupHeaderModels<Row extends DistributionGroupRow>(
       total: opts.totalOf ? opts.totalOf(memberRows) : groupTotal(memberRows),
       locked: opts.lockedOf ? opts.lockedOf(memberRows) : isGroupLocked(memberRows),
       ruleName: opts.ruleNameOf ? (opts.ruleNameOf(first.row) ?? null) : null,
-    })
+    });
   }
-  return models
+  return models;
 }
 
 /**
@@ -172,51 +178,55 @@ export function groupHeaderModels<Row extends DistributionGroupRow>(
  * Split… entry point for any other priced line.
  */
 export type RowDistributionChip =
-  | { kind: 'rule'; ruleName: string; locked: boolean }
-  | { kind: 'pending'; ruleName: string }
-  | { kind: 'suggest'; ruleName: string }
-  | { kind: 'split' }
+  | { kind: "rule"; ruleName: string; locked: boolean }
+  | { kind: "pending"; ruleName: string }
+  | { kind: "suggest"; ruleName: string }
+  | { kind: "split" };
 
 export function chipForRow<Row extends DistributionGroupRow>(
   row: Row,
   index: number,
   opts: {
-    ruleNameOf: (row: Row, index: number) => string | null
-    pendingRuleNameOf: (row: Row, index: number) => string | null
-    suggestionOf: (row: Row, index: number) => { ruleName: string } | null
-    splittable: (row: Row, index: number) => boolean
+    ruleNameOf: (row: Row, index: number) => string | null;
+    pendingRuleNameOf: (row: Row, index: number) => string | null;
+    suggestionOf: (row: Row, index: number) => { ruleName: string } | null;
+    splittable: (row: Row, index: number) => boolean;
   },
 ): RowDistributionChip | null {
   if (groupIdOf(row) !== null) {
-    return { kind: 'rule', ruleName: opts.ruleNameOf(row, index) ?? '', locked: row.distributionLocked === true }
+    return {
+      kind: "rule",
+      ruleName: opts.ruleNameOf(row, index) ?? "",
+      locked: row.distributionLocked === true,
+    };
   }
-  const pending = opts.pendingRuleNameOf(row, index)
-  if (pending !== null && pending !== '') return { kind: 'pending', ruleName: pending }
-  const suggestion = opts.suggestionOf(row, index)
-  if (suggestion !== null) return { kind: 'suggest', ruleName: suggestion.ruleName }
-  return opts.splittable(row, index) ? { kind: 'split' } : null
+  const pending = opts.pendingRuleNameOf(row, index);
+  if (pending !== null && pending !== "") return { kind: "pending", ruleName: pending };
+  const suggestion = opts.suggestionOf(row, index);
+  if (suggestion !== null) return { kind: "suggest", ruleName: suggestion.ruleName };
+  return opts.splittable(row, index) ? { kind: "split" } : null;
 }
 
 /** Row-action menu keys behind the Split… ContextMenu (labels resolve via entry.* in the grid). */
-export type DistributionMenuKey = 'split' | 'unsplit' | 'lock' | 'unlock' | 'apply-suggest'
+export type DistributionMenuKey = "split" | "unsplit" | "lock" | "unlock" | "apply-suggest";
 
 export function menuKeysForRow<Row extends DistributionGroupRow>(
   row: Row,
   index: number,
   opts: {
-    pendingRuleNameOf: (row: Row, index: number) => string | null
-    suggestionOf: (row: Row, index: number) => { ruleName: string } | null
-    splittable: (row: Row, index: number) => boolean
+    pendingRuleNameOf: (row: Row, index: number) => string | null;
+    suggestionOf: (row: Row, index: number) => { ruleName: string } | null;
+    splittable: (row: Row, index: number) => boolean;
   },
 ): DistributionMenuKey[] {
-  const groupId = groupIdOf(row)
+  const groupId = groupIdOf(row);
   if (groupId !== null) {
-    return row.distributionLocked === true ? ['unlock', 'unsplit'] : ['lock', 'unsplit']
+    return row.distributionLocked === true ? ["unlock", "unsplit"] : ["lock", "unsplit"];
   }
-  const keys: DistributionMenuKey[] = []
-  if (opts.suggestionOf(row, index) !== null) keys.push('apply-suggest')
-  if (opts.splittable(row, index) && !opts.pendingRuleNameOf(row, index)) keys.push('split')
-  return keys
+  const keys: DistributionMenuKey[] = [];
+  if (opts.suggestionOf(row, index) !== null) keys.push("apply-suggest");
+  if (opts.splittable(row, index) && !opts.pendingRuleNameOf(row, index)) keys.push("split");
+  return keys;
 }
 
 /**
@@ -230,79 +240,79 @@ export function menuKeysForRow<Row extends DistributionGroupRow>(
  * Either way Σ(result) == total exactly.
  */
 export type SplitPortion =
-  | { kind: 'remainder' }
-  | { kind: 'percent'; value: number | string }
-  | { kind: 'fixed'; value: string }
-  | { kind: 'weight'; value: string }
+  | { kind: "remainder" }
+  | { kind: "percent"; value: number | string }
+  | { kind: "fixed"; value: string }
+  | { kind: "weight"; value: string };
 
 export function splitPortionsToAmounts(
   portions: readonly SplitPortion[],
   total: string,
 ): string[] | null {
-  let totalUnits: bigint
+  let totalUnits: bigint;
   try {
-    totalUnits = toUnits(total)
+    totalUnits = toUnits(total);
   } catch {
-    return null
+    return null;
   }
   // Manual weights belong to allocation targets, not entry splits: a weight
   // names no amount, so a weight line can never price into the total. Fail
   // closed (the allocation drawer never offers this kind here).
-  if (portions.some((portion) => portion.kind === 'weight')) return null
-  const amounts = new Array<bigint>(portions.length).fill(0n)
-  let placed = 0n
+  if (portions.some((portion) => portion.kind === "weight")) return null;
+  const amounts = new Array<bigint>(portions.length).fill(0n);
+  let placed = 0n;
   for (let i = 0; i < portions.length; i++) {
-    const portion = portions[i]!
-    if (portion.kind === 'fixed') {
-      let units: bigint
+    const portion = portions[i]!;
+    if (portion.kind === "fixed") {
+      let units: bigint;
       try {
-        units = toUnits(portion.value)
+        units = toUnits(portion.value);
       } catch {
-        return null
+        return null;
       }
-      amounts[i] = units
-      placed += units
-    } else if (portion.kind === 'percent') {
-      const pctText = typeof portion.value === 'number' ? String(portion.value) : portion.value
+      amounts[i] = units;
+      placed += units;
+    } else if (portion.kind === "percent") {
+      const pctText = typeof portion.value === "number" ? String(portion.value) : portion.value;
       try {
-        if (toUnits(pctText) < 0n) return null
+        if (toUnits(pctText) < 0n) return null;
       } catch {
-        return null
+        return null;
       }
-      let units: bigint
+      let units: bigint;
       try {
-        units = toUnits(mulPercent(total, pctText))
+        units = toUnits(mulPercent(total, pctText));
       } catch {
-        return null
+        return null;
       }
-      amounts[i] = units
-      placed += units
+      amounts[i] = units;
+      placed += units;
     }
   }
-  const leftover = totalUnits - placed
-  const remainderIndexes: number[] = []
+  const leftover = totalUnits - placed;
+  const remainderIndexes: number[] = [];
   portions.forEach((portion, i) => {
-    if (portion.kind === 'remainder') remainderIndexes.push(i)
-  })
+    if (portion.kind === "remainder") remainderIndexes.push(i);
+  });
   if (remainderIndexes.length === 0) {
-    if (leftover !== 0n) return null
-    return amounts.map((units) => fromUnits(units))
+    if (leftover !== 0n) return null;
+    return amounts.map((units) => fromUnits(units));
   }
-  if (leftover < 0n) return null
-  const count = BigInt(remainderIndexes.length)
-  const base = leftover / count
-  const extra = leftover % count
+  if (leftover < 0n) return null;
+  const count = BigInt(remainderIndexes.length);
+  const base = leftover / count;
+  const extra = leftover % count;
   remainderIndexes.forEach((rowIndex, slot) => {
-    amounts[rowIndex] = base + (BigInt(slot) < extra ? 1n : 0n)
-  })
-  return amounts.map((units) => fromUnits(units))
+    amounts[rowIndex] = base + (BigInt(slot) < extra ? 1n : 0n);
+  });
+  return amounts.map((units) => fromUnits(units));
 }
 
 /** True when two ledger amounts differ — drives the dirty/re-explode checks. */
 export function moneyDiffers(a: string, b: string): boolean {
   try {
-    return cmp(a, b) !== 0
+    return cmp(a, b) !== 0;
   } catch {
-    return String(a) !== String(b)
+    return String(a) !== String(b);
   }
 }

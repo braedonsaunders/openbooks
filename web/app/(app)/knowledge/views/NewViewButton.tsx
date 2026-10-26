@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import { useRouter } from 'next/navigation'
-import { Plus } from 'lucide-react'
-import { useTranslations } from 'next-intl'
-import { Button } from '@openbooks/ui'
+import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { Button } from "@openbooks/ui";
 
 /**
  * Unsaved create: navigates to `?view=new`, which renders the view studio
@@ -11,12 +11,12 @@ import { Button } from '@openbooks/ui'
  * explicit Save, and Cancel/close writes nothing.
  */
 export function NewViewButton() {
-  const t = useTranslations('knowledge.views')
-  const router = useRouter()
+  const t = useTranslations("knowledge.views");
+  const router = useRouter();
 
   return (
-    <Button onClick={() => router.push('/knowledge/views?view=new')}>
-      <Plus size={16} /> {t('new')}
+    <Button onClick={() => router.push("/knowledge/views?view=new")}>
+      <Plus size={16} /> {t("new")}
     </Button>
-  )
+  );
 }

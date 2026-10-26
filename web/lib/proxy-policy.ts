@@ -137,17 +137,17 @@ export function isChannelWebhookPath(pathname: string): boolean {
  * values. Same gate as `authRequestContext` — kept here so the Edge CSRF
  * module can honor it without importing `node:net`.
  */
-export function trustsForwardedHeaders(
-  environment: Record<string, string | undefined>,
-): boolean {
+export function trustsForwardedHeaders(environment: Record<string, string | undefined>): boolean {
   return /^(1|true|yes)$/i.test(environment.OPENBOOKS_TRUST_PROXY ?? "");
 }
 
 export function isPublicPath(pathname: string): boolean {
-  return EXACT_PUBLIC_PATHS.has(pathname)
-    || PUBLIC_SEGMENT_ROOTS.some((root) => matchesSegment(pathname, root))
-    || isChannelWebhookPath(pathname)
-    || matchesSegment(pathname, "/_next");
+  return (
+    EXACT_PUBLIC_PATHS.has(pathname) ||
+    PUBLIC_SEGMENT_ROOTS.some((root) => matchesSegment(pathname, root)) ||
+    isChannelWebhookPath(pathname) ||
+    matchesSegment(pathname, "/_next")
+  );
 }
 
 /**
@@ -159,7 +159,9 @@ export function isPublicPath(pathname: string): boolean {
  * browser forms like /api/login and /api/password-reset — is origin-checked.
  */
 export function isCsrfExemptPath(pathname: string): boolean {
-  return pathname === "/mcp"
-    || PUBLIC_SEGMENT_ROOTS.some((root) => matchesSegment(pathname, root))
-    || isChannelWebhookPath(pathname);
+  return (
+    pathname === "/mcp" ||
+    PUBLIC_SEGMENT_ROOTS.some((root) => matchesSegment(pathname, root)) ||
+    isChannelWebhookPath(pathname)
+  );
 }

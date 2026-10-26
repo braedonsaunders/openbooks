@@ -1,16 +1,17 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { stubModules } from '../../testing/stub-modules'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { stubModules } from "../../testing/stub-modules";
+import test from "node:test";
 
-stubModules({ intl: true })
+stubModules({ intl: true });
 
-const { sql } = await import('drizzle-orm')
-const { toUnits } = await import('@openbooks/engine/money/money')
-const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
-const { withSimClock: pinClock } = await import('@openbooks/engine/testing/platform/clock')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { purchasingHome } = await import('./purchasing')
+const { sql } = await import("drizzle-orm");
+const { toUnits } = await import("@openbooks/engine/money/money");
+const { db, env, withBypass } = await import("@openbooks/engine/platform/db");
+const { withSimClock: pinClock } = await import("@openbooks/engine/testing/platform/clock");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { purchasingHome } = await import("./purchasing");
 
 /**
  * An explicitly empty subsidiary scope is a caller whose role visibility
@@ -19,15 +20,18 @@ const { purchasingHome } = await import('./purchasing')
  * organization. Sibling readers (accounting, payroll, customers, cash,
  * banking) fail closed on []; purchasing must match.
  */
-test('purchasing cockpit denies every row to an empty subsidiary scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const scratch = await withBypass(() => createScratchOrg())
-  const actorId = await withBypass(() => createScratchUser(scratch.orgId, 'Buyer', 'admin'))
-  try {
-    await pinClock('2026-07-15', async () => {
-      await withBypass(async () => {
-        const documentId = randomUUID()
-        const entryId = randomUUID()
-        await db.execute(sql`
+test(
+  "purchasing cockpit denies every row to an empty subsidiary scope",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const scratch = await withBypass(() => createScratchOrg());
+    const actorId = await withBypass(() => createScratchUser(scratch.orgId, "Buyer", "admin"));
+    try {
+      await pinClock("2026-07-15", async () => {
+        await withBypass(async () => {
+          const documentId = randomUUID();
+          const entryId = randomUUID();
+          await db.execute(sql`
           insert into documents(
             id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
             posting_date, currency, fx_rate, status, subtotal, tax_total, total
@@ -36,8 +40,8 @@ test('purchasing cockpit denies every row to an empty subsidiary scope', { skip:
             ${scratch.subsidiaryId}, '2026-07-14', '2026-07-14', 'CAD',
             '1', 'draft', '100', 0, '100'
           )
-        `)
-        await db.execute(sql`
+        `);
+          await db.execute(sql`
           insert into journal_entries(
             id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
             status, origin, source_document_id, created_by, updated_by
@@ -45,8 +49,8 @@ test('purchasing cockpit denies every row to an empty subsidiary scope', { skip:
             ${entryId}, ${scratch.orgId}, ${scratch.bookId}, ${scratch.subsidiaryId}, 'BILL-EMPTY-SCOPE',
             '2026-07-14', ${scratch.periodId}, 'draft', 'manual', ${documentId}, ${actorId}, ${actorId}
           )
-        `)
-        await db.execute(sql`
+        `);
+          await db.execute(sql`
           insert into journal_lines(
             id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id,
             is_open_item, amount, currency, txn_amount, fx_rate
@@ -55,28 +59,49 @@ test('purchasing cockpit denies every row to an empty subsidiary scope', { skip:
              ${scratch.vendorId}, true, '-100', 'CAD', '-100', '1'),
             (${randomUUID()}, ${scratch.orgId}, ${entryId}, 2, ${scratch.accounts.cogs}, ${scratch.subsidiaryId},
              ${scratch.vendorId}, false, '100', 'CAD', '100', '1')
-        `)
-        await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`)
-        await db.execute(sql`
+        `);
+          await db.execute(
+            sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`,
+          );
+          await db.execute(sql`
           update documents
              set status = 'posted', posted_entry_id = ${entryId}, posting_period_id = ${scratch.periodId}
            where id = ${documentId} and org_id = ${scratch.orgId}
-        `)
-      })
+        `);
+        });
 
-      const denied = await withBypass(() => purchasingHome(scratch.orgId, [], undefined, { ap: true, orders: true, expenses: true, parties: true }))
-      assert.equal(toUnits(denied.spend30d), toUnits(0), 'empty scope reads no spend')
-      assert.equal(toUnits(denied.apOutstanding), toUnits(0), 'empty scope reads no payables')
-      assert.deepEqual(denied.topExposure, [], 'empty scope exposes no vendor')
-      assert.ok(
-        denied.trend.every((w) => toUnits(w.spend) === 0n),
-        'empty scope trend stays at zero',
-      )
+        const denied = await withBypass(() =>
+          purchasingHome(scratch.orgId, [], undefined, {
+            ap: true,
+            orders: true,
+            expenses: true,
+            parties: true,
+          }),
+        );
+        assert.equal(toUnits(denied.spend30d), toUnits(0), "empty scope reads no spend");
+        assert.equal(toUnits(denied.apOutstanding), toUnits(0), "empty scope reads no payables");
+        assert.deepEqual(denied.topExposure, [], "empty scope exposes no vendor");
+        assert.ok(
+          denied.trend.every((w) => toUnits(w.spend) === 0n),
+          "empty scope trend stays at zero",
+        );
 
-      const all = await withBypass(() => purchasingHome(scratch.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true }))
-      assert.equal(toUnits(all.spend30d), toUnits(100), 'unrestricted callers still see the spend')
-    })
-  } finally {
-    await withBypass(() => dropScratchOrg(scratch.orgId))
-  }
-})
+        const all = await withBypass(() =>
+          purchasingHome(scratch.orgId, undefined, undefined, {
+            ap: true,
+            orders: true,
+            expenses: true,
+            parties: true,
+          }),
+        );
+        assert.equal(
+          toUnits(all.spend30d),
+          toUnits(100),
+          "unrestricted callers still see the spend",
+        );
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(scratch.orgId));
+    }
+  },
+);

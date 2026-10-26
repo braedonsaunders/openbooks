@@ -15,7 +15,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.tax-rate-domain-route-test')]
@@ -30,10 +30,11 @@ const mockAuthz = `
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as setup-route-contract.test.ts).
-    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "mock:setup-intl" };
+    if (specifier === "next-intl/server")
+      return { shortCircuit: true, format: "module", url: "mock:setup-intl" };
     // Forward Next.js-style aliases to the real modules they point at.
-    const entityRoute = context.parentURL?.includes("%5Bentity%5D")
-      ?? context.parentURL?.includes("[entity]");
+    const entityRoute =
+      context.parentURL?.includes("%5Bentity%5D") ?? context.parentURL?.includes("[entity]");
     if (specifier === "../../../../../lib/authz" && entityRoute) {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -50,7 +51,11 @@ registerHooks({
       return { format: "module", source: mockAuthz, shortCircuit: true };
     }
     if (url === "mock:setup-intl") {
-      return { format: "module", source: `export async function getTranslations(){ return (key) => key }; export async function getLocale(){ return 'en' }`, shortCircuit: true };
+      return {
+        format: "module",
+        source: `export async function getTranslations(){ return (key) => key }; export async function getLocale(){ return 'en' }`,
+        shortCircuit: true,
+      };
     }
     return nextLoad(url, context);
   },
@@ -59,26 +64,46 @@ registerHooks({
 const routeUrl = "./route.ts?tax-rate-domain-route-test";
 const { DELETE, PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 const { loadEntityOptions } = await import("../../../../../lib/setup/ref-options.ts");
-const { setupEntitySubsidiaryFilter } = await import("../../../../../lib/setup/subsidiary-scope.ts");
-const { SETUP_ENTITY_BY_KEY, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY, resolveSetupEntityGate } = await import(
-  "../../../../../lib/setup/registry.ts"
-);
-const { createSetupRecord, deleteSetupRecord, preflightSetupWrite, updateSetupRecord } = await import(
-  "../../../../../lib/setup/write.ts"
-);
+const { setupEntitySubsidiaryFilter } =
+  await import("../../../../../lib/setup/subsidiary-scope.ts");
+const { SETUP_ENTITY_BY_KEY, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY, resolveSetupEntityGate } =
+  await import("../../../../../lib/setup/registry.ts");
+const { createSetupRecord, deleteSetupRecord, preflightSetupWrite, updateSetupRecord } =
+  await import("../../../../../lib/setup/write.ts");
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } =
+  await import("@openbooks/engine/testing/fixtures");
 const { computeLineTaxes } = await import("@openbooks/engine/tax/tax");
 const { loadTaxComponentConfig } = await import("@openbooks/engine/tax/persist");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-function authenticate(f: { orgId: string; actorId: string }, allowedSubsidiaryIds: Set<string> | null = null) { routeState.authz = { user: { orgId: f.orgId, id: f.actorId }, permissions: new Set(["admin.setup.manage"]), allowedSubsidiaryIds }; }
-function postRequest(entity: string, body: unknown): Request { return new Request(`http://localhost/api/admin/setup/${entity}`, { method: "POST", headers: { "Idempotency-Key": randomUUID() }, body: JSON.stringify(body) }); }
-function patchRequest(entity: string, body: unknown): Request { return new Request(`http://localhost/api/admin/setup/${entity}`, { method: "PATCH", body: JSON.stringify(body) }); }
-function deleteRequest(entity: string, id: string): Request { return new Request(`http://localhost/api/admin/setup/${entity}?id=${id}`, { method: "DELETE" }); }
+function authenticate(
+  f: { orgId: string; actorId: string },
+  allowedSubsidiaryIds: Set<string> | null = null,
+) {
+  routeState.authz = {
+    user: { orgId: f.orgId, id: f.actorId },
+    permissions: new Set(["admin.setup.manage"]),
+    allowedSubsidiaryIds,
+  };
+}
+function postRequest(entity: string, body: unknown): Request {
+  return new Request(`http://localhost/api/admin/setup/${entity}`, {
+    method: "POST",
+    headers: { "Idempotency-Key": randomUUID() },
+    body: JSON.stringify(body),
+  });
+}
+function patchRequest(entity: string, body: unknown): Request {
+  return new Request(`http://localhost/api/admin/setup/${entity}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+function deleteRequest(entity: string, id: string): Request {
+  return new Request(`http://localhost/api/admin/setup/${entity}?id=${id}`, { method: "DELETE" });
+}
 
 const call = (entity: string) => ({ params: Promise.resolve({ entity }) });
 
@@ -102,16 +127,22 @@ async function seedTaxFixture(): Promise<TaxFixture> {
 }
 
 async function taxRateRows(orgId: string): Promise<{ id: string; rate: string }[]> {
-  const result = await db.execute<{ id: string; rate: string }>(sql`
-    select id, rate_percent::text as rate from tax_rates where org_id = ${orgId} order by effective_from`, "objects");
+  const result = await db.execute<{ id: string; rate: string }>(
+    sql`
+    select id, rate_percent::text as rate from tax_rates where org_id = ${orgId} order by effective_from`,
+    "objects",
+  );
   return result;
 }
 
 async function auditCount(orgId: string, table: string, rowId?: string): Promise<number> {
-  const result = await db.execute<{ n: number }>(sql`
+  const result = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from audit_log
      where org_id = ${orgId} and table_name = ${table}
-       ${rowId ? sql`and row_id = ${rowId}` : sql``}`, "objects");
+       ${rowId ? sql`and row_id = ${rowId}` : sql``}`,
+    "objects",
+  );
   return result[0]!.n;
 }
 
@@ -163,15 +194,16 @@ test("generic setup PATCH and DELETE reject malformed row ids", { skip: !DB }, a
     authenticate({ orgId: org.orgId, actorId });
 
     const patched = await PATCH(
-      patchRequest("tax-codes", { id: "not-a-uuid", code: "MALFORMED", name: "Should not persist" }),
+      patchRequest("tax-codes", {
+        id: "not-a-uuid",
+        code: "MALFORMED",
+        name: "Should not persist",
+      }),
       call("tax-codes"),
     );
     assert.equal(patched.status, 404);
 
-    const deleted = await DELETE(
-      deleteRequest("tax-codes", "not-a-uuid"),
-      call("tax-codes"),
-    );
+    const deleted = await DELETE(deleteRequest("tax-codes", "not-a-uuid"), call("tax-codes"));
     assert.equal(deleted.status, 404);
   } finally {
     routeState.authz = null;
@@ -182,8 +214,11 @@ test("generic setup PATCH and DELETE reject malformed row ids", { skip: !DB }, a
 test("derived-rule edits close the old window and create a successor", { skip: !DB }, async () => {
   const f = await seedDerivedRuleFixture();
   try {
-    const current = await db.execute<{ code: string }>(sql`
-      select code from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`, "objects");
+    const current = await db.execute<{ code: string }>(
+      sql`
+      select code from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`,
+      "objects",
+    );
     const code = current[0]!.code;
     const edited = await PATCH(
       patchRequest("pay-derived-rules", {
@@ -209,18 +244,47 @@ test("derived-rule edits close the old window and create a successor", { skip: !
     assert.equal(edited.status, 200);
     const { id: successorId } = (await edited.json()) as { id: string };
     assert.notEqual(successorId, f.ruleId, "a policy edit must receive a new version id");
-    const rows = await db.execute<{ id: string; name: string; rate: string; from_date: string; to_date: string | null }>(sql`
+    const rows = await db.execute<{
+      id: string;
+      name: string;
+      rate: string;
+      from_date: string;
+      to_date: string | null;
+    }>(
+      sql`
       select id, name, rate_value::text as rate, effective_from::text as from_date,
              effective_to::text as to_date
         from pay_derived_rules
        where org_id = ${f.orgId} and code = ${code}
-       order by effective_from`, "objects");
+       order by effective_from`,
+      "objects",
+    );
     assert.deepEqual(rows, [
-      { id: f.ruleId, name: "Original rule", rate: "10.0000", from_date: "2026-01-01", to_date: "2026-06-30" },
-      { id: successorId, name: "Successor rule", rate: "25.0000", from_date: "2026-07-01", to_date: null },
+      {
+        id: f.ruleId,
+        name: "Original rule",
+        rate: "10.0000",
+        from_date: "2026-01-01",
+        to_date: "2026-06-30",
+      },
+      {
+        id: successorId,
+        name: "Successor rule",
+        rate: "25.0000",
+        from_date: "2026-07-01",
+        to_date: null,
+      },
     ]);
-    assert.equal(await auditCount(f.orgId, "pay_derived_rules", f.ruleId), 2, "close and original create are both audited");
-    assert.equal(await auditCount(f.orgId, "pay_derived_rules", successorId), 1, "successor insert is audited");
+    assert.equal(
+      await auditCount(f.orgId, "pay_derived_rules", f.ruleId),
+      2,
+      "close and original create are both audited",
+    );
+    assert.equal(
+      await auditCount(f.orgId, "pay_derived_rules", successorId),
+      1,
+      "successor insert is audited",
+    );
 
     // Creating a later active version through the same generic endpoint also
     // closes the current window before the insert.
@@ -246,12 +310,20 @@ test("derived-rule edits close the old window and create a successor", { skip: !
     );
     assert.equal(appended.status, 200);
     const { id: appendedId } = (await appended.json()) as { id: string };
-    const finalRows = await db.execute<{ id: string; to_date: string | null }>(sql`
+    const finalRows = await db.execute<{ id: string; to_date: string | null }>(
+      sql`
       select id, effective_to::text as to_date from pay_derived_rules
-       where org_id = ${f.orgId} and code = ${code} order by effective_from`, "objects");
-    assert.deepEqual(finalRows.map((row) => [row.id, row.to_date]), [
-      [f.ruleId, "2026-06-30"], [successorId, "2026-12-31"], [appendedId, null],
-    ]);
+       where org_id = ${f.orgId} and code = ${code} order by effective_from`,
+      "objects",
+    );
+    assert.deepEqual(
+      finalRows.map((row) => [row.id, row.to_date]),
+      [
+        [f.ruleId, "2026-06-30"],
+        [successorId, "2026-12-31"],
+        [appendedId, null],
+      ],
+    );
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);
@@ -261,138 +333,256 @@ test("derived-rule edits close the old window and create a successor", { skip: !
 test("setup deletes write their audit event in the same transaction", { skip: !DB }, async () => {
   const f = await seedDerivedRuleFixture();
   try {
-    assert.equal((await DELETE(deleteRequest("pay-derived-rules", f.ruleId), call("pay-derived-rules"))).status, 200);
-    assert.equal((await db.execute(sql`select id from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`, "objects")).length, 0);
-    assert.equal(await auditCount(f.orgId, "pay_derived_rules", f.ruleId), 2, "insert and delete each leave audit evidence");
+    assert.equal(
+      (await DELETE(deleteRequest("pay-derived-rules", f.ruleId), call("pay-derived-rules")))
+        .status,
+      200,
+    );
+    assert.equal(
+      (
+        await db.execute(
+          sql`select id from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`,
+          "objects",
+        )
+      ).length,
+      0,
+    );
+    assert.equal(
+      await auditCount(f.orgId, "pay_derived_rules", f.ruleId),
+      2,
+      "insert and delete each leave audit evidence",
+    );
 
     const pinnedGroupId = randomUUID();
-    await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name, created_by) values (${pinnedGroupId}, ${f.orgId}, 'delete-test', 'pinned', 'Pinned group', ${f.actorId})`);
-    await db.execute(sql`insert into account_group_members (org_id, group_id, account_id, dimension, created_by) values (${f.orgId}, ${pinnedGroupId}, (select id from accounts where org_id = ${f.orgId} limit 1), 'delete-test', ${f.actorId})`);
-    const refused = await DELETE(deleteRequest("account-groups", pinnedGroupId), call("account-groups"));
-    assert.deepEqual([refused.status, (await refused.json() as { error: string }).error], [409, 'account group still has pinned accounts — unpin or reassign them before deleting the group']);
-    assert.equal((await db.execute(sql`select 1 from account_group_members where group_id = ${pinnedGroupId}`, "objects")).length, 1);
-    await assert.rejects(db.execute(sql`delete from account_groups where id = ${pinnedGroupId} and org_id = ${f.orgId}`));
+    await db.execute(
+      sql`insert into account_groups (id, org_id, dimension, key, name, created_by) values (${pinnedGroupId}, ${f.orgId}, 'delete-test', 'pinned', 'Pinned group', ${f.actorId})`,
+    );
+    await db.execute(
+      sql`insert into account_group_members (org_id, group_id, account_id, dimension, created_by) values (${f.orgId}, ${pinnedGroupId}, (select id from accounts where org_id = ${f.orgId} limit 1), 'delete-test', ${f.actorId})`,
+    );
+    const refused = await DELETE(
+      deleteRequest("account-groups", pinnedGroupId),
+      call("account-groups"),
+    );
+    assert.deepEqual(
+      [refused.status, ((await refused.json()) as { error: string }).error],
+      [
+        409,
+        "account group still has pinned accounts — unpin or reassign them before deleting the group",
+      ],
+    );
+    assert.equal(
+      (
+        await db.execute(
+          sql`select 1 from account_group_members where group_id = ${pinnedGroupId}`,
+          "objects",
+        )
+      ).length,
+      1,
+    );
+    await assert.rejects(
+      db.execute(
+        sql`delete from account_groups where id = ${pinnedGroupId} and org_id = ${f.orgId}`,
+      ),
+    );
 
-    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"multiSubsidiary":true}'::jsonb, true) where id = ${f.orgId}`);
-    const main = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${f.orgId} order by created_at limit 1`, "objects"))[0]!.id;
+    await db.execute(
+      sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"multiSubsidiary":true}'::jsonb, true) where id = ${f.orgId}`,
+    );
+    const main = (
+      await db.execute<{ id: string }>(
+        sql`select id from subsidiaries where org_id = ${f.orgId} order by created_at limit 1`,
+        "objects",
+      )
+    )[0]!.id;
     const [foreign, segment] = [randomUUID(), randomUUID()];
-    await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country) values (${foreign}, ${f.orgId}, ${main}, 'Entity B', 'CAD', 'CA')`);
-    await db.execute(sql`insert into segment_definitions (id, org_id, key, name, plural_name) values (${segment}, ${f.orgId}, ${`scope_${randomUUID().replaceAll('-', '').slice(0, 12)}`}, 'Scope test', 'Scope tests')`);
+    await db.execute(
+      sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country) values (${foreign}, ${f.orgId}, ${main}, 'Entity B', 'CAD', 'CA')`,
+    );
+    await db.execute(
+      sql`insert into segment_definitions (id, org_id, key, name, plural_name) values (${segment}, ${f.orgId}, ${`scope_${randomUUID().replaceAll("-", "").slice(0, 12)}`}, 'Scope test', 'Scope tests')`,
+    );
     authenticate(f, new Set([main]));
-    const orgWide = await POST(postRequest("account-groups", {}), call("account-groups")); assert.deepEqual([orgWide.status, await orgWide.json()], [403, { error: "requires unrestricted subsidiary access" }]);
-    const scoped = await POST(postRequest("segment-values", { segmentId: segment, name: "Foreign", subsidiaryId: foreign }), call("segment-values")); assert.equal(scoped.status, 403);
-    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from segment_values where segment_id = ${segment}`, "objects"))[0]!.n, 0);
+    const orgWide = await POST(postRequest("account-groups", {}), call("account-groups"));
+    assert.deepEqual(
+      [orgWide.status, await orgWide.json()],
+      [403, { error: "requires unrestricted subsidiary access" }],
+    );
+    const scoped = await POST(
+      postRequest("segment-values", { segmentId: segment, name: "Foreign", subsidiaryId: foreign }),
+      call("segment-values"),
+    );
+    assert.equal(scoped.status, 403);
+    assert.equal(
+      (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from segment_values where segment_id = ${segment}`,
+          "objects",
+        )
+      )[0]!.n,
+      0,
+    );
     const groupId = randomUUID();
-    await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name) values (${groupId}, ${f.orgId}, 'class', 'scope_test', 'Restricted group')`);
+    await db.execute(
+      sql`insert into account_groups (id, org_id, dimension, key, name) values (${groupId}, ${f.orgId}, 'class', 'scope_test', 'Restricted group')`,
+    );
     const accountGroups = SETUP_ENTITY_BY_KEY.get("account-groups")!;
-    assert.equal((await db.execute(sql`select count(*)::int as n from account_groups where id = ${groupId} ${setupEntitySubsidiaryFilter(accountGroups, new Set([main]))}`, "objects"))[0]!.n, 0);
-    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,equipment}', 'true'::jsonb) where id = ${f.orgId}`);
-    const unitId = randomUUID(); await db.execute(sql`insert into equipment_units (id,org_id,subsidiary_id,unit_number,name,status,purchase_price) values (${unitId},${f.orgId},${foreign},'FOREIGN','Foreign unit','active','1')`);
+    assert.equal(
+      (
+        await db.execute(
+          sql`select count(*)::int as n from account_groups where id = ${groupId} ${setupEntitySubsidiaryFilter(accountGroups, new Set([main]))}`,
+          "objects",
+        )
+      )[0]!.n,
+      0,
+    );
+    await db.execute(
+      sql`update orgs set settings = jsonb_set(settings, '{features,equipment}', 'true'::jsonb) where id = ${f.orgId}`,
+    );
+    const unitId = randomUUID();
+    await db.execute(
+      sql`insert into equipment_units (id,org_id,subsidiary_id,unit_number,name,status,purchase_price) values (${unitId},${f.orgId},${foreign},'FOREIGN','Foreign unit','active','1')`,
+    );
     assert.deepEqual(await loadEntityOptions("equipment-units", f.orgId, new Set([main])), []);
-    const rule = await POST(postRequest("pay-derived-rules", { code: `SCOPED-${randomUUID()}`, name: "Foreign unit rule", componentId: f.componentId, trigger: "distinct_day", effectiveFrom: "2026-01-01", rateMode: "fixed_per_unit", rateValue: "1", quantityMode: "count", costingMode: "source", billableOnly: false, equipmentUnitId: unitId, includedJobTitles: [], excludedJobTitles: [], sequence: 50, isActive: true }), call("pay-derived-rules"));
-    assert.deepEqual([rule.status, await rule.json()], [403, { error: "The owning record is outside your allowed employer scope" }]);
+    const rule = await POST(
+      postRequest("pay-derived-rules", {
+        code: `SCOPED-${randomUUID()}`,
+        name: "Foreign unit rule",
+        componentId: f.componentId,
+        trigger: "distinct_day",
+        effectiveFrom: "2026-01-01",
+        rateMode: "fixed_per_unit",
+        rateValue: "1",
+        quantityMode: "count",
+        costingMode: "source",
+        billableOnly: false,
+        equipmentUnitId: unitId,
+        includedJobTitles: [],
+        excludedJobTitles: [],
+        sequence: 50,
+        isActive: true,
+      }),
+      call("pay-derived-rules"),
+    );
+    assert.deepEqual(
+      [rule.status, await rule.json()],
+      [403, { error: "The owning record is outside your allowed employer scope" }],
+    );
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);
   }
 });
 
-test("API rejects negative and out-of-domain tax rates before any write", { skip: !DB }, async () => {
-  const f = await seedTaxFixture();
-  try {
-    const beforeRates = await taxRateRows(f.orgId);
-    const beforeAudits = await auditCount(f.orgId, "tax_rates");
+test(
+  "API rejects negative and out-of-domain tax rates before any write",
+  { skip: !DB },
+  async () => {
+    const f = await seedTaxFixture();
+    try {
+      const beforeRates = await taxRateRows(f.orgId);
+      const beforeAudits = await auditCount(f.orgId, "tax_rates");
 
-    for (const [label, override] of [
-      ["negative", { ratePercent: "-13" }],
-      ["negative-sub-cent", { ratePercent: "-0.0001" }],
-      ["fx-scale-precision", { ratePercent: "13.00005" }],
-    ] as const) {
-      const res = await POST(
+      for (const [label, override] of [
+        ["negative", { ratePercent: "-13" }],
+        ["negative-sub-cent", { ratePercent: "-0.0001" }],
+        ["fx-scale-precision", { ratePercent: "13.00005" }],
+      ] as const) {
+        const res = await POST(
+          postRequest("tax-rates", {
+            taxCodeId: f.vatCodeId,
+            effectiveFrom: "2026-01-01",
+            ...override,
+          }),
+          call("tax-rates"),
+        );
+        assert.equal(res.status, 400, `${label}: expected a client error`);
+        const body = (await res.json()) as { error: string };
+        assert.ok(
+          body.error === "negative-tax-rate" ||
+            body.error === "invalid-tax-rate" ||
+            /ratePercent/.test(body.error),
+          `${label}: unexpected error "${body.error}"`,
+        );
+      }
+      // Values the shared coercer already refuses stay refused.
+      for (const [label, override] of [
+        ["not-a-decimal", { ratePercent: "thirteen" }],
+        ["missing-rate", {}],
+      ] as const) {
+        const res = await POST(
+          postRequest("tax-rates", {
+            taxCodeId: f.vatCodeId,
+            effectiveFrom: "2026-01-01",
+            ...override,
+          }),
+          call("tax-rates"),
+        );
+        assert.equal(res.status, 400, `${label}: expected a client error`);
+      }
+      assert.deepEqual(await taxRateRows(f.orgId), beforeRates, "no rate row was written");
+      assert.equal(
+        await auditCount(f.orgId, "tax_rates"),
+        beforeAudits,
+        "no orphan audit was written",
+      );
+
+      // A valid exact-decimal rate persists, then refuses edits that leave the
+      // domain. (The PATCH contract carries the full record, like the drawer.)
+      const created = await POST(
         postRequest("tax-rates", {
           taxCodeId: f.vatCodeId,
+          ratePercent: "8.875",
           effectiveFrom: "2026-01-01",
-          ...override,
         }),
         call("tax-rates"),
       );
-      assert.equal(res.status, 400, `${label}: expected a client error`);
-      const body = (await res.json()) as { error: string };
-      assert.ok(
-        body.error === "negative-tax-rate" || body.error === "invalid-tax-rate"
-          || /ratePercent/.test(body.error),
-        `${label}: unexpected error "${body.error}"`,
-      );
-    }
-    // Values the shared coercer already refuses stay refused.
-    for (const [label, override] of [
-      ["not-a-decimal", { ratePercent: "thirteen" }],
-      ["missing-rate", {}],
-    ] as const) {
-      const res = await POST(
-        postRequest("tax-rates", { taxCodeId: f.vatCodeId, effectiveFrom: "2026-01-01", ...override }),
-        call("tax-rates"),
-      );
-      assert.equal(res.status, 400, `${label}: expected a client error`);
-    }
-    assert.deepEqual(await taxRateRows(f.orgId), beforeRates, "no rate row was written");
-    assert.equal(await auditCount(f.orgId, "tax_rates"), beforeAudits, "no orphan audit was written");
+      assert.equal(created.status, 200);
+      const { id } = (await created.json()) as { id: string };
+      assert.equal(await auditCount(f.orgId, "tax_rates", id), 1);
 
-    // A valid exact-decimal rate persists, then refuses edits that leave the
-    // domain. (The PATCH contract carries the full record, like the drawer.)
-    const created = await POST(
-      postRequest("tax-rates", {
-        taxCodeId: f.vatCodeId,
-        ratePercent: "8.875",
-        effectiveFrom: "2026-01-01",
-      }),
-      call("tax-rates"),
-    );
-    assert.equal(created.status, 200);
-    const { id } = (await created.json()) as { id: string };
-    assert.equal(await auditCount(f.orgId, "tax_rates", id), 1);
-
-    for (const [label, override] of [
-      ["negative", { ratePercent: "-5" }],
-      ["fx-scale-precision", { ratePercent: "8.87505" }],
-    ] as const) {
-      const rejected = await PATCH(
+      for (const [label, override] of [
+        ["negative", { ratePercent: "-5" }],
+        ["fx-scale-precision", { ratePercent: "8.87505" }],
+      ] as const) {
+        const rejected = await PATCH(
+          patchRequest("tax-rates", {
+            id,
+            taxCodeId: f.vatCodeId,
+            effectiveFrom: "2026-01-01",
+            ...override,
+          }),
+          call("tax-rates"),
+        );
+        assert.equal(rejected.status, 400, `${label}: edit must be refused`);
+        const body = (await rejected.json()) as { error: string };
+        assert.ok(
+          body.error === "negative-tax-rate" || body.error === "invalid-tax-rate",
+          `${label}: unexpected error "${body.error}"`,
+        );
+      }
+      // The refused edits left the stored value untouched, and a valid edit
+      // keeps the effective rate intact while closing its window.
+      const edited = await PATCH(
         patchRequest("tax-rates", {
           id,
           taxCodeId: f.vatCodeId,
+          ratePercent: "8.875",
           effectiveFrom: "2026-01-01",
-          ...override,
+          effectiveTo: "2026-06-30",
         }),
         call("tax-rates"),
       );
-      assert.equal(rejected.status, 400, `${label}: edit must be refused`);
-      const body = (await rejected.json()) as { error: string };
-      assert.ok(
-        body.error === "negative-tax-rate" || body.error === "invalid-tax-rate",
-        `${label}: unexpected error "${body.error}"`,
-      );
+      assert.equal(edited.status, 200);
+      const rows = await taxRateRows(f.orgId);
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]!.rate, "8.8750");
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(f.orgId);
     }
-    // The refused edits left the stored value untouched, and a valid edit
-    // keeps the effective rate intact while closing its window.
-    const edited = await PATCH(
-      patchRequest("tax-rates", {
-        id,
-        taxCodeId: f.vatCodeId,
-        ratePercent: "8.875",
-        effectiveFrom: "2026-01-01",
-        effectiveTo: "2026-06-30",
-      }),
-      call("tax-rates"),
-    );
-    assert.equal(edited.status, 200);
-    const rows = await taxRateRows(f.orgId);
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0]!.rate, "8.8750");
-  } finally {
-    routeState.authz = null;
-    await dropScratchOrgReporting(f.orgId);
-  }
-});
+  },
+);
 
 test("valid exact-decimal effective-dated rates persist and calculate", { skip: !DB }, async () => {
   const f = await seedTaxFixture();
@@ -443,7 +633,8 @@ test("valid exact-decimal effective-dated rates persist and calculate", { skip: 
     // it never silently computes at 0%.
     await assert.rejects(
       loadTaxComponentConfig(f.orgId, f.vatCodeId, "2025-12-31"),
-      (e: unknown) => e instanceof Error && /OB-VAT.*no rate effective on 2025-12-31/.test(e.message),
+      (e: unknown) =>
+        e instanceof Error && /OB-VAT.*no rate effective on 2025-12-31/.test(e.message),
     );
   } finally {
     routeState.authz = null;
@@ -451,384 +642,488 @@ test("valid exact-decimal effective-dated rates persist and calculate", { skip: 
   }
 });
 
-test("direct writes cannot persist negative tax rates: storage fails closed", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    // Migration 0042 must have applied its full constraint set.
-    const constraints = await db.execute<{ conname: string }>(sql`
+test(
+  "direct writes cannot persist negative tax rates: storage fails closed",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      // Migration 0042 must have applied its full constraint set.
+      const constraints = await db.execute<{ conname: string }>(
+        sql`
       select conname from pg_constraint
        where conname in ('tax_rates_rate_percent_domain', 'tax_codes_org_code_unique',
                          'tax_groups_org_code_unique', 'classes_org_code_unique',
                          'departments_org_code_unique', 'locations_org_code_unique',
-                         'worker_comp_groups_org_code_unique')`, "objects");
-    assert.equal(constraints.length, 7, "every 0042 constraint exists in the live catalog");
+                         'worker_comp_groups_org_code_unique')`,
+        "objects",
+      );
+      assert.equal(constraints.length, 7, "every 0042 constraint exists in the live catalog");
 
-    const codeId = randomUUID();
-    await db.execute(sql`
+      const codeId = randomUUID();
+      await db.execute(sql`
       insert into tax_codes (id, org_id, code, name)
       values (${codeId}, ${org.orgId}, 'DIRECT', 'Direct write')`);
-    // Drizzle wraps the driver error (DrizzleQueryError.cause); match either.
-    const isCheckViolation = (name: string) => (e: unknown) => {
-      const error = e as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
-      return (error?.code ?? error?.cause?.code) === "23514"
-        && (error?.constraint ?? error?.cause?.constraint) === name;
-    };
-    await assert.rejects(
-      db.execute(sql`
+      // Drizzle wraps the driver error (DrizzleQueryError.cause); match either.
+      const isCheckViolation = (name: string) => (e: unknown) => {
+        const error = e as {
+          code?: string;
+          constraint?: string;
+          cause?: { code?: string; constraint?: string };
+        };
+        return (
+          (error?.code ?? error?.cause?.code) === "23514" &&
+          (error?.constraint ?? error?.cause?.constraint) === name
+        );
+      };
+      await assert.rejects(
+        db.execute(sql`
         insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from)
         values (${org.orgId}, ${codeId}, '-1.2500', '2026-01-01')`),
-      isCheckViolation("tax_rates_rate_percent_domain"),
-      "a negative rate must be unrepresentable",
-    );
-    // The statutory zero rate remains representable.
-    await db.execute(sql`
+        isCheckViolation("tax_rates_rate_percent_domain"),
+        "a negative rate must be unrepresentable",
+      );
+      // The statutory zero rate remains representable.
+      await db.execute(sql`
       insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from)
       values (${org.orgId}, ${codeId}, '0.0000', '2026-01-01')`);
-    await assert.rejects(
-      db.execute(sql`
+      await assert.rejects(
+        db.execute(sql`
         update tax_rates set rate_percent = '-0.0001' where org_id = ${org.orgId}`),
-      isCheckViolation("tax_rates_rate_percent_domain"),
-      "an update to a negative rate must be unrepresentable",
-    );
-    const stored = await db.execute<{ rate: string }>(sql`
-      select rate_percent::text as rate from tax_rates where org_id = ${org.orgId}`, "objects");
-    assert.deepEqual(stored, [{ rate: "0.0000" }]);
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
-
-test("two concurrent Setup creates cannot duplicate an authoritative code", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Setup Race Admin", "admin");
-  try {
-    authenticate({ orgId: org.orgId, actorId });
-    const code = `RACE-${randomUUID().slice(0, 8)}`;
-    const [first, second] = await Promise.all([
-      POST(postRequest("tax-codes", { code, name: "Racer A" }), call("tax-codes")),
-      POST(postRequest("tax-codes", { code, name: "Racer B" }), call("tax-codes")),
-    ]);
-    const statuses = [first.status, second.status].sort();
-    assert.deepEqual(statuses, [200, 409], "exactly one create wins with a deterministic conflict");
-    const conflict = first.status === 409 ? first : second;
-    assert.deepEqual(await conflict.json(), { error: "This record already exists.", code: "duplicate" });
-
-    const rows = await db.execute<{ id: string; n: number }>(sql`
-      select id, count(*) over ()::int as n from tax_codes
-       where org_id = ${org.orgId} and code = ${code}`, "objects");
-    assert.equal(rows[0]!.n, 1, "storage holds exactly one authoritative code");
-    // The insert and its audit share one transaction: the losing request
-    // leaves no row and no orphan audit evidence.
-    assert.equal(await auditCount(org.orgId, "tax_codes", rows[0]!.id), 1);
-    assert.equal(await auditCount(org.orgId, "tax_codes"), 1);
-
-    // An edit that moves a row onto an occupied natural key has no preflight
-    // read: the storage constraint itself must surface as the same 409, with
-    // the SQLSTATE read through Drizzle's error wrapper.
-    const firstClass = await POST(
-      postRequest("classes", { code: "RACE-CLS-A", name: "Class A" }),
-      call("classes"),
-    );
-    assert.equal(firstClass.status, 200);
-    const secondClass = await POST(
-      postRequest("classes", { code: "RACE-CLS-B", name: "Class B" }),
-      call("classes"),
-    );
-    assert.equal(secondClass.status, 200);
-    const takeover = await PATCH(
-      patchRequest("classes", {
-        id: (await secondClass.json()).id,
-        code: "RACE-CLS-A",
-        name: "Class B",
-      }),
-      call("classes"),
-    );
-    assert.equal(takeover.status, 409);
-    assert.deepEqual(await takeover.json(), { error: "This record already exists.", code: "duplicate" });
-  } finally {
-    routeState.authz = null;
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
-
-test("storage decides two-session create/create races for every authoritative setup table", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    for (const table of [
-      "tax_codes",
-      "tax_groups",
-      "classes",
-      "departments",
-      "locations",
-      "worker_comp_groups",
-    ]) {
-      const code = `RACE-${table}`.toUpperCase();
-      const a = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
-      const b = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
-      await a.connect();
-      await b.connect();
-      try {
-        for (const session of [a, b]) {
-          await session.query("select set_config('app.current_org', $1, false)", [org.orgId]);
-        }
-        await a.query("begin");
-        await b.query("begin");
-        // Both sessions pass the exact read the Setup route used to trust.
-        for (const [label, session] of [["A", a], ["B", b]] as const) {
-          const sighted = await session.query(
-            `select 1 from ${table} where org_id = $1 and code = $2`,
-            [org.orgId, code],
-          );
-          assert.deepEqual(sighted.rows, [], `${table}: session ${label} saw no existing row`);
-        }
-        await a.query(
-          `insert into ${table} (org_id, code, name) values ($1, $2, $3)`,
-          [org.orgId, code, `Race ${table} A`],
-        );
-        // Session B's insert blocks on A's uncommitted unique index entry, so
-        // A must commit first — the constraint then decides B's fate.
-        const secondInsert = b.query(
-          `insert into ${table} (org_id, code, name) values ($1, $2, $3)`,
-          [org.orgId, code, `Race ${table} B`],
-        );
-        await a.query("commit");
-        await assert.rejects(
-          secondInsert,
-          (e: unknown) =>
-            (e as { code?: string }).code === "23505"
-            && (e as { constraint?: string }).constraint === `${table}_org_code_unique`,
-          `${table}: the second session must lose to storage`,
-        );
-        await b.query("rollback");
-        const stored = await db.execute<{ n: number }>(sql`
-          select count(*)::int as n from ${sql.raw(table)}
-           where org_id = ${org.orgId} and code = ${code}`, "objects");
-        assert.equal(stored[0]!.n, 1, `${table}: exactly one authoritative row`);
-      } finally {
-        await a.end().catch(() => {});
-        await b.end().catch(() => {});
-      }
+        isCheckViolation("tax_rates_rate_percent_domain"),
+        "an update to a negative rate must be unrepresentable",
+      );
+      const stored = await db.execute<{ rate: string }>(
+        sql`
+      select rate_percent::text as rate from tax_rates where org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.deepEqual(stored, [{ rate: "0.0000" }]);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
     }
-  } finally {
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+  },
+);
 
-test("duplicate FX rates answer a typed conflict with a human message, not a bare code", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "FX Setup Admin", "admin");
-  try {
-    await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb) ||
+test(
+  "two concurrent Setup creates cannot duplicate an authoritative code",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "Setup Race Admin", "admin");
+    try {
+      authenticate({ orgId: org.orgId, actorId });
+      const code = `RACE-${randomUUID().slice(0, 8)}`;
+      const [first, second] = await Promise.all([
+        POST(postRequest("tax-codes", { code, name: "Racer A" }), call("tax-codes")),
+        POST(postRequest("tax-codes", { code, name: "Racer B" }), call("tax-codes")),
+      ]);
+      const statuses = [first.status, second.status].sort();
+      assert.deepEqual(
+        statuses,
+        [200, 409],
+        "exactly one create wins with a deterministic conflict",
+      );
+      const conflict = first.status === 409 ? first : second;
+      assert.deepEqual(await conflict.json(), {
+        error: "This record already exists.",
+        code: "duplicate",
+      });
+
+      const rows = await db.execute<{ id: string; n: number }>(
+        sql`
+      select id, count(*) over ()::int as n from tax_codes
+       where org_id = ${org.orgId} and code = ${code}`,
+        "objects",
+      );
+      assert.equal(rows[0]!.n, 1, "storage holds exactly one authoritative code");
+      // The insert and its audit share one transaction: the losing request
+      // leaves no row and no orphan audit evidence.
+      assert.equal(await auditCount(org.orgId, "tax_codes", rows[0]!.id), 1);
+      assert.equal(await auditCount(org.orgId, "tax_codes"), 1);
+
+      // An edit that moves a row onto an occupied natural key has no preflight
+      // read: the storage constraint itself must surface as the same 409, with
+      // the SQLSTATE read through Drizzle's error wrapper.
+      const firstClass = await POST(
+        postRequest("classes", { code: "RACE-CLS-A", name: "Class A" }),
+        call("classes"),
+      );
+      assert.equal(firstClass.status, 200);
+      const secondClass = await POST(
+        postRequest("classes", { code: "RACE-CLS-B", name: "Class B" }),
+        call("classes"),
+      );
+      assert.equal(secondClass.status, 200);
+      const takeover = await PATCH(
+        patchRequest("classes", {
+          id: (await secondClass.json()).id,
+          code: "RACE-CLS-A",
+          name: "Class B",
+        }),
+        call("classes"),
+      );
+      assert.equal(takeover.status, 409);
+      assert.deepEqual(await takeover.json(), {
+        error: "This record already exists.",
+        code: "duplicate",
+      });
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "storage decides two-session create/create races for every authoritative setup table",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      for (const table of [
+        "tax_codes",
+        "tax_groups",
+        "classes",
+        "departments",
+        "locations",
+        "worker_comp_groups",
+      ]) {
+        const code = `RACE-${table}`.toUpperCase();
+        const a = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+        const b = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+        await a.connect();
+        await b.connect();
+        try {
+          for (const session of [a, b]) {
+            await session.query("select set_config('app.current_org', $1, false)", [org.orgId]);
+          }
+          await a.query("begin");
+          await b.query("begin");
+          // Both sessions pass the exact read the Setup route used to trust.
+          for (const [label, session] of [
+            ["A", a],
+            ["B", b],
+          ] as const) {
+            const sighted = await session.query(
+              `select 1 from ${table} where org_id = $1 and code = $2`,
+              [org.orgId, code],
+            );
+            assert.deepEqual(sighted.rows, [], `${table}: session ${label} saw no existing row`);
+          }
+          await a.query(`insert into ${table} (org_id, code, name) values ($1, $2, $3)`, [
+            org.orgId,
+            code,
+            `Race ${table} A`,
+          ]);
+          // Session B's insert blocks on A's uncommitted unique index entry, so
+          // A must commit first — the constraint then decides B's fate.
+          const secondInsert = b.query(
+            `insert into ${table} (org_id, code, name) values ($1, $2, $3)`,
+            [org.orgId, code, `Race ${table} B`],
+          );
+          await a.query("commit");
+          await assert.rejects(
+            secondInsert,
+            (e: unknown) =>
+              (e as { code?: string }).code === "23505" &&
+              (e as { constraint?: string }).constraint === `${table}_org_code_unique`,
+            `${table}: the second session must lose to storage`,
+          );
+          await b.query("rollback");
+          const stored = await db.execute<{ n: number }>(
+            sql`
+          select count(*)::int as n from ${sql.raw(table)}
+           where org_id = ${org.orgId} and code = ${code}`,
+            "objects",
+          );
+          assert.equal(stored[0]!.n, 1, `${table}: exactly one authoritative row`);
+        } finally {
+          await a.end().catch(() => {});
+          await b.end().catch(() => {});
+        }
+      }
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "duplicate FX rates answer a typed conflict with a human message, not a bare code",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "FX Setup Admin", "admin");
+    try {
+      await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb) ||
       '{"features":{"multiCurrency":true}}'::jsonb where id = ${org.orgId}`);
-    authenticate({ orgId: org.orgId, actorId });
-    const rate = {
-      asOf: "2026-08-16",
-      fromCurrency: "USD",
-      toCurrency: "CAD",
-      rateType: "spot",
-      rate: "1.3604000000",
-    };
-    const first = await POST(postRequest("fx-rates", rate), call("fx-rates"));
-    assert.equal(first.status, 200);
-    const second = await POST(postRequest("fx-rates", rate), call("fx-rates"));
-    assert.equal(second.status, 409);
-    const body = (await second.json()) as { error?: unknown; code?: unknown };
-    assert.equal(body.code, "duplicate");
-    const message = String(body.error ?? "");
-    assert.ok(
-      message.length > "duplicate".length && !/duplicate/i.test(message),
-      `the message must read as user language, got: ${JSON.stringify(body.error)}`,
-    );
-  } finally {
-    routeState.authz = null;
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+      authenticate({ orgId: org.orgId, actorId });
+      const rate = {
+        asOf: "2026-08-16",
+        fromCurrency: "USD",
+        toCurrency: "CAD",
+        rateType: "spot",
+        rate: "1.3604000000",
+      };
+      const first = await POST(postRequest("fx-rates", rate), call("fx-rates"));
+      assert.equal(first.status, 200);
+      const second = await POST(postRequest("fx-rates", rate), call("fx-rates"));
+      assert.equal(second.status, 409);
+      const body = (await second.json()) as { error?: unknown; code?: unknown };
+      assert.equal(body.code, "duplicate");
+      const message = String(body.error ?? "");
+      assert.ok(
+        message.length > "duplicate".length && !/duplicate/i.test(message),
+        `the message must read as user language, got: ${JSON.stringify(body.error)}`,
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("intercompany pairs missing elimination flags answer a typed message, never silence", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "IC Setup Admin", "admin");
-  try {
-    await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb) ||
+test(
+  "intercompany pairs missing elimination flags answer a typed message, never silence",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "IC Setup Admin", "admin");
+    try {
+      await db.execute(sql`update orgs set settings = coalesce(settings, '{}'::jsonb) ||
       '{"features":{"multiSubsidiary":true}}'::jsonb where id = ${org.orgId}`);
-    const childId = randomUUID();
-    await db.execute(sql`
+      const childId = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries
         (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
       values
         (${childId},${org.orgId},${org.subsidiaryId},'T06 Canada Sub','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb)`);
-    const dueFromId = randomUUID();
-    const dueToId = randomUUID();
-    const tag = randomUUID().slice(0, 4);
-    await db.execute(sql`
+      const dueFromId = randomUUID();
+      const dueToId = randomUUID();
+      const tag = randomUUID().slice(0, 4);
+      await db.execute(sql`
       insert into accounts
         (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
       values
         (${dueFromId},${org.orgId},${`1410${tag}`},'Due from Subsidiaries','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true),
         (${dueToId},${org.orgId},${`2150${tag}`},'Due to Parent','liability_current',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)`);
-    authenticate({ orgId: org.orgId, actorId });
-    const res = await POST(
-      postRequest("intercompany-pairs", {
-        fromSubsidiaryId: org.subsidiaryId,
-        toSubsidiaryId: childId,
-        dueFromAccountId: dueFromId,
-        dueToAccountId: dueToId,
-      }),
-      call("intercompany-pairs"),
-    );
-    assert.equal(res.status, 400);
-    const body = (await res.json()) as { error?: unknown; code?: unknown };
-    assert.equal(body.code, "invalid");
-    assert.equal(body.error, "Both intercompany accounts must be marked for elimination");
-  } finally {
-    routeState.authz = null;
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+      authenticate({ orgId: org.orgId, actorId });
+      const res = await POST(
+        postRequest("intercompany-pairs", {
+          fromSubsidiaryId: org.subsidiaryId,
+          toSubsidiaryId: childId,
+          dueFromAccountId: dueFromId,
+          dueToAccountId: dueToId,
+        }),
+        call("intercompany-pairs"),
+      );
+      assert.equal(res.status, 400);
+      const body = (await res.json()) as { error?: unknown; code?: unknown };
+      assert.equal(body.code, "invalid");
+      assert.equal(body.error, "Both intercompany accounts must be marked for elimination");
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("payment cards name an active employee and a liability account (0171)", { skip: !DB }, async () => {
-  // A card is a posting instrument: a holder who is not an employee, or a
-  // liability that is not a liability, must be refused at the Setup boundary
-  // — not discovered at posting time when the reimbursement is due.
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Card Setup Admin", "admin");
-  try {
-    const employeeId = randomUUID();
-    const vendorId = randomUUID();
-    await db.execute(sql`
+test(
+  "payment cards name an active employee and a liability account (0171)",
+  { skip: !DB },
+  async () => {
+    // A card is a posting instrument: a holder who is not an employee, or a
+    // liability that is not a liability, must be refused at the Setup boundary
+    // — not discovered at posting time when the reimbursement is due.
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "Card Setup Admin", "admin");
+    try {
+      const employeeId = randomUUID();
+      const vendorId = randomUUID();
+      await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${employeeId}, ${org.orgId}, 'employee', 'Card Holder', true, '{}'::jsonb),
              (${vendorId}, ${org.orgId}, 'vendor', 'Card Vendor', true, '{}'::jsonb)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${employeeId})`);
-    const cardLiability = randomUUID();
-    const expenseAccount = randomUUID();
-    await db.execute(sql`
+      const cardLiability = randomUUID();
+      const expenseAccount = randomUUID();
+      await db.execute(sql`
       insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
       values (${cardLiability}, ${org.orgId}, '2050', 'Corporate Card Clearing', 'liability_card', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true),
              (${expenseAccount}, ${org.orgId}, '6100', 'Travel', 'expense', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-    authenticate({ orgId: org.orgId, actorId });
+      authenticate({ orgId: org.orgId, actorId });
 
-    const created = await POST(
-      postRequest("payment-cards", {
-        label: "Field card",
-        holderPartyId: employeeId,
-        liabilityAccountId: cardLiability,
-        isActive: true,
-      }),
-      call("payment-cards"),
-    );
-    assert.equal(created.status, 200);
+      const created = await POST(
+        postRequest("payment-cards", {
+          label: "Field card",
+          holderPartyId: employeeId,
+          liabilityAccountId: cardLiability,
+          isActive: true,
+        }),
+        call("payment-cards"),
+      );
+      assert.equal(created.status, 200);
 
-    const notEmployee = await POST(
-      postRequest("payment-cards", {
-        label: "Vendor card",
-        holderPartyId: vendorId,
-        liabilityAccountId: cardLiability,
-        isActive: true,
-      }),
-      call("payment-cards"),
-    );
-    assert.equal(notEmployee.status, 400);
-    assert.match(((await notEmployee.json()) as { error: string }).error, /active employee/);
+      const notEmployee = await POST(
+        postRequest("payment-cards", {
+          label: "Vendor card",
+          holderPartyId: vendorId,
+          liabilityAccountId: cardLiability,
+          isActive: true,
+        }),
+        call("payment-cards"),
+      );
+      assert.equal(notEmployee.status, 400);
+      assert.match(((await notEmployee.json()) as { error: string }).error, /active employee/);
 
-    const notLiability = await POST(
-      postRequest("payment-cards", {
-        label: "Expense card",
-        holderPartyId: employeeId,
-        liabilityAccountId: expenseAccount,
-        isActive: true,
-      }),
-      call("payment-cards"),
-    );
-    assert.equal(notLiability.status, 400);
-    assert.match(((await notLiability.json()) as { error: string }).error, /must be a liability account/);
-  } finally {
-    routeState.authz = null;
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+      const notLiability = await POST(
+        postRequest("payment-cards", {
+          label: "Expense card",
+          holderPartyId: employeeId,
+          liabilityAccountId: expenseAccount,
+          isActive: true,
+        }),
+        call("payment-cards"),
+      );
+      assert.equal(notLiability.status, 400);
+      assert.match(
+        ((await notLiability.json()) as { error: string }).error,
+        /must be a liability account/,
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
 
-test("generic setup verbs refuse feature-gated entities through the shared gate", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Gate Admin", "admin");
-  try {
-    authenticate({ orgId: org.orgId, actorId });
-    const actor = {
-      orgId: org.orgId,
-      id: actorId,
-      permissions: new Set(["admin.setup.manage"]),
-      allowedSubsidiaryIds: null,
-    };
-    // Projects explicitly off: the helper verdict, the direct commands, and
-    // every HTTP verb refuse alike — the verdict below is behavior, not an
-    // import assertion: each call underneath goes through the real gate.
-    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":false}'::jsonb, true) where id = ${org.orgId}`);
-    const rates = SETUP_ENTITY_BY_KEY.get("overhead-rates")!;
-    assert.equal(resolveSetupEntityGate(rates, { projects: false }).enabled, false);
-    assert.deepEqual(await preflightSetupWrite(actor, "overhead-rates", "create"), {
-      status: 404,
-      body: { error: "unknown setup entity" },
+test(
+  "generic setup verbs refuse feature-gated entities through the shared gate",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "Gate Admin", "admin");
+    try {
+      authenticate({ orgId: org.orgId, actorId });
+      const actor = {
+        orgId: org.orgId,
+        id: actorId,
+        permissions: new Set(["admin.setup.manage"]),
+        allowedSubsidiaryIds: null,
+      };
+      // Projects explicitly off: the helper verdict, the direct commands, and
+      // every HTTP verb refuse alike — the verdict below is behavior, not an
+      // import assertion: each call underneath goes through the real gate.
+      await db.execute(
+        sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":false}'::jsonb, true) where id = ${org.orgId}`,
+      );
+      const rates = SETUP_ENTITY_BY_KEY.get("overhead-rates")!;
+      assert.equal(resolveSetupEntityGate(rates, { projects: false }).enabled, false);
+      assert.deepEqual(await preflightSetupWrite(actor, "overhead-rates", "create"), {
+        status: 404,
+        body: { error: "unknown setup entity" },
+      });
+      assert.equal((await createSetupRecord(actor, "overhead-rates", {})).status, 404);
+      assert.equal(
+        (await updateSetupRecord(actor, "overhead-rates", { id: randomUUID() })).status,
+        404,
+      );
+      assert.equal((await deleteSetupRecord(actor, "overhead-rates", randomUUID())).status, 404);
+      const valid = { ratePercent: "12.5", effectiveFrom: "2026-01-01" };
+      assert.equal(
+        (await POST(postRequest("overhead-rates", valid), call("overhead-rates"))).status,
+        404,
+      );
+      assert.equal(
+        (
+          await PATCH(
+            patchRequest("overhead-rates", { id: randomUUID(), ...valid }),
+            call("overhead-rates"),
+          )
+        ).status,
+        404,
+      );
+      assert.equal(
+        (await DELETE(deleteRequest("overhead-rates", randomUUID()), call("overhead-rates")))
+          .status,
+        404,
+      );
+      // A malformed body on a gated entity still answers the gate refusal: the
+      // preflight runs before body parsing, so no parse error escapes instead.
+      const malformed = new Request("http://localhost/api/admin/setup/overhead-rates", {
+        method: "POST",
+        headers: { "Idempotency-Key": randomUUID() },
+        body: "{not json",
+      });
+      assert.equal((await POST(malformed, call("overhead-rates"))).status, 404);
+      // Projects on: the same helper admits and a valid row persists.
+      await db.execute(
+        sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true}'::jsonb, true) where id = ${org.orgId}`,
+      );
+      assert.equal(resolveSetupEntityGate(rates, { projects: true }).enabled, true);
+      const created = await POST(postRequest("overhead-rates", valid), call("overhead-rates"));
+      assert.equal(created.status, 200);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "the generic route enforces an any-of gate with no observable storage effect",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "Any Gate Admin", "admin");
+    // A test-local descriptor carrying the any-of gate: entity files are owned
+    // elsewhere, so the probe registers directly and is removed afterwards.
+    // Its table does not exist — any storage touch would 500, so three 404s
+    // prove the refusal lands before columns, locks, or writes.
+    const probeKey = "c7a-any-of-probe";
+    SETUP_ENTITY_BY_KEY.set(probeKey, {
+      key: probeKey,
+      table: "c7a_probe_missing_table",
+      groupKey: "projects",
+      iconKey: "briefcase",
+      orgScoped: true,
+      hasActive: false,
+      featureKeysAny: ["projects", "manufacturing"],
+      columns: [],
+      fields: [],
     });
-    assert.equal((await createSetupRecord(actor, "overhead-rates", {})).status, 404);
-    assert.equal((await updateSetupRecord(actor, "overhead-rates", { id: randomUUID() })).status, 404);
-    assert.equal((await deleteSetupRecord(actor, "overhead-rates", randomUUID())).status, 404);
-    const valid = { ratePercent: "12.5", effectiveFrom: "2026-01-01" };
-    assert.equal((await POST(postRequest("overhead-rates", valid), call("overhead-rates"))).status, 404);
-    assert.equal((await PATCH(patchRequest("overhead-rates", { id: randomUUID(), ...valid }), call("overhead-rates"))).status, 404);
-    assert.equal((await DELETE(deleteRequest("overhead-rates", randomUUID()), call("overhead-rates"))).status, 404);
-    // A malformed body on a gated entity still answers the gate refusal: the
-    // preflight runs before body parsing, so no parse error escapes instead.
-    const malformed = new Request("http://localhost/api/admin/setup/overhead-rates", {
-      method: "POST",
-      headers: { "Idempotency-Key": randomUUID() },
-      body: "{not json",
-    });
-    assert.equal((await POST(malformed, call("overhead-rates"))).status, 404);
-    // Projects on: the same helper admits and a valid row persists.
-    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true}'::jsonb, true) where id = ${org.orgId}`);
-    assert.equal(resolveSetupEntityGate(rates, { projects: true }).enabled, true);
-    const created = await POST(postRequest("overhead-rates", valid), call("overhead-rates"));
-    assert.equal(created.status, 200);
-  } finally {
-    routeState.authz = null;
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
-
-test("the generic route enforces an any-of gate with no observable storage effect", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Any Gate Admin", "admin");
-  // A test-local descriptor carrying the any-of gate: entity files are owned
-  // elsewhere, so the probe registers directly and is removed afterwards.
-  // Its table does not exist — any storage touch would 500, so three 404s
-  // prove the refusal lands before columns, locks, or writes.
-  const probeKey = "c7a-any-of-probe";
-  SETUP_ENTITY_BY_KEY.set(probeKey, {
-    key: probeKey,
-    table: "c7a_probe_missing_table",
-    groupKey: "projects",
-    iconKey: "briefcase",
-    orgScoped: true,
-    hasActive: false,
-    featureKeysAny: ["projects", "manufacturing"],
-    columns: [],
-    fields: [],
-  });
-  try {
-    authenticate({ orgId: org.orgId, actorId });
-    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":false,"manufacturing":false}'::jsonb, true) where id = ${org.orgId}`);
-    const probe = SETUP_ENTITY_BY_KEY.get(probeKey)!;
-    const verdict = resolveSetupEntityGate(probe, { projects: false, manufacturing: false, inventory: true });
-    assert.equal(verdict.enabled, false);
-    assert.equal(verdict.remedy, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY);
-    assert.equal(verdict.remedy, "Turn on Projects or Manufacturing in Company Settings → Features.");
-    assert.equal((await POST(postRequest(probeKey, {}), call(probeKey))).status, 404);
-    assert.equal((await PATCH(patchRequest(probeKey, { id: randomUUID() }), call(probeKey))).status, 404);
-    assert.equal((await DELETE(deleteRequest(probeKey, randomUUID()), call(probeKey))).status, 404);
-  } finally {
-    SETUP_ENTITY_BY_KEY.delete(probeKey);
-    routeState.authz = null;
-    await dropScratchOrgReporting(org.orgId);
-  }
-});
+    try {
+      authenticate({ orgId: org.orgId, actorId });
+      await db.execute(
+        sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":false,"manufacturing":false}'::jsonb, true) where id = ${org.orgId}`,
+      );
+      const probe = SETUP_ENTITY_BY_KEY.get(probeKey)!;
+      const verdict = resolveSetupEntityGate(probe, {
+        projects: false,
+        manufacturing: false,
+        inventory: true,
+      });
+      assert.equal(verdict.enabled, false);
+      assert.equal(verdict.remedy, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY);
+      assert.equal(
+        verdict.remedy,
+        "Turn on Projects or Manufacturing in Company Settings → Features.",
+      );
+      assert.equal((await POST(postRequest(probeKey, {}), call(probeKey))).status, 404);
+      assert.equal(
+        (await PATCH(patchRequest(probeKey, { id: randomUUID() }), call(probeKey))).status,
+        404,
+      );
+      assert.equal(
+        (await DELETE(deleteRequest(probeKey, randomUUID()), call(probeKey))).status,
+        404,
+      );
+    } finally {
+      SETUP_ENTITY_BY_KEY.delete(probeKey);
+      routeState.authz = null;
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);

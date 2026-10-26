@@ -11,7 +11,6 @@ import {
 } from "./telemetry.ts";
 import { logTerminalFailure } from "./terminal-failure.ts";
 
-
 test("telemetry is disabled without a collector endpoint", async () => {
   assert.equal(await startTelemetry({}), false);
   assert.equal(await startTelemetry({ OTEL_EXPORTER_OTLP_ENDPOINT: "" }), false);
@@ -46,10 +45,8 @@ test("configured telemetry exports real OTLP traces and metrics to the collector
   const address = server.address();
   assert.ok(address && typeof address === "object", "collector did not start");
   const env: TelemetryEnv = {
-    OTEL_EXPORTER_OTLP_ENDPOINT:
-      `http://127.0.0.1:${address.port}/shared?tenant=openbooks`,
-    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT:
-      `http://127.0.0.1:${address.port}/custom/metrics?tenant=openbooks`,
+    OTEL_EXPORTER_OTLP_ENDPOINT: `http://127.0.0.1:${address.port}/shared?tenant=openbooks`,
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: `http://127.0.0.1:${address.port}/custom/metrics?tenant=openbooks`,
     OTEL_SERVICE_NAME: "openbooks-telemetry-boot-test",
     OTEL_RESOURCE_ATTRIBUTES: "deployment.environment=test",
     OTEL_METRIC_EXPORT_INTERVAL: "100",
@@ -57,7 +54,9 @@ test("configured telemetry exports real OTLP traces and metrics to the collector
   let localSpans = 0;
   const localProcessor: SpanProcessor = {
     onStart() {},
-    onEnd(span) { if (span.name === "boot.evidence") localSpans += 1; },
+    onEnd(span) {
+      if (span.name === "boot.evidence") localSpans += 1;
+    },
     async forceFlush() {},
     async shutdown() {},
   };
@@ -89,7 +88,11 @@ test("configured telemetry exports real OTLP traces and metrics to the collector
     }
     assert.ok(hits.traces >= 1, "no trace export reached the collector");
     assert.ok(hits.metrics >= 1, "no metric export reached the collector");
-    assert.equal(localSpans, 1, "local profiling and remote export share one provider without duplicate emissions");
+    assert.equal(
+      localSpans,
+      1,
+      "local profiling and remote export share one provider without duplicate emissions",
+    );
   } finally {
     await stopTelemetry();
     await new Promise<void>((resolve) => server.close(() => resolve()));

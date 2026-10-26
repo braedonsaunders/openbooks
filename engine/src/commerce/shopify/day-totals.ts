@@ -86,25 +86,28 @@ export async function readShopDayTotals(
   let orderCount = 0;
   let grossMinor = 0n;
   let currency: string | null = null;
-  const pages = client.paginate<DayTotalOrderNode>(
-    DAY_TOTALS_QUERY,
-    { query: range },
-    (data) => {
-      const connection = (data as { orders?: { edges?: { node: DayTotalOrderNode }[]; pageInfo?: { hasNextPage?: boolean; endCursor?: string | null } } }).orders;
-      if (!connection || !Array.isArray(connection.edges) || !connection.pageInfo) {
-        throw new Error(
-          "Shopify answered the day-totals query without an orders connection — retry the completeness check, and ask your administrator if it persists",
-        );
+  const pages = client.paginate<DayTotalOrderNode>(DAY_TOTALS_QUERY, { query: range }, (data) => {
+    const connection = (
+      data as {
+        orders?: {
+          edges?: { node: DayTotalOrderNode }[];
+          pageInfo?: { hasNextPage?: boolean; endCursor?: string | null };
+        };
       }
-      return {
-        edges: connection.edges,
-        pageInfo: {
-          hasNextPage: connection.pageInfo.hasNextPage ?? false,
-          endCursor: connection.pageInfo.endCursor ?? null,
-        },
-      };
-    },
-  );
+    ).orders;
+    if (!connection || !Array.isArray(connection.edges) || !connection.pageInfo) {
+      throw new Error(
+        "Shopify answered the day-totals query without an orders connection — retry the completeness check, and ask your administrator if it persists",
+      );
+    }
+    return {
+      edges: connection.edges,
+      pageInfo: {
+        hasNextPage: connection.pageInfo.hasNextPage ?? false,
+        endCursor: connection.pageInfo.endCursor ?? null,
+      },
+    };
+  });
   for await (const node of pages) {
     const money = node.totalPriceSet?.shopMoney;
     const amount = typeof money?.amount === "string" ? money.amount : null;

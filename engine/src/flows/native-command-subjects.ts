@@ -16,13 +16,16 @@ function subcontractScope(table: string) {
       lock: boolean,
     ) {
       const rows = await db.execute<{
-          id: string;
-          subsidiary_id: string;
-        }>(sql`select child.id,p.subsidiary_id from ${sql.identifier(table)} child
+        id: string;
+        subsidiary_id: string;
+      }>(
+        sql`select child.id,p.subsidiary_id from ${sql.identifier(table)} child
     join subcontracts parent on parent.org_id=child.org_id and parent.id=child.subcontract_id
     join projects p on p.org_id=parent.org_id and p.id=parent.project_id
     where child.org_id=${orgId} and child.id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
-    ${lock ? sql`for share of child,parent,p` : sql``}`, "objects");
+    ${lock ? sql`for share of child,parent,p` : sql``}`,
+        "objects",
+      );
       return new Map(rows.map((row) => [row.id, row.subsidiary_id]));
     },
   };
@@ -44,29 +47,28 @@ function complianceScope(table: "compliance_records" | "compliance_waivers") {
       lock: boolean,
     ) {
       const rows = await db.execute<{
-          id: string;
-          partyEntity: string | null;
-          projectEntity: string | null;
-          project_id: string | null;
-        }>(sql`
+        id: string;
+        partyEntity: string | null;
+        projectEntity: string | null;
+        project_id: string | null;
+      }>(
+        sql`
    select s.id,p.subsidiary_id as "partyEntity",j.subsidiary_id as "projectEntity",s.project_id from ${sql.identifier(table)} s
    join parties p on p.org_id=s.org_id and p.id=s.party_id left join projects j on j.org_id=s.org_id and j.id=s.project_id
    where s.org_id=${orgId} and s.id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
-   ${lock ? sql`for share of s,p` : sql``}`, "objects");
+   ${lock ? sql`for share of s,p` : sql``}`,
+        "objects",
+      );
       if (lock) {
-        const projects = rows.flatMap((row) =>
-          row.project_id ? [row.project_id] : [],
-        );
+        const projects = rows.flatMap((row) => (row.project_id ? [row.project_id] : []));
         if (projects.length) {
           const locked = await db.execute<{ id: string; subsidiary_id: string | null }>(
-              sql`select id,subsidiary_id from projects where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify(projects)}::jsonb)::uuid) order by id for share`, "objects",
-            );
-          const actual = new Map(
-            locked.map((project) => [project.id, project.subsidiary_id]),
+            sql`select id,subsidiary_id from projects where org_id=${orgId} and id in(select jsonb_array_elements_text(${JSON.stringify(projects)}::jsonb)::uuid) order by id for share`,
+            "objects",
           );
+          const actual = new Map(locked.map((project) => [project.id, project.subsidiary_id]));
           for (const row of rows)
-            if (row.project_id)
-              row.projectEntity = actual.get(row.project_id) ?? null;
+            if (row.project_id) row.projectEntity = actual.get(row.project_id) ?? null;
         }
       }
       return new Map(
@@ -77,8 +79,7 @@ function complianceScope(table: "compliance_records" | "compliance_waivers") {
               (allowed === null ||
                 ((row.partyEntity === null || allowed.has(row.partyEntity)) &&
                   (!row.project_id ||
-                    (row.projectEntity !== null &&
-                      allowed.has(row.projectEntity))) &&
+                    (row.projectEntity !== null && allowed.has(row.projectEntity))) &&
                   (row.partyEntity !== null || row.projectEntity !== null))),
           )
           .map((row) => [row.id, row.partyEntity ?? row.projectEntity]),
@@ -99,50 +100,106 @@ function reconciliationScope() {
       lock: boolean,
     ) {
       const rows = await db.execute<{
-          id: string;
-          subsidiary_id: string | null;
-        }>(sql`select r.id,a.subsidiary_id from reconciliations r
+        id: string;
+        subsidiary_id: string | null;
+      }>(
+        sql`select r.id,a.subsidiary_id from reconciliations r
     join accounts a on a.org_id=r.org_id and a.id=r.account_id where r.org_id=${orgId}
-      and r.id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid) ${lock ? sql`for share of r,a` : sql``}`, "objects");
+      and r.id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid) ${lock ? sql`for share of r,a` : sql``}`,
+        "objects",
+      );
       return new Map(rows.map((row) => [row.id, row.subsidiary_id]));
     },
   };
 }
 function calibrationSessionScope() {
   return {
-    via:"custom" as const,
-    worklistPredicate(idsJson:string){return sql`exists(select 1 from hrm_calibration_sessions s where s.org_id=g.org_id and s.id=g.subject_id
+    via: "custom" as const,
+    worklistPredicate(idsJson: string) {
+      return sql`exists(select 1 from hrm_calibration_sessions s where s.org_id=g.org_id and s.id=g.subject_id
       and cardinality(public.calibration_session_approval_entities(s.org_id,s.id))>0
       and not exists(select 1 from unnest(public.calibration_session_approval_entities(s.org_id,s.id)) entity(id)
-        where not(entity.id in(select jsonb_array_elements_text(${idsJson}::jsonb)))))`;},
-    async subsidiaryOf(orgId:string,ids:readonly string[],allowed:ReadonlySet<string>|null,lock:boolean){
-      const rows=await db.execute<{id:string;entities:string[]}>(sql`select s.id,public.calibration_session_approval_entities(s.org_id,s.id) as entities
+        where not(entity.id in(select jsonb_array_elements_text(${idsJson}::jsonb)))))`;
+    },
+    async subsidiaryOf(
+      orgId: string,
+      ids: readonly string[],
+      allowed: ReadonlySet<string> | null,
+      lock: boolean,
+    ) {
+      const rows = await db.execute<{ id: string; entities: string[] }>(
+        sql`select s.id,public.calibration_session_approval_entities(s.org_id,s.id) as entities
         from hrm_calibration_sessions s where s.org_id=${orgId} and s.id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
-        ${lock?sql`for share of s`:sql``}`, "objects");
-      return new Map(rows.filter(row=>allowed===null || row.entities.length>0 && row.entities.every(id=>allowed.has(id)))
-        .map(row=>[row.id,allowed===null && row.entities.length!==1?null:row.entities[0]??null]));
+        ${lock ? sql`for share of s` : sql``}`,
+        "objects",
+      );
+      return new Map(
+        rows
+          .filter(
+            (row) =>
+              allowed === null ||
+              (row.entities.length > 0 && row.entities.every((id) => allowed.has(id))),
+          )
+          .map((row) => [
+            row.id,
+            allowed === null && row.entities.length !== 1 ? null : (row.entities[0] ?? null),
+          ]),
+      );
     },
   };
 }
 export const nativeCommandSubjects = [
   defineCommandSubject({
-    kind:"hrm_calibration_session",label:"Calibration publication",table:"hrm_calibration_sessions",statusColumn:"status",statuses:["draft","open","closed"],
-    permissions:{read:"hrm.performance.read",edit:"hrm.performance.manage",approve:"hrm.performance.manage"},
-    scope:calibrationSessionScope(),
-    makerIds:sql`array(select distinct actor from (select s.created_by::text as actor union select u.id::text from users u where u.org_id=s.org_id and u.party_id=s.facilitator_party_id
+    kind: "hrm_calibration_session",
+    label: "Calibration publication",
+    table: "hrm_calibration_sessions",
+    statusColumn: "status",
+    statuses: ["draft", "open", "closed"],
+    permissions: {
+      read: "hrm.performance.read",
+      edit: "hrm.performance.manage",
+      approve: "hrm.performance.manage",
+    },
+    scope: calibrationSessionScope(),
+    makerIds: sql`array(select distinct actor from (select s.created_by::text as actor union select u.id::text from users u where u.org_id=s.org_id and u.party_id=s.facilitator_party_id
       union select e.decided_by::text from hrm_calibration_entries e where e.org_id=s.org_id and e.session_id=s.id) makers where actor is not null)`,
-    integrity:sql`public.calibration_session_approval_dependencies(s.org_id,s.id)`,
-    fields:[{key:"name",column:"name",label:"Session",type:"text"},{key:"cycleId",column:"cycle_id",label:"Review cycle",type:"text"}],
+    integrity: sql`public.calibration_session_approval_dependencies(s.org_id,s.id)`,
+    fields: [
+      { key: "name", column: "name", label: "Session", type: "text" },
+      { key: "cycleId", column: "cycle_id", label: "Review cycle", type: "text" },
+    ],
   }),
   defineCommandSubject({
-    kind:"close_task",label:"Close task",table:"close_run_tasks",statusColumn:"status",
-    statuses:["blocked","ready","in_progress","submitted","complete","changes_requested","invalidated","waived"],
-    permissions:{read:"close.read",edit:"close.run",approve:"close.approve"},scope:{via:"none"},
-    makerColumn:"owner_id",
-    makerIds:sql`array_remove(array[s.owner_id::text,s.completed_by::text,s.created_by::text],null)`,
-    integrity:sql`public.close_task_approval_dependencies(s.org_id,s.id)`,
-    fields:[{key:"name",column:"title",label:"Task",type:"text"},{key:"runId",column:"run_id",label:"Close run",type:"text"},
-      {key:"workstream",column:"workstream",label:"Workstream",type:"text"},{key:"evidenceRequired",column:"evidence_required",label:"Evidence required",type:"bool"}],
+    kind: "close_task",
+    label: "Close task",
+    table: "close_run_tasks",
+    statusColumn: "status",
+    statuses: [
+      "blocked",
+      "ready",
+      "in_progress",
+      "submitted",
+      "complete",
+      "changes_requested",
+      "invalidated",
+      "waived",
+    ],
+    permissions: { read: "close.read", edit: "close.run", approve: "close.approve" },
+    scope: { via: "none" },
+    makerColumn: "owner_id",
+    makerIds: sql`array_remove(array[s.owner_id::text,s.completed_by::text,s.created_by::text],null)`,
+    integrity: sql`public.close_task_approval_dependencies(s.org_id,s.id)`,
+    fields: [
+      { key: "name", column: "title", label: "Task", type: "text" },
+      { key: "runId", column: "run_id", label: "Close run", type: "text" },
+      { key: "workstream", column: "workstream", label: "Workstream", type: "text" },
+      {
+        key: "evidenceRequired",
+        column: "evidence_required",
+        label: "Evidence required",
+        type: "bool",
+      },
+    ],
   }),
   defineCommandSubject({
     kind: "training_course",
@@ -171,10 +228,7 @@ export const nativeCommandSubjects = [
   }),
   ...(["sign_off", "review"] as const).map((action) =>
     defineCommandSubject({
-      kind:
-        action === "sign_off"
-          ? "bank_reconciliation_sign_off"
-          : "bank_reconciliation_review",
+      kind: action === "sign_off" ? "bank_reconciliation_sign_off" : "bank_reconciliation_review",
       label:
         action === "sign_off"
           ? "Bank reconciliation sign-off"
@@ -190,10 +244,7 @@ export const nativeCommandSubjects = [
       },
       ...(action === "review"
         ? {
-            decisionPermissions: [
-              "banking.review_sign_off",
-              "banking.reconcile",
-            ],
+            decisionPermissions: ["banking.review_sign_off", "banking.reconcile"],
           }
         : {}),
       scope: reconciliationScope(),
@@ -251,24 +302,26 @@ export const nativeCommandSubjects = [
       },
       async subsidiaryOf(orgId, ids, allowed, lock) {
         const rows = await db.execute<{
-            id: string;
-            entities: string[];
-            unresolved: boolean;
-          }>(sql`select r.id,
+          id: string;
+          entities: string[];
+          unresolved: boolean;
+        }>(
+          sql`select r.id,
     array(select distinct coalesce(d.subsidiary_id,j.subsidiary_id)::text from documents d left join journal_entries j on j.org_id=d.org_id and j.id=d.posted_entry_id
       where d.org_id=r.org_id and d.id in(r.invoice_document_id,r.receipt_document_id) and coalesce(d.subsidiary_id,j.subsidiary_id) is not null) as entities,
     (not exists(select 1 from documents d where d.org_id=r.org_id and d.id in(r.invoice_document_id,r.receipt_document_id))
       or exists(select 1 from unnest(array[r.invoice_document_id,r.receipt_document_id]) refs(id) where refs.id is not null and not exists(select 1 from documents d left join journal_entries j on j.org_id=d.org_id and j.id=d.posted_entry_id where d.org_id=r.org_id and d.id=refs.id and coalesce(d.subsidiary_id,j.subsidiary_id) is not null))) as unresolved
     from payment_disputes r where r.org_id=${orgId} and r.id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
-    ${lock ? sql`for share of r` : sql``}`, "objects");
+    ${lock ? sql`for share of r` : sql``}`,
+          "objects",
+        );
         return new Map(
           rows
             .filter(
               (row) =>
                 !row.unresolved &&
                 row.entities.length > 0 &&
-                (allowed === null ||
-                  row.entities.every((id) => allowed.has(id))),
+                (allowed === null || row.entities.every((id) => allowed.has(id))),
             )
             .map((row) => [row.id, row.entities[0]!]),
         );
@@ -388,11 +441,7 @@ export const nativeCommandSubjects = [
       edit: "hrm.compensation.manage",
       approve: "hrm.compensation.manage",
     },
-    scope: tableScope(
-      "column",
-      "hrm_headcount_plan_lines",
-      "employer_subsidiary_id",
-    ),
+    scope: tableScope("column", "hrm_headcount_plan_lines", "employer_subsidiary_id"),
 
     fields: [
       { key: "name", column: "title", label: "Role", type: "text" },
@@ -425,12 +474,15 @@ export const nativeCommandSubjects = [
       },
       async subsidiaryOf(orgId, ids, allowed, lock) {
         const rows = await db.execute<{
-            id: string;
-            entities: (string | null)[];
-          }>(sql`select p.id,array(select distinct entity from (
+          id: string;
+          entities: (string | null)[];
+        }>(
+          sql`select p.id,array(select distinct entity from (
       select l.employer_subsidiary_id::text as entity from hrm_headcount_plan_lines l where l.org_id=p.org_id and l.plan_id=p.id
       union select p.scope->>'employer_subsidiary_id' where p.scope->>'employer_subsidiary_id' is not null) owners) as entities
-      from hrm_headcount_plans p where p.org_id=${orgId} and p.id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid) ${lock ? sql`for share of p` : sql``}`, "objects");
+      from hrm_headcount_plans p where p.org_id=${orgId} and p.id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid) ${lock ? sql`for share of p` : sql``}`,
+          "objects",
+        );
         if (lock)
           await db.execute(
             sql`select id from hrm_headcount_plan_lines where org_id=${orgId} and plan_id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid) order by id for share`,
@@ -480,8 +532,7 @@ export const nativeCommandSubjects = [
     defineCommandSubject({
       kind: kind === "per_diem" ? "per_diem_entry" : "travel_pay_entry",
       label: kind === "per_diem" ? "Per-diem allowance" : "Travel allowance",
-      table:
-        kind === "per_diem" ? "hrm_per_diem_entries" : "hrm_travel_pay_entries",
+      table: kind === "per_diem" ? "hrm_per_diem_entries" : "hrm_travel_pay_entries",
       statusColumn: "status",
       statuses: ["computed", "approved", "void"],
       permissions: {
@@ -517,14 +568,7 @@ export const nativeCommandSubjects = [
     label: "Subcontract",
     table: "subcontracts",
     statusColumn: "status",
-    statuses: [
-      "draft",
-      "pending_approval",
-      "active",
-      "substantially_complete",
-      "closed",
-      "void",
-    ],
+    statuses: ["draft", "pending_approval", "active", "substantially_complete", "closed", "void"],
     permissions: { read: "ap.read", edit: "ap.create", approve: "ap.approve" },
     scope: tableScope("project", "subcontracts", "project_id"),
 
@@ -609,10 +653,7 @@ export const nativeCommandSubjects = [
   ...(["customer", "vendor"] as const).flatMap((side) => [
     defineCommandSubject({
       kind: `${side}_rebate_agreement`,
-      label:
-        side === "customer"
-          ? "Customer rebate agreement"
-          : "Vendor rebate agreement",
+      label: side === "customer" ? "Customer rebate agreement" : "Vendor rebate agreement",
       table: "rebate_agreements",
       statusColumn: "status",
       statuses: ["draft", "approved"],
@@ -643,17 +684,10 @@ export const nativeCommandSubjects = [
     }),
     defineCommandSubject({
       kind: `${side}_rebate_claim`,
-      label:
-        side === "customer" ? "Customer rebate claim" : "Vendor rebate claim",
+      label: side === "customer" ? "Customer rebate claim" : "Vendor rebate claim",
       table: "rebate_claims",
       statusColumn: "status",
-      statuses: [
-        "draft",
-        "approved",
-        "document_pending",
-        "settled",
-        "cancelled",
-      ],
+      statuses: ["draft", "approved", "document_pending", "settled", "cancelled"],
       permissions: {
         read: side === "vendor" ? "ap.read" : "ar.read",
         edit: side === "vendor" ? "ap.post" : "ar.post",
@@ -667,11 +701,16 @@ export const nativeCommandSubjects = [
         },
         async subsidiaryOf(orgId, ids, _allowed, lock) {
           return new Map(
-            (await db.execute<{
+            (
+              await db.execute<{
                 id: string;
                 subsidiary_id: string;
-              }>(sql`select c.id,a.subsidiary_id from rebate_claims c join rebate_agreements a on a.org_id=c.org_id and a.id=c.agreement_id
-      where c.org_id=${orgId} and a.side=${side} and c.id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid) ${lock ? sql`for share of c,a` : sql``}`, "objects")).map((row) => [row.id, row.subsidiary_id]),
+              }>(
+                sql`select c.id,a.subsidiary_id from rebate_claims c join rebate_agreements a on a.org_id=c.org_id and a.id=c.agreement_id
+      where c.org_id=${orgId} and a.side=${side} and c.id in(select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid) ${lock ? sql`for share of c,a` : sql``}`,
+                "objects",
+              )
+            ).map((row) => [row.id, row.subsidiary_id]),
           );
         },
       },
@@ -718,6 +757,4 @@ export const nativeCommandSubjects = [
     ],
   }),
 ];
-export const nativeCommandSubjectProfiles = nativeCommandSubjects.map(
-  (adapter) => adapter.profile,
-);
+export const nativeCommandSubjectProfiles = nativeCommandSubjects.map((adapter) => adapter.profile);

@@ -50,9 +50,7 @@ export interface ProductionInterlockRefusal {
   readonly reason: string;
 }
 
-export type ProductionInterlockDecision =
-  | { readonly proceed: true }
-  | ProductionInterlockRefusal;
+export type ProductionInterlockDecision = { readonly proceed: true } | ProductionInterlockRefusal;
 
 function isKnownSafeEnv(nodeEnv: string | undefined): boolean {
   return nodeEnv === "development" || nodeEnv === "test";
@@ -128,10 +126,10 @@ export function decideProductionApply(
     proceed: false,
     code: "database_not_ephemeral",
     reason:
-        "refusing apply: the target database does not carry the ephemeral marker " +
-        `(${JSON.stringify(input.databaseMarker ?? null)}), so it is treated as protected ` +
-        "regardless of NODE_ENV. Either point at an ephemeral-marked database, or pass " +
-        "--allow-production with the reviewed --dry-run-hash. Nothing was written. " +
-        `This run's dry-run report hash is ${input.computedHash}.`,
+      "refusing apply: the target database does not carry the ephemeral marker " +
+      `(${JSON.stringify(input.databaseMarker ?? null)}), so it is treated as protected ` +
+      "regardless of NODE_ENV. Either point at an ephemeral-marked database, or pass " +
+      "--allow-production with the reviewed --dry-run-hash. Nothing was written. " +
+      `This run's dry-run report hash is ${input.computedHash}.`,
   };
 }

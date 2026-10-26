@@ -8,7 +8,12 @@ import { resolveProjectFinancials } from "./financials.ts";
 import { applyOverheadForTime } from "../allocations/overhead-post.ts";
 import { db, pool, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { sum } from "../money/money.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -24,8 +29,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  */
 
 /** The T&M built-in profile: GL cost in headline + detail, no overhead split. */
-const profile = BUILTIN_PROJECT_TYPES.find((t) => t.key === "time_and_materials")!
-  .financialProfile;
+const profile = BUILTIN_PROJECT_TYPES.find((t) => t.key === "time_and_materials")!.financialProfile;
 
 /** Seed a project carrying exactly one posted, balanced, project-tagged cost. */
 async function seedProjectWithPostedCost(
@@ -78,15 +82,36 @@ async function stageUncommittedPosting(
     `insert into journal_entries
        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
      values ($1,$2,$3,$4,$5,$6,$7,$8,'draft','manual')`,
-    [entryId, org.orgId, org.bookId, org.subsidiaryId, entryNumber, org.date, org.periodId, entryNumber],
+    [
+      entryId,
+      org.orgId,
+      org.bookId,
+      org.subsidiaryId,
+      entryNumber,
+      org.date,
+      org.periodId,
+      entryNumber,
+    ],
   );
   await writer.query(
     `insert into journal_lines
        (org_id, entry_id, line_number, account_id, subsidiary_id, project_id, amount, currency, txn_amount, fx_rate)
      values ($1,$2,1,$3,$4,$5,$6,'CAD',$6,'1'), ($1,$2,2,$7,$4,null,$8,'CAD',$8,'1')`,
-    [org.orgId, entryId, org.accounts.cogs, org.subsidiaryId, projectId, lineAmount, org.accounts.ap, `-${lineAmount}`],
+    [
+      org.orgId,
+      entryId,
+      org.accounts.cogs,
+      org.subsidiaryId,
+      projectId,
+      lineAmount,
+      org.accounts.ap,
+      `-${lineAmount}`,
+    ],
   );
-  await writer.query(`update journal_entries set status = 'posted', posted_at = now() where id = $1`, [entryId]);
+  await writer.query(
+    `update journal_entries set status = 'posted', posted_at = now() where id = $1`,
+    [entryId],
+  );
 }
 
 /** Distinctive fragments of the report's read graph, in execution order. */
@@ -101,9 +126,7 @@ const COST_DETAIL_READ = "as account_id";
  * fully returned, but before the cost-by-account detail read executes. Both
  * orderings are enforced by awaiting the report's own statements — no sleeps.
  */
-function midReportCommitGate(
-  writer: { query(text: string): Promise<unknown> },
-) {
+function midReportCommitGate(writer: { query(text: string): Promise<unknown> }) {
   let headerSeen = false;
   let costReadDone: Promise<unknown> | undefined;
   let committed = false;
@@ -153,10 +176,8 @@ function midReportCommitGate(
       text: unknown,
       values?: unknown[],
     ) => Promise<unknown>;
-    (client as unknown as { query: unknown }).query = (
-      text: unknown,
-      values?: unknown[],
-    ) => driveGenerationBoundary(() => clientQuery(text, values), textOf(text));
+    (client as unknown as { query: unknown }).query = (text: unknown, values?: unknown[]) =>
+      driveGenerationBoundary(() => clientQuery(text, values), textOf(text));
     return client;
   };
 
@@ -166,10 +187,8 @@ function midReportCommitGate(
       return committed;
     },
     install() {
-      (pool as unknown as { query: unknown }).query = (
-        text: unknown,
-        values?: unknown[],
-      ) => driveGenerationBoundary(() => pooledQuery(text, values), textOf(text));
+      (pool as unknown as { query: unknown }).query = (text: unknown, values?: unknown[]) =>
+        driveGenerationBoundary(() => pooledQuery(text, values), textOf(text));
       pg.Pool.prototype.connect = function (this: pg.Pool, ...args: unknown[]) {
         if (this !== pool) return originalPoolConnect.apply(this, args as never);
         return pooledConnect().then(observeClient);
@@ -182,91 +201,102 @@ function midReportCommitGate(
   };
 }
 
-test("a project posting committing mid-report stays out of the resolved generation and lands in the next", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  let writer: pg.Client | undefined;
-  try {
-    const projectId = await withBypassContext(() => seedProjectWithPostedCost(db, org, "SNAP-SEED", "800.0000"));
-
-    const stagedWriter = new pg.Client({
-      connectionString: process.env.OPENBOOKS_DB_URL,
-    });
-    await stagedWriter.connect();
-    writer = stagedWriter;
-    await stageUncommittedPosting(stagedWriter, org, projectId, "SNAP-LATE", "5000.0000");
-
-    const gate = midReportCommitGate(stagedWriter);
-    gate.install();
-    let report: Awaited<ReturnType<typeof resolveProjectFinancials>>;
+test(
+  "a project posting committing mid-report stays out of the resolved generation and lands in the next",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    let writer: pg.Client | undefined;
     try {
-      report = await resolveProjectFinancials(org.orgId, projectId, profile);
-    } finally {
-      gate.restore();
-    }
+      const projectId = await withBypassContext(() =>
+        seedProjectWithPostedCost(db, org, "SNAP-SEED", "800.0000"),
+      );
 
-    // The interleave genuinely happened: the staged poster committed while the
-    // report was still resolving, between its headline and detail cost reads.
-    assert.ok(gate.midReportCommitHappened, "the staged poster must commit mid-report");
-    const lateRows = (await withOrgContext(org.orgId, () => db.execute<{ n: number }>(sql`
+      const stagedWriter = new pg.Client({
+        connectionString: process.env.OPENBOOKS_DB_URL,
+      });
+      await stagedWriter.connect();
+      writer = stagedWriter;
+      await stageUncommittedPosting(stagedWriter, org, projectId, "SNAP-LATE", "5000.0000");
+
+      const gate = midReportCommitGate(stagedWriter);
+      gate.install();
+      let report: Awaited<ReturnType<typeof resolveProjectFinancials>>;
+      try {
+        report = await resolveProjectFinancials(org.orgId, projectId, profile);
+      } finally {
+        gate.restore();
+      }
+
+      // The interleave genuinely happened: the staged poster committed while the
+      // report was still resolving, between its headline and detail cost reads.
+      assert.ok(gate.midReportCommitHappened, "the staged poster must commit mid-report");
+      const lateRows = await withOrgContext(org.orgId, () =>
+        db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from journal_entries
-       where org_id = ${org.orgId} and entry_number = 'SNAP-LATE' and status = 'posted'`, "objects")));
-    assert.equal(lateRows[0]?.n, 1, "the staged posting is durably committed");
+       where org_id = ${org.orgId} and entry_number = 'SNAP-LATE' and status = 'posted'`,
+          "objects",
+        ),
+      );
+      assert.equal(lateRows[0]?.n, 1, "the staged posting is durably committed");
 
-    // One coherent generation: the report observed EITHER side of the commit —
-    // here, wholly before it — so headline cost, total cost and the
-    // cost-by-account detail all agree and exclude the late poster wholesale.
-    assert.equal(report.measures.actual_cost, "800.0000");
-    assert.equal(report.measures.total_cost, "800.0000");
-    assert.equal(
-      sum(report.costByAccount.map((row) => row.amount)),
-      report.measures.actual_cost,
-      "headline actual_cost must reconcile with its own account detail",
-    );
+      // One coherent generation: the report observed EITHER side of the commit —
+      // here, wholly before it — so headline cost, total cost and the
+      // cost-by-account detail all agree and exclude the late poster wholesale.
+      assert.equal(report.measures.actual_cost, "800.0000");
+      assert.equal(report.measures.total_cost, "800.0000");
+      assert.equal(
+        sum(report.costByAccount.map((row) => row.amount)),
+        report.measures.actual_cost,
+        "headline actual_cost must reconcile with its own account detail",
+      );
 
-    // The next generation absorbs the concurrent posting completely.
-    const second = await resolveProjectFinancials(org.orgId, projectId, profile);
-    assert.equal(second.measures.actual_cost, "5800.0000");
-    assert.equal(
-      sum(second.costByAccount.map((row) => row.amount)),
-      second.measures.actual_cost,
-    );
-  } finally {
-    if (writer) {
-      await writer.query("rollback").catch(() => undefined);
-      await writer.end();
+      // The next generation absorbs the concurrent posting completely.
+      const second = await resolveProjectFinancials(org.orgId, projectId, profile);
+      assert.equal(second.measures.actual_cost, "5800.0000");
+      assert.equal(sum(second.costByAccount.map((row) => row.amount)), second.measures.actual_cost);
+    } finally {
+      if (writer) {
+        await writer.query("rollback").catch(() => undefined);
+        await writer.end();
+      }
+      await dropScratchOrg(org.orgId);
     }
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
-test("the profitability report reconciles headline cost with its account detail in one stable generation", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const projectId = await withBypassContext(() => seedProjectWithPostedCost(db, org, "SNAP-CALM", "800.0000"));
+test(
+  "the profitability report reconciles headline cost with its account detail in one stable generation",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const projectId = await withBypassContext(() =>
+        seedProjectWithPostedCost(db, org, "SNAP-CALM", "800.0000"),
+      );
 
-    const report = await resolveProjectFinancials(org.orgId, projectId, profile);
+      const report = await resolveProjectFinancials(org.orgId, projectId, profile);
 
-    assert.equal(report.projectType, "time_and_materials");
-    assert.equal(report.contractValue, "0.0000");
-    assert.equal(report.measures.actual_cost, "800.0000");
-    assert.equal(report.measures.total_cost, "800.0000");
-    assert.equal(report.measures.gross_profit, "-800.0000");
-    assert.deepEqual(report.costByAccount, [
-      {
-        accountId: org.accounts.cogs,
-        number: "5000",
-        name: "Cost of Goods Sold",
-        amount: "800.0000",
-      },
-    ]);
-    assert.equal(
-      sum(report.costByAccount.map((row) => row.amount)),
-      report.measures.actual_cost,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      assert.equal(report.projectType, "time_and_materials");
+      assert.equal(report.contractValue, "0.0000");
+      assert.equal(report.measures.actual_cost, "800.0000");
+      assert.equal(report.measures.total_cost, "800.0000");
+      assert.equal(report.measures.gross_profit, "-800.0000");
+      assert.deepEqual(report.costByAccount, [
+        {
+          accountId: org.accounts.cogs,
+          number: "5000",
+          name: "Cost of Goods Sold",
+          amount: "800.0000",
+        },
+      ]);
+      assert.equal(sum(report.costByAccount.map((row) => row.amount)), report.measures.actual_cost);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /**
  * rate_engine overhead must resolve the published rate card exactly the way the
@@ -275,61 +305,83 @@ test("the profitability report reconciles headline cost with its account detail 
  * department, and stacked org-wide rows sum. Anything else silently drops
  * overhead from total_cost / gross_profit for department-less time.
  */
-test("rate-engine overhead matches org-wide rates and the posted net-zero pair", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const actor = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
-    const projectId = randomUUID();
-    const employeeId = randomUUID();
-    const departmentId = randomUUID();
-    const orgWideEntry = randomUUID();
-    const departmentEntry = randomUUID();
-    await withBypassContext(async () => {
-      await db.execute(sql`
+test(
+  "rate-engine overhead matches org-wide rates and the posted net-zero pair",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actor = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+      const projectId = randomUUID();
+      const employeeId = randomUUID();
+      const departmentId = randomUUID();
+      const orgWideEntry = randomUUID();
+      const departmentEntry = randomUUID();
+      await withBypassContext(async () => {
+        await db.execute(sql`
         insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
         values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-OH', 'Overhead parity job', ${org.customerId}, 'active', true, '{}'::jsonb)`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
         values (${employeeId}, ${org.orgId}, 'employee', 'Overhead worker', ${org.subsidiaryId}, true, '{}'::jsonb)`);
-      await db.execute(sql`insert into departments (id, org_id, name) values (${departmentId}, ${org.orgId}, 'Field crew')`);
-      // Two stacked org-wide category rows (10 + 2) and one department row (15).
-      await db.execute(sql`
+        await db.execute(
+          sql`insert into departments (id, org_id, name) values (${departmentId}, ${org.orgId}, 'Field crew')`,
+        );
+        // Two stacked org-wide category rows (10 + 2) and one department row (15).
+        await db.execute(sql`
         insert into overhead_rates (id, org_id, department_id, category, method, rate_kind, rate_percent, effective_from)
         values (${randomUUID()}, ${org.orgId}, null, 'Equipment', 'standard', 'per_hour', '10.0000', '2026-01-01'),
                (${randomUUID()}, ${org.orgId}, null, 'Consumables', 'standard', 'per_hour', '2.0000', '2026-01-01'),
                (${randomUUID()}, ${org.orgId}, ${departmentId}, 'Equipment', 'standard', 'per_hour', '15.0000', '2026-01-01')`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into time_entries (id, org_id, employee_party_id, worked_on, hours, project_id, department_id, status, costing_basis, is_billable, custom, created_by, updated_by)
         values (${orgWideEntry}, ${org.orgId}, ${employeeId}, ${org.date}, '4.0000', ${projectId}, null, 'approved', 'actual', false, '{}'::jsonb, ${actor}, ${actor}),
                (${departmentEntry}, ${org.orgId}, ${employeeId}, ${org.date}, '4.0000', ${projectId}, ${departmentId}, 'approved', 'actual', false, '{}'::jsonb, ${actor}, ${actor})`);
-    });
+      });
 
-    const rateEngineProfile = {
-      ...profile,
-      overhead: { method: "rate_engine" as const, rateEngine: { rateSource: "standard" as const, hoursBasis: "total_hours" as const, dimension: "overhead", scope: "department" as const } },
-      totalCost: { components: ["actual_cost", "committed_cost", "overhead"] as FinancialProfile["totalCost"]["components"] },
-    };
-    const report = await resolveProjectFinancials(org.orgId, projectId, rateEngineProfile);
-    // 4h × (10 + 2) org-wide + 4h × 15 department-specific = 108.
-    assert.equal(report.measures.calculated_overhead, "108.0000");
-    assert.equal(report.measures.overhead, "108.0000");
-    assert.equal(report.measures.total_cost, "108.0000");
-    // Profit to date is recognized revenue less posted cost: no revenue has
-    // posted and statistical overhead is never a posting, so this is zero —
-    // not priced total minus total cost.
-    assert.equal(report.measures.gross_profit, "0.0000");
+      const rateEngineProfile = {
+        ...profile,
+        overhead: {
+          method: "rate_engine" as const,
+          rateEngine: {
+            rateSource: "standard" as const,
+            hoursBasis: "total_hours" as const,
+            dimension: "overhead",
+            scope: "department" as const,
+          },
+        },
+        totalCost: {
+          components: [
+            "actual_cost",
+            "committed_cost",
+            "overhead",
+          ] as FinancialProfile["totalCost"]["components"],
+        },
+      };
+      const report = await resolveProjectFinancials(org.orgId, projectId, rateEngineProfile);
+      // 4h × (10 + 2) org-wide + 4h × 15 department-specific = 108.
+      assert.equal(report.measures.calculated_overhead, "108.0000");
+      assert.equal(report.measures.overhead, "108.0000");
+      assert.equal(report.measures.total_cost, "108.0000");
+      // Profit to date is recognized revenue less posted cost: no revenue has
+      // posted and statistical overhead is never a posting, so this is zero —
+      // not priced total minus total cost.
+      assert.equal(report.measures.gross_profit, "0.0000");
 
-    // The statistical measure and the posted net-zero pair are ONE rule.
-    await withBypassContext(() => db.execute(sql`
+      // The statistical measure and the posted net-zero pair are ONE rule.
+      await withBypassContext(() =>
+        db.execute(sql`
       update orgs set settings = settings || ${JSON.stringify({ overheadApplication: { mode: "net_zero_pair", accountId: org.accounts.adjustment } })}::jsonb
-       where id = ${org.orgId}`));
-    const applied = await applyOverheadForTime(org.orgId, actor, [orgWideEntry, departmentEntry]);
-    assert.equal(applied.entries, 2);
-    assert.equal(applied.total, report.measures.calculated_overhead);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where id = ${org.orgId}`),
+      );
+      const applied = await applyOverheadForTime(org.orgId, actor, [orgWideEntry, departmentEntry]);
+      assert.equal(applied.entries, 2);
+      assert.equal(applied.total, report.measures.calculated_overhead);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("account-group labor resolves posted GL on the grouped accounts", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -355,88 +407,111 @@ test("account-group labor resolves posted GL on the grouped accounts", { skip: !
   }
 });
 
-test("an unknown labor source refuses instead of pricing labor as zero", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const projectId = await seedProjectWithPostedCost(db, org, "LABOR-UNK-1", "500");
-    const bogus: FinancialProfile = {
-      ...structuredClone(profile),
-      laborCost: { source: "unknown_source" as unknown as FinancialProfile["laborCost"]["source"] },
-    };
-    await assert.rejects(
-      resolveProjectFinancials(org.orgId, projectId, bogus),
-      /Unknown laborCost\.source 'unknown_source'/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "an unknown labor source refuses instead of pricing labor as zero",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const projectId = await seedProjectWithPostedCost(db, org, "LABOR-UNK-1", "500");
+      const bogus: FinancialProfile = {
+        ...structuredClone(profile),
+        laborCost: {
+          source: "unknown_source" as unknown as FinancialProfile["laborCost"]["source"],
+        },
+      };
+      await assert.rejects(
+        resolveProjectFinancials(org.orgId, projectId, bogus),
+        /Unknown laborCost\.source 'unknown_source'/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a deactivated labor group refuses by name instead of pricing zero", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const groupId = randomUUID();
-    await db.execute(sql`
+test(
+  "a deactivated labor group refuses by name instead of pricing zero",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const groupId = randomUUID();
+      await db.execute(sql`
       insert into account_groups (id, org_id, dimension, key, name, is_catch_all, is_active)
       values (${groupId}, ${org.orgId}, 'labor_pool', 'field_labor', 'Field labor', false, true)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into account_group_members (id, org_id, group_id, account_id, dimension)
       values (${randomUUID()}, ${org.orgId}, ${groupId}, ${org.accounts.cogs}, 'labor_pool')`);
-    const projectId = await seedProjectWithPostedCost(db, org, "LABOR-DEAD-1", "500");
-    const grouped: FinancialProfile = {
-      ...structuredClone(profile),
-      totalPrice: { ...structuredClone(profile).totalPrice, method: "cost_plus" },
-      laborCost: { source: "account_group", dimension: "labor_pool", groupKeys: ["field_labor"] },
-    };
-    // With the group active the wage resolves; the price path is cost-plus
-    // so any silent zero would flow straight into the price.
-    assert.equal((await resolveProjectFinancials(org.orgId, projectId, grouped)).measures.labor_cost, "500.0000");
-    await db.execute(sql`update account_groups set is_active=false where org_id=${org.orgId} and id=${groupId}`);
-    // Deactivated after configuration: the report AND the cost-plus price
-    // refuse naming the unresolved keys instead of reporting $0 labor.
-    await assert.rejects(
-      resolveProjectFinancials(org.orgId, projectId, grouped),
-      /laborCost\.source 'account_group' is unresolved: groupKeys \[field_labor\] resolve to no active accounts/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const projectId = await seedProjectWithPostedCost(db, org, "LABOR-DEAD-1", "500");
+      const grouped: FinancialProfile = {
+        ...structuredClone(profile),
+        totalPrice: { ...structuredClone(profile).totalPrice, method: "cost_plus" },
+        laborCost: { source: "account_group", dimension: "labor_pool", groupKeys: ["field_labor"] },
+      };
+      // With the group active the wage resolves; the price path is cost-plus
+      // so any silent zero would flow straight into the price.
+      assert.equal(
+        (await resolveProjectFinancials(org.orgId, projectId, grouped)).measures.labor_cost,
+        "500.0000",
+      );
+      await db.execute(
+        sql`update account_groups set is_active=false where org_id=${org.orgId} and id=${groupId}`,
+      );
+      // Deactivated after configuration: the report AND the cost-plus price
+      // refuse naming the unresolved keys instead of reporting $0 labor.
+      await assert.rejects(
+        resolveProjectFinancials(org.orgId, projectId, grouped),
+        /laborCost\.source 'account_group' is unresolved: groupKeys \[field_labor\] resolve to no active accounts/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("an unresolved actual-cost group refuses by name instead of pricing zero", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const projectId = await seedProjectWithPostedCost(db, org, "ACTUAL-DEAD-1", "500");
-    const grouped: FinancialProfile = {
-      ...structuredClone(profile),
-      actualCost: { source: "account_group", dimension: "labor_pool", groupKeys: ["ghost_pool"] },
-    };
-    await assert.rejects(
-      resolveProjectFinancials(org.orgId, projectId, grouped),
-      /actualCost\.source 'account_group' is unresolved: groupKeys \[ghost_pool\] resolve to no active accounts/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "an unresolved actual-cost group refuses by name instead of pricing zero",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const projectId = await seedProjectWithPostedCost(db, org, "ACTUAL-DEAD-1", "500");
+      const grouped: FinancialProfile = {
+        ...structuredClone(profile),
+        actualCost: { source: "account_group", dimension: "labor_pool", groupKeys: ["ghost_pool"] },
+      };
+      await assert.rejects(
+        resolveProjectFinancials(org.orgId, projectId, grouped),
+        /actualCost\.source 'account_group' is unresolved: groupKeys \[ghost_pool\] resolve to no active accounts/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("an unresolved overhead group refuses by name instead of pricing zero", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const projectId = await seedProjectWithPostedCost(db, org, "OH-DEAD-1", "500");
-    const grouped: FinancialProfile = {
-      ...structuredClone(profile),
-      overhead: {
-        ...structuredClone(profile).overhead,
-        method: "posted_gl_account_group",
-        accountGroup: { dimension: "labor_pool", groupKeys: ["ghost_pool"] },
-      },
-    };
-    await assert.rejects(
-      resolveProjectFinancials(org.orgId, projectId, grouped),
-      /overhead\.method 'posted_gl_account_group' is unresolved: groupKeys \[ghost_pool\] resolve to no active accounts/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "an unresolved overhead group refuses by name instead of pricing zero",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const projectId = await seedProjectWithPostedCost(db, org, "OH-DEAD-1", "500");
+      const grouped: FinancialProfile = {
+        ...structuredClone(profile),
+        overhead: {
+          ...structuredClone(profile).overhead,
+          method: "posted_gl_account_group",
+          accountGroup: { dimension: "labor_pool", groupKeys: ["ghost_pool"] },
+        },
+      };
+      await assert.rejects(
+        resolveProjectFinancials(org.orgId, projectId, grouped),
+        /overhead\.method 'posted_gl_account_group' is unresolved: groupKeys \[ghost_pool\] resolve to no active accounts/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

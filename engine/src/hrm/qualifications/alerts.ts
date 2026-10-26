@@ -3,11 +3,7 @@ import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts"
 import { businessToday, calendarDaysBetween } from "../../platform/business-date.ts";
 import { requireAggregateCertificationsRead } from "../authorization.ts";
 import { HrmQualificationError } from "./errors.ts";
-import {
-  assertQualificationsFeature,
-  requireId,
-  type SqlExecutor,
-} from "./shared.ts";
+import { assertQualificationsFeature, requireId, type SqlExecutor } from "./shared.ts";
 import { DEFAULT_ALERT_LEAD_DAYS, loadSettings } from "./types.ts";
 
 /**
@@ -58,10 +54,7 @@ type DueRow = {
   holder_party_id: string | null;
 };
 
-function scheduleForType(
-  renewalLeadDays: number,
-  orgSchedule: readonly number[],
-): number[] {
+function scheduleForType(renewalLeadDays: number, orgSchedule: readonly number[]): number[] {
   // A type's lead days override the org schedule for that type; a type
   // still on a scheduled value keeps the schedule (indistinguishable
   // from explicit, and firing the schedule is correct either way).
@@ -74,11 +67,14 @@ export async function listAlertEligibleOrgs(exec: SqlExecutor): Promise<string[]
   // Registry fallback shape (non-boolean stored values fall back to the
   // default instead of throwing 22P02); the explicit conjunction is the
   // hrm → hrmCertifications parent chain.
-  const rows = await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(
+    sql`
     select id::text as id from orgs
      where case (settings->'features'->>'hrm') when 'true' then true when 'false' then false else false end
        and case (settings->'features'->>'hrmCertifications') when 'true' then true when 'false' then false else false end
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => row.id);
 }
 
@@ -112,13 +108,15 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('hrm-qualification-alert-scan'))`);
     const today = await businessToday(orgId);
     const settings = await loadSettings(tx, orgId);
-    const orgSchedule = settings.alertLeadDays.length > 0 ? settings.alertLeadDays : [...DEFAULT_ALERT_LEAD_DAYS];
+    const orgSchedule =
+      settings.alertLeadDays.length > 0 ? settings.alertLeadDays : [...DEFAULT_ALERT_LEAD_DAYS];
     let alertsWritten = 0;
     let notificationsWritten = 0;
     let expiredNoticed = 0;
     // Stored-valid qualifications with a dated expiry. Pending rows
     // need verification, not expiry alerts; revoked rows need nothing.
-    const due = await tx.execute<DueRow & { renewal_lead_days: number }>(sql`
+    const due = await tx.execute<DueRow & { renewal_lead_days: number }>(
+      sql`
       select q.id::text as qualification_id, q.employment_id::text as employment_id,
              t.code as type_code, t.name as type_name,
              q.expires_on::text, t.renewal_lead_days,
@@ -131,17 +129,24 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
        where q.org_id = ${orgId}::uuid
          and q.status = 'valid'
          and q.expires_on is not null
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of due) {
       const daysLeft = calendarDaysBetween(today, row.expires_on);
       if (daysLeft < 0) {
         // Crossed expiry: one expired_noticed event, then one notice.
-        const noticed = (await tx.execute<{ id: string }>(sql`
+        const noticed = (
+          await tx.execute<{ id: string }>(
+            sql`
           select id from hrm_qualification_events
            where org_id = ${orgId}::uuid and qualification_id = ${row.qualification_id}::uuid
              and kind = 'expired_noticed'
            limit 1
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         if (noticed) continue;
         await tx.execute(sql`
           insert into hrm_qualification_events
@@ -151,7 +156,9 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
         `);
         expiredNoticed += 1;
         notificationsWritten += await notifyHolders(
-          tx, orgId, row,
+          tx,
+          orgId,
+          row,
           `Qualification expired — ${row.type_name}`,
           `${row.type_name} expired ${row.expires_on}. Renew it before gated work is refused.`,
           "/hrm/qualifications",
@@ -171,7 +178,9 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
       const freshAlertIds: string[] = [];
       for (const threshold of schedule) {
         if (daysLeft > threshold) continue;
-        const alertId = (await tx.execute<{ id: string }>(sql`
+        const alertId = (
+          await tx.execute<{ id: string }>(
+            sql`
           insert into hrm_qualification_alerts
             (org_id, qualification_id, lead_days, due_on, channel, created_by)
           values (${orgId}::uuid, ${row.qualification_id}::uuid, ${threshold},
@@ -179,7 +188,10 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
           -- The existing qualification threshold alert already owns its notice; do not send it twice.
           on conflict (qualification_id, lead_days) do nothing
           returning id
-        `, "objects"))[0]?.id;
+        `,
+            "objects",
+          )
+        )[0]?.id;
         if (!alertId) continue;
         alertsWritten += 1;
         freshAlertIds.push(alertId);
@@ -191,7 +203,9 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
              and org_id = ${orgId}::uuid
         `);
         notificationsWritten += await notifyHolders(
-          tx, orgId, row,
+          tx,
+          orgId,
+          row,
           `Qualification expiring — ${row.type_name}`,
           `${row.type_name} expires ${row.expires_on} (${daysLeft} days). Renew it before gated work is refused.`,
           "/hrm/qualifications",
@@ -218,14 +232,18 @@ async function notifyHolders(
   href: string,
 ): Promise<number> {
   if (!row.holder_party_id) return 0;
-  const holders = await exec.execute<{ id: string }>(sql`
+  const holders = await exec.execute<{ id: string }>(
+    sql`
     select id::text as id from users
      where org_id = ${orgId}::uuid and party_id = ${row.holder_party_id}::uuid
-  `, "objects");
+  `,
+    "objects",
+  );
   // The holder's line managers as of today (same structural predicate
   // as loadTeamEmploymentIdsForManager, inverted: holder → managers).
   const today = await businessToday(orgId);
-  const managerPartyIds = await exec.execute<{ party_id: string }>(sql`
+  const managerPartyIds = await exec.execute<{ party_id: string }>(
+    sql`
     select distinct m.worker_party_id::text as party_id
       from reporting_relationships r
       join worker_employments m
@@ -235,14 +253,19 @@ async function notifyHolders(
        and r.kind = 'line' and r.recorded_until is null
        and r.effective_from <= ${today}::date
        and (r.effective_to is null or r.effective_to > ${today}::date)
-  `, "objects");
+  `,
+    "objects",
+  );
   let managerUserIds: { id: string }[] = [];
   if (managerPartyIds.length > 0) {
-    managerUserIds = await exec.execute<{ id: string }>(sql`
+    managerUserIds = await exec.execute<{ id: string }>(
+      sql`
       select id::text as id from users
        where org_id = ${orgId}::uuid
          and party_id in (select jsonb_array_elements_text(${JSON.stringify(managerPartyIds.map((r) => r.party_id))}::jsonb)::uuid)
-    `, "objects");
+    `,
+      "objects",
+    );
   }
   const userIds = [...new Set([...holders, ...managerUserIds].map((u) => u.id))];
   let count = 0;
@@ -250,14 +273,21 @@ async function notifyHolders(
     // Same columns as the shared writeNotification path (kind, title,
     // body, href, org + user scope): the row surfaces in /notifications
     // and as an inbox item with zero extra plumbing.
-    const inserted = (await exec.execute<{ id: string }>(sql`
+    const inserted = (
+      await exec.execute<{ id: string }>(
+        sql`
       insert into notifications (org_id, user_id, kind, title, body, href)
       values (${orgId}::uuid, ${userId}::uuid, 'hrm_qualification_expiry',
               ${title}, ${body}, ${href})
       returning id
-    `, "objects"))[0]?.id;
+    `,
+        "objects",
+      )
+    )[0]?.id;
     if (!inserted) {
-      throw new HrmQualificationError("The expiry notice was not stored — no row was written; retry the action.");
+      throw new HrmQualificationError(
+        "The expiry notice was not stored — no row was written; retry the action.",
+      );
     }
     count += 1;
   }
@@ -290,7 +320,8 @@ export async function listAlerts(
     due_on: string;
     sent_at: string | null;
     channel: string;
-  }>(sql`
+  }>(
+    sql`
     select a.id::text as id, a.qualification_id::text as qualification_id,
            q.employment_id::text as employment_id,
            t.code as type_code, t.name as type_name,
@@ -307,7 +338,9 @@ export async function listAlerts(
        and (${input.employmentId ?? null}::uuid is null or q.employment_id = ${input.employmentId ?? null}::uuid)
        and (${input.unsentOnly !== true}::boolean or a.sent_at is null)
      order by a.due_on, t.code
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     qualificationId: row.qualification_id,

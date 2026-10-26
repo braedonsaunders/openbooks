@@ -2,7 +2,10 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { businessTimeZone } from "../../platform/business-date.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
-import { assertUnrestrictedScope, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
+import {
+  assertUnrestrictedScope,
+  subsidiaryVisibleFilter,
+} from "../../organization/subsidiary-scope.ts";
 import { requireHrmRecruitingManageOrg, requireHrmRecruitingReadOrg } from "../authorization.ts";
 import { requireCandidateOwnedInScope } from "./candidate-scope.ts";
 import { RecruitingError } from "./errors.ts";
@@ -67,7 +70,7 @@ export type RetentionRunDTO = {
   readonly candidatesDeleted: number;
   readonly extensionsRequested: number;
   readonly detail: unknown;
-}
+};
 
 type RuleRow = {
   id: string;
@@ -123,7 +126,8 @@ export async function listRetentionRules(query: {
   return withOrgTransaction(orgId, async () => {
     // Rules are shared configuration: any recruiting reader lists them.
     await requireHrmRecruitingReadOrg(db, orgId, actorId);
-    const rows = await db.execute<RuleRow>(sql`
+    const rows = await db.execute<RuleRow>(
+      sql`
       select id, name, region_scope as "regionScope", basis,
              retain_months as "retainMonths", action,
              consent_extension_lead_days as "consentExtensionLeadDays",
@@ -131,7 +135,9 @@ export async function listRetentionRules(query: {
         from hrm_retention_rules
        where org_id = ${orgId} and (${query.includeInactive === true} or is_active)
        order by name
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map(toRuleDTO);
   });
 }
@@ -149,27 +155,50 @@ export async function createRetentionRule(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   if (typeof query.name !== "string" || query.name.trim().length === 0) {
-    throw new RecruitingError("INVALID_INPUT", "a retention rule needs a non-blank name — name the obligation it enforces");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "a retention rule needs a non-blank name — name the obligation it enforces",
+    );
   }
   if (query.basis !== "inactivity" && query.basis !== "consent") {
-    throw new RecruitingError("INVALID_INPUT", "a retention rule runs on basis inactivity or consent — pick what starts the clock");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "a retention rule runs on basis inactivity or consent — pick what starts the clock",
+    );
   }
-  if (typeof query.retainMonths !== "number" || !Number.isInteger(query.retainMonths) || query.retainMonths < 1) {
-    throw new RecruitingError("INVALID_INPUT", "retain_months is a positive integer of months — say how long the data may live");
+  if (
+    typeof query.retainMonths !== "number" ||
+    !Number.isInteger(query.retainMonths) ||
+    query.retainMonths < 1
+  ) {
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "retain_months is a positive integer of months — say how long the data may live",
+    );
   }
   const action = query.action === undefined ? "anonymize" : query.action;
   if (action !== "anonymize" && action !== "delete") {
-    throw new RecruitingError("INVALID_INPUT", "a retention rule acts by anonymize or delete — anonymize keeps funnel analytics; delete erases");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "a retention rule acts by anonymize or delete — anonymize keeps funnel analytics; delete erases",
+    );
   }
-  const leadDays =
-    query.consentExtensionLeadDays == null ? null : query.consentExtensionLeadDays;
-  if (leadDays !== null && (typeof leadDays !== "number" || !Number.isInteger(leadDays) || leadDays < 1)) {
-    throw new RecruitingError("INVALID_INPUT", "consent_extension_lead_days is a positive integer of days when sent — say how early the extension goes out");
+  const leadDays = query.consentExtensionLeadDays == null ? null : query.consentExtensionLeadDays;
+  if (
+    leadDays !== null &&
+    (typeof leadDays !== "number" || !Number.isInteger(leadDays) || leadDays < 1)
+  ) {
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "consent_extension_lead_days is a positive integer of days when sent — say how early the extension goes out",
+    );
   }
-  const scope =
-    query.regionScope == null ? {} : (query.regionScope as Record<string, unknown>);
+  const scope = query.regionScope == null ? {} : (query.regionScope as Record<string, unknown>);
   if (typeof scope !== "object" || Array.isArray(scope)) {
-    throw new RecruitingError("INVALID_INPUT", "region_scope is an object ({applies_to, countries}) — declare where the rule applies");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "region_scope is an object ({applies_to, countries}) — declare where the rule applies",
+    );
   }
   return withOrgTransaction(orgId, async () => {
     // Org-wide shared configuration: the manage grant, then the canonical
@@ -177,7 +206,9 @@ export async function createRetentionRule(query: {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
     try {
-      const row = (await db.execute<RuleRow>(sql`
+      const row = (
+        await db.execute<RuleRow>(
+          sql`
         insert into hrm_retention_rules
           (org_id, name, region_scope, basis, retain_months, action,
            consent_extension_lead_days, created_by, updated_by)
@@ -187,11 +218,21 @@ export async function createRetentionRule(query: {
                   retain_months as "retainMonths", action,
                   consent_extension_lead_days as "consentExtensionLeadDays",
                   is_active as "isActive"
-      `, "objects"))[0];
-      if (!row) throw new RecruitingError("REFUSED", "the rule was not stored — no row was written; retry the request");
+      `,
+          "objects",
+        )
+      )[0];
+      if (!row)
+        throw new RecruitingError(
+          "REFUSED",
+          "the rule was not stored — no row was written; retry the request",
+        );
       return toRuleDTO(row);
     } catch (error) {
-      if ((error as { code?: string }).code === "23505" || (error as { cause?: { code?: string } }).cause?.code === "23505") {
+      if (
+        (error as { code?: string }).code === "23505" ||
+        (error as { cause?: { code?: string } }).cause?.code === "23505"
+      ) {
         throw new RecruitingError(
           "REFUSED",
           `a retention rule named ${query.name} already exists — rename the rule or edit the existing one`,
@@ -210,7 +251,7 @@ export type ConsentDTO = {
   readonly expiresAt: string | null;
   readonly withdrawnAt: string | null;
   readonly source: string;
-}
+};
 
 /** Record (or re-grant) consent for a candidate + purpose. Withdrawals ride withdrawConsent. */
 export async function recordConsent(query: {
@@ -232,19 +273,29 @@ export async function recordConsent(query: {
   }
   const source = query.source === undefined ? "form" : query.source;
   if (source !== "form" && source !== "email" && source !== "import") {
-    throw new RecruitingError("INVALID_INPUT", "consent source is form, email, or import — record where the consent came from");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "consent source is form, email, or import — record where the consent came from",
+    );
   }
-  const expiresAt =
-    query.expiresAt == null ? null : String(query.expiresAt);
+  const expiresAt = query.expiresAt == null ? null : String(query.expiresAt);
   if (expiresAt !== null && Number.isNaN(Date.parse(expiresAt))) {
-    throw new RecruitingError("INVALID_INPUT", "consent expires_at must be an ISO instant when sent — say when the consent lapses");
+    throw new RecruitingError(
+      "INVALID_INPUT",
+      "consent expires_at must be an ISO instant when sent — say when the consent lapses",
+    );
   }
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     // Consent is a candidate-wide grant with legal effect: recording it for
     // a stranger manufactures permission over their data. Ownership first —
     // unknown and out-of-scope refuse identically.
-    await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
+    await requireCandidateOwnedInScope(
+      db,
+      orgId,
+      candidateId,
+      await actorAllowedSubsidiaryIds(db, orgId, actorId),
+    );
     // Post-lock erasure recheck: a retention run may clear the prospect
     // between the ownership read and this write. Consent for an anonymized
     // shell is permission over nobody, so refuse and name the re-entry
@@ -252,12 +303,20 @@ export async function recordConsent(query: {
     // token, so a static import back would cycle — reach back dynamically,
     // the same pattern applications uses for postings.
     const { isRetentionErasedCandidate } = await import("./candidates.ts");
-    const locked = (await db.execute<{ displayName: string | null; email: string | null; phone: string | null }>(sql`
+    const locked = (
+      await db.execute<{ displayName: string | null; email: string | null; phone: string | null }>(
+        sql`
       select display_name as "displayName", email, phone from hrm_candidates
        where org_id = ${orgId} and id = ${candidateId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!locked) {
-      throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization — check the reference");
+      throw new RecruitingError(
+        "NOT_FOUND",
+        "candidate is not visible in this organization — check the reference",
+      );
     }
     if (isRetentionErasedCandidate(locked)) {
       throw new RecruitingError(
@@ -265,7 +324,9 @@ export async function recordConsent(query: {
         "this candidate's data was erased under the retention policy — re-enter them as a new prospect before recording consent",
       );
     }
-    const row = (await db.execute<ConsentDTO>(sql`
+    const row = (
+      await db.execute<ConsentDTO>(
+        sql`
       insert into hrm_candidate_consents (org_id, candidate_id, purpose, expires_at, source, created_by, updated_by)
       values (${orgId}, ${candidateId}, ${query.purpose}, ${expiresAt}, ${source}, ${actorId}, ${actorId})
       on conflict (org_id, candidate_id, purpose)
@@ -275,8 +336,15 @@ export async function recordConsent(query: {
       returning id, candidate_id as "candidateId", purpose,
                 granted_at as "grantedAt", expires_at as "expiresAt",
                 withdrawn_at as "withdrawnAt", source
-    `, "objects"))[0];
-    if (!row) throw new RecruitingError("REFUSED", "the consent was not stored — no row was written; retry the request");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!row)
+      throw new RecruitingError(
+        "REFUSED",
+        "the consent was not stored — no row was written; retry the request",
+      );
     return row;
   });
 }
@@ -295,14 +363,24 @@ export async function withdrawConsent(query: {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     // Withdrawing a stranger's consent answers whether the row exists and
     // rewrites their privacy posture: ownership first, uniform denial.
-    await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
-    const updated = (await db.execute<{ one: number }>(sql`
+    await requireCandidateOwnedInScope(
+      db,
+      orgId,
+      candidateId,
+      await actorAllowedSubsidiaryIds(db, orgId, actorId),
+    );
+    const updated = (
+      await db.execute<{ one: number }>(
+        sql`
       update hrm_candidate_consents
          set withdrawn_at = now(), updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and candidate_id = ${candidateId}
          and purpose = ${String(query.purpose)} and withdrawn_at is null
       returning 1 as one
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!updated) {
       throw new RecruitingError(
         "NOT_FOUND",
@@ -312,16 +390,28 @@ export async function withdrawConsent(query: {
   });
 }
 
-export type RetentionFileRemover = (exec: SqlExecutor, orgId: string, fileId: string) => Promise<void>;
+export type RetentionFileRemover = (
+  exec: SqlExecutor,
+  orgId: string,
+  fileId: string,
+) => Promise<void>;
 
 /** Default resume removal: delete the File Cabinet blob + file rows (the file is candidate PII). */
 async function deleteCabinetFile(exec: SqlExecutor, orgId: string, fileId: string): Promise<void> {
   await exec.execute(sql`delete from file_blobs where org_id = ${orgId} and file_id = ${fileId}`);
-  const deleted = (await exec.execute<{ id: string }>(sql`
+  const deleted = (
+    await exec.execute<{ id: string }>(
+      sql`
     delete from files where org_id = ${orgId} and id = ${fileId} returning id
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!deleted) {
-    throw new RecruitingError("REFUSED", "the resume file was not removed — no row was deleted; retry the request");
+    throw new RecruitingError(
+      "REFUSED",
+      "the resume file was not removed — no row was deleted; retry the request",
+    );
   }
 }
 
@@ -365,9 +455,16 @@ export interface EvaluateRuleOptions {
 /** Active rule ids for the worker scanner, read inside the organization's scope. */
 export async function activeRetentionRuleIdsForDuty(orgId: string): Promise<string[]> {
   const scopedOrgId = requireOrgId(orgId);
-  return withOrgTransaction(scopedOrgId, async () => (await db.execute<{ id: string }>(sql`
+  return withOrgTransaction(scopedOrgId, async () =>
+    (
+      await db.execute<{ id: string }>(
+        sql`
     select id from hrm_retention_rules where org_id = ${scopedOrgId} and is_active order by id
-  `, "objects")).map((row) => row.id));
+  `,
+        "objects",
+      )
+    ).map((row) => row.id),
+  );
 }
 
 /**
@@ -400,23 +497,34 @@ export async function evaluateRetentionRule(
       await requireHrmRecruitingManageOrg(db, orgId, actorId);
       allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
     }
-    const rule = (await db.execute<RuleRow>(sql`
+    const rule = (
+      await db.execute<RuleRow>(
+        sql`
       select id, name, region_scope as "regionScope", basis,
              retain_months as "retainMonths", action,
              consent_extension_lead_days as "consentExtensionLeadDays",
              is_active as "isActive"
         from hrm_retention_rules where org_id = ${orgId} and id = ${ruleId}
-    `, "objects"))[0];
-    if (!rule) throw new RecruitingError("NOT_FOUND", "retention rule is not visible in this organization");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!rule)
+      throw new RecruitingError("NOT_FOUND", "retention rule is not visible in this organization");
     if (!rule.isActive) {
-      throw new RecruitingError("REFUSED", `rule ${rule.name} is retired — reactivate it before running it`);
+      throw new RecruitingError(
+        "REFUSED",
+        `rule ${rule.name} is retired — reactivate it before running it`,
+      );
     }
     if (options.claimBusinessDay) {
       const businessZone = await businessTimeZone(orgId);
       await db.execute(sql`
         select pg_advisory_xact_lock(hashtextextended(${`hrm-candidate-retention:${orgId}:${ruleId}:${options.claimBusinessDay}`}, 0))
       `);
-      const priorRun = (await db.execute<RetentionRunDTO>(sql`
+      const priorRun = (
+        await db.execute<RetentionRunDTO>(
+          sql`
         select id, rule_id as "ruleId", ran_at as "ranAt",
                candidates_anonymized as "candidatesAnonymized",
                candidates_deleted as "candidatesDeleted",
@@ -426,7 +534,10 @@ export async function evaluateRetentionRule(
            and ran_at >= (${options.claimBusinessDay}::date::timestamp at time zone ${businessZone})
            and ran_at < ((${options.claimBusinessDay}::date + 1)::timestamp at time zone ${businessZone})
          order by ran_at limit 1
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (priorRun) return priorRun;
     }
     // Unrestricted runners own every candidate (including prospects with no
@@ -439,7 +550,8 @@ export async function evaluateRetentionRule(
                         join hrm_requisitions r on r.org_id = a.org_id and r.id = a.requisition_id
                        where a.org_id = ${orgId} and a.candidate_id = c.id
                          ${subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, allowed)})`;
-    const candidates = await db.execute<CandidateScanRow>(sql`
+    const candidates = await db.execute<CandidateScanRow>(
+      sql`
       select c.id, c.party_id as "partyId",
              (select max(e.recorded_at) from hrm_application_events e
                join hrm_applications a on a.id = e.application_id and a.org_id = e.org_id
@@ -461,7 +573,9 @@ export async function evaluateRetentionRule(
              c.resume_attachment_id as "resumeFileId"
         from hrm_candidates c
        where c.org_id = ${orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     const cutoffMonths = rule.retainMonths;
     const monthsAgo = (dateIso: string | null): number | null => {
       if (!dateIso) return null;
@@ -473,15 +587,26 @@ export async function evaluateRetentionRule(
     let extensions = 0;
     const detail: Record<string, unknown>[] = [];
     for (const candidate of candidates) {
-      const candidateLock = (await db.execute<{ id: string; partyId: string | null }>(sql`
+      const candidateLock = (
+        await db.execute<{ id: string; partyId: string | null }>(
+          sql`
         select id, party_id as "partyId" from hrm_candidates
          where org_id = ${orgId} and id = ${candidate.id} for update
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!candidateLock) continue;
-      const nowOpen = (await db.execute<{ open: boolean }>(sql`
+      const nowOpen =
+        (
+          await db.execute<{ open: boolean }>(
+            sql`
         select exists (select 1 from hrm_applications
                         where org_id = ${orgId} and candidate_id = ${candidate.id} and status = 'active') as open
-      `, "objects"))[0]?.open ?? false;
+      `,
+            "objects",
+          )
+        )[0]?.open ?? false;
       // THE OPEN-APPLICATION RULE: a candidate with an open application is
       // never touched, whatever the rule says. A hired candidate (party
       // linked — an employee) is never touched either: retention owns
@@ -500,20 +625,26 @@ export async function evaluateRetentionRule(
         // Consent basis: the clock is the earliest live consent expiry; a
         // candidate with no expiring consent is not due.
         if (!candidate.consentExpiresAt) continue;
-        const expiryInDays = (Date.parse(candidate.consentExpiresAt) - now.getTime()) / (24 * 3_600_000);
+        const expiryInDays =
+          (Date.parse(candidate.consentExpiresAt) - now.getTime()) / (24 * 3_600_000);
         const leadDays = rule.consentExtensionLeadDays;
         if (expiryInDays > 0) {
           // Not yet expired: extension window only.
           if (leadDays === null || leadDays === undefined) continue;
           if (expiryInDays > leadDays) continue;
           if (candidate.extensionRequestedAt) continue; // idempotent: asked once per grant
-          const consentRow = (await db.execute<{ id: string; email: string | null }>(sql`
+          const consentRow = (
+            await db.execute<{ id: string; email: string | null }>(
+              sql`
             select k.id, c.email from hrm_candidate_consents k
              join hrm_candidates c on c.org_id = k.org_id and c.id = k.candidate_id
              where k.org_id = ${orgId} and k.candidate_id = ${candidate.id}
                and k.withdrawn_at is null and k.expires_at is not null
              order by k.expires_at limit 1
-          `, "objects"))[0];
+          `,
+              "objects",
+            )
+          )[0];
           if (consentRow?.email) {
             // Staged, not sent: the drain below runs only after this
             // transaction commits, so a rolled-back run never asks for an
@@ -546,16 +677,24 @@ export async function evaluateRetentionRule(
         if (candidate.resumeFileId) {
           await removeFile(db, orgId, candidate.resumeFileId);
         }
-        const touched = (await db.execute<{ one: number }>(sql`
+        const touched = (
+          await db.execute<{ one: number }>(
+            sql`
           update hrm_candidates
              set display_name = ${ANONYMIZED_DISPLAY_NAME}, email = null, phone = null,
                  notes = null, source_detail = null, resume_attachment_id = null,
                  updated_by = ${actorId}, updated_at = now()
            where org_id = ${orgId} and id = ${candidate.id}
           returning 1 as one
-        `, "objects"))[0];
+        `,
+            "objects",
+          )
+        )[0];
         if (!touched) {
-          throw new RecruitingError("REFUSED", "the candidate changed while anonymizing — the run is refused rather than half-applied");
+          throw new RecruitingError(
+            "REFUSED",
+            "the candidate changed while anonymizing — the run is refused rather than half-applied",
+          );
         }
         anonymized += 1;
         detail.push({ candidate_id: candidate.id, action: "anonymized" });
@@ -565,7 +704,9 @@ export async function evaluateRetentionRule(
         detail.push({ candidate_id: candidate.id, action: "deleted", events_orphaned: orphaned });
       }
     }
-    const run = (await db.execute<RetentionRunDTO>(sql`
+    const run = (
+      await db.execute<RetentionRunDTO>(
+        sql`
       insert into hrm_retention_runs
         (org_id, rule_id, ran_at, candidates_anonymized, candidates_deleted,
          extensions_requested, detail)
@@ -575,8 +716,15 @@ export async function evaluateRetentionRule(
                 candidates_anonymized as "candidatesAnonymized",
                 candidates_deleted as "candidatesDeleted",
                 extensions_requested as "extensionsRequested", detail
-    `, "objects"))[0];
-    if (!run) throw new RecruitingError("REFUSED", "the retention run was not recorded — no row was written; retry the request");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!run)
+      throw new RecruitingError(
+        "REFUSED",
+        "the retention run was not recorded — no row was written; retry the request",
+      );
     return run;
   });
   for (const pending of pendingEmails) {
@@ -597,49 +745,90 @@ async function deleteCandidateCascade(
   candidateId: string,
   removeFile: RetentionFileRemover,
 ): Promise<number> {
-  const resume = (await exec.execute<{ resumeFileId: string | null }>(sql`
+  const resume = (
+    await exec.execute<{ resumeFileId: string | null }>(
+      sql`
     select resume_attachment_id as "resumeFileId" from hrm_candidates
      where org_id = ${orgId} and id = ${candidateId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (resume?.resumeFileId) {
     await removeFile(exec, orgId, resume.resumeFileId);
   }
-  const applications = await exec.execute<{ id: string }>(sql`
+  const applications = await exec.execute<{ id: string }>(
+    sql`
     select id from hrm_applications where org_id = ${orgId} and candidate_id = ${candidateId}
-  `, "objects");
+  `,
+    "objects",
+  );
   let orphanedEvents = 0;
   for (const application of applications) {
-    const interviews = await exec.execute<{ id: string }>(sql`
+    const interviews = await exec.execute<{ id: string }>(
+      sql`
       select id from hrm_interviews where org_id = ${orgId} and application_id = ${application.id}
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const interview of interviews) {
-      await exec.execute(sql`delete from hrm_scorecards where org_id = ${orgId} and interview_id = ${interview.id}`);
-      await exec.execute(sql`delete from hrm_interview_slots where org_id = ${orgId} and interview_id = ${interview.id}`);
-      await exec.execute(sql`delete from hrm_interviews where org_id = ${orgId} and id = ${interview.id}`);
+      await exec.execute(
+        sql`delete from hrm_scorecards where org_id = ${orgId} and interview_id = ${interview.id}`,
+      );
+      await exec.execute(
+        sql`delete from hrm_interview_slots where org_id = ${orgId} and interview_id = ${interview.id}`,
+      );
+      await exec.execute(
+        sql`delete from hrm_interviews where org_id = ${orgId} and id = ${interview.id}`,
+      );
     }
-    const offers = await exec.execute<{ id: string }>(sql`
+    const offers = await exec.execute<{ id: string }>(
+      sql`
       select id from hrm_offers where org_id = ${orgId} and application_id = ${application.id}
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const offer of offers) {
-      await exec.execute(sql`delete from hrm_offer_versions where org_id = ${orgId} and offer_id = ${offer.id}`);
+      await exec.execute(
+        sql`delete from hrm_offer_versions where org_id = ${orgId} and offer_id = ${offer.id}`,
+      );
       await exec.execute(sql`delete from hrm_offers where org_id = ${orgId} and id = ${offer.id}`);
     }
-    const events = (await exec.execute<{ count: string }>(sql`
+    const events = (
+      await exec.execute<{ count: string }>(
+        sql`
       select count(*)::text as count from hrm_application_events
        where org_id = ${orgId} and application_id = ${application.id}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     orphanedEvents += Number(events?.count ?? 0);
     // The events survive (SET NULL orphans them as aggregates); the
     // application row goes.
-    await exec.execute(sql`delete from hrm_applications where org_id = ${orgId} and id = ${application.id}`);
+    await exec.execute(
+      sql`delete from hrm_applications where org_id = ${orgId} and id = ${application.id}`,
+    );
   }
-  await exec.execute(sql`delete from hrm_candidate_consents where org_id = ${orgId} and candidate_id = ${candidateId}`);
-  await exec.execute(sql`delete from hrm_talent_pool_members where org_id = ${orgId} and candidate_id = ${candidateId}`);
-  const gone = (await exec.execute<{ id: string }>(sql`
+  await exec.execute(
+    sql`delete from hrm_candidate_consents where org_id = ${orgId} and candidate_id = ${candidateId}`,
+  );
+  await exec.execute(
+    sql`delete from hrm_talent_pool_members where org_id = ${orgId} and candidate_id = ${candidateId}`,
+  );
+  const gone = (
+    await exec.execute<{ id: string }>(
+      sql`
     delete from hrm_candidates where org_id = ${orgId} and id = ${candidateId} returning id
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!gone) {
-    throw new RecruitingError("REFUSED", "the candidate changed while deleting — the run is refused rather than half-applied");
+    throw new RecruitingError(
+      "REFUSED",
+      "the candidate changed while deleting — the run is refused rather than half-applied",
+    );
   }
   return orphanedEvents;
 }
@@ -664,16 +853,26 @@ export async function listCandidateConsents(query: {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     // Consent rows are privacy posture: listing a stranger's grants and
     // expiries is the same leak as recording them. Ownership first.
-    await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
-    const consents = await db.execute<ConsentDTO>(sql`
+    await requireCandidateOwnedInScope(
+      db,
+      orgId,
+      candidateId,
+      await actorAllowedSubsidiaryIds(db, orgId, actorId),
+    );
+    const consents = await db.execute<ConsentDTO>(
+      sql`
       select id, candidate_id as "candidateId", purpose,
              granted_at as "grantedAt", expires_at as "expiresAt",
              withdrawn_at as "withdrawnAt", source
         from hrm_candidate_consents
        where org_id = ${orgId} and candidate_id = ${candidateId}
        order by purpose
-    `, "objects");
-    const live = consents.filter((consent) => consent.withdrawnAt == null && consent.expiresAt != null);
+    `,
+      "objects",
+    );
+    const live = consents.filter(
+      (consent) => consent.withdrawnAt == null && consent.expiresAt != null,
+    );
     live.sort((a, b) => Date.parse(a.expiresAt!) - Date.parse(b.expiresAt!));
     return { consents, earliestExpiry: live[0]?.expiresAt ?? null };
   });
@@ -690,7 +889,8 @@ export async function listRetentionRuns(query: {
   return withOrgTransaction(orgId, async () => {
     // The run ledger is evidence any recruiting reader may audit.
     await requireHrmRecruitingReadOrg(db, orgId, actorId);
-    const rows = await db.execute<RetentionRunDTO>(sql`
+    const rows = await db.execute<RetentionRunDTO>(
+      sql`
       select id, rule_id as "ruleId", ran_at as "ranAt",
              candidates_anonymized as "candidatesAnonymized",
              candidates_deleted as "candidatesDeleted",
@@ -698,7 +898,9 @@ export async function listRetentionRuns(query: {
         from hrm_retention_runs
        where org_id = ${orgId} and rule_id = ${ruleId}
        order by ran_at desc limit 100
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows;
   });
 }

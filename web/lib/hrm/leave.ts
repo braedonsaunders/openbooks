@@ -1,9 +1,9 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
   leaveEmploymentBalances,
   listOrgLeaveRequests,
@@ -11,19 +11,16 @@ import {
   payrollBankBalances,
   strandedLeavePayrollInputs,
   type LeaveRequestSummary,
-} from '@openbooks/engine/hrm/leave-read'
-import {
-  absenceCalendarForDepartment,
-  employmentsOnLeave,
-} from '@openbooks/engine/hrm/attendance'
-import { loadOwnEmploymentIds } from '@openbooks/engine/hrm/authorization'
-import { HrmAuthorizationError } from '@openbooks/engine/hrm/authorization'
-import { LeaveError } from '@openbooks/engine/hrm/leave-errors'
-import { can, type Authz } from '../authz'
-import { hrmGroupTabs } from '../../components/module-home/group-tabs'
-import { loadQueueLabels } from './change-requests'
-import { listScopedDepartmentOptions } from '../scoped-options'
-import { leaveCalendarWindow } from './leave-calendar'
+} from "@openbooks/engine/hrm/leave-read";
+import { absenceCalendarForDepartment, employmentsOnLeave } from "@openbooks/engine/hrm/attendance";
+import { loadOwnEmploymentIds } from "@openbooks/engine/hrm/authorization";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
+import { LeaveError } from "@openbooks/engine/hrm/leave-errors";
+import { can, type Authz } from "../authz";
+import { hrmGroupTabs } from "../../components/module-home/group-tabs";
+import { loadQueueLabels } from "./change-requests";
+import { listScopedDepartmentOptions } from "../scoped-options";
+import { leaveCalendarWindow } from "./leave-calendar";
 
 /**
  * Leave workspace loaders — one read per surface behind the Leave tab, the
@@ -39,111 +36,110 @@ import { leaveCalendarWindow } from './leave-calendar'
  * refusals beside the segments, never an empty table pretending to be data.
  */
 
-const QUEUE_LIMIT = 500
+const QUEUE_LIMIT = 500;
 
 export interface LeaveQueueRow extends LeaveRequestSummary {
-  employeeName: string | null
-  partyId: string | null
+  employeeName: string | null;
+  partyId: string | null;
   /** Display-resolved cells for the shared table block: labels and hrefs, never ids. */
-  employeeLabel: string
-  employeeHref: string | null
-  statusLabel: string
-  statusVariant:
-    'default' | 'secondary' | 'outline' | 'destructive' | 'warning' | 'success'
-  requestHref: string
-  openLabel: string
-  rangeLabel: string
+  employeeLabel: string;
+  employeeHref: string | null;
+  statusLabel: string;
+  statusVariant: "default" | "secondary" | "outline" | "destructive" | "warning" | "success";
+  requestHref: string;
+  openLabel: string;
+  rangeLabel: string;
 }
 
 export interface LeaveSegment {
-  value: string
-  label: string
-  count: number
+  value: string;
+  label: string;
+  count: number;
 }
 
 export interface LeaveRefusal {
-  title: string
-  message: string
+  title: string;
+  message: string;
 }
 
 export interface LeaveQueueData {
-  title: string
-  description: string
-  listTitle: string
-  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  refusal: LeaveRefusal | null
-  hasContent: boolean
-  view: 'requests' | 'calendar'
-  onRequests: boolean
-  onCalendar: boolean
-  segmentsLabel: string
-  allLabel: string
-  counts: Record<string, number>
-  total: number
-  truncated: boolean
-  truncatedNote: string
-  strandedNote: string | null
-  segments: LeaveSegment[]
-  currentParams: Record<string, string | string[] | undefined>
-  columns: { employee: string; type: string; range: string; hours: string }
-  rows: LeaveQueueRow[]
-  emptyTitle: string
-  emptyDescription: string
-  canFile: boolean
-  canRecord: boolean
-  canWithdrawCancel: boolean
-  fileTitle: string
-  fileButton: string
-  recordTitle: string
-  recordButton: string
-  calendarTitle: string
-  calendarDepartmentLabel: string
-  calendarAllDepartments: string
-  calendarFromLabel: string
-  calendarToLabel: string
-  calendarFrom: string
-  calendarTo: string
-  calendarToday: string
-  calendarScopeLabel: string
+  title: string;
+  description: string;
+  listTitle: string;
+  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>;
+  refusal: LeaveRefusal | null;
+  hasContent: boolean;
+  view: "requests" | "calendar";
+  onRequests: boolean;
+  onCalendar: boolean;
+  segmentsLabel: string;
+  allLabel: string;
+  counts: Record<string, number>;
+  total: number;
+  truncated: boolean;
+  truncatedNote: string;
+  strandedNote: string | null;
+  segments: LeaveSegment[];
+  currentParams: Record<string, string | string[] | undefined>;
+  columns: { employee: string; type: string; range: string; hours: string };
+  rows: LeaveQueueRow[];
+  emptyTitle: string;
+  emptyDescription: string;
+  canFile: boolean;
+  canRecord: boolean;
+  canWithdrawCancel: boolean;
+  fileTitle: string;
+  fileButton: string;
+  recordTitle: string;
+  recordButton: string;
+  calendarTitle: string;
+  calendarDepartmentLabel: string;
+  calendarAllDepartments: string;
+  calendarFromLabel: string;
+  calendarToLabel: string;
+  calendarFrom: string;
+  calendarTo: string;
+  calendarToday: string;
+  calendarScopeLabel: string;
   calendarDays: {
-    date: string
+    date: string;
     entries: {
-      employmentId: string
-      workerName: string
-      hours: string
-      leaveTypeCode: string
+      employmentId: string;
+      workerName: string;
+      hours: string;
+      leaveTypeCode: string;
       /** Null when the day cannot open a record (request-sourced without its request). */
-      absenceHref: string | null
-    }[]
-  }[]
-  calendarEmpty: string
-  departmentOptions: { value: string; label: string }[]
-  queue: { notAvailable: string; openEmployee: string }
-  openRequest: string
-  fileHref: string
-  recordHref: string
-  dialogOpen: boolean
-  dialogRequestId: string | null
-  dialogAbsenceId: string | null
-  dialogCloseHref: string
+      absenceHref: string | null;
+    }[];
+  }[];
+  calendarEmpty: string;
+  departmentOptions: { value: string; label: string }[];
+  queue: { notAvailable: string; openEmployee: string };
+  openRequest: string;
+  fileHref: string;
+  recordHref: string;
+  dialogOpen: boolean;
+  dialogRequestId: string | null;
+  dialogAbsenceId: string | null;
+  dialogCloseHref: string;
   /** The record-absence action opens its own dialog, never the file-leave one. */
-  recordOpen: boolean
+  recordOpen: boolean;
 }
 
 function segmentOf(
   row: LeaveRequestSummary,
   today: string,
-): 'pending' | 'upcoming' | 'today' | 'history' | 'recorded' {
-  if (row.status === 'recorded') return 'recorded'
-  if (row.status === 'submitted') return 'pending'
-  if (row.status === 'approved' && row.endsOn >= today) return 'upcoming'
-  return 'history'
+): "pending" | "upcoming" | "today" | "history" | "recorded" {
+  if (row.status === "recorded") return "recorded";
+  if (row.status === "submitted") return "pending";
+  if (row.status === "approved" && row.endsOn >= today) return "upcoming";
+  return "history";
 }
 
 type LeaveCatalog = {
-  (key: string, params?: Record<string, string | number>): string
-  has: (key: string) => boolean
-}
+  (key: string, params?: Record<string, string | number>): string;
+  has: (key: string) => boolean;
+};
 
 /** Header/dialog hrefs preserve the active segment; the dialog closes by navigating the param away. */
 function leaveHref(
@@ -151,26 +147,24 @@ function leaveHref(
   segment: string | undefined,
   extra: Record<string, string>,
 ): string {
-  const params = new URLSearchParams()
-  if (segment) params.set('segment', segment)
-  for (const [key, value] of Object.entries(extra)) params.set(key, value)
-  const query = params.toString()
-  return query ? `${basePath}?${query}` : basePath
+  const params = new URLSearchParams();
+  if (segment) params.set("segment", segment);
+  for (const [key, value] of Object.entries(extra)) params.set(key, value);
+  const query = params.toString();
+  return query ? `${basePath}?${query}` : basePath;
 }
 
 function leaveStatusLabel(t: LeaveCatalog, status: string): string {
-  return t.has(`leave.statusNames.${status}`)
-    ? t(`leave.statusNames.${status}`)
-    : status
+  return t.has(`leave.statusNames.${status}`) ? t(`leave.statusNames.${status}`) : status;
 }
 
-function leaveStatusVariant(status: string): LeaveQueueRow['statusVariant'] {
-  if (status === 'draft') return 'secondary'
-  if (status === 'submitted') return 'warning'
-  if (status === 'approved' || status === 'recorded') return 'success'
-  if (status === 'rejected') return 'destructive'
-  if (status === 'withdrawn' || status === 'cancelled') return 'outline'
-  return 'default'
+function leaveStatusVariant(status: string): LeaveQueueRow["statusVariant"] {
+  if (status === "draft") return "secondary";
+  if (status === "submitted") return "warning";
+  if (status === "approved" || status === "recorded") return "success";
+  if (status === "rejected") return "destructive";
+  if (status === "withdrawn" || status === "cancelled") return "outline";
+  return "default";
 }
 
 export async function loadLeaveQueue(
@@ -180,114 +174,111 @@ export async function loadLeaveQueue(
   // The caller (the leave view) owns the page gate — requirePermission plus
   // the hrm switch with a 404. This loader never re-checks either; it
   // resolves rows for the authorized session it is given.
-  const orgId = authz.user.orgId
-  const t = await getTranslations('hrm')
-  const today = await businessToday(orgId)
-  const strandedInputs = await strandedLeavePayrollInputs(db, orgId)
-  const strandedNote = strandedInputs.length > 0
-    ? t('leave.strandedPayrollInputs', { count: strandedInputs.length })
-    : null
+  const orgId = authz.user.orgId;
+  const t = await getTranslations("hrm");
+  const today = await businessToday(orgId);
+  const strandedInputs = await strandedLeavePayrollInputs(db, orgId);
+  const strandedNote =
+    strandedInputs.length > 0
+      ? t("leave.strandedPayrollInputs", { count: strandedInputs.length })
+      : null;
   // Requests and the calendar are two VIEWS of leave, not two
   // sections of one page. Stacked, the calendar sat below a table that fills
   // the viewport, so nobody scrolled to it and neither surface could be read
   // on its own.
-  const view: 'requests' | 'calendar' =
-    sp.view === 'calendar' ? 'calendar' : 'requests'
+  const view: "requests" | "calendar" = sp.view === "calendar" ? "calendar" : "requests";
   const keepView: Record<string, string> =
-    view === 'calendar'
+    view === "calendar"
       ? {
-          view: 'calendar',
+          view: "calendar",
           ...Object.fromEntries(
-            ['department', 'from', 'to'].flatMap((key) =>
-              sp[key] ? [[key, sp[key]!]] : [],
-            ),
+            ["department", "from", "to"].flatMap((key) => (sp[key] ? [[key, sp[key]!]] : [])),
           ),
         }
-      : {}
-  const defaultWindow = leaveCalendarWindow(undefined, undefined, today)
+      : {};
+  const defaultWindow = leaveCalendarWindow(undefined, undefined, today);
   const base = {
-    title: t('leave.title'),
-    description: t('leave.description'),
-    listTitle: t('leave.listTitle'),
-    tabs: await hrmGroupTabs(authz, '/hrm/leave'),
-    segmentsLabel: t('leave.segmentsLabel'),
-    allLabel: t('leave.allLabel'),
+    title: t("leave.title"),
+    description: t("leave.description"),
+    listTitle: t("leave.listTitle"),
+    tabs: await hrmGroupTabs(authz, "/hrm/leave"),
+    segmentsLabel: t("leave.segmentsLabel"),
+    allLabel: t("leave.allLabel"),
     columns: {
-      employee: t('leave.columns.employee'),
-      type: t('leave.columns.type'),
-      range: t('leave.columns.range'),
-      hours: t('leave.columns.hours'),
+      employee: t("leave.columns.employee"),
+      type: t("leave.columns.type"),
+      range: t("leave.columns.range"),
+      hours: t("leave.columns.hours"),
     },
-    emptyTitle: t('leave.emptyTitle'),
-    emptyDescription: t('leave.emptyDescription'),
-    truncatedNote: t('leave.truncatedNote', { limit: QUEUE_LIMIT }),
+    emptyTitle: t("leave.emptyTitle"),
+    emptyDescription: t("leave.emptyDescription"),
+    truncatedNote: t("leave.truncatedNote", { limit: QUEUE_LIMIT }),
     strandedNote,
-    canFile: can(authz, 'hrm.leave.request') || can(authz, 'hrm.leave.manage'),
-    canRecord: can(authz, 'hrm.leave.manage'),
+    canFile: can(authz, "hrm.leave.request") || can(authz, "hrm.leave.manage"),
+    canRecord: can(authz, "hrm.leave.manage"),
     // Withdraw/cancel routes require hrm.leave.request exactly (manage does
     // not substitute), so the drawer gate mirrors the route guard — never
     // the broader canFile.
-    canWithdrawCancel: can(authz, 'hrm.leave.request'),
-    fileTitle: t('leave.fileTitle'),
-    fileButton: t('leave.fileButton'),
-    recordTitle: t('leave.recordTitle'),
-    recordButton: t('leave.recordButton'),
-    calendarTitle: t('leave.calendarTitle'),
-    calendarDepartmentLabel: t('leave.calendarDepartmentLabel'),
-    calendarAllDepartments: t('leave.calendarAllDepartments'),
-    calendarFromLabel: t('leave.calendarFromLabel'),
-    calendarToLabel: t('leave.calendarToLabel'),
-    calendarEmpty: t('leave.calendarEmpty'),
+    canWithdrawCancel: can(authz, "hrm.leave.request"),
+    fileTitle: t("leave.fileTitle"),
+    fileButton: t("leave.fileButton"),
+    recordTitle: t("leave.recordTitle"),
+    recordButton: t("leave.recordButton"),
+    calendarTitle: t("leave.calendarTitle"),
+    calendarDepartmentLabel: t("leave.calendarDepartmentLabel"),
+    calendarAllDepartments: t("leave.calendarAllDepartments"),
+    calendarFromLabel: t("leave.calendarFromLabel"),
+    calendarToLabel: t("leave.calendarToLabel"),
+    calendarEmpty: t("leave.calendarEmpty"),
     calendarFrom: defaultWindow.from,
     calendarTo: defaultWindow.to,
     calendarToday: today,
-    calendarScopeLabel: t('leave.calendarAllDepartments'),
+    calendarScopeLabel: t("leave.calendarAllDepartments"),
     view,
-    onRequests: view === 'requests',
-    onCalendar: view === 'calendar',
+    onRequests: view === "requests",
+    onCalendar: view === "calendar",
     queue: {
-      notAvailable: t('queue.notAvailable'),
-      openEmployee: t('queue.openEmployee'),
+      notAvailable: t("queue.notAvailable"),
+      openEmployee: t("queue.openEmployee"),
     },
     currentParams: sp as Record<string, string | string[] | undefined>,
-    openRequest: t('leave.openRequest'),
+    openRequest: t("leave.openRequest"),
     // The dialogs keep the active VIEW as well as the segment: filing a
     // request from the calendar and closing it must not silently move you
     // to the requests list.
-    fileHref: leaveHref('/hrm/leave', sp.segment, { ...keepView, file: '1' }),
-    recordHref: leaveHref('/hrm/leave', sp.segment, {
+    fileHref: leaveHref("/hrm/leave", sp.segment, { ...keepView, file: "1" }),
+    recordHref: leaveHref("/hrm/leave", sp.segment, {
       ...keepView,
-      record: '1',
+      record: "1",
     }),
     dialogOpen:
       sp.file !== undefined ||
-      (typeof sp.request === 'string' && sp.request !== '') ||
-      (typeof sp.absence === 'string' && sp.absence !== ''),
-    dialogRequestId:
-      typeof sp.request === 'string' && sp.request !== '' ? sp.request : null,
+      (typeof sp.request === "string" && sp.request !== "") ||
+      (typeof sp.absence === "string" && sp.absence !== ""),
+    dialogRequestId: typeof sp.request === "string" && sp.request !== "" ? sp.request : null,
     dialogAbsenceId:
-      typeof sp.request === 'string' && sp.request !== ''
+      typeof sp.request === "string" && sp.request !== ""
         ? null
-        : typeof sp.absence === 'string' && sp.absence !== ''
+        : typeof sp.absence === "string" && sp.absence !== ""
           ? sp.absence
           : null,
-    dialogCloseHref: leaveHref('/hrm/leave', sp.segment, keepView),
+    dialogCloseHref: leaveHref("/hrm/leave", sp.segment, keepView),
     // ?record=1 is the manager absence-recording action, not a second
     // spelling of ?file=1: it opens the record dialog below, which posts
     // the absence route instead of filing a draft request.
     recordOpen: sp.record !== undefined,
-  }
+  };
 
-  const segmentParam = view === 'requests' ? sp.segment : undefined
+  const segmentParam = view === "requests" ? sp.segment : undefined;
   if (
     segmentParam !== undefined &&
-    !['pending', 'upcoming', 'today', 'history', 'recorded'].includes(segmentParam)
+    !["pending", "upcoming", "today", "history", "recorded"].includes(segmentParam)
   ) {
     return {
       ...base,
       refusal: {
-        title: t('leave.unknownSegmentTitle'),
-        message: t('leave.unknownSegment', { segment: segmentParam }),
+        title: t("leave.unknownSegmentTitle"),
+        message: t("leave.unknownSegment", { segment: segmentParam }),
       },
       hasContent: false,
       counts: {},
@@ -297,24 +288,25 @@ export async function loadLeaveQueue(
       rows: [],
       departmentOptions: [],
       calendarDays: [],
-    }
+    };
   }
 
-  let listed: LeaveRequestSummary[]
-  let truncated = false
+  let listed: LeaveRequestSummary[];
+  let truncated = false;
   try {
-    const result = await listOrgLeaveRequests(db, orgId, authz.user.id, { limit: QUEUE_LIMIT })
-    listed = result.requests
-    truncated = result.truncated
+    const result = await listOrgLeaveRequests(db, orgId, authz.user.id, { limit: QUEUE_LIMIT });
+    listed = result.requests;
+    truncated = result.truncated;
   } catch (error) {
-    const message = error instanceof HrmAuthorizationError || error instanceof LeaveError ? error.message : null
+    const message =
+      error instanceof HrmAuthorizationError || error instanceof LeaveError ? error.message : null;
     // An unexpected system failure is not an empty queue: the change-request
     // queue in this module area rethrows it, and so does this loader. A
     // null refusal beside zero rows would present an outage as content.
-    if (message === null) throw error
+    if (message === null) throw error;
     return {
       ...base,
-      refusal: { title: t('leave.refusedTitle'), message },
+      refusal: { title: t("leave.refusedTitle"), message },
       hasContent: false,
       counts: {},
       total: 0,
@@ -323,87 +315,96 @@ export async function loadLeaveQueue(
       rows: [],
       departmentOptions: [],
       calendarDays: [],
-    }
+    };
   }
 
   // On-leave-today is absence-fact, not request state: approved days land
   // here even when the request range started earlier. Scoped to the
   // actor's allowed employers like the request list above — the
   // today-count must not leak org-wide totals to a restricted reader.
-  const onLeave = await employmentsOnLeave(db, orgId, today, authz.allowedSubsidiaryIds)
+  const onLeave = await employmentsOnLeave(db, orgId, today, authz.allowedSubsidiaryIds);
 
-  const counts: Record<string, number> = { pending: 0, upcoming: 0, today: onLeave.length, history: 0, recorded: 0 }
-  for (const row of listed) counts[segmentOf(row, today)] = (counts[segmentOf(row, today)] ?? 0) + 1
-  const segments: LeaveSegment[] = (['pending', 'upcoming', 'today', 'history', 'recorded'] as const).map((value) => ({
+  const counts: Record<string, number> = {
+    pending: 0,
+    upcoming: 0,
+    today: onLeave.length,
+    history: 0,
+    recorded: 0,
+  };
+  for (const row of listed)
+    counts[segmentOf(row, today)] = (counts[segmentOf(row, today)] ?? 0) + 1;
+  const segments: LeaveSegment[] = (
+    ["pending", "upcoming", "today", "history", "recorded"] as const
+  ).map((value) => ({
     value,
     label: t(`leave.segments.${value}`),
     count: counts[value] ?? 0,
-  }))
+  }));
 
-  let rows = listed
-  if (segmentParam === 'pending' || segmentParam === 'upcoming' || segmentParam === 'history' || segmentParam === 'recorded') {
-    rows = listed.filter((row) => segmentOf(row, today) === segmentParam)
-  } else if (segmentParam === 'today') {
+  let rows = listed;
+  if (
+    segmentParam === "pending" ||
+    segmentParam === "upcoming" ||
+    segmentParam === "history" ||
+    segmentParam === "recorded"
+  ) {
+    rows = listed.filter((row) => segmentOf(row, today) === segmentParam);
+  } else if (segmentParam === "today") {
     // On leave TODAY is the absence fact, not the request file: an
     // approved future range belongs to Upcoming even when its employment
     // is also on leave today under another request. Recorded days covering
     // today belong here too — they are absence fact, never proposals.
-    rows = listed.filter((row) =>
-      (row.status === 'approved' && row.startsOn <= today && row.endsOn >= today) ||
-      (row.status === 'recorded' && row.startsOn <= today && row.endsOn >= today),
-    )
+    rows = listed.filter(
+      (row) =>
+        (row.status === "approved" && row.startsOn <= today && row.endsOn >= today) ||
+        (row.status === "recorded" && row.startsOn <= today && row.endsOn >= today),
+    );
   }
 
   const { workerByEmployment } = await loadQueueLabels(
     orgId,
     [...new Set(rows.map((row) => row.employmentId))],
     [],
-  )
+  );
   const queueRows: LeaveQueueRow[] = rows.map((row) => {
-    const worker = workerByEmployment.get(row.employmentId)
-    const name = worker?.name ?? null
-    const party = worker?.partyId ?? null
+    const worker = workerByEmployment.get(row.employmentId);
+    const name = worker?.name ?? null;
+    const party = worker?.partyId ?? null;
     return {
       ...row,
       employeeName: name,
       partyId: party,
-      employeeLabel: name ?? t('queue.notAvailable'),
+      employeeLabel: name ?? t("queue.notAvailable"),
       employeeHref: party ? `/entities/employees?party=${encodeURIComponent(party)}` : null,
       statusLabel: leaveStatusLabel(t, row.status),
       statusVariant: leaveStatusVariant(row.status),
       requestHref:
-        row.source === 'recorded' && row.absenceId
-          ? leaveHref('/hrm/leave', sp.segment, { absence: row.absenceId })
-          : leaveHref('/hrm/leave', sp.segment, { request: row.id }),
-      openLabel: t('leave.openRequest'),
+        row.source === "recorded" && row.absenceId
+          ? leaveHref("/hrm/leave", sp.segment, { absence: row.absenceId })
+          : leaveHref("/hrm/leave", sp.segment, { request: row.id }),
+      openLabel: t("leave.openRequest"),
       rangeLabel: `${row.startsOn} → ${row.endsOn}`,
-    }
-  })
+    };
+  });
 
-  const departments = await listScopedDepartmentOptions(
-    orgId,
-    authz.allowedSubsidiaryIds,
-  )
+  const departments = await listScopedDepartmentOptions(orgId, authz.allowedSubsidiaryIds);
 
   // The calendar reads all visible departments unless the operator filters
   // it. Dates default to the full business month, even with no absence facts.
-  let calendarDays: LeaveQueueData['calendarDays'] = []
-  let calendarRefusal: LeaveRefusal | null = null
-  let calendarWindow = defaultWindow
-  const departmentId = sp.department || null
-  if (view === 'calendar') {
+  let calendarDays: LeaveQueueData["calendarDays"] = [];
+  let calendarRefusal: LeaveRefusal | null = null;
+  let calendarWindow = defaultWindow;
+  const departmentId = sp.department || null;
+  if (view === "calendar") {
     try {
       try {
-        calendarWindow = leaveCalendarWindow(sp.from, sp.to, today)
+        calendarWindow = leaveCalendarWindow(sp.from, sp.to, today);
       } catch (error) {
-        if (!(error instanceof RangeError)) throw error
-        throw new LeaveError('INVALID_INPUT', error.message)
+        if (!(error instanceof RangeError)) throw error;
+        throw new LeaveError("INVALID_INPUT", error.message);
       }
       if (departmentId && !departments.some((row) => row.id === departmentId)) {
-        throw new LeaveError(
-          'REFUSED',
-          t('leave.calendarDepartmentUnavailable'),
-        )
+        throw new LeaveError("REFUSED", t("leave.calendarDepartmentUnavailable"));
       }
       const days = await absenceCalendarForDepartment(
         db,
@@ -412,13 +413,10 @@ export async function loadLeaveQueue(
         departmentId,
         calendarWindow.from,
         calendarWindow.to,
-      )
-      const byDate = new Map<
-        string,
-        LeaveQueueData['calendarDays'][number]['entries']
-      >()
+      );
+      const byDate = new Map<string, LeaveQueueData["calendarDays"][number]["entries"]>();
       for (const day of days) {
-        const entries = byDate.get(day.onDate) ?? []
+        const entries = byDate.get(day.onDate) ?? [];
         // Every calendar entry opens its record in the drawer: recorded
         // days by absence id, request-written days by their request. The
         // href keeps the calendar view so closing lands back on it.
@@ -428,27 +426,23 @@ export async function loadLeaveQueue(
           hours: day.hours,
           leaveTypeCode: day.leaveTypeCode,
           absenceHref:
-            day.source === 'recorded'
-              ? leaveHref('/hrm/leave', undefined, { ...keepView, absence: day.id })
+            day.source === "recorded"
+              ? leaveHref("/hrm/leave", undefined, { ...keepView, absence: day.id })
               : day.leaveRequestId
-                ? leaveHref('/hrm/leave', undefined, { ...keepView, request: day.leaveRequestId })
+                ? leaveHref("/hrm/leave", undefined, { ...keepView, request: day.leaveRequestId })
                 : null,
-        })
-        byDate.set(day.onDate, entries)
+        });
+        byDate.set(day.onDate, entries);
       }
       calendarDays = [...byDate.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([date, entries]) => ({ date, entries }))
+        .map(([date, entries]) => ({ date, entries }));
     } catch (error) {
-      if (
-        !(error instanceof HrmAuthorizationError) &&
-        !(error instanceof LeaveError)
-      )
-        throw error
+      if (!(error instanceof HrmAuthorizationError) && !(error instanceof LeaveError)) throw error;
       calendarRefusal = {
-        title: t('leave.refusedTitle'),
+        title: t("leave.refusedTitle"),
         message: error.message,
-      }
+      };
     }
   }
 
@@ -469,59 +463,58 @@ export async function loadLeaveQueue(
     calendarFrom: calendarWindow.from,
     calendarTo: calendarWindow.to,
     calendarScopeLabel:
-      departments.find((row) => row.id === departmentId)?.name ??
-      t('leave.calendarAllDepartments'),
-  }
+      departments.find((row) => row.id === departmentId)?.name ?? t("leave.calendarAllDepartments"),
+  };
 }
 
 export interface MyLeaveBalance {
-  leaveTypeCode: string
-  kind: 'time' | 'value'
-  employmentId: string | null
-  scopeLabel: string
-  balance: string | null
-  unlimited: boolean
+  leaveTypeCode: string;
+  kind: "time" | "value";
+  employmentId: string | null;
+  scopeLabel: string;
+  balance: string | null;
+  unlimited: boolean;
   /** Breakdown behind a time balance; null on value rows. */
-  entitlement: string | null
-  taken: string | null
-  pending: string | null
-  remaining: string | null
+  entitlement: string | null;
+  taken: string | null;
+  pending: string | null;
+  remaining: string | null;
   /** True when tiered accrual priced at base hours for an unknown service start. */
-  serviceStartUnknown: boolean
+  serviceStartUnknown: boolean;
 }
 
 export interface MyLeaveData {
-  title: string
-  description: string
-  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  refusal: LeaveRefusal | null
-  hasContent: boolean
-  requests: LeaveQueueRow[]
-  balancesTitle: string
-  balances: MyLeaveBalance[]
-  balancesEmpty: string
-  balanceEmployment: string
-  balancePerson: string
-  timeKindLabel: string
-  valueKindLabel: string
-  unlimitedLabel: string
-  entitlementLabel: string
-  takenLabel: string
-  pendingLabel: string
-  remainingLabel: string
-  serviceStartUnknownLabel: string
-  columns: { employee: string; type: string; range: string; hours: string; status: string }
-  emptyTitle: string
-  emptyDescription: string
-  fileButton: string
-  fileTitle: string
-  queue: { notAvailable: string; openEmployee: string }
-  openRequest: string
-  fileHref: string
-  dialogOpen: boolean
-  dialogRequestId: string | null
-  dialogCloseHref: string
-  canWithdrawCancel: boolean
+  title: string;
+  description: string;
+  tabs: Awaited<ReturnType<typeof hrmGroupTabs>>;
+  refusal: LeaveRefusal | null;
+  hasContent: boolean;
+  requests: LeaveQueueRow[];
+  balancesTitle: string;
+  balances: MyLeaveBalance[];
+  balancesEmpty: string;
+  balanceEmployment: string;
+  balancePerson: string;
+  timeKindLabel: string;
+  valueKindLabel: string;
+  unlimitedLabel: string;
+  entitlementLabel: string;
+  takenLabel: string;
+  pendingLabel: string;
+  remainingLabel: string;
+  serviceStartUnknownLabel: string;
+  columns: { employee: string; type: string; range: string; hours: string; status: string };
+  emptyTitle: string;
+  emptyDescription: string;
+  fileButton: string;
+  fileTitle: string;
+  queue: { notAvailable: string; openEmployee: string };
+  openRequest: string;
+  fileHref: string;
+  dialogOpen: boolean;
+  dialogRequestId: string | null;
+  dialogCloseHref: string;
+  canWithdrawCancel: boolean;
 }
 
 /** Self-service inbox: the caller's own requests and balances, nothing else. */
@@ -529,92 +522,100 @@ export async function loadMyLeave(
   authz: Authz,
   sp: Record<string, string | undefined> = {},
 ): Promise<MyLeaveData> {
-  const orgId = authz.user.orgId
-  const t = await getTranslations('hrm')
+  const orgId = authz.user.orgId;
+  const t = await getTranslations("hrm");
   // Withdraw/cancel routes require hrm.leave.request exactly, like the
   // org queue — the dialog gate mirrors the route guard, never a broader
   // file/manage grant. Base carries it so the refusal return below stays
   // a complete MyLeaveData too.
-  const canWithdrawCancel = can(authz, 'hrm.leave.request')
+  const canWithdrawCancel = can(authz, "hrm.leave.request");
   const base = {
-    title: t('myLeave.title'),
-    description: t('myLeave.description'),
-    tabs: await hrmGroupTabs(authz, '/hrm/my-leave'),
+    title: t("myLeave.title"),
+    description: t("myLeave.description"),
+    tabs: await hrmGroupTabs(authz, "/hrm/my-leave"),
     columns: {
-      employee: t('leave.columns.employee'),
-      type: t('leave.columns.type'),
-      range: t('leave.columns.range'),
-      hours: t('leave.columns.hours'),
-      status: t('leave.columns.status'),
+      employee: t("leave.columns.employee"),
+      type: t("leave.columns.type"),
+      range: t("leave.columns.range"),
+      hours: t("leave.columns.hours"),
+      status: t("leave.columns.status"),
     },
-    emptyTitle: t('myLeave.emptyTitle'),
-    emptyDescription: t('myLeave.emptyDescription'),
-    fileButton: t('leave.fileButton'),
-    fileTitle: t('leave.fileTitle'),
-    balancesTitle: t('myLeave.balancesTitle'),
-    balancesEmpty: t('myLeave.balancesEmpty'),
-    balanceEmployment: t('myLeave.balanceEmployment'),
-    balancePerson: t('myLeave.balancePerson'),
-    timeKindLabel: t('myLeave.timeKind'),
-    valueKindLabel: t('myLeave.valueKind'),
-    unlimitedLabel: t('myLeave.unlimited'),
-    entitlementLabel: t('leave.balanceEntitlement'),
-    takenLabel: t('leave.balanceTaken'),
-    pendingLabel: t('leave.balancePending'),
-    remainingLabel: t('leave.balanceRemaining'),
-    serviceStartUnknownLabel: t('myLeave.serviceStartUnknown'),
-    queue: { notAvailable: t('queue.notAvailable'), openEmployee: t('queue.openEmployee') },
-    openRequest: t('leave.openRequest'),
-    fileHref: leaveHref('/hrm/my-leave', undefined, { file: '1' }),
-    dialogOpen: sp.file !== undefined || (typeof sp.request === 'string' && sp.request !== ''),
-    dialogRequestId: typeof sp.request === 'string' && sp.request !== '' ? sp.request : null,
-    dialogCloseHref: '/hrm/my-leave',
+    emptyTitle: t("myLeave.emptyTitle"),
+    emptyDescription: t("myLeave.emptyDescription"),
+    fileButton: t("leave.fileButton"),
+    fileTitle: t("leave.fileTitle"),
+    balancesTitle: t("myLeave.balancesTitle"),
+    balancesEmpty: t("myLeave.balancesEmpty"),
+    balanceEmployment: t("myLeave.balanceEmployment"),
+    balancePerson: t("myLeave.balancePerson"),
+    timeKindLabel: t("myLeave.timeKind"),
+    valueKindLabel: t("myLeave.valueKind"),
+    unlimitedLabel: t("myLeave.unlimited"),
+    entitlementLabel: t("leave.balanceEntitlement"),
+    takenLabel: t("leave.balanceTaken"),
+    pendingLabel: t("leave.balancePending"),
+    remainingLabel: t("leave.balanceRemaining"),
+    serviceStartUnknownLabel: t("myLeave.serviceStartUnknown"),
+    queue: { notAvailable: t("queue.notAvailable"), openEmployee: t("queue.openEmployee") },
+    openRequest: t("leave.openRequest"),
+    fileHref: leaveHref("/hrm/my-leave", undefined, { file: "1" }),
+    dialogOpen: sp.file !== undefined || (typeof sp.request === "string" && sp.request !== ""),
+    dialogRequestId: typeof sp.request === "string" && sp.request !== "" ? sp.request : null,
+    dialogCloseHref: "/hrm/my-leave",
     canWithdrawCancel,
-  }
-  let inbox: LeaveRequestSummary[]
+  };
+  let inbox: LeaveRequestSummary[];
   try {
-    inbox = await myLeaveRequests({ orgId, actorId: authz.user.id })
+    inbox = await myLeaveRequests({ orgId, actorId: authz.user.id });
   } catch (error) {
-    const message = error instanceof HrmAuthorizationError || error instanceof LeaveError ? error.message : null
+    const message =
+      error instanceof HrmAuthorizationError || error instanceof LeaveError ? error.message : null;
     // An unexpected system failure is not an empty inbox: like the org
     // queue above, this loader rethrows it. A null refusal beside zero
     // rows would present an outage as content.
-    if (message === null) throw error
-    return { ...base, refusal: { title: t('leave.refusedTitle'), message }, hasContent: false, requests: [], balances: [] }
+    if (message === null) throw error;
+    return {
+      ...base,
+      refusal: { title: t("leave.refusedTitle"), message },
+      hasContent: false,
+      requests: [],
+      balances: [],
+    };
   }
   const { workerByEmployment } = await loadQueueLabels(
     orgId,
     [...new Set(inbox.map((row) => row.employmentId))],
     [],
-  )
+  );
   const requests: LeaveQueueRow[] = inbox.map((row) => {
-    const worker = workerByEmployment.get(row.employmentId)
-    const name = worker?.name ?? null
-    const party = worker?.partyId ?? null
+    const worker = workerByEmployment.get(row.employmentId);
+    const name = worker?.name ?? null;
+    const party = worker?.partyId ?? null;
     return {
       ...row,
       employeeName: name,
       partyId: party,
-      employeeLabel: name ?? t('queue.notAvailable'),
+      employeeLabel: name ?? t("queue.notAvailable"),
       employeeHref: party ? `/entities/employees?party=${encodeURIComponent(party)}` : null,
       statusLabel: leaveStatusLabel(t, row.status),
       statusVariant: leaveStatusVariant(row.status),
-      requestHref: leaveHref('/hrm/my-leave', undefined, { request: row.id }),
-      openLabel: t('leave.openRequest'),
+      requestHref: leaveHref("/hrm/my-leave", undefined, { request: row.id }),
+      openLabel: t("leave.openRequest"),
       rangeLabel: `${row.startsOn} → ${row.endsOn}`,
-    }
-  })
-  const asOf = await businessToday(orgId)
-  const balances: MyLeaveBalance[] = []
-  const own = await loadOwnEmploymentIds(db, orgId, authz.user.id)
+    };
+  });
+  const asOf = await businessToday(orgId);
+  const balances: MyLeaveBalance[] = [];
+  const own = await loadOwnEmploymentIds(db, orgId, authz.user.id);
   if (own.length > 0) {
-    const ids = own.map((id) => sql`${id}::uuid`)
+    const ids = own.map((id) => sql`${id}::uuid`);
     const employments = await db.execute<{
-      employmentId: string
-      employmentNumber: string | null
-      employerName: string
-      partyId: string
-    }>(sql`
+      employmentId: string;
+      employmentNumber: string | null;
+      employerName: string;
+      partyId: string;
+    }>(
+      sql`
       select w.id::text as "employmentId",
              w.employment_number as "employmentNumber",
              s.name as "employerName",
@@ -623,19 +624,25 @@ export async function loadMyLeave(
         join subsidiaries s on s.org_id = w.org_id and s.id = w.employer_subsidiary_id
        where w.org_id = ${orgId}::uuid and w.id in (${sql.join(ids, sql`, `)})
        order by s.name, w.employment_number nulls last, w.id
-    `, 'objects')
+    `,
+      "objects",
+    );
     for (const employment of employments) {
-      const employmentReference = employment.employmentNumber?.trim() || employment.employmentId.slice(0, 8)
+      const employmentReference =
+        employment.employmentNumber?.trim() || employment.employmentId.slice(0, 8);
       // One engine read per employment prices every active type through
       // the same time balance the filing gate uses — never a second
       // calculator beside it.
-      const rows = await leaveEmploymentBalances(db, orgId, employment.employmentId, asOf)
+      const rows = await leaveEmploymentBalances(db, orgId, employment.employmentId, asOf);
       for (const row of rows) {
         balances.push({
           leaveTypeCode: row.code,
-          kind: 'time',
+          kind: "time",
           employmentId: employment.employmentId,
-          scopeLabel: t('myLeave.balanceEmployment', { employer: employment.employerName, employment: employmentReference }),
+          scopeLabel: t("myLeave.balanceEmployment", {
+            employer: employment.employerName,
+            employment: employmentReference,
+          }),
           balance: row.balance,
           unlimited: row.unlimited,
           entitlement: row.entitlement,
@@ -643,51 +650,66 @@ export async function loadMyLeave(
           pending: row.pending,
           remaining: row.remaining,
           serviceStartUnknown: row.serviceStartUnknown,
-        })
+        });
       }
     }
     // Payroll banks belong to the person, not an employment. Resolve once so
     // multiple employments cannot duplicate a party-level bank.
-    const party = employments[0]?.partyId
+    const party = employments[0]?.partyId;
     if (party) {
-      const banks = await payrollBankBalances(orgId, party, { asOf })
+      const banks = await payrollBankBalances(orgId, party, { asOf });
       for (const bank of banks) {
-        balances.push({ leaveTypeCode: bank.planCode, kind: 'value', employmentId: null, scopeLabel: t('myLeave.balancePerson'), balance: bank.balance, unlimited: false, entitlement: null, taken: null, pending: null, remaining: null, serviceStartUnknown: false })
+        balances.push({
+          leaveTypeCode: bank.planCode,
+          kind: "value",
+          employmentId: null,
+          scopeLabel: t("myLeave.balancePerson"),
+          balance: bank.balance,
+          unlimited: false,
+          entitlement: null,
+          taken: null,
+          pending: null,
+          remaining: null,
+          serviceStartUnknown: false,
+        });
       }
     }
   }
-  return { ...base, refusal: null, hasContent: true, requests, balances }
+  return { ...base, refusal: null, hasContent: true, requests, balances };
 }
 
 export interface LeavePanelData {
-  title: string
-  onLeaveToday: { workerName: string; leaveTypeCode: string; hours: string }[]
-  onLeaveEmpty: string
-  pendingCount: number
-  pendingLabel: string
-  queueHref: string
+  title: string;
+  onLeaveToday: { workerName: string; leaveTypeCode: string; hours: string }[];
+  onLeaveEmpty: string;
+  pendingCount: number;
+  pendingLabel: string;
+  queueHref: string;
 }
 
 /** HR overview Leave panel: on leave today plus pending approvals. */
 export async function loadLeavePanel(authz: Authz): Promise<LeavePanelData | null> {
-  if (!can(authz, 'hrm.leave.read')) return null
-  const orgId = authz.user.orgId
-  const t = await getTranslations('hrm')
-  const today = await businessToday(orgId)
+  if (!can(authz, "hrm.leave.read")) return null;
+  const orgId = authz.user.orgId;
+  const t = await getTranslations("hrm");
+  const today = await businessToday(orgId);
   // Names and the today-count stay inside the actor's allowed employers —
   // a subsidiary-A HR reader sees only A's on-leave workers and count.
-  const onLeave = await employmentsOnLeave(db, orgId, today, authz.allowedSubsidiaryIds)
-  const pending = await listOrgLeaveRequests(db, orgId, authz.user.id, { status: 'submitted', limit: 6 })
+  const onLeave = await employmentsOnLeave(db, orgId, today, authz.allowedSubsidiaryIds);
+  const pending = await listOrgLeaveRequests(db, orgId, authz.user.id, {
+    status: "submitted",
+    limit: 6,
+  });
   return {
-    title: t('overview.leave.title'),
+    title: t("overview.leave.title"),
     onLeaveToday: onLeave.slice(0, 5).map((entry) => ({
       workerName: entry.workerName,
       leaveTypeCode: entry.leaveTypeCode,
       hours: entry.hours,
     })),
-    onLeaveEmpty: t('overview.leave.onLeaveEmpty'),
+    onLeaveEmpty: t("overview.leave.onLeaveEmpty"),
     pendingCount: pending.requests.length,
-    pendingLabel: t('overview.leave.pendingSub'),
-    queueHref: '/hrm/leave?segment=pending',
-  }
+    pendingLabel: t("overview.leave.pendingSub"),
+    queueHref: "/hrm/leave?segment=pending",
+  };
 }

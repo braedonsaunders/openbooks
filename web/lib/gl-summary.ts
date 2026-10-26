@@ -1,7 +1,10 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
-import { civilDateFromParts, endOfMonth } from '@openbooks/engine/platform/business-date/module'
-import { excludePeriodEndJournals, statementMonthActivity } from '@openbooks/engine/records/period-end-origins'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
+import { civilDateFromParts, endOfMonth } from "@openbooks/engine/platform/business-date/module";
+import {
+  excludePeriodEndJournals,
+  statementMonthActivity,
+} from "@openbooks/engine/records/period-end-origins";
 
 /**
  * Read-side of the gl_month_activity summary (maintained by the
@@ -37,25 +40,25 @@ import { excludePeriodEndJournals, statementMonthActivity } from '@openbooks/eng
  */
 
 export interface ActivityBoundary {
-  date: string
-  kind: 'start' | 'end'
+  date: string;
+  kind: "start" | "end";
 }
 
-const isMonthStart = (d: string) => d.slice(8, 10) === '01'
+const isMonthStart = (d: string) => d.slice(8, 10) === "01";
 
 function monthStart(d: string): string {
-  return `${d.slice(0, 7)}-01`
+  return `${d.slice(0, 7)}-01`;
 }
 
 function nextMonthStart(d: string): string {
-  const y = Number(d.slice(0, 4))
-  const m = Number(d.slice(5, 7))
+  const y = Number(d.slice(0, 4));
+  const m = Number(d.slice(5, 7));
   // civilDateFromParts keeps literal years and zero-pads, which the old
   // template strings did not below year 1000.
-  return m === 12 ? civilDateFromParts(y + 1, 1, 1) : civilDateFromParts(y, m + 1, 1)
+  return m === 12 ? civilDateFromParts(y + 1, 1, 1) : civilDateFromParts(y, m + 1, 1);
 }
 
-const isMonthEnd = (d: string) => endOfMonth(d) === d
+const isMonthEnd = (d: string) => endOfMonth(d) === d;
 
 /**
  * The book a statement reads, as an inline SQL value expression: the caller's
@@ -66,7 +69,7 @@ const isMonthEnd = (d: string) => endOfMonth(d) === d
 export function statementBookExpr(orgId: string | SQL, bookId?: string | null): SQL {
   return bookId
     ? sql`${bookId}::uuid`
-    : sql`(select b.id from accounting_books b where b.org_id = ${orgId} and b.is_primary order by b.created_at limit 1)`
+    : sql`(select b.id from accounting_books b where b.org_id = ${orgId} and b.is_primary order by b.created_at limit 1)`;
 }
 
 /** Physical books of one native reporting basis; full books remain independent. */
@@ -82,29 +85,39 @@ export function statementBookIdsExpr(orgId: string | SQL, bookId?: string | null
  */
 export function glActivityBuckets(
   orgId: string,
-  opts: { minDate: string | null; maxDate: string; boundaries: ActivityBoundary[]; bookId?: string | null; includePeriodEndJournals?: boolean },
+  opts: {
+    minDate: string | null;
+    maxDate: string;
+    boundaries: ActivityBoundary[];
+    bookId?: string | null;
+    includePeriodEndJournals?: boolean;
+  },
 ): SQL {
-  const split = new Set<string>()
+  const split = new Set<string>();
   const consider = (b: ActivityBoundary) => {
-    if (b.kind === 'start' ? !isMonthStart(b.date) : !isMonthEnd(b.date)) split.add(monthStart(b.date))
-  }
-  if (opts.minDate) consider({ date: opts.minDate, kind: 'start' })
-  consider({ date: opts.maxDate, kind: 'end' })
-  for (const b of opts.boundaries) consider(b)
+    if (b.kind === "start" ? !isMonthStart(b.date) : !isMonthEnd(b.date))
+      split.add(monthStart(b.date));
+  };
+  if (opts.minDate) consider({ date: opts.minDate, kind: "start" });
+  consider({ date: opts.maxDate, kind: "end" });
+  for (const b of opts.boundaries) consider(b);
 
   // Split months outside the overall window contribute nothing.
-  const min = opts.minDate ? monthStart(opts.minDate) : null
-  const max = monthStart(opts.maxDate)
-  const splitMonths = [...split].filter((m) => (min === null || m >= min) && m <= max).sort()
+  const min = opts.minDate ? monthStart(opts.minDate) : null;
+  const max = monthStart(opts.maxDate);
+  const splitMonths = [...split].filter((m) => (min === null || m >= min) && m <= max).sort();
 
-  const summaryCaps = min === null ? sql`and g.month <= ${max}` : sql`and g.month >= ${min} and g.month <= ${max}`
+  const summaryCaps =
+    min === null ? sql`and g.month <= ${max}` : sql`and g.month >= ${min} and g.month <= ${max}`;
   const splitFilter = splitMonths.length
-    ? sql`and g.month <> all(${`{${splitMonths.join(',')}}`}::date[])`
-    : sql``
-  const book = sql`and g.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}`
+    ? sql`and g.month <> all(${`{${splitMonths.join(",")}}`}::date[])`
+    : sql``;
+  const book = sql`and g.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}`;
   // Statutory ledger detail includes the close itself; statements retain
   // their existing basis that computes retained earnings independently.
-  const activity = opts.includePeriodEndJournals ? sql`gl_month_activity` : statementMonthActivity(orgId)
+  const activity = opts.includePeriodEndJournals
+    ? sql`gl_month_activity`
+    : statementMonthActivity(orgId);
 
   if (!splitMonths.length) {
     return sql`(
@@ -112,13 +125,13 @@ export function glActivityBuckets(
              (g.debit_total - g.credit_total) as amount, g.debit_total, g.credit_total
         from ${activity} g
        where g.org_id = ${orgId} ${book} ${summaryCaps}
-    )`
+    )`;
   }
 
   const ranges = sql.join(
     splitMonths.map((m) => sql`(e.posting_date >= ${m} and e.posting_date < ${nextMonthStart(m)})`),
     sql` or `,
-  )
+  );
   return sql`(
     select g.account_id, g.subsidiary_id, g.month as d,
            (g.debit_total - g.credit_total) as amount, g.debit_total, g.credit_total
@@ -136,7 +149,7 @@ export function glActivityBuckets(
        and (${ranges})
        and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
      where l.org_id = ${orgId}
-  )`
+  )`;
 }
 
 /**
@@ -145,20 +158,20 @@ export function glActivityBuckets(
  * subsidiary_id), accrual basis, and no per-line FX translation.
  */
 export function glSummaryEligibleDims(dims?: {
-  departmentId?: string
-  projectId?: string
-  locationId?: string
-  classId?: string
-  segments?: Record<string, string>
+  departmentId?: string;
+  projectId?: string;
+  locationId?: string;
+  classId?: string;
+  segments?: Record<string, string>;
 }): boolean {
-  if (!dims) return true
+  if (!dims) return true;
   return (
     !dims.departmentId &&
     !dims.projectId &&
     !dims.locationId &&
     !dims.classId &&
     Object.keys(dims.segments ?? {}).length === 0
-  )
+  );
 }
 
 /**
@@ -178,8 +191,8 @@ export function glSummaryEligibleDims(dims?: {
  * whose visibility resolved to nothing and must read no rows — never "all".
  */
 export function bucketSubsidiaryFilter(subsidiaryIds?: string[], alias: SQL = sql`b`): SQL {
-  if (subsidiaryIds === undefined) return sql``
+  if (subsidiaryIds === undefined) return sql``;
   return subsidiaryIds.length
-    ? sql`and ${alias}.subsidiary_id = any(${`{${subsidiaryIds.join(',')}}`}::uuid[])`
-    : sql`and false`
+    ? sql`and ${alias}.subsidiary_id = any(${`{${subsidiaryIds.join(",")}}`}::uuid[])`
+    : sql`and false`;
 }

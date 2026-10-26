@@ -36,7 +36,10 @@ async function seed(): Promise<Seed> {
 }
 
 /** Insert a draft and submit it against a real flow run; returns the request id. */
-async function submittedRequest(run: { execute: (q: unknown) => Promise<unknown> }, s: Seed): Promise<string> {
+async function submittedRequest(
+  run: { execute: (q: unknown) => Promise<unknown> },
+  s: Seed,
+): Promise<string> {
   const id = randomUUID();
   await run.execute(sql`
     insert into hrm_employment_change_requests
@@ -60,63 +63,88 @@ async function submittedRequest(run: { execute: (q: unknown) => Promise<unknown>
   return id;
 }
 
-test("a submitted request refuses DELETE without the amend allowance and clears with it", { skip: !DB, timeout: 120_000 }, async (t) => {
-  const { db } = await import("@openbooks/engine/platform/db");
-  const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
-  const s = await seed();
-  t.after(async () => {
-    await dropScratchOrgReporting(s.orgId);
-  });
-  class Rollback extends Error {}
-  await assert.rejects(
-    db.transaction(async (tx) => {
-      const id = await submittedRequest(tx, s);
-      // Production shape: no GUC, the retention rule fires.
-      await tx.execute(sql`savepoint no_guc`);
-      await assert.rejects(
-        tx.execute(sql`delete from hrm_employment_change_requests where id = ${id}`),
-        (error: unknown) => /retained as history/.test(String(error) + String((error as { cause?: unknown }).cause ?? "")),
-        "submitted request must refuse DELETE without the amend allowance",
-      );
-      await tx.execute(sql`rollback to savepoint no_guc`);
-      await tx.execute(sql`release savepoint no_guc`);
-      const still = (await tx.execute<{ n: number }>(sql`
-        select count(*)::int as n from hrm_employment_change_requests where id = ${id}`)).rows[0]!.n;
-      assert.equal(still, 1, "the refused DELETE removed nothing");
-      // Governed amend path: the same statement clears exactly one row.
-      await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
-      const deleted = (await tx.execute<{ id: string }>(sql`
-        delete from hrm_employment_change_requests where id = ${id} returning id`)).rows;
-      assert.equal(deleted.length, 1, "amend allowance must delete exactly the submitted row");
-      const gone = (await tx.execute<{ n: number }>(sql`
-        select count(*)::int as n from hrm_employment_change_requests where id = ${id}`)).rows[0]!.n;
-      assert.equal(gone, 0);
-      throw new Rollback();
-    }),
-    (error: unknown) => error instanceof Rollback,
-  );
-});
+test(
+  "a submitted request refuses DELETE without the amend allowance and clears with it",
+  { skip: !DB, timeout: 120_000 },
+  async (t) => {
+    const { db } = await import("@openbooks/engine/platform/db");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
+    const s = await seed();
+    t.after(async () => {
+      await dropScratchOrgReporting(s.orgId);
+    });
+    class Rollback extends Error {}
+    await assert.rejects(
+      db.transaction(async (tx) => {
+        const id = await submittedRequest(tx, s);
+        // Production shape: no GUC, the retention rule fires.
+        await tx.execute(sql`savepoint no_guc`);
+        await assert.rejects(
+          tx.execute(sql`delete from hrm_employment_change_requests where id = ${id}`),
+          (error: unknown) =>
+            /retained as history/.test(
+              String(error) + String((error as { cause?: unknown }).cause ?? ""),
+            ),
+          "submitted request must refuse DELETE without the amend allowance",
+        );
+        await tx.execute(sql`rollback to savepoint no_guc`);
+        await tx.execute(sql`release savepoint no_guc`);
+        const still = (
+          await tx.execute<{ n: number }>(sql`
+        select count(*)::int as n from hrm_employment_change_requests where id = ${id}`)
+        ).rows[0]!.n;
+        assert.equal(still, 1, "the refused DELETE removed nothing");
+        // Governed amend path: the same statement clears exactly one row.
+        await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+        const deleted = (
+          await tx.execute<{ id: string }>(sql`
+        delete from hrm_employment_change_requests where id = ${id} returning id`)
+        ).rows;
+        assert.equal(deleted.length, 1, "amend allowance must delete exactly the submitted row");
+        const gone = (
+          await tx.execute<{ n: number }>(sql`
+        select count(*)::int as n from hrm_employment_change_requests where id = ${id}`)
+        ).rows[0]!.n;
+        assert.equal(gone, 0);
+        throw new Rollback();
+      }),
+      (error: unknown) => error instanceof Rollback,
+    );
+  },
+);
 
-test("fixture teardown clears an organisation that holds a committed submitted request", { skip: !DB, timeout: 120_000 }, async () => {
-  const { db } = await import("@openbooks/engine/platform/db");
-  const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
-  const s = await seed();
-  // Committed on purpose: this is the state that pinned scratch orgs before 0188.
-  const id = await submittedRequest(db, s);
-  const before = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from hrm_employment_change_requests where org_id = ${s.orgId}`)).rows[0]!.n;
-  assert.equal(before, 1);
-  await dropScratchOrgReporting(s.orgId);
-  // Under the pooled lifecycle the org row is a reusable slot that is reset and
-  // released, so the proof is that the org's HRM rows are gone — the exact
-  // state that pinned scratch orgs before 0188 — not that the org row vanished.
-  const after = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from hrm_employment_change_requests where org_id = ${s.orgId} or id = ${id}`)).rows[0]!.n;
-  assert.equal(after, 0, "teardown must remove the submitted request with the rest of the org");
-  const runs = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from flow_runs where org_id = ${s.orgId}`)).rows[0]!.n;
-  assert.equal(runs, 0, "the bound flow run is gone with it");
-  const employments = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from worker_employments where org_id = ${s.orgId}`)).rows[0]!.n;
-  assert.equal(employments, 0, "the 0184 rows are gone with it");
-});
+test(
+  "fixture teardown clears an organisation that holds a committed submitted request",
+  { skip: !DB, timeout: 120_000 },
+  async () => {
+    const { db } = await import("@openbooks/engine/platform/db");
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
+    const s = await seed();
+    // Committed on purpose: this is the state that pinned scratch orgs before 0188.
+    const id = await submittedRequest(db, s);
+    const before = (
+      await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from hrm_employment_change_requests where org_id = ${s.orgId}`)
+    ).rows[0]!.n;
+    assert.equal(before, 1);
+    await dropScratchOrgReporting(s.orgId);
+    // Under the pooled lifecycle the org row is a reusable slot that is reset and
+    // released, so the proof is that the org's HRM rows are gone — the exact
+    // state that pinned scratch orgs before 0188 — not that the org row vanished.
+    const after = (
+      await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from hrm_employment_change_requests where org_id = ${s.orgId} or id = ${id}`)
+    ).rows[0]!.n;
+    assert.equal(after, 0, "teardown must remove the submitted request with the rest of the org");
+    const runs = (
+      await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from flow_runs where org_id = ${s.orgId}`)
+    ).rows[0]!.n;
+    assert.equal(runs, 0, "the bound flow run is gone with it");
+    const employments = (
+      await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from worker_employments where org_id = ${s.orgId}`)
+    ).rows[0]!.n;
+    assert.equal(employments, 0, "the 0184 rows are gone with it");
+  },
+);

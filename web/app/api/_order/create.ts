@@ -1,29 +1,38 @@
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { allocateDocumentNumber } from '@openbooks/engine/records/numbering'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
-import { guardFeaturePermission } from '../../../lib/feature-gates'
-import { isUuid } from '../../../lib/list-params'
-import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
-import type { OrderKind } from '../../../lib/order-kinds'
-import { CrmLifecycleRefusalError, promoteCrmAccount } from '@openbooks/engine/crm/crm'
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { allocateDocumentNumber } from "@openbooks/engine/records/numbering";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { guardFeaturePermission } from "../../../lib/feature-gates";
+import { isUuid } from "../../../lib/list-params";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../lib/features";
+import type { OrderKind } from "../../../lib/order-kinds";
+import { CrmLifecycleRefusalError, promoteCrmAccount } from "@openbooks/engine/crm/crm";
 import { persistLineTaxComponents } from "../../../lib/bills.ts";
-import { activeStockLocations, profiledItemIds, resolveLineStockLocation } from '../../../lib/stock-locations'
-import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
-import { orderCreateBody, parseJsonBody, type OrderCreateBody } from '@/lib/api/json'
-import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../lib/api/idempotency'
-import type { Authz } from '../../../lib/authz'
-import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyOptions, listScopedProjectOptions } from '../../../lib/scoped-options'
 import {
-  computeOrderTotals,
-  exactOrderMoney,
-  loadOrder,
-  orderTaxProfileMap,
-} from './lib'
-import { overallItemQuantities, resolveLinePriceBasis, selectPostableOrderLines, type OrderLineInput } from './line-selection'
+  activeStockLocations,
+  profiledItemIds,
+  resolveLineStockLocation,
+} from "../../../lib/stock-locations";
+import { segmentRegistry, validateExtraDims } from "../../../lib/segments";
+import { orderCreateBody, parseJsonBody, type OrderCreateBody } from "@/lib/api/json";
+import { claimIdempotentCreate, resolveIdempotentReplay } from "../../../lib/api/idempotency";
+import type { Authz } from "../../../lib/authz";
+import {
+  listScopedAccountOptions,
+  listScopedDepartmentOptions,
+  listScopedPartyOptions,
+  listScopedProjectOptions,
+} from "../../../lib/scoped-options";
+import { computeOrderTotals, exactOrderMoney, loadOrder, orderTaxProfileMap } from "./lib";
+import {
+  overallItemQuantities,
+  resolveLinePriceBasis,
+  selectPostableOrderLines,
+  type OrderLineInput,
+} from "./line-selection";
 import { notFound } from "@/lib/api/responses";
-import { documentWorkDatesRefusal } from '@openbooks/engine/records/work-period'
+import { documentWorkDatesRefusal } from "@openbooks/engine/records/work-period";
 
 /**
  * Shared collection-POST for the three order-cycle modules (quote /
@@ -47,27 +56,26 @@ import { documentWorkDatesRefusal } from '@openbooks/engine/records/work-period'
  * semantics after persistence are unchanged.
  */
 
-
 export interface OrderCreateConfig {
-  kind: OrderKind
-  createPerm: string
-  numberPrefix: string
+  kind: OrderKind;
+  createPerm: string;
+  numberPrefix: string;
 }
 
-const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 function bad(error: string, status = 422) {
-  return NextResponse.json({ error }, { status })
+  return NextResponse.json({ error }, { status });
 }
 
 export function makePOST(cfg: OrderCreateConfig) {
   return async function POST(req: Request) {
-    const gate = await guardFeaturePermission(cfg.createPerm, 'orders')
-    if (gate instanceof NextResponse) return gate
-    const parsedBody = await parseJsonBody(req, orderCreateBody)
-    if (!parsedBody.ok) return parsedBody.response
-    return createOrder(cfg, gate, req, parsedBody.data)
-  }
+    const gate = await guardFeaturePermission(cfg.createPerm, "orders");
+    if (gate instanceof NextResponse) return gate;
+    const parsedBody = await parseJsonBody(req, orderCreateBody);
+    if (!parsedBody.ok) return parsedBody.response;
+    return createOrder(cfg, gate, req, parsedBody.data);
+  };
 }
 
 /**
@@ -82,11 +90,11 @@ export async function createOrder(
   req: Request,
   body: OrderCreateBody,
 ) {
-  const { user } = gate
+  const { user } = gate;
 
-  const requestId = req.headers.get('Idempotency-Key')?.trim() ?? ''
+  const requestId = req.headers.get("Idempotency-Key")?.trim() ?? "";
   if (!isUuid(requestId)) {
-    return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
+    return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 400 });
   }
 
   // Header dates land in DATE columns: an impossible calendar date
@@ -94,13 +102,13 @@ export async function createOrder(
   // error, so refuse it here with the shared ISO calendar policy before
   // any further read or write. A null due date clears the field.
   if (body.documentDate !== undefined && !isIsoCalendarDate(body.documentDate)) {
-    return bad('Document date must be a valid calendar date (YYYY-MM-DD)')
+    return bad("Document date must be a valid calendar date (YYYY-MM-DD)");
   }
   if (body.dueDate !== undefined && body.dueDate !== null && !isIsoCalendarDate(body.dueDate)) {
-    return bad('Due date must be a valid calendar date (YYYY-MM-DD)')
+    return bad("Due date must be a valid calendar date (YYYY-MM-DD)");
   }
-  const workDatesRefusal = documentWorkDatesRefusal(cfg.kind, body.workCompletedOn, body.lines)
-  if (workDatesRefusal) return bad(workDatesRefusal)
+  const workDatesRefusal = documentWorkDatesRefusal(cfg.kind, body.workCompletedOn, body.lines);
+  if (workDatesRefusal) return bad(workDatesRefusal);
 
   // The order's subsidiary is resolved BEFORE any write: a restricted caller
   // omitting it would otherwise insert documents.subsidiary_id NULL (plus an
@@ -108,169 +116,214 @@ export async function createOrder(
   // invisible when the post-insert load 500s. Undefined defaults to the
   // caller's single allowed subsidiary; with more than one in scope the
   // caller must choose. Null (org-wide) always needs unrestricted scope.
-  let subsidiaryId: string | null | undefined = body.subsidiaryId
+  let subsidiaryId: string | null | undefined = body.subsidiaryId;
   if (subsidiaryId === undefined && gate.allowedSubsidiaryIds) {
     if (gate.allowedSubsidiaryIds.size === 1) {
-      subsidiaryId = [...gate.allowedSubsidiaryIds][0] ?? undefined
+      subsidiaryId = [...gate.allowedSubsidiaryIds][0] ?? undefined;
     }
     if (subsidiaryId === undefined) {
       return bad(
-        'an order needs a subsidiary in your visible subsidiaries — choose one before saving',
-      )
+        "an order needs a subsidiary in your visible subsidiaries — choose one before saving",
+      );
     }
   }
   if (subsidiaryId !== undefined && subsidiaryId !== null) {
     if (!(await subsidiaryFeatureEnabled(user.orgId))) {
-      return bad('Subsidiaries are not enabled')
+      return bad("Subsidiaries are not enabled");
     }
     if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
       return bad(
         `subsidiary "${subsidiaryId}" is outside your visible subsidiaries — choose a subsidiary in scope or ask an administrator for access`,
-      )
+      );
     }
-    const subsidiary = (await db.execute(sql`
+    const subsidiary = await db.execute(
+      sql`
       select 1 from subsidiaries
        where id = ${subsidiaryId} and org_id = ${user.orgId}
          and is_active and not is_elimination
-    `, 'objects'))
-    if (!subsidiary[0]) return bad('order subsidiary must be an active operating subsidiary of this organization')
+    `,
+      "objects",
+    );
+    if (!subsidiary[0])
+      return bad("order subsidiary must be an active operating subsidiary of this organization");
   } else if (subsidiaryId === null && gate.allowedSubsidiaryIds) {
     return bad(
-      'clearing the order subsidiary is not available with restricted subsidiary scope — choose a visible subsidiary instead',
-    )
+      "clearing the order subsidiary is not available with restricted subsidiary scope — choose a visible subsidiary instead",
+    );
   }
 
-  const segments = await segmentRegistry(user.orgId)
-  const headerDims = body.extraDims === undefined ? null : validateExtraDims(body.extraDims, segments)
-  if (headerDims && !headerDims.ok) return bad(headerDims.error)
+  const segments = await segmentRegistry(user.orgId);
+  const headerDims =
+    body.extraDims === undefined ? null : validateExtraDims(body.extraDims, segments);
+  if (headerDims && !headerDims.ok) return bad(headerDims.error);
 
   // The order currency is the org's base currency — never invented. A
   // missing org row (or an unconfigured base currency) refuses by name
   // instead of silently booking foreign-currency intent as CAD.
-  const orgRow = (await db.execute<{ base_currency: string | null }>(
-    sql`select base_currency from orgs where id = ${user.orgId}`, 'objects',
-  ))
-  const baseCurrency = orgRow[0]?.base_currency
+  const orgRow = await db.execute<{ base_currency: string | null }>(
+    sql`select base_currency from orgs where id = ${user.orgId}`,
+    "objects",
+  );
+  const baseCurrency = orgRow[0]?.base_currency;
   if (!baseCurrency) {
-    return bad('this organization has no base currency configured — set one before creating orders')
+    return bad(
+      "this organization has no base currency configured — set one before creating orders",
+    );
   }
-  const currency = baseCurrency
-  const documentDate = body.documentDate ?? (await businessToday(user.orgId))
+  const currency = baseCurrency;
+  const documentDate = body.documentDate ?? (await businessToday(user.orgId));
 
-  const profiles = await orderTaxProfileMap(user.orgId, documentDate)
+  const profiles = await orderTaxProfileMap(user.orgId, documentDate);
 
   // Every referenced row must exist, be active, and belong to this org —
   // checked explicitly (batched per table) before the insert, never left
   // to a raw FK violation or a global uuid shape. Each refusal names the
   // reference and the remedy.
-  const lines = body.lines ?? []
+  const lines = body.lines ?? [];
   {
     const ids = (values: (string | null | undefined)[]): string[] => [
-      ...new Set(values.filter((v): v is string => typeof v === 'string' && v.length > 0)),
-    ]
-    const lineItemIds = ids(lines.map((l) => l.itemId))
-    const activeIds = async (table: string, wanted: string[], extra = ''): Promise<Set<string>> => {
-      if (wanted.length === 0) return new Set()
-      const rows = await db.execute<{ id: string }>(sql`
+      ...new Set(values.filter((v): v is string => typeof v === "string" && v.length > 0)),
+    ];
+    const lineItemIds = ids(lines.map((l) => l.itemId));
+    const activeIds = async (table: string, wanted: string[], extra = ""): Promise<Set<string>> => {
+      if (wanted.length === 0) return new Set();
+      const rows = await db.execute<{ id: string }>(
+        sql`
         select id from ${sql.identifier(table)}
          where org_id = ${user.orgId} and is_active ${sql.raw(extra)}
-           and id = any(${`{${wanted.join(',')}}`}::uuid[])`, 'objects')
-      return new Set(rows.map((r) => r.id))
-    }
-    const [partyOptions, departmentOptions, projectOptions, items, accountOptions] = await Promise.all([
-      listScopedPartyOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true }),
-      listScopedDepartmentOptions(user.orgId, gate.allowedSubsidiaryIds),
-      listScopedProjectOptions(user.orgId, gate.allowedSubsidiaryIds),
-      activeIds('items', lineItemIds),
-      listScopedAccountOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }),
-    ])
-    const parties = new Set(partyOptions.map((row) => row.id))
-    const departments = new Set(departmentOptions.map((row) => row.id))
-    const projects = new Set(projectOptions.map((row) => row.id))
-    const accounts = new Set(accountOptions.map((row) => row.id))
+           and id = any(${`{${wanted.join(",")}}`}::uuid[])`,
+        "objects",
+      );
+      return new Set(rows.map((r) => r.id));
+    };
+    const [partyOptions, departmentOptions, projectOptions, items, accountOptions] =
+      await Promise.all([
+        listScopedPartyOptions(user.orgId, gate.allowedSubsidiaryIds, { activeOnly: true }),
+        listScopedDepartmentOptions(user.orgId, gate.allowedSubsidiaryIds),
+        listScopedProjectOptions(user.orgId, gate.allowedSubsidiaryIds),
+        activeIds("items", lineItemIds),
+        listScopedAccountOptions(user.orgId, gate.allowedSubsidiaryIds, {
+          activeOnly: true,
+          postingOnly: true,
+        }),
+      ]);
+    const parties = new Set(partyOptions.map((row) => row.id));
+    const departments = new Set(departmentOptions.map((row) => row.id));
+    const projects = new Set(projectOptions.map((row) => row.id));
+    const accounts = new Set(accountOptions.map((row) => row.id));
     if (body.partyId && !parties.has(body.partyId)) {
-      return bad(`order party "${body.partyId}" must be an active party of this organization — choose an active party`)
+      return bad(
+        `order party "${body.partyId}" must be an active party of this organization — choose an active party`,
+      );
     }
     if (body.departmentId && !departments.has(body.departmentId)) {
-      return bad(`order department "${body.departmentId}" must be an active department of this organization`)
+      return bad(
+        `order department "${body.departmentId}" must be an active department of this organization`,
+      );
     }
     if (body.projectId && !projects.has(body.projectId)) {
-      return bad(`order project "${body.projectId}" must be an active project of this organization`)
+      return bad(
+        `order project "${body.projectId}" must be an active project of this organization`,
+      );
     }
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]!
-      const n = i + 1
+      const line = lines[i]!;
+      const n = i + 1;
       if (line.itemId && !items.has(line.itemId)) {
-        return bad(`Order line ${n}: item "${line.itemId}" must be an active item of this organization`)
+        return bad(
+          `Order line ${n}: item "${line.itemId}" must be an active item of this organization`,
+        );
       }
       if (line.accountId && !accounts.has(line.accountId)) {
-        return bad(`Order line ${n}: account "${line.accountId}" must be an active non-summary account of this organization`)
+        return bad(
+          `Order line ${n}: account "${line.accountId}" must be an active non-summary account of this organization`,
+        );
       }
       if (line.departmentId && !departments.has(line.departmentId)) {
-        return bad(`Order line ${n}: department "${line.departmentId}" must be an active department of this organization`)
+        return bad(
+          `Order line ${n}: department "${line.departmentId}" must be an active department of this organization`,
+        );
       }
       if (line.projectId && !projects.has(line.projectId)) {
-        return bad(`Order line ${n}: project "${line.projectId}" must be an active project of this organization`)
+        return bad(
+          `Order line ${n}: project "${line.projectId}" must be an active project of this organization`,
+        );
       }
       // Tax profiles resolve through the effective-rate map: anything
       // missing is inactive, expired, or foreign — refused with its line.
       if (line.taxCodeId && !profiles.codes.has(line.taxCodeId)) {
-        return bad(`Order line ${n}: tax code "${line.taxCodeId}" is inactive or has no effective rate for ${documentDate} — choose an active tax profile`)
+        return bad(
+          `Order line ${n}: tax code "${line.taxCodeId}" is inactive or has no effective rate for ${documentDate} — choose an active tax profile`,
+        );
       }
       if (line.taxGroupId && !profiles.groups.has(line.taxGroupId)) {
-        return bad(`Order line ${n}: tax group "${line.taxGroupId}" is inactive or has no effective rate for ${documentDate} — choose an active tax profile`)
+        return bad(
+          `Order line ${n}: tax group "${line.taxGroupId}" is inactive or has no effective rate for ${documentDate} — choose an active tax profile`,
+        );
       }
     }
   }
 
   // The drawer's save shape: blank grid rows never persist, while any
   // populated row that cannot post refuses by line number (shared helper).
-  const selected = selectPostableOrderLines(lines)
-  if ('error' in selected) return bad(selected.error)
-  const valid: OrderLineInput[] = selected.valid
+  const selected = selectPostableOrderLines(lines);
+  if ("error" in selected) return bad(selected.error);
+  const valid: OrderLineInput[] = selected.valid;
   if (valid.length > 0) {
     const scope = {
       active: await activeStockLocations(user.orgId),
       profiled: await profiledItemIds(
         user.orgId,
-        valid.map((line) => line.itemId).filter((id): id is string => typeof id === 'string' && id.length > 0),
+        valid
+          .map((line) => line.itemId)
+          .filter((id): id is string => typeof id === "string" && id.length > 0),
       ),
-    }
+    };
     for (let i = 0; i < valid.length; i++) {
-      const line = valid[i]!
-      const resolved = resolveLineStockLocation(i + 1, line.itemId ?? null, line.stockLocationId, scope)
-      if ('error' in resolved) return bad(resolved.error)
-      line.stockLocationId = resolved.locationId
+      const line = valid[i]!;
+      const resolved = resolveLineStockLocation(
+        i + 1,
+        line.itemId ?? null,
+        line.stockLocationId,
+        scope,
+      );
+      if ("error" in resolved) return bad(resolved.error);
+      line.stockLocationId = resolved.locationId;
     }
   }
-  let computed: ReturnType<typeof computeOrderTotals>
+  let computed: ReturnType<typeof computeOrderTotals>;
   try {
-    computed = computeOrderTotals(valid, profiles)
+    computed = computeOrderTotals(valid, profiles);
   } catch (error) {
-    return bad(error instanceof Error ? error.message : 'Order lines contain an invalid tax profile')
+    return bad(
+      error instanceof Error ? error.message : "Order lines contain an invalid tax profile",
+    );
   }
-  const subtotal = exactOrderMoney(computed.subtotal)
-  const taxTotal = exactOrderMoney(computed.taxTotal)
-  const total = exactOrderMoney(computed.total)
-  if (subtotal === 'invalid' || taxTotal === 'invalid' || total === 'invalid') {
-    return bad('Order totals contain an invalid amount')
+  const subtotal = exactOrderMoney(computed.subtotal);
+  const taxTotal = exactOrderMoney(computed.taxTotal);
+  const total = exactOrderMoney(computed.total);
+  if (subtotal === "invalid" || taxTotal === "invalid" || total === "invalid") {
+    return bad("Order totals contain an invalid amount");
   }
-  const preparedLines: (Omit<(typeof computed.lines)[number], 'amount' | 'taxInputAmount' | 'taxAmount'> & {
-    amount: string
-    taxInputAmount: string
-    taxAmount: string
-    extraDims: Record<string, string | null>
-  })[] = []
-  const itemQuantities = overallItemQuantities(valid)
+  const preparedLines: (Omit<
+    (typeof computed.lines)[number],
+    "amount" | "taxInputAmount" | "taxAmount"
+  > & {
+    amount: string;
+    taxInputAmount: string;
+    taxAmount: string;
+    extraDims: Record<string, string | null>;
+  })[] = [];
+  const itemQuantities = overallItemQuantities(valid);
   for (let i = 0; i < computed.lines.length; i++) {
-    const l = computed.lines[i]!
-    const lineDims = validateExtraDims(l.extraDims, segments)
-    if (!lineDims.ok) return bad(`Line ${i + 1}: ${lineDims.error}`)
-    const amount = exactOrderMoney(l.amount)
-    const taxInputAmount = exactOrderMoney(l.taxInputAmount)
-    const taxAmount = exactOrderMoney(l.taxAmount)
-    if (amount === 'invalid' || taxInputAmount === 'invalid' || taxAmount === 'invalid') {
-      return bad('Order totals contain an invalid amount')
+    const l = computed.lines[i]!;
+    const lineDims = validateExtraDims(l.extraDims, segments);
+    if (!lineDims.ok) return bad(`Line ${i + 1}: ${lineDims.error}`);
+    const amount = exactOrderMoney(l.amount);
+    const taxInputAmount = exactOrderMoney(l.taxInputAmount);
+    const taxAmount = exactOrderMoney(l.taxAmount);
+    if (amount === "invalid" || taxInputAmount === "invalid" || taxAmount === "invalid") {
+      return bad("Order totals contain an invalid amount");
     }
     // Client provenance is only a signal that the line came from a preview;
     // the server derives the persisted basis from the current catalog.
@@ -281,27 +334,30 @@ export async function createOrder(
       currency,
       documentDate,
       line: l,
-      overallItemQuantity: itemQuantities.get(l.itemId ?? '') ?? (l.quantity ?? '0'),
-    })
-    if (priceBasis !== null && 'error' in priceBasis) return bad(priceBasis.error)
+      overallItemQuantity: itemQuantities.get(l.itemId ?? "") ?? l.quantity ?? "0",
+    });
+    if (priceBasis !== null && "error" in priceBasis) return bad(priceBasis.error);
     preparedLines.push({
       ...l,
-      quantity: l.quantity ?? '0',
-      unitPrice: l.unitPrice ?? '0',
+      quantity: l.quantity ?? "0",
+      unitPrice: l.unitPrice ?? "0",
       amount,
       taxInputAmount,
       taxAmount,
       extraDims: lineDims.cleaned,
       priceBasis,
-    })
+    });
   }
-  if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
+  if (!(await isFeatureEnabled(user.orgId, "inventory"))) {
     for (const l of preparedLines) {
-      if (!l.itemId) continue
-      const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${l.itemId} and org_id = ${user.orgId}`, 'objects'))
+      if (!l.itemId) continue;
+      const item = await db.execute<{ kind: string }>(
+        sql`
+        select kind from items where id = ${l.itemId} and org_id = ${user.orgId}`,
+        "objects",
+      );
       if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
-        return notFound("record")
+        return notFound("record");
       }
     }
   }
@@ -333,11 +389,13 @@ export async function createOrder(
       project_id: l.projectId ?? null,
       stock_location_id: l.stockLocationId ?? null,
       extra_dims: l.extraDims ?? {},
-      ...(l.workFrom || l.workTo ? { work_from: l.workFrom ?? null, work_to: l.workTo ?? null } : {}),
+      ...(l.workFrom || l.workTo
+        ? { work_from: l.workFrom ?? null, work_to: l.workTo ?? null }
+        : {}),
     })),
-  }
-  if (body.documentDate !== undefined) match.document_date = body.documentDate
-  if (body.workCompletedOn) match.work_completed_on = body.workCompletedOn
+  };
+  if (body.documentDate !== undefined) match.document_date = body.documentDate;
+  if (body.workCompletedOn) match.work_completed_on = body.workCompletedOn;
   const snapshot = {
     id: requestId,
     org_id: user.orgId,
@@ -348,19 +406,19 @@ export async function createOrder(
     subtotal,
     tax_total: taxTotal,
     total,
-    status: 'draft',
-  }
+    status: "draft",
+  };
 
   const isTenantReferenceViolation = (error: unknown): boolean => {
-    let cursor: unknown = error
-    for (let depth = 0; depth < 4 && cursor !== null && typeof cursor === 'object'; depth++) {
-      if ((cursor as { code?: unknown }).code === '23503') return true
-      cursor = (cursor as { cause?: unknown }).cause
+    let cursor: unknown = error;
+    for (let depth = 0; depth < 4 && cursor !== null && typeof cursor === "object"; depth++) {
+      if ((cursor as { code?: unknown }).code === "23503") return true;
+      cursor = (cursor as { cause?: unknown }).cause;
     }
-    return false
-  }
+    return false;
+  };
 
-  let replayed = false
+  let replayed = false;
   try {
     const outcome = await db.transaction(async (tx) => {
       // Same-key fence first: two concurrent first-Saves with one
@@ -368,31 +426,43 @@ export async function createOrder(
       // of racing past the prior-row check and dying on the insert
       // conflict (409). Scoped to the key alone — never blocks other keys.
       await tx.execute(sql`
-        select pg_advisory_xact_lock(hashtextextended(${requestId}, 0))`)
+        select pg_advisory_xact_lock(hashtextextended(${requestId}, 0))`);
       // The lookup never reads another org's row: a key minted elsewhere
       // misses here, hits the insert conflict below, and refuses as 409.
-      if ((await claimIdempotentCreate(tx, { orgId: user.orgId, table: 'documents', key: requestId })) === 'exists') {
+      if (
+        (await claimIdempotentCreate(tx, {
+          orgId: user.orgId,
+          table: "documents",
+          key: requestId,
+        })) === "exists"
+      ) {
         // Compared against the immutable create snapshot in the insert
         // audit event — not today's row — so an unchanged retry still
         // succeeds even when a later PATCH has legitimately edited it.
         const verdict = await resolveIdempotentReplay(tx, {
           orgId: user.orgId,
-          table: 'documents',
+          table: "documents",
           key: requestId,
           match,
-        })
-        if (verdict !== 'replay') throw new Error('idempotency_key_conflict')
-        return { replayed: true }
+        });
+        if (verdict !== "replay") throw new Error("idempotency_key_conflict");
+        return { replayed: true };
       }
       // The number allocates HERE, inside the successful save transaction:
       // opening or cancelling the drawer never reaches this statement, so
       // neither burns a row nor a sequence value. The allocator serializes
       // concurrent savers on the org-wide counter row.
-      const documentNumber = await allocateDocumentNumber(tx, user.orgId, cfg.kind, cfg.numberPrefix)
+      const documentNumber = await allocateDocumentNumber(
+        tx,
+        user.orgId,
+        cfg.kind,
+        cfg.numberPrefix,
+      );
       // The advisory lock and prior-row lookup above serialize same-key
       // writers; this conflict arm is a defensive race fence for any unseen
       // competing writer, and a missing returned row throws below.
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const inserted = await tx.execute<{ id: string }>(
+        sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, document_date, due_date, work_completed_on,
            currency, status, subsidiary_id, department_id, project_id,
@@ -408,46 +478,51 @@ export async function createOrder(
         -- A concurrent request-ID collision is refused below, so no second order is reported as created.
         on conflict (id) do nothing
         returning id
-      `, 'objects'))
-      if (!inserted[0]) throw new Error('idempotency_key_conflict')
+      `,
+        "objects",
+      );
+      if (!inserted[0]) throw new Error("idempotency_key_conflict");
       for (let i = 0; i < preparedLines.length; i++) {
-        const l = preparedLines[i]!
-        const lineId = (await tx.execute<{ id: string }>(sql`
+        const l = preparedLines[i]!;
+        const lineId = await tx.execute<{ id: string }>(
+          sql`
           insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
                                       quantity, unit, unit_price, amount, tax_code_id, tax_group_id,
                                       tax_input_amount, tax_amount,
                                       department_id, project_id, stock_location_id, extra_dims, price_basis,
                                       work_from, work_to)
           values (${user.orgId}, ${requestId}, ${i + 1}, ${l.itemId ?? null}, ${l.accountId ?? null},
-                  ${l.description ?? null}, ${l.quantity ?? '0'}, ${l.unit ?? null}, ${l.unitPrice ?? '0'},
+                  ${l.description ?? null}, ${l.quantity ?? "0"}, ${l.unit ?? null}, ${l.unitPrice ?? "0"},
                   ${l.amount}, ${l.taxCodeId ?? null}, ${l.taxGroupId ?? null}, ${l.taxInputAmount}, ${l.taxAmount},
                   ${l.departmentId ?? null}, ${l.projectId ?? null}, ${l.stockLocationId ?? null}, ${JSON.stringify(l.extraDims)}::jsonb,
                   ${l.priceBasis == null ? null : JSON.stringify(l.priceBasis)}::jsonb,
                   ${l.workFrom ?? null}, ${l.workTo ?? null})
           returning id
-        `, 'objects'))
+        `,
+          "objects",
+        );
         await persistLineTaxComponents(tx, {
           orgId: user.orgId,
           documentLineId: lineId[0]!.id,
           components: l.taxComponents,
           actorId: user.id,
-        })
+        });
       }
-      const nextPartyId = body.partyId ?? null
-      if (nextPartyId && (cfg.kind === 'quote' || cfg.kind === 'sales_order')) {
+      const nextPartyId = body.partyId ?? null;
+      if (nextPartyId && (cfg.kind === "quote" || cfg.kind === "sales_order")) {
         const promotion = await promoteCrmAccount(tx, {
           orgId: user.orgId,
           partyId: nextPartyId,
           actorId: user.id,
-          toStage: cfg.kind === 'quote' ? 'prospect' : 'customer',
+          toStage: cfg.kind === "quote" ? "prospect" : "customer",
           sourceKind: cfg.kind,
           sourceId: requestId,
-        })
+        });
         // A sales order makes the party a customer: core AR state the credit
         // checks below depend on. A quote only touches CRM lifecycle, which
         // is legitimately absent with CRM off.
-        if (cfg.kind === 'sales_order' && !promotion.customerRoleActive) {
-          throw new Error('customer role was not established while issuing the sales order')
+        if (cfg.kind === "sales_order" && !promotion.customerRoleActive) {
+          throw new Error("customer role was not established while issuing the sales order");
         }
       }
       await tx.execute(sql`
@@ -457,45 +532,55 @@ export async function createOrder(
           (${user.orgId}, 'documents', ${requestId}, 'insert',
            ${JSON.stringify({ before: null, after: snapshot })}::jsonb,
            ${user.id}, ${requestId})
-      `)
+      `);
       // A restricted caller's row must be readable through their scope: if
       // the post-insert load below could not see it, the whole save — row,
       // lines, promotion, and audit — rolls back here instead of committing
       // an invisible order and answering a 500 for it. Unrestricted callers
       // skip the recheck (there is no lens to verify against).
       if (gate.allowedSubsidiaryIds) {
-        const written = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+        const written = (
+          await tx.execute<{ subsidiary_id: string | null }>(
+            sql`
           select subsidiary_id from documents where id = ${requestId} and org_id = ${user.orgId}
-        `, 'objects'))[0]
-        if (!written || !gate.allowedSubsidiaryIds.has(String(written.subsidiary_id ?? ''))) {
-          throw new Error('order_scope_invisible')
+        `,
+            "objects",
+          )
+        )[0];
+        if (!written || !gate.allowedSubsidiaryIds.has(String(written.subsidiary_id ?? ""))) {
+          throw new Error("order_scope_invisible");
         }
       }
-      return { replayed: false }
-    })
-    replayed = outcome.replayed
+      return { replayed: false };
+    });
+    replayed = outcome.replayed;
   } catch (error) {
-    const message = error instanceof Error
-      ? `${error.message} ${String((error as { cause?: unknown }).cause ?? '')}`
-      : String(error)
-    if (message.includes('idempotency_key_conflict')) {
-      return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+    const message =
+      error instanceof Error
+        ? `${error.message} ${String((error as { cause?: unknown }).cause ?? "")}`
+        : String(error);
+    if (message.includes("idempotency_key_conflict")) {
+      return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 409 });
     }
     // A CRM lifecycle refusal is operator-actionable (it names its remedy),
     // not a server fault: answer 422 with its message instead of a 500.
     if (error instanceof CrmLifecycleRefusalError) {
-      return bad(error.message)
+      return bad(error.message);
     }
-    if (message.includes('order_scope_invisible')) {
-      return bad('the saved order is outside your visible subsidiaries — nothing was kept; choose a subsidiary in scope and save again')
+    if (message.includes("order_scope_invisible")) {
+      return bad(
+        "the saved order is outside your visible subsidiaries — nothing was kept; choose a subsidiary in scope and save again",
+      );
     }
     if (isTenantReferenceViolation(error)) {
-      return bad('Referenced party, account, tax profile, or dimension must belong to this organization')
+      return bad(
+        "Referenced party, account, tax profile, or dimension must belong to this organization",
+      );
     }
-    throw error
+    throw error;
   }
 
-  const order = await loadOrder(requestId, user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
-  if (!order) return bad('save_failed', 500)
-  return NextResponse.json(order, { status: replayed ? 200 : 201 })
+  const order = await loadOrder(requestId, user.orgId, cfg.kind, gate.allowedSubsidiaryIds);
+  if (!order) return bad("save_failed", 500);
+  return NextResponse.json(order, { status: replayed ? 200 : 201 });
 }

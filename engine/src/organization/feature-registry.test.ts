@@ -21,9 +21,27 @@ test("distribution features are opt-in and declare their dependencies", () => {
 });
 
 for (const [key, title, category, enabled, navModules] of [
-  ["nonprofit", "nonprofit is an opt-in feature with its own operating area", "nonprofit", false, ["nonprofit"]],
-  ["allocations", "allocations is an opt-in finance feature with no nav modules", "finance", false, []],
-  ["homeAnnouncements", "home announcements is a default-on platform feature with no parent", "platform", true, []],
+  [
+    "nonprofit",
+    "nonprofit is an opt-in feature with its own operating area",
+    "nonprofit",
+    false,
+    ["nonprofit"],
+  ],
+  [
+    "allocations",
+    "allocations is an opt-in finance feature with no nav modules",
+    "finance",
+    false,
+    [],
+  ],
+  [
+    "homeAnnouncements",
+    "home announcements is a default-on platform feature with no parent",
+    "platform",
+    true,
+    [],
+  ],
 ] as const) {
   test(title, () => {
     const def = FEATURE_BY_KEY.get(key);
@@ -48,7 +66,10 @@ test("contract costs are opt-in billing subordinate to revenue recognition", () 
   // A stale stored override can never light the child while the parent is off
   // (the default-on parent resolves on when untouched, so the refusal needs
   // an explicit off).
-  assert.equal(featureEnabled({ revenueRecognition: false, contractCosts: true }, "contractCosts"), false);
+  assert.equal(
+    featureEnabled({ revenueRecognition: false, contractCosts: true }, "contractCosts"),
+    false,
+  );
   assert.equal(
     featureEnabled({ revenueRecognition: true, contractCosts: true }, "contractCosts"),
     true,
@@ -71,8 +92,16 @@ test("fixed-asset depth features are opt-in children of Fixed Assets", () => {
     assert.equal(def.parentKey, "fixedAssets");
     assert.deepEqual(def.navModules ?? [], navModules);
     assert.equal(featureEnabled({}, key), false);
-    assert.equal(featureEnabled({ [key]: true }, key), true, "the default-on parent admits an enabled child");
-    assert.equal(featureEnabled({ fixedAssets: false, [key]: true }, key), false, "a disabled parent switches the child off");
+    assert.equal(
+      featureEnabled({ [key]: true }, key),
+      true,
+      "the default-on parent admits an enabled child",
+    );
+    assert.equal(
+      featureEnabled({ fixedAssets: false, [key]: true }, key),
+      false,
+      "a disabled parent switches the child off",
+    );
   }
 });
 
@@ -90,7 +119,6 @@ test("allocation binding-moment gates are subordinate to the parent", () => {
     assert.equal(featureEnabled({ allocations: true, [key]: false }, key), false);
   }
 });
-
 
 test("automations is an opt-in platform feature under flows with four sub-features", () => {
   const def = FEATURE_BY_KEY.get("automations");
@@ -142,25 +170,64 @@ test("optional HRM operations preserve independent capabilities and explicit clo
   for (const key of optional) {
     assert.equal(FEATURE_BY_KEY.get(key)?.defaultEnabled, false, `${key} must be opt-in`);
     assert.equal(featureEnabled({}, key), false);
-    assert.equal(featureEnabled({ hrm: false, [key]: true, hrmShiftPlanning: true, hrmAttendance: true }, key), false);
+    assert.equal(
+      featureEnabled({ hrm: false, [key]: true, hrmShiftPlanning: true, hrmAttendance: true }, key),
+      false,
+    );
   }
-  const independent = { hrm: true, hrmCertifications: false, hrmTraining: true, hrmShiftPlanning: false, hrmAttendance: true };
+  const independent = {
+    hrm: true,
+    hrmCertifications: false,
+    hrmTraining: true,
+    hrmShiftPlanning: false,
+    hrmAttendance: true,
+  };
   assert.equal(featureEnabled(independent, "hrmTraining"), true);
   assert.equal(featureEnabled(independent, "hrmAttendance"), true);
   assert.equal(featureEnabled({ hrm: true, hrmCertifications: true }, "hrmTraining"), false);
-  assert.equal(featureEnabled({ hrm: true, hrmTraining: false, hrmCertifications: true }, "hrmCertifications"), true);
-  assert.equal(featureEnabled({ hrm: true, hrmShiftPlanning: true, hrmAttendance: false }, "hrmShiftPlanning"), true);
+  assert.equal(
+    featureEnabled({ hrm: true, hrmTraining: false, hrmCertifications: true }, "hrmCertifications"),
+    true,
+  );
+  assert.equal(
+    featureEnabled({ hrm: true, hrmShiftPlanning: true, hrmAttendance: false }, "hrmShiftPlanning"),
+    true,
+  );
   assert.equal(featureEnabled({ payroll: true, hrm: false }, "payroll"), true);
-  assert.equal(featureEnabled({ projects: true, timeTracking: true, fieldTime: true, hrm: false }, "fieldTime"), true);
+  assert.equal(
+    featureEnabled(
+      { projects: true, timeTracking: true, fieldTime: true, hrm: false },
+      "fieldTime",
+    ),
+    true,
+  );
   assert.equal(featureEnabled({}, "compensationPackages"), false);
-  assert.equal(featureEnabled({ payroll: true, hrm: false, compensationPackages: true }, "compensationPackages"), true);
-  assert.equal(featureEnabled({ payroll: false, compensationPackages: true }, "compensationPackages"), false);
+  assert.equal(
+    featureEnabled(
+      { payroll: true, hrm: false, compensationPackages: true },
+      "compensationPackages",
+    ),
+    true,
+  );
+  assert.equal(
+    featureEnabled({ payroll: false, compensationPackages: true }, "compensationPackages"),
+    false,
+  );
   const closing = { hrm: true, hrmShiftPlanning: true, hrmAttendance: true, hrmShiftClosing: true };
   assert.equal(featureEnabled(closing, "hrmShiftClosing"), true);
-  for (const dependency of ["hrmShiftPlanning", "hrmAttendance"]) assert.equal(featureEnabled({ ...closing, [dependency]: false }, "hrmShiftClosing"), false);
-  const singleSwitches = new Set(["fieldTime", ...FEATURES.filter(feature => feature.parentKey === "hrm").map(feature => feature.key)]);
+  for (const dependency of ["hrmShiftPlanning", "hrmAttendance"])
+    assert.equal(featureEnabled({ ...closing, [dependency]: false }, "hrmShiftClosing"), false);
+  const singleSwitches = new Set([
+    "fieldTime",
+    ...FEATURES.filter((feature) => feature.parentKey === "hrm").map((feature) => feature.key),
+  ]);
   assert.ok(singleSwitches.has("hrmPerformance") && singleSwitches.has("hrmRecruiting"));
-  assert.deepEqual(FEATURES.filter(feature => feature.parentKey && singleSwitches.has(feature.parentKey)).map(feature => feature.key), ["hrmShiftClosing", "serviceDispatch"]);
+  assert.deepEqual(
+    FEATURES.filter((feature) => feature.parentKey && singleSwitches.has(feature.parentKey)).map(
+      (feature) => feature.key,
+    ),
+    ["hrmShiftClosing", "serviceDispatch"],
+  );
 });
 
 test("time tracking stands alone: hourly time needs no job costing", () => {
@@ -178,8 +245,14 @@ test("time tracking stands alone: hourly time needs no job costing", () => {
   assert.deepEqual(fieldTime.requiresAll ?? [], []);
   // Field capture rides time tracking, not Projects: clock and crew entry
   // work with Projects off while the project binding stays in the data.
-  assert.equal(featureEnabled({ projects: false, timeTracking: true, fieldTime: true }, "fieldTime"), true);
-  assert.equal(featureEnabled({ projects: false, timeTracking: false, fieldTime: true }, "fieldTime"), false);
+  assert.equal(
+    featureEnabled({ projects: false, timeTracking: true, fieldTime: true }, "fieldTime"),
+    true,
+  );
+  assert.equal(
+    featureEnabled({ projects: false, timeTracking: false, fieldTime: true }, "fieldTime"),
+    false,
+  );
 });
 
 test("information returns are a tax switch beside the other tax features", () => {
@@ -193,8 +266,20 @@ test("information returns are a tax switch beside the other tax features", () =>
   assert.deepEqual(def.requiresAll ?? [], []);
   // A services partnership with no projects files 1099s with Projects and
   // subcontractor compliance both off.
-  assert.equal(featureEnabled({ projects: false, subcontractorCompliance: false, informationReturns: true }, "informationReturns"), true);
-  assert.equal(featureEnabled({ subcontractorCompliance: true, informationReturns: false }, "informationReturns"), false);
+  assert.equal(
+    featureEnabled(
+      { projects: false, subcontractorCompliance: false, informationReturns: true },
+      "informationReturns",
+    ),
+    true,
+  );
+  assert.equal(
+    featureEnabled(
+      { subcontractorCompliance: true, informationReturns: false },
+      "informationReturns",
+    ),
+    false,
+  );
   assert.equal(featureEnabled({}, "informationReturns"), false);
 });
 
@@ -206,5 +291,11 @@ test("subcontractor compliance keeps COIs and lien waivers, recommending informa
   assert.deepEqual(def.navModules ?? [], ["compliance", "compliance-vendors", "lien-waivers"]);
   assert.deepEqual(def.recommends ?? [], ["informationReturns"]);
   // Enabling the tax switch never requires the compliance switch.
-  assert.equal(featureEnabled({ subcontractorCompliance: false, informationReturns: true }, "informationReturns"), true);
+  assert.equal(
+    featureEnabled(
+      { subcontractorCompliance: false, informationReturns: true },
+      "informationReturns",
+    ),
+    true,
+  );
 });

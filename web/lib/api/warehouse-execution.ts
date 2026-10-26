@@ -26,18 +26,13 @@ import { InventoryError } from "@openbooks/engine/inventory/contracts/module";
 import { apiErrorResponse } from "./error-response";
 import { inventoryErrorStatus } from "./inventory-errors";
 import { PackingRefusal } from "@openbooks/engine/sales/handling-unit-state";
-export async function warehouseExecutionResponse(
-  work: () => Promise<Response>,
-): Promise<Response> {
+export async function warehouseExecutionResponse(work: () => Promise<Response>): Promise<Response> {
   try {
     return await work();
   } catch (error) {
     if (error instanceof InventoryError)
       return apiErrorResponse(error, {
-        safeStatus:
-          error instanceof PackingRefusal
-            ? error.status
-            : inventoryErrorStatus(error),
+        safeStatus: error instanceof PackingRefusal ? error.status : inventoryErrorStatus(error),
       });
     throw error;
   }

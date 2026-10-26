@@ -46,14 +46,32 @@ test("inactive default refusal names form and view apart and names both remedies
   }
 
   assert.throws(
-    () => refuseInactivePromotedDefault("list_views", { is_active: false }, { is_default: true, is_active: true }),
+    () =>
+      refuseInactivePromotedDefault(
+        "list_views",
+        { is_active: false },
+        { is_default: true, is_active: true },
+      ),
     VIEW,
   );
   assert.throws(
-    () => refuseInactivePromotedDefault("form_layouts", { is_default: true }, { is_default: false, is_active: false }),
+    () =>
+      refuseInactivePromotedDefault(
+        "form_layouts",
+        { is_default: true },
+        { is_default: false, is_active: false },
+      ),
     FORM,
   );
 
-  refuseInactivePromotedDefault("list_views", { is_active: true }, { is_default: true, is_active: false });
-  refuseInactivePromotedDefault("form_layouts", { is_default: false, is_active: false }, { is_default: true, is_active: true });
+  refuseInactivePromotedDefault(
+    "list_views",
+    { is_active: true },
+    { is_default: true, is_active: false },
+  );
+  refuseInactivePromotedDefault(
+    "form_layouts",
+    { is_default: false, is_active: false },
+    { is_default: true, is_active: true },
+  );
 });

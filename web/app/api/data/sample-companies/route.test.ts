@@ -1,26 +1,29 @@
-import { UUID_RE } from '@openbooks/engine/platform/identifiers';
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
+import { UUID_RE } from "@openbooks/engine/platform/identifiers";
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
 
 // When provisioning fails mid-pipeline, POST /api/data/sample-companies
 // must return the NAMED stage refusal (stable code + operator-facing message)
 // — never a generic 500, and never SQL text or internal detail in the body.
 
-const stateKey = Symbol.for('openbooks.sample-companies-route-test')
-const routeState = { calls: [] as unknown[], failClone: false }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+const stateKey = Symbol.for("openbooks.sample-companies-route-test");
+const routeState = { calls: [] as unknown[], failClone: false };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const failuresUrl = new URL(
-  '../../../../../engine/src/sample-companies/provisioning-failures.ts',
+  "../../../../../engine/src/sample-companies/provisioning-failures.ts",
   import.meta.url,
-).href
+).href;
 
-const featuresUrl = new URL('../../../../../engine/src/sample-companies/features.ts', import.meta.url).href
+const featuresUrl = new URL(
+  "../../../../../engine/src/sample-companies/features.ts",
+  import.meta.url,
+).href;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
       export async function getAuthz() {
         return { user: { homeUserId: 'user-1', orgId: 'org-1', name: 'Sara Lindqvist' } }
@@ -34,13 +37,13 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:industries',
+    "mock:industries",
     `
       export const INDUSTRY_BY_KEY = new Map([['manufacturing', { features: {} }]])
     `,
   ],
   [
-    '@openbooks/engine/sample-companies',
+    "@openbooks/engine/sample-companies",
     `
       export { sampleCompanyFeatures } from '${featuresUrl}'
       export {
@@ -70,82 +73,89 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 // '@/lib/api/json' is deliberately NOT mocked: a parseJsonBody stub taking only
 // (request) and returning { ok: true } unconditionally would hollow every
 // malformed-body case behind it, and the real boundary loads cleanly.
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/sample-companies', '@openbooks/engine/sample-companies'],
-])
+  ["@openbooks/engine/sample-companies", "@openbooks/engine/sample-companies"],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    if (specifier.endsWith('lib/authz')) return { url: 'mock:authz', shortCircuit: true }
-    if (specifier.endsWith('lib/industries')) return { url: 'mock:industries', shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    if (specifier.endsWith("lib/authz")) return { url: "mock:authz", shortCircuit: true };
+    if (specifier.endsWith("lib/industries")) return { url: "mock:industries", shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?sample-companies-stage-refusal-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-after(() => hooks.deregister())
+const routeUrl = "./route.ts?sample-companies-stage-refusal-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
+after(() => hooks.deregister());
 
 function post(body: unknown): Promise<Response> {
   return POST(
-    new Request('http://openbooks.test/api/data/sample-companies', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/data/sample-companies", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-  )
+  );
 }
 
-test('a clone-stage database failure returns the named stage refusal without SQL text', async () => {
-  routeState.calls = []
-  routeState.failClone = true
+test("a clone-stage database failure returns the named stage refusal without SQL text", async () => {
+  routeState.calls = [];
+  routeState.failClone = true;
   try {
-    const response = await post({ industry: 'manufacturing' })
-    assert.equal(response.status, 500)
-    const body = (await response.json()) as Record<string, unknown>
-    assert.equal(body.error, 'sample-company-clone-failed')
-    assert.equal(body.stage, 'clone')
-    assert.match(String(body.message), /copying the template's posted history failed/)
-    assert.match(String(body.message), /Company readiness is unconfirmed/)
-    assert.doesNotMatch(String(body.message), /Nothing was created|you can retry/)
-    assert.match(String(body.requestId), UUID_RE)
-    assert.equal(response.headers.get('x-request-id'), body.requestId)
-    for (const leak of ['duplicate key', 'unique constraint', 'orgs_pkey', 'INSERT', 'STATEMENT', 'VALUES']) {
+    const response = await post({ industry: "manufacturing" });
+    assert.equal(response.status, 500);
+    const body = (await response.json()) as Record<string, unknown>;
+    assert.equal(body.error, "sample-company-clone-failed");
+    assert.equal(body.stage, "clone");
+    assert.match(String(body.message), /copying the template's posted history failed/);
+    assert.match(String(body.message), /Company readiness is unconfirmed/);
+    assert.doesNotMatch(String(body.message), /Nothing was created|you can retry/);
+    assert.match(String(body.requestId), UUID_RE);
+    assert.equal(response.headers.get("x-request-id"), body.requestId);
+    for (const leak of [
+      "duplicate key",
+      "unique constraint",
+      "orgs_pkey",
+      "INSERT",
+      "STATEMENT",
+      "VALUES",
+    ]) {
       assert.doesNotMatch(
         JSON.stringify(body),
-        new RegExp(leak.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
+        new RegExp(leak.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
         `the response body must not leak ${JSON.stringify(leak)}`,
-      )
+      );
     }
   } finally {
-    routeState.failClone = false
+    routeState.failClone = false;
   }
-})
+});
 
-test('a successful provision still returns the new company', async () => {
-  routeState.calls = []
-  const response = await post({ industry: 'manufacturing' })
-  assert.equal(response.status, 200)
-  const body = (await response.json()) as Record<string, unknown>
-  assert.equal(body.ok, true)
-  assert.equal(body.orgId, 'org-new')
-})
+test("a successful provision still returns the new company", async () => {
+  routeState.calls = [];
+  const response = await post({ industry: "manufacturing" });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as Record<string, unknown>;
+  assert.equal(body.ok, true);
+  assert.equal(body.orgId, "org-new");
+});
 
-test('an unknown industry stays a 422 refusal', async () => {
-  const response = await post({ industry: 'no_such_industry' })
-  assert.equal(response.status, 422)
-  const body = (await response.json()) as Record<string, unknown>
-  assert.equal(body.error, 'unknown-industry')
-})
+test("an unknown industry stays a 422 refusal", async () => {
+  const response = await post({ industry: "no_such_industry" });
+  assert.equal(response.status, 422);
+  const body = (await response.json()) as Record<string, unknown>;
+  assert.equal(body.error, "unknown-industry");
+});

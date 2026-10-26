@@ -1,18 +1,12 @@
 import { canonicalNonNegativeDecimal } from "../money/exact-decimal.ts";
 import { z } from "zod";
 import { uuidString } from "../platform/uuid.ts";
-import {
-  makeEffectiveInterval,
-  parseCivilDate,
-} from "./temporal.ts";
+import { makeEffectiveInterval, parseCivilDate } from "./temporal.ts";
 import {
   profileChangePayloadSchema,
   type ProfileChangePayload,
 } from "./self-service/profile-schema.ts";
-import {
-  bankChangePayloadSchema,
-  type BankChangePayload,
-} from "./self-service/bank-schema.ts";
+import { bankChangePayloadSchema, type BankChangePayload } from "./self-service/bank-schema.ts";
 
 /**
  * Governed HRM employment change-request service (slice A).
@@ -97,8 +91,15 @@ function dbFault(error: unknown): { code?: string; message?: string } {
  */
 export function mapGuardRefusal(error: unknown): never {
   const fault = dbFault(error);
-  if (typeof fault.message === "string" && fault.code === "P0001" && fault.message.startsWith("HRM change request")) {
-    throw new HrmChangeRequestError(/revision/i.test(fault.message) ? "STALE_REVISION" : "BAD_STATE", fault.message);
+  if (
+    typeof fault.message === "string" &&
+    fault.code === "P0001" &&
+    fault.message.startsWith("HRM change request")
+  ) {
+    throw new HrmChangeRequestError(
+      /revision/i.test(fault.message) ? "STALE_REVISION" : "BAD_STATE",
+      fault.message,
+    );
   }
   throw error;
 }
@@ -124,7 +125,10 @@ const uuidField = (field: string) => uuidString(`${field} must be a uuid`);
 
 const fteField = z
   .string()
-  .refine((value) => canonicalNonNegativeDecimal(value, 4) !== null, "fte must be a decimal string with up to 4 fraction digits")
+  .refine(
+    (value) => canonicalNonNegativeDecimal(value, 4) !== null,
+    "fte must be a decimal string with up to 4 fraction digits",
+  )
   .refine(
     (value) => {
       const n = Number(value);
@@ -169,7 +173,8 @@ const hirePayloadSchema = z
     if (payload.status === "terminated") {
       ctx.addIssue({
         code: "custom",
-        message: "a hire cannot carry status terminated — hire as offered or active, then file a termination",
+        message:
+          "a hire cannot carry status terminated — hire as offered or active, then file a termination",
       });
     }
     if (payload.initialAssignment?.managerEmploymentId === null) {
@@ -182,7 +187,10 @@ const hirePayloadSchema = z
     try {
       makeEffectiveInterval(payload.effectiveFrom, payload.effectiveTo);
     } catch (error) {
-      ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : String(error) });
+      ctx.addIssue({
+        code: "custom",
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 
@@ -192,25 +200,38 @@ const statusChangePayloadSchema = z
     status: z.enum(EMPLOYMENT_STATUSES),
     effectiveFrom: civilDate("effectiveFrom"),
     effectiveTo: civilDate("effectiveTo").nullable().default(null),
-    historicalObservation: z.object({
-      sourceReference: z.string().trim().min(1, "sourceReference must not be blank").max(2000),
-    }).strict().optional(),
+    historicalObservation: z
+      .object({
+        sourceReference: z.string().trim().min(1, "sourceReference must not be blank").max(2000),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((payload, ctx) => {
     if (payload.historicalObservation && payload.effectiveTo === null) {
-      ctx.addIssue({ code: "custom", message: "a historical status observation needs an exclusive end date" });
+      ctx.addIssue({
+        code: "custom",
+        message: "a historical status observation needs an exclusive end date",
+      });
     }
     // Ending employment is a termination: it ends benefit coverage and sets
     // the payroll termination date. A status change records only observed
     // historical windows of terminated status.
     if (payload.status === "terminated" && !payload.historicalObservation) {
-      ctx.addIssue({ code: "custom", message: "end employment with a termination change, which also ends benefit coverage and final pay; a terminated status change is only for a historical observation" });
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "end employment with a termination change, which also ends benefit coverage and final pay; a terminated status change is only for a historical observation",
+      });
     }
     try {
       makeEffectiveInterval(payload.effectiveFrom, payload.effectiveTo);
     } catch (error) {
-      ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : String(error) });
+      ctx.addIssue({
+        code: "custom",
+        message: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 
@@ -252,12 +273,12 @@ const assignmentChangePayloadSchema = z
     }
     if (payload.effectiveFrom !== undefined || payload.effectiveTo !== undefined) {
       try {
-        makeEffectiveInterval(
-          payload.effectiveFrom ?? "0001-01-01",
-          payload.effectiveTo ?? null,
-        );
+        makeEffectiveInterval(payload.effectiveFrom ?? "0001-01-01", payload.effectiveTo ?? null);
       } catch (error) {
-        ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : String(error) });
+        ctx.addIssue({
+          code: "custom",
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
     }
   });
@@ -288,12 +309,12 @@ const positionAssignmentPayloadSchema = z
   .superRefine((payload, ctx) => {
     if (payload.effectiveFrom !== undefined || payload.effectiveTo !== undefined) {
       try {
-        makeEffectiveInterval(
-          payload.effectiveFrom ?? "0001-01-01",
-          payload.effectiveTo ?? null,
-        );
+        makeEffectiveInterval(payload.effectiveFrom ?? "0001-01-01", payload.effectiveTo ?? null);
       } catch (error) {
-        ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : String(error) });
+        ctx.addIssue({
+          code: "custom",
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
     }
   });
@@ -324,10 +345,14 @@ export type ChangeRequestPayload =
   | ProfileChangePayload
   | BankChangePayload;
 
-function formatIssues(issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }>): string {
+function formatIssues(
+  issues: ReadonlyArray<{ path: ReadonlyArray<PropertyKey>; message: string }>,
+): string {
   return issues
     .map((issue) =>
-      issue.path.length > 0 ? `${issue.path.map(String).join(".")}: ${issue.message}` : issue.message,
+      issue.path.length > 0
+        ? `${issue.path.map(String).join(".")}: ${issue.message}`
+        : issue.message,
     )
     .join("; ");
 }
@@ -345,7 +370,11 @@ export function validateChangePayload(raw: unknown): ChangeRequestPayload {
     );
   }
   const kind = (raw as { kind?: unknown }).kind;
-  if (kind === undefined || typeof kind !== "string" || !(CHANGE_KINDS as readonly string[]).includes(kind)) {
+  if (
+    kind === undefined ||
+    typeof kind !== "string" ||
+    !(CHANGE_KINDS as readonly string[]).includes(kind)
+  ) {
     throw new HrmChangeRequestError(
       "UNKNOWN_KIND",
       `unknown change kind ${JSON.stringify(kind)} — file one of hire, status_change, assignment_change, termination, position_assignment, profile_change, or bank_change`,

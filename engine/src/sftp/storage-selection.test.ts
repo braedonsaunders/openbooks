@@ -8,18 +8,19 @@ import test from "node:test";
 // fallback, so every test below pins all five variables in BOTH places and
 // restores them afterwards — nothing may leak between tests.
 const { env } = await import("../platform/db.ts");
-const {
-  appBucket,
-  appStorageKind,
-  assertSftpStorageReady,
-  backendFor,
-  sftpStorageSelection,
-} = await import("./backend.ts");
+const { appBucket, appStorageKind, assertSftpStorageReady, backendFor, sftpStorageSelection } =
+  await import("./backend.ts");
 
 const ORG = "44444444-4444-4444-4444-444444444444";
 const ROOT = `sftp/${ORG}/storage-selection`;
 
-const VARS = ["S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_BUCKET", "OPENBOOKS_DATA_DIR"] as const;
+const VARS = [
+  "S3_ENDPOINT",
+  "S3_ACCESS_KEY_ID",
+  "S3_SECRET_ACCESS_KEY",
+  "S3_BUCKET",
+  "OPENBOOKS_DATA_DIR",
+] as const;
 type Var = (typeof VARS)[number];
 
 function readVar(name: Var): string | undefined {
@@ -28,7 +29,11 @@ function readVar(name: Var): string | undefined {
 
 function setStorageEnv(values: Partial<Record<Var, string | undefined>>, clearOthers = true): void {
   for (const name of VARS) {
-    const value = Object.hasOwn(values, name) ? values[name] : clearOthers ? undefined : readVar(name);
+    const value = Object.hasOwn(values, name)
+      ? values[name]
+      : clearOthers
+        ? undefined
+        : readVar(name);
     if (value === undefined) {
       delete process.env[name];
       delete (env as Record<string, string | undefined>)[name];
@@ -39,7 +44,9 @@ function setStorageEnv(values: Partial<Record<Var, string | undefined>>, clearOt
   }
 }
 
-const saved = Object.fromEntries(VARS.map((name) => [name, readVar(name)])) as Partial<Record<Var, string | undefined>>;
+const saved = Object.fromEntries(VARS.map((name) => [name, readVar(name)])) as Partial<
+  Record<Var, string | undefined>
+>;
 test.after(() => setStorageEnv(saved, false));
 
 const FULL_S3: Record<Var, string> = {
@@ -66,7 +73,10 @@ test("local storage without any configured root refuses by name instead of a per
 
 test("local storage with a relative root refuses by name", () => {
   setStorageEnv({ OPENBOOKS_DATA_DIR: "relative/data" });
-  assert.throws(() => sftpStorageSelection(), /absolute directory shared by the web and worker processes.*relative\/data/);
+  assert.throws(
+    () => sftpStorageSelection(),
+    /absolute directory shared by the web and worker processes.*relative\/data/,
+  );
   assert.throws(
     () => backendFor({ orgId: ORG, backend: "local", bucket: null, rootPrefix: ROOT }),
     /absolute/,
@@ -124,7 +134,12 @@ test("two processes with different working directories share one absolute root",
     setStorageEnv({ OPENBOOKS_DATA_DIR: scratch });
     // The web listener's working directory: a partner upload lands here.
     process.chdir(cwdA);
-    const listenerSide = backendFor({ orgId: ORG, backend: "local", bucket: null, rootPrefix: ROOT });
+    const listenerSide = backendFor({
+      orgId: ORG,
+      backend: "local",
+      bucket: null,
+      rootPrefix: ROOT,
+    });
     await listenerSide.write("inbound/shared.ofx", Buffer.from("shared-bytes"));
     // The worker's working directory: the scheduled import must see it.
     process.chdir(cwdB);

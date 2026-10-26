@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { getTranslations } from 'next-intl/server'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { getTranslations } from "next-intl/server";
 import {
   badge,
   column,
@@ -16,10 +16,10 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { loadLeaveQueue, type LeaveQueueData } from '../../../../lib/hrm/leave'
+} from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { loadLeaveQueue, type LeaveQueueData } from "../../../../lib/hrm/leave";
 
 /**
  * The org-wide leave queue, split into a loader and a spec.
@@ -39,40 +39,37 @@ import { loadLeaveQueue, type LeaveQueueData } from '../../../../lib/hrm/leave'
  * bolted to the bottom.
  */
 
-const f = ref<LeaveQueueData>()
+const f = ref<LeaveQueueData>();
 
 // The registry builds every spec from its data alone (scripts/page-registry-source.mjs),
 // so the base path defaults to the literal route the spec declares.
-export function leaveQueueSpec(
-  data: LeaveQueueData,
-  basePath: string = '/hrm/leave',
-): PageSpec {
+export function leaveQueueSpec(data: LeaveQueueData, basePath: string = "/hrm/leave"): PageSpec {
   return page({
-    route: '/hrm/leave',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/hrm/leave",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
           widget(
-            'link-button',
-            { href: f('fileHref'), label: f('fileButton'), iconKey: 'plus' },
-            f('canFile'),
+            "link-button",
+            { href: f("fileHref"), label: f("fileButton"), iconKey: "plus" },
+            f("canFile"),
           ),
           widget(
-            'link-button',
+            "link-button",
             {
-              href: f('recordHref'),
-              label: f('recordButton'),
-              iconKey: 'plus',
-              variant: 'outline',
+              href: f("recordHref"),
+              label: f("recordButton"),
+              iconKey: "plus",
+              variant: "outline",
             },
-            f('canRecord'),
+            f("canRecord"),
           ),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
@@ -80,107 +77,107 @@ export function leaveQueueSpec(
       // A computed refusal (unknown segment, scope denial) renders with its
       // message intact — never a success, never an empty table.
       widgetBlock(
-        'empty-state',
+        "empty-state",
         {
-          title: data.refusal?.title ?? '',
+          title: data.refusal?.title ?? "",
           description: data.refusal?.message,
         },
-        f('refusal'),
+        f("refusal"),
       ),
-      widgetBlock('page-notice', { message: f('strandedNote') }, f('strandedNote')),
+      widgetBlock("page-notice", { message: f("strandedNote") }, f("strandedNote")),
       {
-        ...grid('flex h-full min-h-0 flex-col gap-4', [
+        ...grid("flex h-full min-h-0 flex-col gap-4", [
           // Each view's filters on the shared toolbar. Requests and Calendar
           // are views on the Time off strip under the page header.
-          grid('flex shrink-0 flex-wrap items-center gap-3', [
+          grid("flex shrink-0 flex-wrap items-center gap-3", [
             {
-              ...widgetBlock('list-toolbar', {
+              ...widgetBlock("list-toolbar", {
                 basePath,
                 currentParams: data.currentParams,
                 filters: [
                   {
-                    paramKey: 'segment',
+                    paramKey: "segment",
                     label: data.segmentsLabel,
                     allLabel: data.allLabel,
                     options: data.segments,
                   },
                 ],
               }),
-              when: f('onRequests'),
+              when: f("onRequests"),
             },
             // Department is optional; an unfiltered calendar covers every
             // employment the reader is permitted to see.
             {
-              ...widgetBlock('list-toolbar', {
+              ...widgetBlock("list-toolbar", {
                 basePath,
                 currentParams: data.currentParams,
                 filters: [
                   {
-                    paramKey: 'department',
+                    paramKey: "department",
                     label: data.calendarDepartmentLabel,
                     allLabel: data.calendarAllDepartments,
                     options: data.departmentOptions,
                   },
                 ],
               }),
-              when: f('onCalendar'),
+              when: f("onCalendar"),
             },
             {
-              ...widgetBlock('date-range-filter', {
+              ...widgetBlock("date-range-filter", {
                 fromLabel: data.calendarFromLabel,
                 toLabel: data.calendarToLabel,
                 clearLabel: data.allLabel,
                 defaultFrom: data.calendarFrom,
                 defaultTo: data.calendarTo,
               }),
-              when: f('onCalendar'),
+              when: f("onCalendar"),
             },
           ]),
           {
-            ...grid('flex min-h-0 flex-1 flex-col gap-4', [
+            ...grid("flex min-h-0 flex-1 flex-col gap-4", [
               // No panel around either surface: the active tab already names it,
               // and a card headed "Leave requests" under a tab reading "Leave
               // requests" is the same words twice with a border between them.
               {
-                ...grid('flex min-h-0 flex-1 flex-col gap-4', [
-                  registeredListTable('hrm_leave', {
-                    variant: 'app',
-                    rows: f('rows'),
-                    rowKey: item('id'),
+                ...grid("flex min-h-0 flex-1 flex-col gap-4", [
+                  registeredListTable("hrm_leave", {
+                    variant: "app",
+                    rows: f("rows"),
+                    rowKey: item("id"),
                     columns: [
                       column(
-                        f('columns.employee'),
-                        link(item('employeeLabel'), item('employeeHref')),
+                        f("columns.employee"),
+                        link(item("employeeLabel"), item("employeeHref")),
                       ),
-                      column(f('columns.type'), text(item('leaveTypeCode'))),
+                      column(f("columns.type"), text(item("leaveTypeCode"))),
                       column(
-                        f('columns.range'),
-                        text(item('rangeLabel'), { className: 'tabular-nums' }),
+                        f("columns.range"),
+                        text(item("rangeLabel"), { className: "tabular-nums" }),
                       ),
-                      column(f('columns.hours'), text(item('hours')), {
-                        align: 'right',
-                        className: 'tabular-nums',
+                      column(f("columns.hours"), text(item("hours")), {
+                        align: "right",
+                        className: "tabular-nums",
                       }),
                       column(
-                        f('columns.status'),
-                        badge(item('statusLabel'), {
-                          variant: item('statusVariant'),
+                        f("columns.status"),
+                        badge(item("statusLabel"), {
+                          variant: item("statusVariant"),
                         }),
                       ),
-                      column('', link(item('openLabel'), item('requestHref'))),
+                      column("", link(item("openLabel"), item("requestHref"))),
                     ],
                     empty: {
-                      title: f('emptyTitle'),
-                      description: f('emptyDescription'),
+                      title: f("emptyTitle"),
+                      description: f("emptyDescription"),
                     },
                     ...(data.truncated
                       ? {
                           trailing: [
                             spanRow({
-                              label: f('truncatedNote'),
+                              label: f("truncatedNote"),
                               labelColSpan: 6,
                               labelClassName:
-                                'text-center text-xs text-slate-400 dark:text-slate-500',
+                                "text-center text-xs text-slate-400 dark:text-slate-500",
                               cells: [],
                             }),
                           ],
@@ -188,10 +185,10 @@ export function leaveQueueSpec(
                       : {}),
                   }),
                 ]),
-                when: f('onRequests'),
+                when: f("onRequests"),
               },
               {
-                ...widgetBlock('hrm-leave-calendar', {
+                ...widgetBlock("hrm-leave-calendar", {
                   days: data.calendarDays,
                   empty: data.calendarEmpty,
                   from: data.calendarFrom,
@@ -199,37 +196,37 @@ export function leaveQueueSpec(
                   today: data.calendarToday,
                   scopeLabel: data.calendarScopeLabel,
                 }),
-                when: f('onCalendar'),
+                when: f("onCalendar"),
               },
               widgetBlock(
-                'hrm-leave-dialog',
+                "hrm-leave-dialog",
                 {
-                  requestId: f('dialogRequestId'),
-                  absenceId: f('dialogAbsenceId'),
-                  closeHref: f('dialogCloseHref'),
-                  canWithdrawCancel: f('canWithdrawCancel'),
+                  requestId: f("dialogRequestId"),
+                  absenceId: f("dialogAbsenceId"),
+                  closeHref: f("dialogCloseHref"),
+                  canWithdrawCancel: f("canWithdrawCancel"),
                 },
-                f('dialogOpen'),
+                f("dialogOpen"),
               ),
               // Record absence posts the absence route, never a draft
               // request: its own dialog over the same close href.
               widgetBlock(
-                'hrm-leave-dialog',
+                "hrm-leave-dialog",
                 {
-                  requestId: f('dialogRequestId'),
-                  closeHref: f('dialogCloseHref'),
-                  canWithdrawCancel: f('canWithdrawCancel'),
-                  recordOpen: f('recordOpen'),
+                  requestId: f("dialogRequestId"),
+                  closeHref: f("dialogCloseHref"),
+                  canWithdrawCancel: f("canWithdrawCancel"),
+                  recordOpen: f("recordOpen"),
                 },
-                f('recordOpen'),
+                f("recordOpen"),
               ),
             ]),
-            when: f('hasContent'),
+            when: f("hasContent"),
           },
         ]),
       },
     ],
-  })
+  });
 }
 
 export async function loadLeaveQueuePage(
@@ -237,12 +234,12 @@ export async function loadLeaveQueuePage(
 ): Promise<LeaveQueueData> {
   // The page gate lives here — where the route-gate scanner reads — and the
   // loader enforces nothing twice: it takes the authorized session as input.
-  const authz = await requirePermission('hrm.leave.read')
-  await requireFeatureEnabled(authz.user.orgId, 'hrm')
-  return loadLeaveQueue(authz, sp)
+  const authz = await requirePermission("hrm.leave.read");
+  await requireFeatureEnabled(authz.user.orgId, "hrm");
+  return loadLeaveQueue(authz, sp);
 }
 
 export async function leaveQueueTitle(): Promise<string> {
-  const t = await getTranslations('hrm')
-  return t('leave.title')
+  const t = await getTranslations("hrm");
+  return t("leave.title");
 }

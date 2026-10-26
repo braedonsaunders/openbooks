@@ -13,7 +13,16 @@ const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
 });
 const globals = globalThis as Record<string, unknown>;
 const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
+for (const key of [
+  "window",
+  "document",
+  "navigator",
+  "Node",
+  "Element",
+  "HTMLElement",
+  "Event",
+  "self",
+]) {
   if (globals[key] === undefined) globals[key] = domWindow[key];
 }
 if (typeof window.matchMedia !== "function") {
@@ -28,8 +37,10 @@ if (!window.HTMLElement.prototype.scrollIntoView) {
   window.HTMLElement.prototype.scrollIntoView = function () {};
 }
 if (typeof window.requestAnimationFrame !== "function") {
-  window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
-  window.cancelAnimationFrame = ((_id: number) => setTimeout(() => {}, 0)) as unknown as typeof window.cancelAnimationFrame;
+  window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
+    setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
+  window.cancelAnimationFrame = ((_id: number) =>
+    setTimeout(() => {}, 0)) as unknown as typeof window.cancelAnimationFrame;
 }
 
 const { registerHooks } = await import("node:module");
@@ -67,12 +78,17 @@ const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
 const FAILURE_COPY = "could not be requested";
 const SENT_COPY = "reset link is on its way";
 
-type FetchScript = { calls: { url: string; method: string; body: string }[]; respond: () => Promise<Response> };
+type FetchScript = {
+  calls: { url: string; method: string; body: string }[];
+  respond: () => Promise<Response>;
+};
 
 async function mount(script: FetchScript): Promise<() => Promise<void>> {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     script.calls.push({ url, method: init?.method ?? "GET", body: String(init?.body ?? "") });
     return script.respond();
   }) as typeof fetch;
@@ -142,8 +158,14 @@ test("a 403 from the origin gate surfaces the failure alert and never claims the
       "the request carries the typed address",
     );
     const alert = alertText();
-    assert.ok(alert?.includes(FAILURE_COPY), `the gate failure renders the failure copy (saw: ${alert})`);
-    assert.ok(!bodyText().includes(SENT_COPY), "the sent copy must not render when the request failed");
+    assert.ok(
+      alert?.includes(FAILURE_COPY),
+      `the gate failure renders the failure copy (saw: ${alert})`,
+    );
+    assert.ok(
+      !bodyText().includes(SENT_COPY),
+      "the sent copy must not render when the request failed",
+    );
   } finally {
     await cleanup();
   }
@@ -175,8 +197,14 @@ test("a rejected request surfaces the failure alert instead of claiming success"
   try {
     await submitRequest("operator@example.com");
     const alert = alertText();
-    assert.ok(alert?.includes(FAILURE_COPY), `a dropped request renders the failure copy (saw: ${alert})`);
-    assert.ok(!bodyText().includes(SENT_COPY), "the sent copy must not render when nothing was asked");
+    assert.ok(
+      alert?.includes(FAILURE_COPY),
+      `a dropped request renders the failure copy (saw: ${alert})`,
+    );
+    assert.ok(
+      !bodyText().includes(SENT_COPY),
+      "the sent copy must not render when nothing was asked",
+    );
   } finally {
     await cleanup();
   }
@@ -199,8 +227,14 @@ test("an invitation link welcomes a new user and confirms their first password",
   const script: FetchScript = { calls: [], respond: async () => Response.json({ ok: true }) };
   const cleanup = await mount(script);
   try {
-    assert.ok(bodyText().includes("Welcome — set your password to get started"), "the invitation is greeted as a first sign-in");
-    assert.ok(!bodyText().includes("Choose a new password"), "reset wording does not render for an invitation");
+    assert.ok(
+      bodyText().includes("Welcome — set your password to get started"),
+      "the invitation is greeted as a first sign-in",
+    );
+    assert.ok(
+      !bodyText().includes("Choose a new password"),
+      "reset wording does not render for an invitation",
+    );
     await fillPassword("#new-password", "A first password 2026");
     await fillPassword("#confirm-password", "A first password 2026");
     const submit = document.querySelector('button[type="submit"]') as HTMLButtonElement | null;
@@ -213,7 +247,10 @@ test("an invitation link welcomes a new user and confirms their first password",
     assert.equal(script.calls.length, 1);
     assert.equal(JSON.parse(script.calls[0]!.body).token, "invite-token");
     assert.ok(bodyText().includes("Your password is set. Sign in to get started."));
-    assert.ok(!bodyText().includes("all other sessions were signed out"), "an invitation does not describe a reset");
+    assert.ok(
+      !bodyText().includes("all other sessions were signed out"),
+      "an invitation does not describe a reset",
+    );
   } finally {
     delete search.__resetSearch;
     await cleanup();

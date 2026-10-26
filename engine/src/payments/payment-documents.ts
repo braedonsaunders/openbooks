@@ -6,16 +6,38 @@ import { businessToday } from "../platform/business-date.ts";
 import { cmp, fromUnits, isZero, sum, toUnits } from "../money/money.ts";
 import { PaymentError, PaymentRevisionConflictError } from "../payments-core/payment-errors.ts";
 import { resolveDraftSubsidiary } from "../organization/subsidiary-scope.ts";
-import { persistPaymentFxRate, persistPaymentMoney, sameCurrencyAllocation, validateAllocationInputs, validateSettlementEvidence, type AllocationInput } from "./settlement-policy.ts";
-import { type PaymentKind, PAYMENT_KIND_SIDE, type CreditAllocationInput } from "./payment-contracts.ts";
+import {
+  persistPaymentFxRate,
+  persistPaymentMoney,
+  sameCurrencyAllocation,
+  validateAllocationInputs,
+  validateSettlementEvidence,
+  type AllocationInput,
+} from "./settlement-policy.ts";
+import {
+  type PaymentKind,
+  PAYMENT_KIND_SIDE,
+  type CreditAllocationInput,
+} from "./payment-contracts.ts";
 import { paymentBookId } from "./payment-accounts.ts";
-import { assertNoForeignRunReservation, openItemsForParty, loadPaymentDocument } from "./payment-queries.ts";
+import {
+  assertNoForeignRunReservation,
+  openItemsForParty,
+  loadPaymentDocument,
+} from "./payment-queries.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
-import { isPaymentKind, lockEditablePaymentDocument } from "../payments-core/payment-document-lock.ts";
+import {
+  isPaymentKind,
+  lockEditablePaymentDocument,
+} from "../payments-core/payment-document-lock.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
-import { loadSubsidiaryContext, validateSubsidiaryRestrictions, SubsidiaryError } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  validateSubsidiaryRestrictions,
+  SubsidiaryError,
+} from "../organization/subsidiaries.ts";
 import { resolveReceiptFunding } from "../payments-core/receipt-funding.ts";
 import { resolvePaymentCurrencyBasis } from "./payment-currency.ts";
 import { subsidiaryFunctionalCurrency } from "../ledger/document-fx.ts";
@@ -27,7 +49,11 @@ import {
   type DocumentFxEditPlan,
   type ExplicitFxInput,
 } from "./payment-fx-evidence.ts";
-import { loadStoredValueTenderAccount, resolveStoredValueTender, storedValueLiabilityControlAccount } from "../stored-value/accounts.ts";
+import {
+  loadStoredValueTenderAccount,
+  resolveStoredValueTender,
+  storedValueLiabilityControlAccount,
+} from "../stored-value/accounts.ts";
 import {
   computePaymentWithholdings,
   ContractorWithholdingError,
@@ -56,7 +82,6 @@ export interface StoredValueTenderSnapshot {
   codeLast4: string;
   kind: "gift_card" | "store_credit";
 }
-
 
 export async function nextNumber(orgId: string, kind: string, prefix: string): Promise<string> {
   return allocateDocumentNumber(db, orgId, kind, prefix);
@@ -95,18 +120,23 @@ export async function createPaymentDocument(opts: {
 }): Promise<{ id: string; documentNumber: string }> {
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, opts.orgId));
   if (!org) throw new PaymentError("org not found");
-  const sub = (await db.execute<{ id: string | null }>(sql`
+  const sub = await db.execute<{ id: string | null }>(
+    sql`
     select coalesce(
       (select subsidiary_id from parties where id = ${opts.partyId ?? null} and org_id = ${opts.orgId}),
       (select id from subsidiaries where org_id = ${opts.orgId} and parent_id is null)
-    ) as id`, "objects"));
+    ) as id`,
+    "objects",
+  );
   const derived = opts.subsidiaryId !== undefined ? opts.subsidiaryId : (sub[0]?.id ?? null);
   const resolved = resolveDraftSubsidiary(opts.allowedSubsidiaryIds, derived);
   if (!resolved.ok) throw new PaymentError(resolved.error);
   const subsidiaryId = resolved.subsidiaryId;
   const documentNumber = await nextNumber(opts.orgId, opts.kind, NUMBER_PREFIX[opts.kind]);
   const fxRate = persistPaymentFxRate(opts.currencyBasis?.fxRate ?? opts.fxRate ?? "1");
-  const baseCustom: Record<string, unknown> = opts.bankAccountId ? { bankAccountId: opts.bankAccountId, allocations: [] } : { allocations: [] };
+  const baseCustom: Record<string, unknown> = opts.bankAccountId
+    ? { bankAccountId: opts.bankAccountId, allocations: [] }
+    : { allocations: [] };
   if (opts.currencyBasis) baseCustom.paymentCurrencyEvidence = opts.currencyBasis.evidence;
   const [doc] = await db
     .insert(schema.documents)
@@ -116,7 +146,7 @@ export async function createPaymentDocument(opts: {
       documentNumber,
       partyId: opts.partyId ?? null,
       subsidiaryId,
-      documentDate: opts.documentDate ?? await businessToday(opts.orgId),
+      documentDate: opts.documentDate ?? (await businessToday(opts.orgId)),
       currency: opts.currency ?? org.baseCurrency,
       fxRate,
       memo: opts.memo ?? null,
@@ -168,7 +198,9 @@ export async function updateDraftPayment(
      * posting; already-resolved echoes carry the account id (the code is
      * shown once at issue and is gone by design) and re-verify the same way.
      */
-    storedValueTenders?: Array<{ code: string; amount: string } | { accountId: string; amount: string }>;
+    storedValueTenders?: Array<
+      { code: string; amount: string } | { accountId: string; amount: string }
+    >;
     /**
      * Explicit settlement rate into the owning legal entity's functional
      * currency (see payment-fx-evidence.ts). Undefined preserves recorded
@@ -192,7 +224,8 @@ export async function updateDraftPayment(
   // null stays the unrestricted grant (unrestricted actors and documented
   // system paths name it outright); it is never inferred from an omission.
   const actorScope = options.allowedSubsidiaryIds;
-  if (actorScope === undefined) throw new PaymentError("draft save requires the caller's subsidiary scope");
+  if (actorScope === undefined)
+    throw new PaymentError("draft save requires the caller's subsidiary scope");
   return withOrgTransaction(orgId, async () => {
     const doc = await lockEditablePaymentDocument(id, orgId, {
       allowedSubsidiaryIds: actorScope,
@@ -233,8 +266,13 @@ export async function updateDraftPayment(
     const storedFxEvidence = storedPaymentFxEvidence(doc.documentFxRateEvidence);
     let fxPlan: DocumentFxEditPlan = { action: "keep" };
     if (patch.explicitFx !== undefined || storedFxEvidence) {
-      if (patch.explicitFx != null && !(await lockAndCheckOrgFeature(db, doc.orgId, "multiCurrency"))) {
-        throw new PaymentError("explicit exchange rates are unavailable while Multi-currency is off; turn on Multi-currency in Company Settings \u2192 Features before recording a rate");
+      if (
+        patch.explicitFx != null &&
+        !(await lockAndCheckOrgFeature(db, doc.orgId, "multiCurrency"))
+      ) {
+        throw new PaymentError(
+          "explicit exchange rates are unavailable while Multi-currency is off; turn on Multi-currency in Company Settings \u2192 Features before recording a rate",
+        );
       }
       const functionalCurrency = doc.subsidiaryId
         ? await subsidiaryFunctionalCurrency(db, doc.orgId, doc.subsidiaryId)
@@ -252,7 +290,12 @@ export async function updateDraftPayment(
         }),
       });
     }
-    const standingFxEvidence = fxPlan.action === "set" ? fxPlan.evidence : fxPlan.action === "clear" ? null : storedFxEvidence;
+    const standingFxEvidence =
+      fxPlan.action === "set"
+        ? fxPlan.evidence
+        : fxPlan.action === "clear"
+          ? null
+          : storedFxEvidence;
     const partyId = patch.partyId !== undefined ? patch.partyId : doc.partyId;
     const bankAccountId =
       patch.bankAccountId !== undefined ? patch.bankAccountId : (custom.bankAccountId ?? null);
@@ -264,10 +307,19 @@ export async function updateDraftPayment(
     // bill was never actually reduced by.
     const creditAllocations = patch.creditAllocations ?? custom.creditAllocations ?? [];
     const discountAmount = patch.discountAmount ?? custom.discountAmount ?? "0";
-    const discountAccountId = patch.discountAccountId !== undefined ? patch.discountAccountId : (custom.discountAccountId ?? null);
-    const controlAccountId = patch.controlAccountId !== undefined ? patch.controlAccountId : (custom.controlAccountId ?? null);
+    const discountAccountId =
+      patch.discountAccountId !== undefined
+        ? patch.discountAccountId
+        : (custom.discountAccountId ?? null);
+    const controlAccountId =
+      patch.controlAccountId !== undefined
+        ? patch.controlAccountId
+        : (custom.controlAccountId ?? null);
     const feeAmount = patch.feeAmount ?? custom.feeAmount ?? "0";
-    const feeIncomeAccountId = patch.feeIncomeAccountId !== undefined ? patch.feeIncomeAccountId : (custom.feeIncomeAccountId ?? null);
+    const feeIncomeAccountId =
+      patch.feeIncomeAccountId !== undefined
+        ? patch.feeIncomeAccountId
+        : (custom.feeIncomeAccountId ?? null);
     const onAccountAmount = patch.onAccountAmount ?? custom.onAccountAmount ?? "0";
 
     const paymentReferenceIds = [
@@ -281,19 +333,27 @@ export async function updateDraftPayment(
     }
 
     validateAllocationInputs(allocations);
-    validateAllocationInputs(creditAllocations.map((a) => sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount)));
+    validateAllocationInputs(
+      creditAllocations.map((a) =>
+        sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount),
+      ),
+    );
     const discountUnits = persistPaymentMoney(discountAmount, "discount amount");
     if (discountUnits < 0n) throw new PaymentError("discount amount cannot be negative");
     // Early-payment discounts settle against the payable: the vendor_payment
     // kernel rule carries the discount leg, while customer_payment has none —
     // accepting one here would post a short AR credit against full
     // applications (caught only later at the posting cross-foot).
-    if (discountUnits > 0n && doc.kind !== "vendor_payment") throw new PaymentError("discounts only apply to vendor payments");
-    if (discountUnits > 0n && !discountAccountId) throw new PaymentError("select a discount account before applying a discount");
+    if (discountUnits > 0n && doc.kind !== "vendor_payment")
+      throw new PaymentError("discounts only apply to vendor payments");
+    if (discountUnits > 0n && !discountAccountId)
+      throw new PaymentError("select a discount account before applying a discount");
     const feeUnits = persistPaymentMoney(feeAmount, "fee amount");
     if (feeUnits < 0n) throw new PaymentError("fee amount cannot be negative");
-    if (feeUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("fees only apply to customer receipts");
-    if (feeUnits > 0n && !feeIncomeAccountId) throw new PaymentError("a fee income account is required for a surcharge");
+    if (feeUnits > 0n && doc.kind !== "customer_payment")
+      throw new PaymentError("fees only apply to customer receipts");
+    if (feeUnits > 0n && !feeIncomeAccountId)
+      throw new PaymentError("a fee income account is required for a surcharge");
     // Cash above the applications stays on the payment as an on-account
     // balance instead of being dropped: the bank line carries the full
     // amount while the applications settle only what is still open. On a
@@ -309,38 +369,52 @@ export async function updateDraftPayment(
     // snapshot can never overspend money that moved since.
     let storedValueTenders: StoredValueTenderSnapshot[] = custom.storedValueTenders ?? [];
     const revalidateStoredValueForPartyChange =
-      patch.partyId !== undefined && patch.partyId !== doc.partyId && patch.storedValueTenders === undefined;
-    const storedValueInputs = patch.storedValueTenders ?? (revalidateStoredValueForPartyChange
-      ? storedValueTenders.map(({ accountId, amount }) => ({ accountId, amount }))
-      : undefined);
+      patch.partyId !== undefined &&
+      patch.partyId !== doc.partyId &&
+      patch.storedValueTenders === undefined;
+    const storedValueInputs =
+      patch.storedValueTenders ??
+      (revalidateStoredValueForPartyChange
+        ? storedValueTenders.map(({ accountId, amount }) => ({ accountId, amount }))
+        : undefined);
     if (storedValueInputs !== undefined) {
       storedValueTenders = [];
       if (storedValueInputs.length > 0 && doc.kind !== "customer_payment") {
         throw new PaymentError("stored-value tenders only apply to customer receipts");
       }
-      if (storedValueInputs.length > 0 && !(await lockAndCheckOrgFeature(db, doc.orgId, "storedValue"))) {
-        throw new PaymentError("Stored value is disabled; enable storedValue in Company Settings → Features.");
+      if (
+        storedValueInputs.length > 0 &&
+        !(await lockAndCheckOrgFeature(db, doc.orgId, "storedValue"))
+      ) {
+        throw new PaymentError(
+          "Stored value is disabled; enable storedValue in Company Settings → Features.",
+        );
       }
       const tenderedByAccount = new Map<string, bigint>();
       for (const tender of storedValueInputs) {
         const tenderUnits = persistPaymentMoney(tender.amount, "stored-value tender amount");
-        if (tenderUnits <= 0n) throw new PaymentError("stored-value tender amount must be positive");
+        if (tenderUnits <= 0n)
+          throw new PaymentError("stored-value tender amount must be positive");
         // Tender discovery runs under the same actor scope as the save: a
         // hidden account resolves exactly like an unknown code, and an
         // unknown scope already failed closed above. Posting re-locks each
         // account and re-verifies entity, balance, currency, and status.
-        const resolved = "code" in tender && tender.code
-          ? await resolveStoredValueTender(doc.orgId, tender.code, actorScope)
-          : await loadStoredValueTenderAccount(
-            doc.orgId,
-            "accountId" in tender && typeof tender.accountId === "string" ? tender.accountId : "",
-            actorScope,
-          );
-        if (!resolved) throw new PaymentError("stored-value code not found; check the code and retry");
+        const resolved =
+          "code" in tender && tender.code
+            ? await resolveStoredValueTender(doc.orgId, tender.code, actorScope)
+            : await loadStoredValueTenderAccount(
+                doc.orgId,
+                "accountId" in tender && typeof tender.accountId === "string"
+                  ? tender.accountId
+                  : "",
+                actorScope,
+              );
+        if (!resolved)
+          throw new PaymentError("stored-value code not found; check the code and retry");
         if (resolved.status !== "active") {
           throw new PaymentError(
             `stored-value …${resolved.codeLast4} is ${resolved.status} and cannot be redeemed` +
-            (resolved.status === "frozen" ? "; unfreeze the account before applying it" : ""),
+              (resolved.status === "frozen" ? "; unfreeze the account before applying it" : ""),
           );
         }
         if (resolved.currency !== doc.currency) {
@@ -349,7 +423,9 @@ export async function updateDraftPayment(
           );
         }
         if (resolved.kind === "store_credit" && resolved.customerPartyId !== partyId) {
-          throw new PaymentError("store credit belongs to its customer; select that customer on the receipt before applying it");
+          throw new PaymentError(
+            "store credit belongs to its customer; select that customer on the receipt before applying it",
+          );
         }
         const accountTotal = (tenderedByAccount.get(resolved.accountId) ?? 0n) + tenderUnits;
         tenderedByAccount.set(resolved.accountId, accountTotal);
@@ -358,7 +434,8 @@ export async function updateDraftPayment(
             `stored-value …${resolved.codeLast4} holds ${fromUnits(resolved.balanceMinor)}; combined tenders must not exceed that amount`,
           );
         }
-        const liabilityAccountId = resolved.liabilityAccountId ?? (await storedValueLiabilityControlAccount(doc.orgId));
+        const liabilityAccountId =
+          resolved.liabilityAccountId ?? (await storedValueLiabilityControlAccount(doc.orgId));
         storedValueTenders.push({
           accountId: resolved.accountId,
           liabilityAccountId,
@@ -369,18 +446,33 @@ export async function updateDraftPayment(
       }
     }
 
-    const processorFunding = bankAccountId ? await resolveReceiptFunding(db, {
-      orgId: doc.orgId, accountId: bankAccountId, kind: doc.kind, subsidiaryId: doc.subsidiaryId,
-      currency: doc.currency, onDate: patch.documentDate ?? doc.documentDate, allowedSubsidiaryIds: actorScope, lock: true,
-    }) : null;
+    const processorFunding = bankAccountId
+      ? await resolveReceiptFunding(db, {
+          orgId: doc.orgId,
+          accountId: bankAccountId,
+          kind: doc.kind,
+          subsidiaryId: doc.subsidiaryId,
+          currency: doc.currency,
+          onDate: patch.documentDate ?? doc.documentDate,
+          allowedSubsidiaryIds: actorScope,
+          lock: true,
+        })
+      : null;
     if (processorFunding) {
-      if (!userId) throw new PaymentError("Processor receipts require an authorized receipt actor.");
+      if (!userId)
+        throw new PaymentError("Processor receipts require an authorized receipt actor.");
       await lockActorCommandAuthority(db, doc.orgId, userId, doc.subsidiaryId, "ar.pay");
       try {
-        await validateSubsidiaryRestrictions(db, { orgId: doc.orgId, ctx: await loadSubsidiaryContext(db, doc.orgId),
-          docSubsidiaryId: processorFunding.subsidiaryId, partyId, lines: [] });
+        await validateSubsidiaryRestrictions(db, {
+          orgId: doc.orgId,
+          ctx: await loadSubsidiaryContext(db, doc.orgId),
+          docSubsidiaryId: processorFunding.subsidiaryId,
+          partyId,
+          lines: [],
+        });
       } catch (error) {
-        if (error instanceof SubsidiaryError) throw new PaymentError(error.message, { cause: error });
+        if (error instanceof SubsidiaryError)
+          throw new PaymentError(error.message, { cause: error });
         throw error;
       }
     }
@@ -394,8 +486,17 @@ export async function updateDraftPayment(
     // account, entity, currency and dates — no rate — so no such quote is
     // presented in this save. With no recorded rate the basis keeps its
     // existing behaviour and invents no evidence.
-    const currencyBasis = !standingFxEvidence && (processorFunding || custom.paymentCurrencyEvidence) && currencyEntityId
-      ? await resolvePaymentCurrencyBasis(doc.orgId, currencyEntityId, doc.currency, patch.documentDate ?? doc.documentDate) : null;
+    const currencyBasis =
+      !standingFxEvidence &&
+      (processorFunding || custom.paymentCurrencyEvidence) &&
+      currencyEntityId
+        ? await resolvePaymentCurrencyBasis(
+            doc.orgId,
+            currencyEntityId,
+            doc.currency,
+            patch.documentDate ?? doc.documentDate,
+          )
+        : null;
     const savedFxRate = paymentFxRateForSave({
       plan: fxPlan,
       stored: storedFxEvidence,
@@ -403,12 +504,18 @@ export async function updateDraftPayment(
       currentRate: doc.fxRate,
     });
     if (discountAccountId || controlAccountId || feeIncomeAccountId) {
-      const refs = [discountAccountId, controlAccountId, feeIncomeAccountId].filter(Boolean) as string[];
+      const refs = [discountAccountId, controlAccountId, feeIncomeAccountId].filter(
+        Boolean,
+      ) as string[];
       const uniqueRefs = [...new Set(refs)];
-      const validRefs = (await db.execute<{ id: string; type: string }>(sql`
+      const validRefs = await db.execute<{ id: string; type: string }>(
+        sql`
         select id, type from accounts where org_id = ${doc.orgId} and id in ${uniqueRefs} and is_active and not is_summary
-      `, "objects"));
-      if (validRefs.length !== uniqueRefs.length) throw new PaymentError("payment accounting account is invalid or inactive");
+      `,
+        "objects",
+      );
+      if (validRefs.length !== uniqueRefs.length)
+        throw new PaymentError("payment accounting account is invalid or inactive");
       if (feeIncomeAccountId) {
         const feeAccount = validRefs.find((row) => row.id === feeIncomeAccountId);
         if (!feeAccount || !["income", "income_other"].includes(feeAccount.type)) {
@@ -417,16 +524,22 @@ export async function updateDraftPayment(
       }
     }
     if (partyId && partyId !== doc.partyId) {
-      const party = (await db.execute<{ id: string }>(
-        sql`select id from parties where id = ${partyId} and org_id = ${doc.orgId} and is_active`, "objects",
-      ));
+      const party = await db.execute<{ id: string }>(
+        sql`select id from parties where id = ${partyId} and org_id = ${doc.orgId} and is_active`,
+        "objects",
+      );
       if (!party[0]) throw new PaymentError("party not found");
     }
 
     // Allocations must target real open items of this party, within open balance.
     if (allocations.length > 0) {
       if (!partyId) throw new PaymentError("select a party before applying open items");
-      const openItems = await openItemsForParty(partyId, PAYMENT_KIND_SIDE[doc.kind], doc.orgId, new Set(doc.subsidiaryId ? [doc.subsidiaryId] : []));
+      const openItems = await openItemsForParty(
+        partyId,
+        PAYMENT_KIND_SIDE[doc.kind],
+        doc.orgId,
+        new Set(doc.subsidiaryId ? [doc.subsidiaryId] : []),
+      );
       const byLine = new Map(openItems.map((i) => [i.lineId, i]));
       for (const a of allocations) {
         const item = byLine.get(a.openLineId);
@@ -447,36 +560,57 @@ export async function updateDraftPayment(
     // every reservation strictly.
     await assertNoForeignRunReservation(
       doc.orgId,
-      [...allocations.map((a) => a.openLineId), ...creditAllocations.flatMap((a) => [a.fromLineId, a.toLineId])],
+      [
+        ...allocations.map((a) => a.openLineId),
+        ...creditAllocations.flatMap((a) => [a.fromLineId, a.toLineId]),
+      ],
       doc.id,
       { skipUnassembled: true },
     );
-    if (creditAllocations.length) await validateCreditAllocations(creditAllocations, allocations, {
-      orgId: doc.orgId, partyId, subsidiaryId: doc.subsidiaryId,
-      bookId: await paymentBookId(doc.orgId), side: PAYMENT_KIND_SIDE[doc.kind], controlAccountId,
-    });
+    if (creditAllocations.length)
+      await validateCreditAllocations(creditAllocations, allocations, {
+        orgId: doc.orgId,
+        partyId,
+        subsidiaryId: doc.subsidiaryId,
+        bookId: await paymentBookId(doc.orgId),
+        side: PAYMENT_KIND_SIDE[doc.kind],
+        controlAccountId,
+      });
     const grossApplied = sum(allocations.map((a) => a.sourceTransactionAmount));
     // A discount is a reduction of cash actually paid: it cannot consume the
     // whole application. Settling a payable without cash is a vendor credit.
     if (discountUnits > 0n && cmp(discountAmount, grossApplied) >= 0) {
-      throw new PaymentError("an early-payment discount must be less than the amount applied; settle the balance without cash through a vendor credit instead");
+      throw new PaymentError(
+        "an early-payment discount must be less than the amount applied; settle the balance without cash through a vendor credit instead",
+      );
     }
-    const withholdingAuthorisation = patch.withholdingAuthorisation !== undefined
-      ? (patch.withholdingAuthorisation?.trim() || null)
-      : (custom.withholdingAuthorisation ?? null);
+    const withholdingAuthorisation =
+      patch.withholdingAuthorisation !== undefined
+        ? patch.withholdingAuthorisation?.trim() || null
+        : (custom.withholdingAuthorisation ?? null);
     if (withholdingAuthorisation && withholdingAuthorisation.length > 100) {
-      throw new PaymentError("a withholding authorisation reference must be at most 100 characters");
+      throw new PaymentError(
+        "a withholding authorisation reference must be at most 100 characters",
+      );
     }
-    const suppliedWithholdingAuthorisedAmount = patch.withholdingAuthorisedAmount !== undefined
-      ? patch.withholdingAuthorisedAmount
-      : (custom.withholdingAuthorisedAmount ?? null);
+    const suppliedWithholdingAuthorisedAmount =
+      patch.withholdingAuthorisedAmount !== undefined
+        ? patch.withholdingAuthorisedAmount
+        : (custom.withholdingAuthorisedAmount ?? null);
     let withholdingAuthorisedAmount: string | null = null;
     if (suppliedWithholdingAuthorisedAmount !== null) {
-      const authorisedUnits = persistPaymentMoney(suppliedWithholdingAuthorisedAmount, "withholding authorised amount");
-      if (authorisedUnits < 0n) throw new PaymentError("withholding authorised amount cannot be negative");
+      const authorisedUnits = persistPaymentMoney(
+        suppliedWithholdingAuthorisedAmount,
+        "withholding authorised amount",
+      );
+      if (authorisedUnits < 0n)
+        throw new PaymentError("withholding authorised amount cannot be negative");
       withholdingAuthorisedAmount = fromUnits(authorisedUnits);
     }
-    if ((withholdingAuthorisation || withholdingAuthorisedAmount !== null) && doc.kind !== "vendor_payment") {
+    if (
+      (withholdingAuthorisation || withholdingAuthorisedAmount !== null) &&
+      doc.kind !== "vendor_payment"
+    ) {
       throw new PaymentError("a withholding authorisation only applies to vendor payments");
     }
     // Contractor withholding (CIS, § 48 EStG, RCT) is deducted when the
@@ -499,7 +633,10 @@ export async function updateDraftPayment(
         });
       } catch (error) {
         if (error instanceof ContractorWithholdingError) {
-          throw new PaymentError(error.remedy ? `${error.message} — ${error.remedy}` : error.message, { cause: error });
+          throw new PaymentError(
+            error.remedy ? `${error.message} — ${error.remedy}` : error.message,
+            { cause: error },
+          );
         }
         throw error;
       }
@@ -520,7 +657,13 @@ export async function updateDraftPayment(
     // matching on journal lines); every settlement reader uses open items
     // and applications. Do not "fix" total to the gross: cash forecasting
     // depends on it.
-    const total = fromUnits(toUnits(grossApplied) - discountUnits - toUnits(withholdingAmount) + feeUnits + onAccountUnits);
+    const total = fromUnits(
+      toUnits(grossApplied) -
+        discountUnits -
+        toUnits(withholdingAmount) +
+        feeUnits +
+        onAccountUnits,
+    );
     // Stored-value tenders split the receipt total: the bank line carries
     // the cash remainder, one line per tender debits the liability. Tenders
     // past the total would drive the bank leg negative, so they are refused
@@ -531,7 +674,9 @@ export async function updateDraftPayment(
     }
     const bankPortion = fromUnits(toUnits(total) - toUnits(svTotal));
     if (!isZero(bankPortion) && !bankAccountId && storedValueTenders.length > 0) {
-      throw new PaymentError("select a bank account for the cash remainder of a split-tender receipt");
+      throw new PaymentError(
+        "select a bank account for the cash remainder of a split-tender receipt",
+      );
     }
 
     await db.transaction(async (tx) => {
@@ -540,19 +685,26 @@ export async function updateDraftPayment(
       // before that lock or wait for this whole save to commit.
       // The strictly increasing revision_seq counter (migration 0167), not
       // the editable updated_at display timestamp, is the revision token.
-      const locked = (await tx.execute<{ status: string; updatedAt: string }>(sql`
+      const locked = (
+        await tx.execute<{ status: string; updatedAt: string }>(
+          sql`
         select status,
                ${documentRevisionCounterSql(sql`revision_seq`)} as "updatedAt"
           from documents
          where id = ${id} and org_id = ${orgId}
          for update
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!locked) throw new PaymentError("payment document not found");
       if (locked.status !== "draft") throw new PaymentError("only draft payments can be edited");
       if (options.expectedRevision !== undefined && options.expectedRevision !== locked.updatedAt) {
         throw new PaymentRevisionConflictError();
       }
-      await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`);
+      await tx.execute(
+        sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`,
+      );
       let lineNumber = 1;
       if (bankAccountId && !isZero(bankPortion)) {
         await tx.insert(schema.documentLines).values({
@@ -585,7 +737,7 @@ export async function updateDraftPayment(
           reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
           memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
           fx_rate = ${savedFxRate},
-          document_fx_rate_evidence = ${fxPlan.action === 'set' ? JSON.stringify(fxPlan.evidence) : fxPlan.action === 'clear' ? null : sql`document_fx_rate_evidence`}::jsonb,
+          document_fx_rate_evidence = ${fxPlan.action === "set" ? JSON.stringify(fxPlan.evidence) : fxPlan.action === "clear" ? null : sql`document_fx_rate_evidence`}::jsonb,
           custom = ${JSON.stringify({ ...custom, bankAccountId, processorFunding, ...(standingFxEvidence ? { paymentCurrencyEvidence: null } : currencyBasis ? { paymentCurrencyEvidence: currencyBasis.evidence } : {}), allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId, onAccountAmount, storedValueTenders, withholdings, withholdingAmount, withholdingAuthorisation, withholdingAuthorisedAmount })}::jsonb,
           subtotal = ${total}, tax_total = '0', total = ${total},
           updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${userId}
@@ -595,16 +747,36 @@ export async function updateDraftPayment(
       if (fxPlan.action !== "keep") {
         await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'documents', ${id}, 'update',
-            ${JSON.stringify({ mode: "payment_explicit_fx",
+            ${JSON.stringify({
+              mode: "payment_explicit_fx",
               before: { fxRate: doc.fxRate, documentFxRateEvidence: storedFxEvidence },
-              after: { fxRate: savedFxRate, documentFxRateEvidence: standingFxEvidence } })}::jsonb, ${userId})`);
+              after: { fxRate: savedFxRate, documentFxRateEvidence: standingFxEvidence },
+            })}::jsonb, ${userId})`);
       }
-      if (processorFunding || (doc.custom as { processorFunding?: unknown } | null)?.processorFunding) {
+      if (
+        processorFunding ||
+        (doc.custom as { processorFunding?: unknown } | null)?.processorFunding
+      ) {
         await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'documents', ${id}, 'update',
-            ${JSON.stringify({ mode: "processor_receipt_funding", reason: "Receipt funding selected during native draft save",
-              before: { bankAccountId: custom.bankAccountId ?? null, processorFunding: (doc.custom as { processorFunding?: unknown } | null)?.processorFunding ?? null, fxRate: doc.fxRate },
-              after: { bankAccountId, processorFunding, total, fxRate: savedFxRate, currencyEvidence: currencyBasis?.evidence ?? null, documentDate: patch.documentDate ?? doc.documentDate } })}::jsonb, ${userId})`);
+            ${JSON.stringify({
+              mode: "processor_receipt_funding",
+              reason: "Receipt funding selected during native draft save",
+              before: {
+                bankAccountId: custom.bankAccountId ?? null,
+                processorFunding:
+                  (doc.custom as { processorFunding?: unknown } | null)?.processorFunding ?? null,
+                fxRate: doc.fxRate,
+              },
+              after: {
+                bankAccountId,
+                processorFunding,
+                total,
+                fxRate: savedFxRate,
+                currencyEvidence: currencyBasis?.evidence ?? null,
+                documentDate: patch.documentDate ?? doc.documentDate,
+              },
+            })}::jsonb, ${userId})`);
       }
     });
     return loadPaymentDocument(id, doc.kind, orgId);

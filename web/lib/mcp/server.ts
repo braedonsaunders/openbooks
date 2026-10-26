@@ -12,16 +12,14 @@ import {
   takeClaimedCommandEvidence,
   transportEvent,
 } from "../application/api-key-audit";
-import {
-  applicationContextFromApiKey,
-  type ApplicationContext,
-} from "../application/context";
+import { applicationContextFromApiKey, type ApplicationContext } from "../application/context";
 import { listRecordTypes } from "../application/records";
+import { APPLICATION_TOOLS, executeApplicationTool } from "../application/tool-catalog";
 import {
-  APPLICATION_TOOLS,
-  executeApplicationTool,
-} from "../application/tool-catalog";
-import { ASSISTANT_TOOLS, applicationToolVisible, executeAssistantTool } from "../assistant/registry";
+  ASSISTANT_TOOLS,
+  applicationToolVisible,
+  executeAssistantTool,
+} from "../assistant/registry";
 import { listAppToolViews, runListedAppTool, toAssistantToolDef } from "../apps/tools";
 import { can } from "../authz";
 import { resolvedFeatureState } from "../features";
@@ -57,22 +55,26 @@ function auditHook(requestContext: OpenBooksMcpRequestContext) {
     // The vendored registrar does not await its audit callback, so do not rely
     // on the registrar to keep this write ahead of the response.
     if (!takeClaimedCommandEvidence(requestContext.auth.audit)) {
-      await insertApiKeyEvent(transportEvent(
-        requestContext.auth.audit,
-        { orgId: requestContext.auth.user.orgId, keyId: requestContext.auth.keyId },
-        {
-          statusCode: event.status === "ok" ? 200 : event.statusCode ?? 500,
-          ...(event.errorSummary ? { error: event.errorSummary } : {}),
-        },
-        { method: "MCP", path: `/mcp/tools/${event.name}` },
-      ));
+      await insertApiKeyEvent(
+        transportEvent(
+          requestContext.auth.audit,
+          { orgId: requestContext.auth.user.orgId, keyId: requestContext.auth.keyId },
+          {
+            statusCode: event.status === "ok" ? 200 : (event.statusCode ?? 500),
+            ...(event.errorSummary ? { error: event.errorSummary } : {}),
+          },
+          { method: "MCP", path: `/mcp/tools/${event.name}` },
+        ),
+      );
     }
   };
 }
 
 /** The canonical application catalog, adapted 1:1 onto the shared registrar.
  *  Built per request so visibility can honour the org's feature state. */
-const applicationCatalog = (features: FeatureState): readonly McpCatalogTool<ApplicationContext>[] =>
+const applicationCatalog = (
+  features: FeatureState,
+): readonly McpCatalogTool<ApplicationContext>[] =>
   APPLICATION_TOOLS.map((definition) => ({
     name: definition.name,
     title: definition.title,
@@ -96,8 +98,7 @@ const assistantCatalog = (features: FeatureState): readonly McpCatalogTool<Appli
     inputSchema: definition.inputSchema,
     readOnly: definition.category !== "write",
     visible: (context) => canRunTool(context.authz, definition, features),
-    summarize: (result) =>
-      typeof result.note === "string" ? result.note : undefined,
+    summarize: (result) => (typeof result.note === "string" ? result.note : undefined),
     execute: async (context, input) => {
       const result = await executeAssistantTool(context.authz, definition.name, input, features);
       if (!result.ok) throw new AssistantToolFailure(result.error);
@@ -130,8 +131,7 @@ const appCatalog = async (
         inputSchema: definition.inputSchema,
         readOnly: definition.category !== "write",
         visible: (candidate) => canRunTool(candidate.authz, definition, features),
-        summarize: (result) =>
-          typeof result.note === "string" ? result.note : undefined,
+        summarize: (result) => (typeof result.note === "string" ? result.note : undefined),
         execute: async (candidate, input) => {
           // Writes execute directly on the API-key surface (no confirmation
           // card). The MCP request identity is the invocation key, so a
@@ -139,9 +139,7 @@ const appCatalog = async (
           // nonce so each fetch is a new claim, matching platform.query's
           // readInvocation.
           const idempotencyKey =
-            definition.category === "write"
-              ? candidate.requestId
-              : randomUUID();
+            definition.category === "write" ? candidate.requestId : randomUUID();
           const outcome = await runListedAppTool({
             orgId: candidate.authz.user.orgId,
             user: candidate.authz.user,
@@ -201,8 +199,7 @@ export async function createOpenBooksMcpServer(
       description:
         "Live tenant-specific record types and fields visible to the authenticated actor.",
       mimeType: "application/json",
-      text: async () =>
-        JSON.stringify({ recordTypes: await listRecordTypes(context) }),
+      text: async () => JSON.stringify({ recordTypes: await listRecordTypes(context) }),
     },
     ...MCP_SKILLS.map((skill) => ({
       name: `skill-${skill.slug}`,

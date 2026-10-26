@@ -1,14 +1,46 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const contractorWithholding: DocArticle = {
-  slug: 'contractor-withholding',
-  title: 'Contractor Withholding',
-  category: 'administration',
+  slug: "contractor-withholding",
+  title: "Contractor Withholding",
+  category: "administration",
   order: 4,
-  summary: 'Activate a country withholding scheme for a legal entity, record vendor standings, calculate payment deductions, and prepare authority payments and corrections.',
-  updated: '2026-10-09',
-  keywords: ['withholding', 'country pack', 'CIS', 'Construction Industry Scheme', 'United Kingdom', 'UK', 'Germany', 'Bauabzugsteuer', '§48', 'exemption certificate', 'Freistellungsbescheinigung', 'Ireland', 'RCT', 'Relevant Contracts Tax', 'Italy', 'condominium', 'United States', 'backup withholding', 'Form 945', 'materials cost', 'remittance', 'deposit', 'foreign currency'],
-  related: ['tax-configuration', 'setup-taxes-group', 'payments-and-applications', 'purchasing-workflow', 'subcontractor-compliance', 'audit-log'],
+  summary:
+    "Activate a country withholding scheme for a legal entity, record vendor standings, calculate payment deductions, and prepare authority payments and corrections.",
+  updated: "2026-10-09",
+  keywords: [
+    "withholding",
+    "country pack",
+    "CIS",
+    "Construction Industry Scheme",
+    "United Kingdom",
+    "UK",
+    "Germany",
+    "Bauabzugsteuer",
+    "§48",
+    "exemption certificate",
+    "Freistellungsbescheinigung",
+    "Ireland",
+    "RCT",
+    "Relevant Contracts Tax",
+    "Italy",
+    "condominium",
+    "United States",
+    "backup withholding",
+    "Form 945",
+    "materials cost",
+    "remittance",
+    "deposit",
+    "foreign currency",
+  ],
+  related: [
+    "tax-configuration",
+    "setup-taxes-group",
+    "payments-and-applications",
+    "purchasing-workflow",
+    "subcontractor-compliance",
+    "audit-log",
+  ],
   body: `# Contractor Withholding
 
 Contractor withholding deducts statutory amounts from applicable vendor
@@ -121,4 +153,4 @@ their monetary lines to force a different deduction. Use the supported
 correction or reversal action; if required configuration is missing, complete
 the named Setup remedy and retry.
 `,
-}
+};

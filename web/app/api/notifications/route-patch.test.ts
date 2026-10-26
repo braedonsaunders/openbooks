@@ -18,8 +18,7 @@ interface NotificationsRouteState {
 }
 
 const routeState: NotificationsRouteState = { unreadIds: [], readIds: [], calls: [] };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 /** Flatten a drizzle SQL chunk into its raw text for keyword assertions. */
 function sqlText(query: unknown): string {
@@ -30,15 +29,12 @@ function sqlText(query: unknown): string {
       if (typeof chunk === "string") return chunk;
       const value = (chunk as { value?: unknown[] })?.value;
       if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks)
-        return sqlText(chunk);
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
     })
     .join("");
 }
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksSqlTextNotifications = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextNotifications = sqlText;
 
 const mockSources = new Map<string, string>([
   [
@@ -104,10 +100,7 @@ registerHooks({
     if (mocked) return { url: mocked, shortCircuit: true };
     // The mark-read helper reaches the pool through a relative specifier;
     // keep it on the same fake as the route's own db import.
-    if (
-      typeof specifier === "string" &&
-      specifier.endsWith("/platform/db.ts")
-    ) {
+    if (typeof specifier === "string" && specifier.endsWith("/platform/db.ts")) {
       return { url: "mock:db", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -188,11 +181,7 @@ test("PATCH with a foreign id is 404, never {ok:true}", async () => {
   assert.equal(response.status, 404);
   const payload = (await response.json()) as { error?: string };
   assert.ok(payload.error, "the refusal names what happened");
-  assert.deepEqual(
-    Object.keys(payload).sort(),
-    ["error"],
-    "no ok:true alongside the refusal",
-  );
+  assert.deepEqual(Object.keys(payload).sort(), ["error"], "no ok:true alongside the refusal");
 });
 
 test("PATCH with a mixed own+foreign request refuses before any write", async () => {

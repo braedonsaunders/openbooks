@@ -21,10 +21,7 @@ import {
 
 function databaseRefusal(pattern: RegExp) {
   return (error: unknown) => {
-    const cause =
-      error instanceof Error && error.cause instanceof Error
-        ? error.cause
-        : error;
+    const cause = error instanceof Error && error.cause instanceof Error ? error.cause : error;
     assert.ok(cause instanceof Error);
     assert.match(cause.message, pattern);
     return true;
@@ -48,13 +45,22 @@ test(
           sql`update app_roles set permissions='["crm.setup.manage","crm.forecasts.override"]'::jsonb where org_id=${org.orgId}`,
         ),
       );
-      await withBypassContext(() => seedApprovalFlow(org.orgId, { subjectKind: 'sales_quota',
-        assignees: [{ type: 'user', userId: checker }], mode: 'any', preventSelfApproval: true }));
+      await withBypassContext(() =>
+        seedApprovalFlow(org.orgId, {
+          subjectKind: "sales_quota",
+          assignees: [{ type: "user", userId: checker }],
+          mode: "any",
+          preventSelfApproval: true,
+        }),
+      );
       await withBypassContext(() => ensureCrmDefaults(org.orgId, maker));
       const employee = await withOrg(org.orgId, async () => {
-        const p = (await db.execute<{ id: string }>(
-            sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Native employee without login',${org.subsidiaryId}) returning id`, "objects",
-          ))[0]!;
+        const p = (
+          await db.execute<{ id: string }>(
+            sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Native employee without login',${org.subsidiaryId}) returning id`,
+            "objects",
+          )
+        )[0]!;
         await db.execute(
           sql`insert into employee_roles(org_id,party_id,is_sales_rep,sales_rep_since) values(${org.orgId},${p.id},true,'2020-01-01')`,
         );
@@ -67,14 +73,29 @@ test(
       };
       const write = async (command: SalesCommand, actorId = maker): Promise<SalesRecord> =>
         withOrg(org.orgId, async () => {
-          if (command.action === 'quota-transition' && command.lifecycle === 'approved') {
-            const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates
+          if (command.action === "quota-transition" && command.lifecycle === "approved") {
+            const gate = (
+              await db.execute<{ id: string }>(
+                sql`select id from flow_gates
               where org_id=${org.orgId} and subject_kind='sales_quota' and subject_id=${command.id}
-                and status='pending'`, "objects"))[0];
-            assert.ok(gate, 'the quota decision requires its pending native Flow gate');
-            await decideGate({ gateId: gate.id, userId: actorId, decision: 'approved', comment: command.reason });
-            return (await db.execute<SalesRecord>(sql`select * from crm_sales_quotas
-              where org_id=${org.orgId} and id=${command.id}`, "objects"))[0]!;
+                and status='pending'`,
+                "objects",
+              )
+            )[0];
+            assert.ok(gate, "the quota decision requires its pending native Flow gate");
+            await decideGate({
+              gateId: gate.id,
+              userId: actorId,
+              decision: "approved",
+              comment: command.reason,
+            });
+            return (
+              await db.execute<SalesRecord>(
+                sql`select * from crm_sales_quotas
+              where org_id=${org.orgId} and id=${command.id}`,
+                "objects",
+              )
+            )[0]!;
           }
           return writeSalesCommand({ ...scope, actorId }, command) as Promise<SalesRecord>;
         });
@@ -82,9 +103,12 @@ test(
         "inactive employees can be removed from Sales but cannot be newly designated",
         async () => {
           const retired = await withOrg(org.orgId, async () => {
-            const person = (await db.execute<{ id: string }>(
-                sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Retired sales employee',${org.subsidiaryId}) returning id`, "objects",
-              ))[0]!.id;
+            const person = (
+              await db.execute<{ id: string }>(
+                sql`insert into parties(org_id,kind,display_name,subsidiary_id) values(${org.orgId},'employee','Retired sales employee',${org.subsidiaryId}) returning id`,
+                "objects",
+              )
+            )[0]!.id;
             await db.execute(
               sql`insert into employee_roles(org_id,party_id,is_active,is_sales_rep,sales_rep_since) values(${org.orgId},${person},false,true,'2020-01-01')`,
             );
@@ -93,9 +117,12 @@ test(
           const revision = await withOrg(
             org.orgId,
             async () =>
-              (await db.execute<{ updated_at: string }>(
-                  sql`select updated_at::text from employee_roles where org_id=${org.orgId} and party_id=${retired}`, "objects",
-                ))[0]!.updated_at,
+              (
+                await db.execute<{ updated_at: string }>(
+                  sql`select updated_at::text from employee_roles where org_id=${org.orgId} and party_id=${retired}`,
+                  "objects",
+                )
+              )[0]!.updated_at,
           );
           await assert.rejects(
             () =>
@@ -118,92 +145,89 @@ test(
           const saved = await withOrg(
             org.orgId,
             async () =>
-              (await db.execute<{ is_sales_rep: boolean }>(
-                  sql`select is_sales_rep from employee_roles where org_id=${org.orgId} and party_id=${retired}`, "objects",
-                ))[0]!,
+              (
+                await db.execute<{ is_sales_rep: boolean }>(
+                  sql`select is_sales_rep from employee_roles where org_id=${org.orgId} and party_id=${retired}`,
+                  "objects",
+                )
+              )[0]!,
           );
           assert.equal(saved.is_sales_rep, false);
         },
       );
       let salesTeam: SalesRecord;
       let quota: SalesRecord;
-      await t.test(
-        "employees can own teams and quotas without a login",
-        async () => {
-          salesTeam = await write({
-            action: "team",
-            name: "Enterprise sales",
-            subsidiaryId: org.subsidiaryId,
-            managerEmployeeId: employee,
-            isActive: true,
-            members: [
-              {
-                employeeId: employee,
-                role: "manager",
-                validFrom: "2020-01-01",
-              },
-            ],
-          });
-          quota = await write({
-            action: "quota",
-            name: "September target",
-            subsidiaryId: org.subsidiaryId,
-            employeeId: employee,
-            salesTeamId: null,
-            parentQuotaId: null,
-            supersedesId: null,
-            reason: "",
-            periodStart: "2026-09-01",
-            periodEnd: "2026-09-30",
-            currency: "CAD",
-            amount: "1234.5678",
-            metric: "closed_won",
-          });
-          assert.equal(quota.employee_id, employee);
-          assert.equal(quota.amount, "1234.5678");
-          assert.equal(salesTeam.manager_employee_id, employee);
-        },
-      );
-      await t.test(
-        "cross-entity and stale record writes are refused",
-        async () => {
-          await assert.rejects(
-            () =>
-              withOrg(org.orgId, () =>
-                writeSalesCommand(
-                  { ...scope, allowedSubsidiaryIds: new Set() },
-                  {
-                    action: "quota",
-                    name: "Forbidden",
-                    subsidiaryId: org.subsidiaryId,
-                    employeeId: employee,
-                    salesTeamId: null,
-                    parentQuotaId: null,
-                    supersedesId: null,
-                    reason: "",
-                    periodStart: "2026-09-01",
-                    periodEnd: "2026-09-30",
-                    currency: "CAD",
-                    amount: "1",
-                    metric: "closed_won",
-                  },
-                ),
+      await t.test("employees can own teams and quotas without a login", async () => {
+        salesTeam = await write({
+          action: "team",
+          name: "Enterprise sales",
+          subsidiaryId: org.subsidiaryId,
+          managerEmployeeId: employee,
+          isActive: true,
+          members: [
+            {
+              employeeId: employee,
+              role: "manager",
+              validFrom: "2020-01-01",
+            },
+          ],
+        });
+        quota = await write({
+          action: "quota",
+          name: "September target",
+          subsidiaryId: org.subsidiaryId,
+          employeeId: employee,
+          salesTeamId: null,
+          parentQuotaId: null,
+          supersedesId: null,
+          reason: "",
+          periodStart: "2026-09-01",
+          periodEnd: "2026-09-30",
+          currency: "CAD",
+          amount: "1234.5678",
+          metric: "closed_won",
+        });
+        assert.equal(quota.employee_id, employee);
+        assert.equal(quota.amount, "1234.5678");
+        assert.equal(salesTeam.manager_employee_id, employee);
+      });
+      await t.test("cross-entity and stale record writes are refused", async () => {
+        await assert.rejects(
+          () =>
+            withOrg(org.orgId, () =>
+              writeSalesCommand(
+                { ...scope, allowedSubsidiaryIds: new Set() },
+                {
+                  action: "quota",
+                  name: "Forbidden",
+                  subsidiaryId: org.subsidiaryId,
+                  employeeId: employee,
+                  salesTeamId: null,
+                  parentQuotaId: null,
+                  supersedesId: null,
+                  reason: "",
+                  periodStart: "2026-09-01",
+                  periodEnd: "2026-09-30",
+                  currency: "CAD",
+                  amount: "1",
+                  metric: "closed_won",
+                },
               ),
-            /outside your permitted scope/,
-          );
-          await assert.rejects(
-            () =>
-              write({
-                action: "quota-transition",
-                id: quota.id,
-                expectedRevision: 99,
-                lifecycle: "pending_approval",
-                reason: "Submit",
-              }),
-            /changed/,
-          );
-        },
-      );
+            ),
+          /outside your permitted scope/,
+        );
+        await assert.rejects(
+          () =>
+            write({
+              action: "quota-transition",
+              id: quota.id,
+              expectedRevision: 99,
+              lifecycle: "pending_approval",
+              reason: "Submit",
+            }),
+          /changed/,
+        );
+      });
       await t.test(
         "quota maker cannot approve, but a different live authorized actor can",
         async () => {
@@ -320,7 +344,8 @@ test(
           );
           const old = await withOrg(org.orgId, () =>
             db.execute<{ lifecycle: string; amount: string }>(
-              sql`select lifecycle,amount::text from crm_sales_quotas where id=${quota.id} and org_id=${org.orgId}`, "objects",
+              sql`select lifecycle,amount::text from crm_sales_quotas where id=${quota.id} and org_id=${org.orgId}`,
+              "objects",
             ),
           );
           assert.equal(old[0]?.lifecycle, "superseded");
@@ -457,7 +482,8 @@ test(
         async () => {
           const before = await withOrg(org.orgId, () =>
             db.execute<{ count: number }>(
-              sql`select count(*)::int as count from crm_sales_quotas where org_id=${org.orgId}`, "objects",
+              sql`select count(*)::int as count from crm_sales_quotas where org_id=${org.orgId}`,
+              "objects",
             ),
           );
           await withBypassContext(() =>
@@ -480,7 +506,8 @@ test(
             );
             const after = await withOrg(org.orgId, () =>
               db.execute<{ count: number }>(
-                sql`select count(*)::int as count from crm_sales_quotas where org_id=${org.orgId}`, "objects",
+                sql`select count(*)::int as count from crm_sales_quotas where org_id=${org.orgId}`,
+                "objects",
               ),
             );
             assert.equal(after[0]?.count, before[0]?.count);
@@ -540,7 +567,8 @@ test(
           });
           const account = await withOrg(org.orgId, () =>
             db.execute<{ sales_rep_id: string; territory_id: string }>(
-              sql`select sales_rep_id,territory_id from crm_account_profiles where org_id=${org.orgId} and party_id=${org.customerId}`, "objects",
+              sql`select sales_rep_id,territory_id from crm_account_profiles where org_id=${org.orgId} and party_id=${org.customerId}`,
+              "objects",
             ),
           );
           assert.equal(account[0]?.sales_rep_id, employee);
@@ -561,14 +589,16 @@ test(
         async () => {
           const statuses = await withOrg(org.orgId, () =>
             db.execute<{ id: string; is_won: boolean }>(
-              sql`select id,is_won from crm_opportunity_statuses where org_id=${org.orgId} and key in ('closed_won','qualification') order by is_won`, "objects",
+              sql`select id,is_won from crm_opportunity_statuses where org_id=${org.orgId} and key in ('closed_won','qualification') order by is_won`,
+              "objects",
             ),
           );
           const won = statuses.find((s) => s.is_won)!.id;
           const open = statuses.find((s) => !s.is_won)!.id;
           const opportunity = await withOrg(org.orgId, () =>
             db.execute<{ id: string }>(
-              sql`insert into crm_opportunities(org_id,opportunity_number,title,status_id,sales_rep_id,sales_team_id,subsidiary_id,currency,projected_amount,closed_at,updated_by) values(${org.orgId},'OPP-SALES','Native attribution',${won},${employee},${salesTeam.id},${org.subsidiaryId},'CAD','10.1234','2026-09-10',${maker}) returning id`, "objects",
+              sql`insert into crm_opportunities(org_id,opportunity_number,title,status_id,sales_rep_id,sales_team_id,subsidiary_id,currency,projected_amount,closed_at,updated_by) values(${org.orgId},'OPP-SALES','Native attribution',${won},${employee},${salesTeam.id},${org.subsidiaryId},'CAD','10.1234','2026-09-10',${maker}) returning id`,
+              "objects",
             ),
           );
           const id = opportunity[0]!.id;
@@ -592,7 +622,8 @@ test(
               employee_id: string;
               event_kind: string;
             }>(
-              sql`select amount::text,employee_id,event_kind from crm_sales_evidence where org_id=${org.orgId} and source_id=${id} order by created_at,id`, "objects",
+              sql`select amount::text,employee_id,event_kind from crm_sales_evidence where org_id=${org.orgId} and source_id=${id} order by created_at,id`,
+              "objects",
             ),
           );
           assert.equal(evidence.length, 2);

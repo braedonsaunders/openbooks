@@ -15,12 +15,17 @@ import type { CandidateDrawerData, OfferDrawerData } from "./sections.tsx";
  * the island only needs router.refresh, stubbed below like the house
  * web-integration pattern.
  */
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function redirect() {}; export function notFound() {}; export function useRouter() { return { refresh() {} } }; export function usePathname() { return '' }" });
+stubModules({
+  navigation:
+    "export function redirect() {}; export function notFound() {}; export function useRouter() { return { refresh() {} } }; export function usePathname() { return '' }",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link")
       return virtual("export default function Link(p) { return p.children }");
     return next(specifier, context);
@@ -34,18 +39,29 @@ Object.assign(globalThis, { React });
 const { renderToString } = await import("react-dom/server");
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
-const { createRequisition, openRequisition } = await import("@openbooks/engine/hrm/recruiting/requisitions");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { createRequisition, openRequisition } =
+  await import("@openbooks/engine/hrm/recruiting/requisitions");
 const { createCandidate } = await import("@openbooks/engine/hrm/recruiting/candidates");
 const { createApplication } = await import("@openbooks/engine/hrm/recruiting/applications");
 const { createOffer } = await import("@openbooks/engine/hrm/recruiting/offers");
-const { getOfferDetail, getCandidateDetail } = await import("@openbooks/engine/hrm/recruiting/recruiting-read");
+const { getOfferDetail, getCandidateDetail } =
+  await import("@openbooks/engine/hrm/recruiting/recruiting-read");
 const { OfferDrawerBody, CandidateDrawerBody } = await import("./sections.tsx");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-const catalog = JSON.parse(readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"));
+const catalog = JSON.parse(
+  readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),
+);
 
-async function seedOffer(): Promise<{ orgId: string; cleanup: () => Promise<void>; offer: OfferDrawerData; candidate: CandidateDrawerData; employerSubsidiaryId: string }> {
+async function seedOffer(): Promise<{
+  orgId: string;
+  cleanup: () => Promise<void>;
+  offer: OfferDrawerData;
+  candidate: CandidateDrawerData;
+  employerSubsidiaryId: string;
+}> {
   const org = await createScratchOrg();
   const orgId = org.orgId;
   await db.execute(sql`
@@ -57,21 +73,48 @@ async function seedOffer(): Promise<{ orgId: string; cleanup: () => Promise<void
     values (${orgId}, ${adminId}, 'hrm.recruiting.read', 'grant'),
            (${orgId}, ${adminId}, 'hrm.recruiting.manage', 'grant')
     on conflict (user_id, permission) do update set effect = 'grant'`);
-  const draft = await createRequisition({ orgId, actorId: adminId, title: "Readback role", employerSubsidiaryId: org.subsidiaryId, headcount: 1 });
+  const draft = await createRequisition({
+    orgId,
+    actorId: adminId,
+    title: "Readback role",
+    employerSubsidiaryId: org.subsidiaryId,
+    headcount: 1,
+  });
   const opened = await openRequisition({ orgId, actorId: adminId, requisitionId: draft.id });
-  const created = await createCandidate({ orgId, actorId: adminId, displayName: "Rita Readback", email: "rita@example.test" });
-  const application = await createApplication({ orgId, actorId: adminId, requisitionId: opened.id, candidateId: created.candidate.id });
+  const created = await createCandidate({
+    orgId,
+    actorId: adminId,
+    displayName: "Rita Readback",
+    email: "rita@example.test",
+  });
+  const application = await createApplication({
+    orgId,
+    actorId: adminId,
+    requisitionId: opened.id,
+    candidateId: created.candidate.id,
+  });
   const saved = await createOffer({
-    orgId, actorId: adminId, applicationId: application.id, employerSubsidiaryId: org.subsidiaryId,
-    jobTitle: "Backend engineer", proposedStartOn: "2026-10-01",
-    compensationAmount: "120000", compensationCurrency: "USD", compensationBasis: "annual",
+    orgId,
+    actorId: adminId,
+    applicationId: application.id,
+    employerSubsidiaryId: org.subsidiaryId,
+    jobTitle: "Backend engineer",
+    proposedStartOn: "2026-10-01",
+    compensationAmount: "120000",
+    compensationCurrency: "USD",
+    compensationBasis: "annual",
   });
   const detail = await getOfferDetail({ orgId, actorId: adminId, offerId: saved.id });
   // The loader's own employer-name resolution (view.ts offer branch).
-  const employerName = (await db.execute<{ name: string }>(sql`
+  const employerName = (
+    await db.execute<{ name: string }>(
+      sql`
     select name from subsidiaries
      where org_id = ${orgId}::uuid and id = ${detail.employerSubsidiaryId}
-     limit 1`, "objects"))[0]?.name;
+     limit 1`,
+      "objects",
+    )
+  )[0]?.name;
   assert.ok(employerName, "the persisted employer resolves to a name");
   const actions = catalog.recruiting.offerActions;
   const offerStatus = catalog.recruiting.offerStatus;
@@ -85,24 +128,34 @@ async function seedOffer(): Promise<{ orgId: string; cleanup: () => Promise<void
     draft: null,
     labels: {
       employer: catalog.recruiting.drawer.employer,
-      send: actions.send, accept: actions.accept, decline: actions.decline,
-      withdraw: actions.withdraw, reason: actions.reason, failed: actions.failed,
+      send: actions.send,
+      accept: actions.accept,
+      decline: actions.decline,
+      withdraw: actions.withdraw,
+      reason: actions.reason,
+      failed: actions.failed,
       addBankAccount: actions.addBankAccount,
     },
   };
-  const cand = await getCandidateDetail({ orgId, actorId: adminId, candidateId: created.candidate.id });
+  const cand = await getCandidateDetail({
+    orgId,
+    actorId: adminId,
+    candidateId: created.candidate.id,
+  });
   const candidate: CandidateDrawerData = {
     ...cand,
     canManage: true,
-    interviews: [{
-      id: "interview-readable-kind",
-      applicationId: application.id,
-      kind: "phone",
-      kindLabel: catalog.recruiting.interviewKind.phone,
-      scheduledAt: "2026-09-24T15:00:00Z",
-      status: "completed",
-      outcome: null,
-    }],
+    interviews: [
+      {
+        id: "interview-readable-kind",
+        applicationId: application.id,
+        kind: "phone",
+        kindLabel: catalog.recruiting.interviewKind.phone,
+        scheduledAt: "2026-09-24T15:00:00Z",
+        status: "completed",
+        outcome: null,
+      },
+    ],
     closeHref: "/hrm/recruiting",
     labels: {
       applications: catalog.recruiting.drawer.applications,
@@ -120,7 +173,13 @@ async function seedOffer(): Promise<{ orgId: string; cleanup: () => Promise<void
       failed: catalog.recruiting.interview.failed,
     },
   };
-  return { orgId, cleanup: () => dropScratchOrg(orgId), offer, candidate, employerSubsidiaryId: detail.employerSubsidiaryId };
+  return {
+    orgId,
+    cleanup: () => dropScratchOrg(orgId),
+    offer,
+    candidate,
+    employerSubsidiaryId: detail.employerSubsidiaryId,
+  };
 }
 
 test("the saved-offer drawer renders the persisted legal employer", { skip: !DB }, async () => {
@@ -131,11 +190,26 @@ test("the saved-offer drawer renders the persisted legal employer", { skip: !DB 
     // renderToString splits text nodes with hydration comments, so the row
     // is proven by its parts: the translated label and the persisted name.
     assert.ok(html.includes(seed.offer.labels.employer), "the employer row label renders");
-    assert.ok(html.includes(seed.offer.employerName), "the drawer shows the persisted legal employer name");
-    assert.ok(html.includes(seed.offer.statusLabel), "the drawer shows the translated offer status");
-    assert.ok(html.includes(seed.offer.compensationAmount), "the terms render alongside the entity");
-    assert.ok(!html.includes(seed.employerSubsidiaryId), "the raw employer id never renders — the name does");
-    assert.ok(html.includes(seed.offer.labels.send), "the draft action island mounts with the stubbed router");
+    assert.ok(
+      html.includes(seed.offer.employerName),
+      "the drawer shows the persisted legal employer name",
+    );
+    assert.ok(
+      html.includes(seed.offer.statusLabel),
+      "the drawer shows the translated offer status",
+    );
+    assert.ok(
+      html.includes(seed.offer.compensationAmount),
+      "the terms render alongside the entity",
+    );
+    assert.ok(
+      !html.includes(seed.employerSubsidiaryId),
+      "the raw employer id never renders — the name does",
+    );
+    assert.ok(
+      html.includes(seed.offer.labels.send),
+      "the draft action island mounts with the stubbed router",
+    );
   } finally {
     await seed.cleanup();
   }
@@ -145,9 +219,15 @@ test("the candidate drawer renders its own visible title", { skip: !DB }, async 
   const seed = await seedOffer();
   try {
     const html = renderToString(<CandidateDrawerBody detail={seed.candidate} />);
-    assert.ok(html.includes(seed.candidate.displayName), "the candidate drawer is titled for its own record");
+    assert.ok(
+      html.includes(seed.candidate.displayName),
+      "the candidate drawer is titled for its own record",
+    );
     assert.ok(html.includes("REQ-"), "the candidate's requisition link renders");
-    assert.ok(html.includes("Phone"), "the candidate's interview kind is rendered as a translated label");
+    assert.ok(
+      html.includes("Phone"),
+      "the candidate's interview kind is rendered as a translated label",
+    );
     assert.ok(!html.includes("phone"), "the raw interview kind code is not rendered");
   } finally {
     await seed.cleanup();

@@ -63,7 +63,10 @@ export {
   transferUnitPrice,
   type TransferPricingPolicy,
 } from "./transfer-pricing.ts";
-export { representingPartiesRefusal, transferPricingPolicySetupRefusal } from "./setup-validation.ts";
+export {
+  representingPartiesRefusal,
+  transferPricingPolicySetupRefusal,
+} from "./setup-validation.ts";
 export {
   intercompanyReconciliation,
   unreconciledIntercompanyCount,

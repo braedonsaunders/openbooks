@@ -75,19 +75,18 @@ const { loadAgentPolicy } = await import("./view.ts");
 hooks.deregister();
 
 const { withBypassContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-const { detectorSpecsForAgent } = await import(
-  "@openbooks/engine/agents/continuous-close-config"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { detectorSpecsForAgent } = await import("@openbooks/engine/agents/continuous-close-config");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 test("a setup manager gets the pack policy, specs and routing targets", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const userId = await withBypassContext(() => createScratchUser(org.orgId, "Policy Admin", "admin"));
+    const userId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Policy Admin", "admin"),
+    );
     loaderState.user = { orgId: org.orgId, id: userId };
     loaderState.permissions = new Set(["admin.setup.manage"]);
     const data = await withBypassContext(() => loadAgentPolicy("accounting"));
@@ -106,14 +105,26 @@ test("a setup manager gets the pack policy, specs and routing targets", { skip: 
     // parameter check below cannot pass over an empty spec list.
     assert.ok(data.specs.length > 0, "accounting pack must publish detector specs");
     for (const spec of data.specs) {
-      assert.ok(Array.isArray(spec.parameters), `${spec.detectorKey} must carry its parameter specs`);
+      assert.ok(
+        Array.isArray(spec.parameters),
+        `${spec.detectorKey} must carry its parameter specs`,
+      );
     }
     assert.equal(data.notification, null);
     assert.equal(data.featureEnabled, true);
     loaderState.allowed = new Set(["00000000-0000-0000-0000-000000000001"]);
-    await assert.rejects(withBypassContext(() => loadAgentPolicy("accounting")), /NEXT_NOT_FOUND/);
-    assert.ok(data.roles.some((role) => role.name.toLowerCase().includes("admin")), "must list org roles");
-    assert.ok(data.users.some((user) => user.id === userId), "must list org people");
+    await assert.rejects(
+      withBypassContext(() => loadAgentPolicy("accounting")),
+      /NEXT_NOT_FOUND/,
+    );
+    assert.ok(
+      data.roles.some((role) => role.name.toLowerCase().includes("admin")),
+      "must list org roles",
+    );
+    assert.ok(
+      data.users.some((user) => user.id === userId),
+      "must list org people",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -124,7 +135,10 @@ test("an unknown pack key 404s", { skip: !DB }, async () => {
   try {
     loaderState.user = { orgId: org.orgId, id: "00000000-0000-0000-0000-000000000001" };
     loaderState.permissions = new Set(["admin.setup.manage"]);
-    await assert.rejects(withBypassContext(() => loadAgentPolicy("nope")), /NEXT_NOT_FOUND/);
+    await assert.rejects(
+      withBypassContext(() => loadAgentPolicy("nope")),
+      /NEXT_NOT_FOUND/,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -135,7 +149,10 @@ test("without the setup key the policy redirects", { skip: !DB }, async () => {
   try {
     loaderState.user = { orgId: org.orgId, id: "00000000-0000-0000-0000-000000000002" };
     loaderState.permissions = new Set(["assistant.use"]);
-    await assert.rejects(withBypassContext(() => loadAgentPolicy("accounting")), /NEXT_REDIRECT:\// );
+    await assert.rejects(
+      withBypassContext(() => loadAgentPolicy("accounting")),
+      /NEXT_REDIRECT:\//,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

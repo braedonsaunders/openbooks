@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
+import { stubModules } from "../../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../../testing/jsdom-env.ts";
 
 // jsdom first: the workbench reads browser globals at render.
 const { registerHooks } = await import("node:module");
@@ -13,7 +13,15 @@ const worktreeRoot = pathToFileURL(
 ).href;
 await bootJsdomEnvironment({ url: "http://localhost:4800/assistant" });
 
-stubModules({ navigation: { source: 'export function useRouter(){return{push(){},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return \'/assistant\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return{push(){},refresh(){},replace(){},prefetch(){}}}export function usePathname(){return '/assistant'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {

@@ -33,12 +33,12 @@ export interface LocalBackupOptions {
 function parseArgs(argv: readonly string[]): Map<string, string> {
   return new Map(
     argv
-    .slice(2)
-    .filter((arg) => arg.startsWith("--"))
-    .map((arg) => {
-      const [key, ...value] = arg.slice(2).split("=");
-      return [key!, value.join("=")];
-    }),
+      .slice(2)
+      .filter((arg) => arg.startsWith("--"))
+      .map((arg) => {
+        const [key, ...value] = arg.slice(2).split("=");
+        return [key!, value.join("=")];
+      }),
   );
 }
 
@@ -127,7 +127,11 @@ export async function runLocalBackup({
     return manifest;
   } catch (error) {
     const artifacts = archiveRenamed
-      ? [partial, out, ...(manifestWriteStarted && !manifestExistedBeforeWrite ? [manifestPath] : [])]
+      ? [
+          partial,
+          out,
+          ...(manifestWriteStarted && !manifestExistedBeforeWrite ? [manifestPath] : []),
+        ]
       : [partial];
     const cleanupErrors: unknown[] = [];
     for (const artifact of artifacts) {
@@ -138,7 +142,10 @@ export async function runLocalBackup({
       }
     }
     if (cleanupErrors.length > 0) {
-      throw new AggregateError([error, ...cleanupErrors], "local backup failed and artifact cleanup failed");
+      throw new AggregateError(
+        [error, ...cleanupErrors],
+        "local backup failed and artifact cleanup failed",
+      );
     }
     throw error;
   }

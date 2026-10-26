@@ -23,34 +23,38 @@ function appContext(orgId: string, subsidiaryIds: Set<string> | null): Applicati
 }
 
 async function seedFormulaReturn(orgId: string, formCode: string): Promise<void> {
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into tax_return_forms (id, org_id, code, name, submission_channel, is_active)
-    values (${randomUUID()}, ${orgId}, ${formCode}, 'Test filing', 'portal_manual', true)`));
-  await withBypassContext(() => db.execute(sql`
+    values (${randomUUID()}, ${orgId}, ${formCode}, 'Test filing', 'portal_manual', true)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into tax_report_lines
       (id, org_id, report_code, line_code, label, sign, sequence, formula)
-    values (${randomUUID()}, ${orgId}, ${formCode}, '101', 'Taxable sales', 1, 10, '2.5')`));
+    values (${randomUUID()}, ${orgId}, ${formCode}, '101', 'Taxable sales', 1, 10, '2.5')`),
+  );
 }
 
 test("application tax return preserves exact decimal values from the real filing engine", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     await seedFormulaReturn(org.orgId, "T1_EXACT_RETURN");
-    const result = await withOrgContext(org.orgId, () => getApplicationTaxReturn(
-      appContext(org.orgId, new Set([org.subsidiaryId])),
-      {
+    const result = await withOrgContext(org.orgId, () =>
+      getApplicationTaxReturn(appContext(org.orgId, new Set([org.subsidiaryId])), {
         formCode: "T1_EXACT_RETURN",
         from: org.date,
         to: org.date,
         subsidiaryIds: [org.subsidiaryId],
-      },
-    ));
+      }),
+    );
 
     assert.equal(result.currency, "CAD");
     assert.deepEqual(result.subsidiaryIds, [org.subsidiaryId]);
-    assert.deepEqual(result.boxes.map(({ lineCode, value }) => ({ lineCode, value })), [
-      { lineCode: "101", value: "2.5000" },
-    ]);
+    assert.deepEqual(
+      result.boxes.map(({ lineCode, value }) => ({ lineCode, value })),
+      [{ lineCode: "101", value: "2.5000" }],
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -60,14 +64,18 @@ test("application tax return maps an unknown-form engine refusal to a named 422"
   const org = await withBypassContext(() => createScratchOrg());
   try {
     await assert.rejects(
-      withOrgContext(org.orgId, () => getApplicationTaxReturn(
-        appContext(org.orgId, null),
-        { formCode: "T1_UNKNOWN_RETURN", from: org.date, to: org.date },
-      )),
-      (error: unknown) => error instanceof ApplicationError
-        && error.code === "invalid_input"
-        && error.status === 422
-        && error.message === 'tax return form "T1_UNKNOWN_RETURN" is not configured',
+      withOrgContext(org.orgId, () =>
+        getApplicationTaxReturn(appContext(org.orgId, null), {
+          formCode: "T1_UNKNOWN_RETURN",
+          from: org.date,
+          to: org.date,
+        }),
+      ),
+      (error: unknown) =>
+        error instanceof ApplicationError &&
+        error.code === "invalid_input" &&
+        error.status === 422 &&
+        error.message === 'tax return form "T1_UNKNOWN_RETURN" is not configured',
     );
   } finally {
     await dropScratchOrg(org.orgId);

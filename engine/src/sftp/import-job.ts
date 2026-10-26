@@ -18,12 +18,31 @@ import {
   type SkippedStatementRow,
   type StatementSourceContent,
 } from "../banking/banking.ts";
-import { claimPaymentFileDelivery, generatePaymentFileArtifact, markDeliveryUncertain, reclaimExpiredDeliveryClaims, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery, releaseDeliveryClaim } from "../payments/operations.ts";
+import {
+  claimPaymentFileDelivery,
+  generatePaymentFileArtifact,
+  markDeliveryUncertain,
+  reclaimExpiredDeliveryClaims,
+  recordPaymentFileDeliveryFailure,
+  recordPaymentFileSftpDelivery,
+  releaseDeliveryClaim,
+} from "../payments/operations.ts";
 import { backendFor, type SftpBackend } from "./backend.ts";
 import { resolveOutboundPath } from "./delivery-path.ts";
-import { SFTP_UNBOUND_SCHEDULE_NOTICE_KIND, sftpUnboundScheduleNoticeHref } from "./schedule-notice.ts";
-import { findSftpWatchFolderOverlap, normalizeSftpWatchFolder, sftpScheduleFolderLockKey, sftpWatchFolderOverlapRefusal } from "./watch-folders.ts";
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import {
+  SFTP_UNBOUND_SCHEDULE_NOTICE_KIND,
+  sftpUnboundScheduleNoticeHref,
+} from "./schedule-notice.ts";
+import {
+  findSftpWatchFolderOverlap,
+  normalizeSftpWatchFolder,
+  sftpScheduleFolderLockKey,
+  sftpWatchFolderOverlapRefusal,
+} from "./watch-folders.ts";
+import {
+  acquireOrgFeatureGateLock,
+  lockAndCheckOrgFeature,
+} from "../organization/org-feature-lock.ts";
 
 /**
  * Archive destination for one consumed watch-folder file: a unique generation
@@ -34,7 +53,13 @@ import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organizati
  * replace the archived generation. Pure: takes the day and attempt
  * explicitly so tests pin them; the scan passes the current UTC day.
  */
-export function archiveDestination(folder: string, name: string, content: Buffer, utcDay: string, attempt = 1): string {
+export function archiveDestination(
+  folder: string,
+  name: string,
+  content: Buffer,
+  utcDay: string,
+  attempt = 1,
+): string {
   const hash = createHash("sha256").update(content).digest("hex").slice(0, 12);
   const dot = name.lastIndexOf(".");
   const stem = dot > 0 ? name.slice(0, dot) : name;
@@ -49,13 +74,20 @@ export function archiveDestination(folder: string, name: string, content: Buffer
  * and S3 alike: if the destination somehow exists, the next numbered
  * generation is taken — an archived file is never replaced silently.
  */
-export async function archiveConsumedFile(backend: SftpBackend, folder: string, name: string, content: Buffer): Promise<string> {
+export async function archiveConsumedFile(
+  backend: SftpBackend,
+  folder: string,
+  name: string,
+  content: Buffer,
+): Promise<string> {
   const utcDay = new Date().toISOString().slice(0, 10);
   for (let attempt = 1; attempt <= 1000; attempt++) {
     const candidate = archiveDestination(folder, name, content, utcDay, attempt);
     if ((await backend.stat(candidate)) === null) return candidate;
   }
-  throw new Error(`could not archive ${name}: no free generation under ${folder}/processed/${utcDay}`);
+  throw new Error(
+    `could not archive ${name}: no free generation under ${folder}/processed/${utcDay}`,
+  );
 }
 
 /**
@@ -90,14 +122,70 @@ function detectFormat(name: string, text: string): Exclude<Fmt, "auto" | "csv"> 
   return null;
 }
 
-function parse(format: Exclude<Fmt, "auto">, content: StatementSourceContent, mapping: CsvMapping | null): { lines: ParsedStatementLine[]; skipped: SkippedStatementRow[]; meta: Omit<ParsedStatement, "lines"> } {
+function parse(
+  format: Exclude<Fmt, "auto">,
+  content: StatementSourceContent,
+  mapping: CsvMapping | null,
+): {
+  lines: ParsedStatementLine[];
+  skipped: SkippedStatementRow[];
+  meta: Omit<ParsedStatement, "lines">;
+} {
   // The file's account identifier rides through meta on every format that
   // carries one; CSV has none (its meta stays empty) and relies on
   // watch-folder isolation instead.
-  if (format === "ofx") { const p = parseOfx(content); return { lines: p.lines, skipped: [], meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
-  if (format === "camt053") { const p = parseCamt053(content); return { lines: p.lines, skipped: [], meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
-  if (format === "bai2") { const p = parseBai2(content); return { lines: p.lines, skipped: [], meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
-  if (format === "mt940") { const p = parseMt940(content); return { lines: p.lines, skipped: [], meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
+  if (format === "ofx") {
+    const p = parseOfx(content);
+    return {
+      lines: p.lines,
+      skipped: [],
+      meta: {
+        currency: p.currency,
+        statementDate: p.statementDate,
+        closingBalance: p.closingBalance,
+        externalAccountId: p.externalAccountId,
+      },
+    };
+  }
+  if (format === "camt053") {
+    const p = parseCamt053(content);
+    return {
+      lines: p.lines,
+      skipped: [],
+      meta: {
+        currency: p.currency,
+        statementDate: p.statementDate,
+        closingBalance: p.closingBalance,
+        externalAccountId: p.externalAccountId,
+      },
+    };
+  }
+  if (format === "bai2") {
+    const p = parseBai2(content);
+    return {
+      lines: p.lines,
+      skipped: [],
+      meta: {
+        currency: p.currency,
+        statementDate: p.statementDate,
+        closingBalance: p.closingBalance,
+        externalAccountId: p.externalAccountId,
+      },
+    };
+  }
+  if (format === "mt940") {
+    const p = parseMt940(content);
+    return {
+      lines: p.lines,
+      skipped: [],
+      meta: {
+        currency: p.currency,
+        statementDate: p.statementDate,
+        closingBalance: p.closingBalance,
+        externalAccountId: p.externalAccountId,
+      },
+    };
+  }
   if (!mapping) throw new Error("CSV import needs a column mapping on the schedule");
   const csvParsed = parseCsv(content, mapping);
   return { lines: csvParsed.lines, skipped: csvParsed.skipped, meta: {} };
@@ -171,10 +259,21 @@ export interface ScheduleRun {
   notRun?: "inactive" | "configuration-conflict" | "account-scope";
 }
 type ScheduleRow = {
-  id: string; org_id: string; sftp_server_id: string; account_id: string; format: Fmt; folder: string; csv_mapping: CsvMapping | null;
+  id: string;
+  org_id: string;
+  sftp_server_id: string;
+  account_id: string;
+  format: Fmt;
+  folder: string;
+  csv_mapping: CsvMapping | null;
   expected_external_account_id: string | null;
-  created_by: string | null; account_number: string | null; account_name: string | null; server_name: string;
-  backend: string; bucket: string | null; root_prefix: string;
+  created_by: string | null;
+  account_number: string | null;
+  account_name: string | null;
+  server_name: string;
+  backend: string;
+  bucket: string | null;
+  root_prefix: string;
 };
 
 /**
@@ -208,15 +307,19 @@ export async function ensureUnboundScheduleNotice(s: ScheduleRow): Promise<numbe
   // decision, so wildcard/override grants are out of scope here; the author
   // plus setup managers cover every operable org, and the per-file refusal
   // plus the schedule badge keep naming the remedy regardless.
-  const recipients = await db.execute<{ id: string }>(sql`
+  const recipients = await db.execute<{ id: string }>(
+    sql`
     select distinct u.id::text as id
       from users u
       left join role_assignments a on a.user_id = u.id and a.org_id = u.org_id
       left join app_roles r on r.id = a.role_id and r.org_id = a.org_id
      where u.org_id = ${s.org_id} and u.is_active
        and (u.id = ${s.created_by} or u.is_super_admin or (r.permissions ? 'admin.setup.manage'))
-  `, "objects");
-  const accountLabel = [s.account_number, s.account_name].filter(Boolean).join(" · ") || s.account_id;
+  `,
+    "objects",
+  );
+  const accountLabel =
+    [s.account_number, s.account_name].filter(Boolean).join(" · ") || s.account_id;
   const title = `SFTP schedule /${s.folder} has no expected bank account — identified statements refuse`;
   const body =
     `Route /${s.folder} on server ${s.server_name} feeds ${accountLabel} but no expected external account is bound, ` +
@@ -225,30 +328,47 @@ export async function ensureUnboundScheduleNotice(s: ScheduleRow): Promise<numbe
     `identified statements import on the next run after binding.`;
   let written = 0;
   for (const recipient of recipients) {
-    const existing = (await db.execute<{ one: number }>(sql`
+    const existing = (
+      await db.execute<{ one: number }>(
+        sql`
       select 1 as one from notifications
        where org_id = ${s.org_id} and user_id = ${recipient.id}::uuid
          and kind = ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND} and href = ${href} and read_at is null
        limit 1
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (existing) continue;
     // Same columns as the shared writeNotification path (kind, title, body,
     // href, org + user scope) — see engine/src/inbox/adapters/notification.ts:
     // the row surfaces in /notifications and as an inbox item with zero
     // extra plumbing. Inlined (not imported) so the sftp module gains no
     // inbox edge; the hrm qualification alerts use the same convention.
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into notifications (org_id, user_id, kind, title, body, href)
       values (${s.org_id}, ${recipient.id}::uuid, ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND}, ${title}, ${body}, ${href})
       returning id
-    `, "objects"))[0]?.id;
-    if (!inserted) throw new Error("the unbound-schedule notice was not stored — no row was written; retry the action");
+    `,
+        "objects",
+      )
+    )[0]?.id;
+    if (!inserted)
+      throw new Error(
+        "the unbound-schedule notice was not stored — no row was written; retry the action",
+      );
     written += 1;
   }
   return written;
 }
 
-async function assertScheduleEffectAllowed(s: ScheduleRow, claimToken: string, tx: SqlExecutor = db): Promise<void> {
+async function assertScheduleEffectAllowed(
+  s: ScheduleRow,
+  claimToken: string,
+  tx: SqlExecutor = db,
+): Promise<void> {
   // Feature changes use this same organization fence. For writes the check is
   // run on the import transaction, so disabling Bank Feeds cannot slip between
   // the eligibility check and its statement commit.
@@ -256,14 +376,20 @@ async function assertScheduleEffectAllowed(s: ScheduleRow, claimToken: string, t
   if (!(await lockAndCheckOrgFeature(tx, s.org_id, "bankFeeds"))) {
     throw new Error("Bank feeds were disabled before this SFTP import completed");
   }
-  const active = (await tx.execute<{ active: boolean }>(sql`
+  const active = (
+    await tx.execute<{ active: boolean }>(
+      sql`
     select sc.is_active and sv.is_active and sc.run_claim_token = ${claimToken}::uuid as active
       from sftp_import_schedules sc
       join sftp_servers sv on sv.id = sc.sftp_server_id and sv.org_id = sc.org_id
      where sc.id = ${s.id} and sc.org_id = ${s.org_id}
      for share of sc, sv
-  `, "objects"))[0]?.active;
-  if (!active) throw new Error("The SFTP schedule or server was disabled before this import completed");
+  `,
+      "objects",
+    )
+  )[0]?.active;
+  if (!active)
+    throw new Error("The SFTP schedule or server was disabled before this import completed");
 }
 
 async function runSchedule(
@@ -271,7 +397,12 @@ async function runSchedule(
   claimToken: string,
   allowedSubsidiaryIds: readonly string[] | null = null,
 ): Promise<ScheduleRun> {
-  const backend = backendFor({ backend: s.backend, bucket: s.bucket, rootPrefix: s.root_prefix, orgId: s.org_id });
+  const backend = backendFor({
+    backend: s.backend,
+    bucket: s.bucket,
+    rootPrefix: s.root_prefix,
+    orgId: s.org_id,
+  });
   // Engine-initiated write provenance: a schedule scan is performed by the
   // system itself — the bank machine file has no human importer and neither
   // the schedule's author nor any org-scoped id may stand in as one
@@ -280,19 +411,40 @@ async function runSchedule(
   // traceable back to the exact run/schedule that imported it.
   // System-initiated: the daemon runs with explicit unrestricted scope, so
   // scheduled imports keep working exactly as before scoped callers existed.
-  const ctx: BankingContext = { orgId: s.org_id, userId: SYSTEM_ACTOR_ID, requestId: sftpImportAuditSource(s.id), allowedSubsidiaryIds: allowedSubsidiaryIds ? new Set(allowedSubsidiaryIds) : null };
-  const result: ScheduleRun = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [], files: [] };
+  const ctx: BankingContext = {
+    orgId: s.org_id,
+    userId: SYSTEM_ACTOR_ID,
+    requestId: sftpImportAuditSource(s.id),
+    allowedSubsidiaryIds: allowedSubsidiaryIds ? new Set(allowedSubsidiaryIds) : null,
+  };
+  const result: ScheduleRun = {
+    scheduleId: s.id,
+    filesSeen: 0,
+    imported: 0,
+    duplicates: 0,
+    errors: [],
+    files: [],
+  };
   let entries: { name: string; isDir: boolean }[] = [];
   try {
     await withOrgContext(s.org_id, () => assertScheduleEffectAllowed(s, claimToken));
     entries = await backend.list(s.folder);
-  } catch (e) { result.errors.push(`list ${s.folder}: ${(e as Error).message}`); return result; }
+  } catch (e) {
+    result.errors.push(`list ${s.folder}: ${(e as Error).message}`);
+    return result;
+  }
 
   for (const e of entries) {
     if (e.isDir || e.name.startsWith(".")) continue;
     result.filesSeen++;
     const filePath = `${s.folder}/${e.name}`;
-    const outcome: ScheduleFileOutcome = { file: e.name, imported: 0, duplicates: 0, skipped: [], statementIds: [] };
+    const outcome: ScheduleFileOutcome = {
+      file: e.name,
+      imported: 0,
+      duplicates: 0,
+      skipped: [],
+      statementIds: [],
+    };
     result.files.push(outcome);
     try {
       await withOrgContext(s.org_id, () => assertScheduleEffectAllowed(s, claimToken));
@@ -301,7 +453,8 @@ async function runSchedule(
       // bytes: the engine decodes BOMs and legacy encodings itself, and a
       // UTF-8 string coercion here corrupts every non-UTF8 file (e.g. UTF-16
       // bank exports) before the parser runs.
-      const fmt = s.format === "auto" ? detectFormat(e.name, sourceBytes.toString("utf8")) : s.format;
+      const fmt =
+        s.format === "auto" ? detectFormat(e.name, sourceBytes.toString("utf8")) : s.format;
       if (!fmt) throw new Error(`could not detect a statement format for ${e.name}`);
       const { lines, skipped, meta } = parse(fmt, sourceBytes, s.csv_mapping);
       // Identity before import: a stranger file refuses here (recorded on
@@ -346,11 +499,13 @@ async function runSchedule(
       // Archive the consumed file so it isn't re-imported: a unique dated,
       // content-hashed generation that never overwrites a previous archive
       // (a bank reusing a routine filename daily keeps every generation).
-      await withOrgContext(s.org_id, () => db.transaction(async (tx) => {
-        await assertScheduleEffectAllowed(s, claimToken, tx);
-        const archived = await archiveConsumedFile(backend, s.folder, e.name, sourceBytes);
-        await backend.rename(filePath, archived);
-      }));
+      await withOrgContext(s.org_id, () =>
+        db.transaction(async (tx) => {
+          await assertScheduleEffectAllowed(s, claimToken, tx);
+          const archived = await archiveConsumedFile(backend, s.folder, e.name, sourceBytes);
+          await backend.rename(filePath, archived);
+        }),
+      );
     } catch (err) {
       const message = (err as Error).message;
       result.errors.push(`${e.name}: ${message}`);
@@ -408,42 +563,63 @@ async function runClaimedSchedule(
   const lockKey = sftpImportScheduleRunLockKey(s.org_id, s.id);
   let acquired = false;
   try {
-    acquired = (await lockConnection.query<{ acquired: boolean }>(
-      "select pg_try_advisory_lock(hashtextextended($1, 0)) as acquired",
-      [lockKey],
-    )).rows[0]?.acquired === true;
+    acquired =
+      (
+        await lockConnection.query<{ acquired: boolean }>(
+          "select pg_try_advisory_lock(hashtextextended($1, 0)) as acquired",
+          [lockKey],
+        )
+      ).rows[0]?.acquired === true;
     if (!acquired) {
       return {
-        scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0,
-        errors: ["this SFTP import schedule is already running; wait for the active scan to finish"],
-        files: [], alreadyRunning: true,
+        scheduleId: s.id,
+        filesSeen: 0,
+        imported: 0,
+        duplicates: 0,
+        errors: [
+          "this SFTP import schedule is already running; wait for the active scan to finish",
+        ],
+        files: [],
+        alreadyRunning: true,
       };
     }
 
     const claimToken = randomUUID();
     type ClaimResult =
-      | { kind: "claimed"; expectedExternalAccountId: string | null; server_name: string; backend: string; bucket: string | null; root_prefix: string }
+      | {
+          kind: "claimed";
+          expectedExternalAccountId: string | null;
+          server_name: string;
+          backend: string;
+          bucket: string | null;
+          root_prefix: string;
+        }
       | { kind: "inactive"; reason: string }
       | { kind: "account-scope" }
       | { kind: "conflict"; error: string };
-    const claim = await withOrgContext(s.org_id, () => db.transaction(async (tx): Promise<ClaimResult> => {
-      // Serialize scans with route creation/reactivation. The short xact lock
-      // closes the gap between the discovery query and this claim; it is
-      // released before any network or file IO begins.
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${sftpScheduleFolderLockKey(s.org_id, s.sftp_server_id)}, 0))`);
-      const eligibility = (await tx.execute<{
-        server_active: boolean;
-        server_name: string;
-        backend: string;
-        bucket: string | null;
-        root_prefix: string;
-        production_org: boolean;
-        bank_feeds_on: boolean;
-        account_subsidiary_id: string | null;
-        account_reconcilable: boolean;
-        account_active: boolean;
-        account_summary: boolean;
-      }>(sql`
+    const claim = await withOrgContext(s.org_id, () =>
+      db.transaction(async (tx): Promise<ClaimResult> => {
+        // Serialize scans with route creation/reactivation. The short xact lock
+        // closes the gap between the discovery query and this claim; it is
+        // released before any network or file IO begins.
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${sftpScheduleFolderLockKey(s.org_id, s.sftp_server_id)}, 0))`,
+        );
+        const eligibility = (
+          await tx.execute<{
+            server_active: boolean;
+            server_name: string;
+            backend: string;
+            bucket: string | null;
+            root_prefix: string;
+            production_org: boolean;
+            bank_feeds_on: boolean;
+            account_subsidiary_id: string | null;
+            account_reconcilable: boolean;
+            account_active: boolean;
+            account_summary: boolean;
+          }>(
+            sql`
         select sv.is_active as server_active, sv.name as server_name, sv.backend, sv.bucket, sv.root_prefix,
                o.env_kind = 'production' as production_org,
                case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end as bank_feeds_on,
@@ -454,23 +630,53 @@ async function runClaimedSchedule(
           join accounts a on a.org_id = sv.org_id and a.id = ${s.account_id}
          where sv.id = ${s.sftp_server_id} and sv.org_id = ${s.org_id}
          for share of sv, o, a
-      `, "objects"))[0];
-      // Each ineligibility names its own remedy: a single
-      // "no longer active" message sends the operator to reactivate a
-      // schedule that is already active when the server or switch is the
-      // actual cause.
-      if (!eligibility) return { kind: "inactive", reason: `SFTP server for schedule '${s.id}' no longer exists; assign an active server before importing` };
-      if (!eligibility.server_active) return { kind: "inactive", reason: `SFTP server for schedule '${s.id}' is inactive; reactivate it before importing` };
-      if (!eligibility.production_org) return { kind: "inactive", reason: `SFTP schedule '${s.id}' can import only in a production organization` };
-      if (!eligibility.bank_feeds_on) return { kind: "inactive", reason: `Bank Feeds is disabled for schedule '${s.id}'; enable it in Company Settings → Features before importing` };
-      if (!eligibility.account_active || !eligibility.account_reconcilable || eligibility.account_summary) {
-        return { kind: "inactive", reason: `the bank account bound to SFTP schedule '${s.id}' is not eligible for import (it must be active, reconcilable, and non-summary); rebind the schedule before running` };
-      }
-      if (allowedSubsidiaryIds !== undefined && allowedSubsidiaryIds !== null &&
-          !allowedSubsidiaryIds.includes(eligibility.account_subsidiary_id ?? "")) {
-        return { kind: "account-scope" };
-      }
-      const siblings = await tx.execute<{ id: string; folder: string; account_label: string }>(sql`
+      `,
+            "objects",
+          )
+        )[0];
+        // Each ineligibility names its own remedy: a single
+        // "no longer active" message sends the operator to reactivate a
+        // schedule that is already active when the server or switch is the
+        // actual cause.
+        if (!eligibility)
+          return {
+            kind: "inactive",
+            reason: `SFTP server for schedule '${s.id}' no longer exists; assign an active server before importing`,
+          };
+        if (!eligibility.server_active)
+          return {
+            kind: "inactive",
+            reason: `SFTP server for schedule '${s.id}' is inactive; reactivate it before importing`,
+          };
+        if (!eligibility.production_org)
+          return {
+            kind: "inactive",
+            reason: `SFTP schedule '${s.id}' can import only in a production organization`,
+          };
+        if (!eligibility.bank_feeds_on)
+          return {
+            kind: "inactive",
+            reason: `Bank Feeds is disabled for schedule '${s.id}'; enable it in Company Settings → Features before importing`,
+          };
+        if (
+          !eligibility.account_active ||
+          !eligibility.account_reconcilable ||
+          eligibility.account_summary
+        ) {
+          return {
+            kind: "inactive",
+            reason: `the bank account bound to SFTP schedule '${s.id}' is not eligible for import (it must be active, reconcilable, and non-summary); rebind the schedule before running`,
+          };
+        }
+        if (
+          allowedSubsidiaryIds !== undefined &&
+          allowedSubsidiaryIds !== null &&
+          !allowedSubsidiaryIds.includes(eligibility.account_subsidiary_id ?? "")
+        ) {
+          return { kind: "account-scope" };
+        }
+        const siblings = await tx.execute<{ id: string; folder: string; account_label: string }>(
+          sql`
         select sc.id, sc.folder,
                coalesce(nullif(a.number, ''), a.name, sc.account_id::text) as account_label
           from sftp_import_schedules sc
@@ -478,58 +684,92 @@ async function runClaimedSchedule(
          where sc.org_id = ${s.org_id} and sc.sftp_server_id = ${s.sftp_server_id}
            and sc.is_active and sc.id <> ${s.id}
          for update of sc
-      `, "objects");
-      try {
-        normalizeSftpWatchFolder(s.folder);
-      } catch (error) {
-        return { kind: "conflict", error: `SFTP import folder for schedule '${s.id}' is invalid: ${(error as Error).message}; delete it or choose a folder below the server root` };
-      }
-      const invalidSibling = siblings.find((peer) => {
+      `,
+          "objects",
+        );
         try {
-          normalizeSftpWatchFolder(peer.folder);
-          return false;
-        } catch {
-          return true;
+          normalizeSftpWatchFolder(s.folder);
+        } catch (error) {
+          return {
+            kind: "conflict",
+            error: `SFTP import folder for schedule '${s.id}' is invalid: ${(error as Error).message}; delete it or choose a folder below the server root`,
+          };
         }
-      });
-      if (invalidSibling) {
-        return { kind: "conflict", error: `SFTP import schedule '${s.id}' cannot run because active schedule '${invalidSibling.id}' has invalid folder '${invalidSibling.folder}'; deactivate or delete the invalid schedule` };
-      }
-      const overlap = findSftpWatchFolderOverlap(s.folder, siblings.map((peer) => ({
-        id: peer.id,
-        folder: peer.folder,
-        accountLabel: peer.account_label,
-      })));
-      if (overlap) return { kind: "conflict", error: sftpWatchFolderOverlapRefusal(s.folder, overlap) };
+        const invalidSibling = siblings.find((peer) => {
+          try {
+            normalizeSftpWatchFolder(peer.folder);
+            return false;
+          } catch {
+            return true;
+          }
+        });
+        if (invalidSibling) {
+          return {
+            kind: "conflict",
+            error: `SFTP import schedule '${s.id}' cannot run because active schedule '${invalidSibling.id}' has invalid folder '${invalidSibling.folder}'; deactivate or delete the invalid schedule`,
+          };
+        }
+        const overlap = findSftpWatchFolderOverlap(
+          s.folder,
+          siblings.map((peer) => ({
+            id: peer.id,
+            folder: peer.folder,
+            accountLabel: peer.account_label,
+          })),
+        );
+        if (overlap)
+          return { kind: "conflict", error: sftpWatchFolderOverlapRefusal(s.folder, overlap) };
 
-      const claimed = await tx.execute(sql`
+        const claimed = await tx.execute(
+          sql`
         update sftp_import_schedules
            set run_claim_token = ${claimToken}, run_claimed_at = now()
          where id = ${s.id} and org_id = ${s.org_id} and is_active
          returning id
-      `, "objects");
-      if (!claimed[0]) return { kind: "inactive", reason: `SFTP schedule '${s.id}' is inactive or no longer exists; reactivate it before running` };
-      // Keep this read in the same transaction: UPDATE still holds the row
-      // lock, so a concurrent API rebind cannot slip between claim and config
-      // capture. SELECT is used instead of RETURNING because this runtime's
-      // column privileges differ for the newly-added binding field.
-      const current = (await tx.execute<{ expected_external_account_id: string | null; server_name: string; backend: string; bucket: string | null; root_prefix: string }>(sql`
+      `,
+          "objects",
+        );
+        if (!claimed[0])
+          return {
+            kind: "inactive",
+            reason: `SFTP schedule '${s.id}' is inactive or no longer exists; reactivate it before running`,
+          };
+        // Keep this read in the same transaction: UPDATE still holds the row
+        // lock, so a concurrent API rebind cannot slip between claim and config
+        // capture. SELECT is used instead of RETURNING because this runtime's
+        // column privileges differ for the newly-added binding field.
+        const current = (
+          await tx.execute<{
+            expected_external_account_id: string | null;
+            server_name: string;
+            backend: string;
+            bucket: string | null;
+            root_prefix: string;
+          }>(
+            sql`
         select sc.expected_external_account_id, sv.name as server_name, sv.backend, sv.bucket, sv.root_prefix
           from sftp_import_schedules sc
           join sftp_servers sv on sv.id = sc.sftp_server_id and sv.org_id = sc.org_id
          where sc.id = ${s.id} and sc.org_id = ${s.org_id}
-      `, "objects"))[0];
-      return current
-        ? {
-            kind: "claimed",
-            expectedExternalAccountId: current.expected_external_account_id,
-            server_name: current.server_name,
-            backend: current.backend,
-            bucket: current.bucket,
-            root_prefix: current.root_prefix,
-          }
-        : { kind: "inactive", reason: `SFTP schedule '${s.id}' disappeared before its configuration could be read` };
-    }));
+      `,
+            "objects",
+          )
+        )[0];
+        return current
+          ? {
+              kind: "claimed",
+              expectedExternalAccountId: current.expected_external_account_id,
+              server_name: current.server_name,
+              backend: current.backend,
+              bucket: current.bucket,
+              root_prefix: current.root_prefix,
+            }
+          : {
+              kind: "inactive",
+              reason: `SFTP schedule '${s.id}' disappeared before its configuration could be read`,
+            };
+      }),
+    );
     if (claim.kind === "conflict") {
       const refused: ScheduleRun = {
         scheduleId: s.id,
@@ -544,7 +784,10 @@ async function runClaimedSchedule(
     }
     if (claim.kind === "inactive") {
       return {
-        scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0,
+        scheduleId: s.id,
+        filesSeen: 0,
+        imported: 0,
+        duplicates: 0,
         errors: [claim.reason],
         files: [],
         notRun: "inactive",
@@ -552,7 +795,10 @@ async function runClaimedSchedule(
     }
     if (claim.kind === "account-scope") {
       return {
-        scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0,
+        scheduleId: s.id,
+        filesSeen: 0,
+        imported: 0,
+        duplicates: 0,
         errors: ["this SFTP schedule's account is outside the caller's subsidiary scope"],
         files: [],
         notRun: "account-scope",
@@ -574,30 +820,49 @@ async function runClaimedSchedule(
 
     let run: ScheduleRun;
     try {
-      run = await withOrgContext(s.org_id, () => runSchedule(currentSchedule, claimToken, allowedSubsidiaryIds ?? null));
+      run = await withOrgContext(s.org_id, () =>
+        runSchedule(currentSchedule, claimToken, allowedSubsidiaryIds ?? null),
+      );
     } catch (e) {
-      run = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [(e as Error).message], files: [] };
+      run = {
+        scheduleId: s.id,
+        filesSeen: 0,
+        imported: 0,
+        duplicates: 0,
+        errors: [(e as Error).message],
+        files: [],
+      };
     }
-    const saved = await withOrgContext(s.org_id, () => db.execute(sql`
+    const saved = await withOrgContext(s.org_id, () =>
+      db.execute(
+        sql`
       update sftp_import_schedules
          set last_run_at = now(), last_result = ${JSON.stringify(run)}::jsonb,
              run_claim_token = null, run_claimed_at = null
        where id = ${s.id} and org_id = ${s.org_id} and run_claim_token = ${claimToken}
        returning id
-    `, "objects"));
+    `,
+        "objects",
+      ),
+    );
     if (!saved[0]) {
       const message = `SFTP schedule '${s.id}' disappeared or its run claim changed before the outcome could be saved`;
-      await withOrgContext(s.org_id, () => db.execute(sql`
+      await withOrgContext(s.org_id, () =>
+        db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
         values (${s.org_id}, 'sftp_import_schedules', ${s.id}, 'scan_outcome_unrecorded', ${JSON.stringify(run)}::jsonb,
                 ${SYSTEM_ACTOR_ID}, ${sftpImportAuditSource(s.id)})
-      `));
+      `),
+      );
       return { ...run, errors: [...run.errors, message] };
     }
 
     // The unbound schedule notice is part of the claimant's outcome work too;
     // another invocation that loses the lock never writes schedule evidence.
-    if (currentSchedule.format !== "csv" && !normalizeExternalAccountId(currentSchedule.expected_external_account_id)) {
+    if (
+      currentSchedule.format !== "csv" &&
+      !normalizeExternalAccountId(currentSchedule.expected_external_account_id)
+    ) {
       await withOrgContext(s.org_id, () => ensureUnboundScheduleNotice(currentSchedule));
     }
     return run;
@@ -609,7 +874,8 @@ async function runClaimedSchedule(
           "select pg_advisory_unlock(hashtextextended($1, 0)) as unlocked",
           [lockKey],
         );
-        if (!unlocked.rows[0]?.unlocked) releaseError = new Error("SFTP schedule advisory lock could not be released");
+        if (!unlocked.rows[0]?.unlocked)
+          releaseError = new Error("SFTP schedule advisory lock could not be released");
       } catch (error) {
         releaseError = error instanceof Error ? error : new Error(String(error));
       }
@@ -630,7 +896,8 @@ export async function runDueSftpImports(
   // these the connection layer denies by default and the scan sees nothing.
   // bypass: scheduler-tick — due SFTP import schedules are found across every organization.
   const rows = await withBypassContext(() =>
-    db.execute<ScheduleRow>(sql`
+    db.execute<ScheduleRow>(
+      sql`
     select sc.id, sc.org_id, sc.sftp_server_id, sc.account_id, sc.format, sc.folder, sc.csv_mapping,
            sc.expected_external_account_id, sc.created_by,
            a.number as account_number, a.name as account_name, sv.name as server_name,
@@ -644,37 +911,71 @@ export async function runDueSftpImports(
        and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end -- registry fallback shape (non-boolean stored values fall back to the default instead of throwing 22P02)
        ${orgId ? sql`and sc.org_id = ${orgId}` : sql``}
        ${scheduleId ? sql`and sc.id = ${scheduleId}` : sql``}
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
   const runs: ScheduleRun[] = [];
   for (const s of rows) {
     let run: ScheduleRun;
-    try { run = await runClaimedSchedule(s, options.allowedSubsidiaryIds); }
-    catch (e) { run = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [(e as Error).message], files: [] }; }
+    try {
+      run = await runClaimedSchedule(s, options.allowedSubsidiaryIds);
+    } catch (e) {
+      run = {
+        scheduleId: s.id,
+        filesSeen: 0,
+        imported: 0,
+        duplicates: 0,
+        errors: [(e as Error).message],
+        files: [],
+      };
+    }
     runs.push(run);
   }
   return runs;
 }
 
 /** Outbound: write a payment run's bank file into an SFTP server's outbound folder. */
-export async function deliverRunToSftp(runId: string, sftpServerId: string, orgId: string, userId: string, now: Date): Promise<{ filename: string; path: string }> {
+export async function deliverRunToSftp(
+  runId: string,
+  sftpServerId: string,
+  orgId: string,
+  userId: string,
+  now: Date,
+): Promise<{ filename: string; path: string }> {
   // Reclaim first: a worker that crashed mid-publish leaves its file in
   // delivering with a dead lease, and the reclaim has no other production
   // caller — without this call the file would wedge there forever. Expired
   // leases park as delivery_uncertain (never silent re-publish), so this is
   // safe to run ahead of every delivery.
   await reclaimExpiredDeliveryClaims({ orgId, userId });
-  const svr = (await db.execute<{ org_id: string; backend: string; bucket: string | null; root_prefix: string; payment_folder: string }>(sql`
+  const svr = await db.execute<{
+    org_id: string;
+    backend: string;
+    bucket: string | null;
+    root_prefix: string;
+    payment_folder: string;
+  }>(
+    sql`
     select s.org_id, s.backend, s.bucket, s.root_prefix, coalesce(p.sftp_folder, 'outbound') as payment_folder
       from payment_runs r join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id
       join sftp_servers s on s.id = ${sftpServerId} and s.org_id = r.org_id and s.is_active
      where r.id = ${runId} and r.org_id = ${orgId}
        and (p.sftp_server_id is null or p.sftp_server_id = s.id)
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (!svr[0]) throw new Error("SFTP server not found or inactive");
   const file = await generatePaymentFileArtifact(runId, orgId, userId, { now });
-  const backend = backendFor({ backend: svr[0].backend, bucket: svr[0].bucket, rootPrefix: svr[0].root_prefix, orgId: svr[0].org_id });
+  const backend = backendFor({
+    backend: svr[0].backend,
+    bucket: svr[0].bucket,
+    rootPrefix: svr[0].root_prefix,
+    orgId: svr[0].org_id,
+  });
   const folder = svr[0].payment_folder.replace(/^\/+|\/+$/g, "");
-  if (!folder || folder.split("/").some((part) => part === ".." || part === ".")) throw new Error("payment profile SFTP folder is invalid");
+  if (!folder || folder.split("/").some((part) => part === ".." || part === "."))
+    throw new Error("payment profile SFTP folder is invalid");
   // Defence in depth: the artifact name is validated at creation, but rows
   // stored before that guard must still fail closed at publish time — and the
   // joined path must provably stay inside the configured folder, because the
@@ -687,13 +988,25 @@ export async function deliverRunToSftp(runId: string, sftpServerId: string, orgI
   // supersede, rejection, or rollback that committed first refuses here, so
   // a disallowed file can never reach the endpoint. The claim's lease also
   // makes concurrent lifecycle moves refuse while the publish is in flight.
-  const claim = await claimPaymentFileDelivery({ fileId: file.id, orgId, userId, owner: `sftp:${sftpServerId}` });
+  const claim = await claimPaymentFileDelivery({
+    fileId: file.id,
+    orgId,
+    userId,
+    owner: `sftp:${sftpServerId}`,
+  });
   try {
     await backend.write(path, file.content);
   } catch (error) {
     // Nothing was published: record the failure evidence, then release the
     // claim so the file is deliverable again.
-    await recordPaymentFileDeliveryFailure({ fileId: file.id, orgId, userId, channel: "sftp", targetRef, error: error instanceof Error ? error.message : String(error) });
+    await recordPaymentFileDeliveryFailure({
+      fileId: file.id,
+      orgId,
+      userId,
+      channel: "sftp",
+      targetRef,
+      error: error instanceof Error ? error.message : String(error),
+    });
     await releaseDeliveryClaim({ fileId: file.id, orgId, userId, token: claim.token });
     throw error;
   }
@@ -711,14 +1024,27 @@ export async function deliverRunToSftp(runId: string, sftpServerId: string, orgI
   let recordError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      await recordPaymentFileSftpDelivery({ fileId: file.id, orgId, userId, targetRef, claimToken: claim.token, response: { path, sha256 } });
+      await recordPaymentFileSftpDelivery({
+        fileId: file.id,
+        orgId,
+        userId,
+        targetRef,
+        claimToken: claim.token,
+        response: { path, sha256 },
+      });
       return { filename: file.filename, path };
     } catch (error) {
       recordError = error;
     }
   }
   const recordMessage = recordError instanceof Error ? recordError.message : String(recordError);
-  await markDeliveryUncertain({ fileId: file.id, orgId, userId, token: claim.token, error: recordMessage });
+  await markDeliveryUncertain({
+    fileId: file.id,
+    orgId,
+    userId,
+    token: claim.token,
+    error: recordMessage,
+  });
   throw new Error(
     `the bank file was published to ${path} but recording the delivery failed (${recordMessage}); the file is parked as delivery-uncertain — resolve it before re-delivering`,
   );

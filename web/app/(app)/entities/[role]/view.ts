@@ -1,26 +1,41 @@
-import 'server-only'
+import "server-only";
 
-import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/database'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { listLinksByNative } from '@openbooks/engine/commerce'
-import { withOrgContext } from '@openbooks/engine/platform/database'
-import { customerGroupTabs, hrmGroupTabs } from '../../../../components/module-home/group-tabs'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
-import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../../lib/custom-fields'
-import { loadComplianceClasses, loadVendorComplianceClass, vendorTaxIdentityFromRole } from '../../../../lib/compliance'
-import { FORM_TYPES } from '@openbooks/engine/compliance/information-returns'
-import { loadParty } from '../../../api/parties/_lib'
-import { findEmploymentsByParty } from '@openbooks/engine/hrm/employment-read'
-import { loadTeamEmploymentPayload } from '../../../../lib/hrm/self-service'
-import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
-import { listScopedAccountOptions } from '../../../../lib/scoped-options'
-import { resolveFormLayout } from '../../../../lib/customization/resolve'
-import type { PartyDrawer, PartyTab } from '../../parties/PartyDrawer'
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/database";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { listLinksByNative } from "@openbooks/engine/commerce";
+import { withOrgContext } from "@openbooks/engine/platform/database";
+import { customerGroupTabs, hrmGroupTabs } from "../../../../components/module-home/group-tabs";
+import { isFeatureEnabled } from "../../../../lib/features";
+import { isUuid, mergeHref, pickString } from "../../../../lib/list-params";
+import {
+  customFieldViewerFor,
+  loadFieldDefs,
+  visibleCustomFieldDefs,
+} from "../../../../lib/custom-fields";
+import {
+  loadComplianceClasses,
+  loadVendorComplianceClass,
+  vendorTaxIdentityFromRole,
+} from "../../../../lib/compliance";
+import { FORM_TYPES } from "@openbooks/engine/compliance/information-returns";
+import { loadParty } from "../../../api/parties/_lib";
+import { findEmploymentsByParty } from "@openbooks/engine/hrm/employment-read";
+import { loadTeamEmploymentPayload } from "../../../../lib/hrm/self-service";
+import { subsidiaryUiOptions, subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
+import { listScopedAccountOptions } from "../../../../lib/scoped-options";
+import { resolveFormLayout } from "../../../../lib/customization/resolve";
+import type { PartyDrawer, PartyTab } from "../../parties/PartyDrawer";
 
 /**
  * An entity role list (customers, vendors, employees), split into a loader
@@ -44,157 +59,212 @@ import type { PartyDrawer, PartyTab } from '../../parties/PartyDrawer'
 // URL slug (plural) → role key (singular) + badge variant. Display copy lives
 // in the `entities` catalog under roles.<slug>.* and is translated at render.
 const ROLES = {
-  customers: { role: 'customer', badge: 'default' as const },
-  vendors: { role: 'vendor', badge: 'secondary' as const },
-  employees: { role: 'employee', badge: 'outline' as const },
-} as const
-type PartyDrawerProps = Parameters<typeof PartyDrawer>[0]
-type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
+  customers: { role: "customer", badge: "default" as const },
+  vendors: { role: "vendor", badge: "secondary" as const },
+  employees: { role: "employee", badge: "outline" as const },
+} as const;
+type PartyDrawerProps = Parameters<typeof PartyDrawer>[0];
+type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never;
 
-async function loadWorkerCompGroups(orgId: string, enabled: boolean): Promise<{ rows: ElementOf<PartyDrawerProps['workerCompGroups']>[] }> {
-  if (!enabled) return { rows: [] }
-  const result = await db.execute<ElementOf<PartyDrawerProps['workerCompGroups']>>(sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`, 'objects')
-  return { rows: result }
+async function loadWorkerCompGroups(
+  orgId: string,
+  enabled: boolean,
+): Promise<{ rows: ElementOf<PartyDrawerProps["workerCompGroups"]>[] }> {
+  if (!enabled) return { rows: [] };
+  const result = await db.execute<ElementOf<PartyDrawerProps["workerCompGroups"]>>(
+    sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`,
+    "objects",
+  );
+  return { rows: result };
 }
 
 export interface EntityRoleData {
-  recordType: 'customer' | 'vendor' | 'employee'
-  title: string
-  description: string
-  canManage: boolean
-  currentParams: Record<string, string | string[] | undefined>
-  newParty: { basePath: string; role: 'customer' | 'vendor' | 'employee'; label: string }
+  recordType: "customer" | "vendor" | "employee";
+  title: string;
+  description: string;
+  canManage: boolean;
+  currentParams: Record<string, string | string[] | undefined>;
+  newParty: { basePath: string; role: "customer" | "vendor" | "employee"; label: string };
   /**
    * The Customers-group route strip. Only the customers slug belongs to that
    * group — vendors and employees are Purchasing and Operations records that
    * happen to share this renderer, so they get no strip.
    */
-  tabs: Awaited<ReturnType<typeof customerGroupTabs | typeof hrmGroupTabs>>
+  tabs: Awaited<ReturnType<typeof customerGroupTabs | typeof hrmGroupTabs>>;
   /**
    * On a lead or prospect segment, New mints a relationship draft at that
    * stage instead of a customer with an AR role. Null when the segment is
    * customers or All, CRM is off, or the viewer cannot create accounts.
    */
-  newAccount: { label: string; failed: string; lifecycleStage: 'lead' | 'prospect' } | null
+  newAccount: { label: string; failed: string; lifecycleStage: "lead" | "prospect" } | null;
   /**
    * Whether the party factory belongs on this segment at all. On a lead or
    * prospect segment it does not: it would mint a customer with an AR role,
    * so a viewer who may see leads but not create them gets no button rather
    * than a "New lead" button that makes a customer.
    */
-  showNewParty: boolean
-  drawer: (Record<string, unknown> & { remountKey: string }) | null
-  txnDrawer: { id: string; kind: string; partyId: string; formLayoutId?: string } | null
+  showNewParty: boolean;
+  drawer: (Record<string, unknown> & { remountKey: string }) | null;
+  txnDrawer: { id: string; kind: string; partyId: string; formLayoutId?: string } | null;
 }
 
 export async function loadEntityRole(
   slug: string,
   sp: Record<string, string | string[] | undefined>,
 ): Promise<EntityRoleData> {
-  const meta = ROLES[slug as keyof typeof ROLES]
-  if (!meta) notFound()
-  const role = meta.role
-  const basePath = `/entities/${slug}`
-  const t = await getTranslations('entities')
-  const tCrm = await getTranslations('crm')
+  const meta = ROLES[slug as keyof typeof ROLES];
+  if (!meta) notFound();
+  const role = meta.role;
+  const basePath = `/entities/${slug}`;
+  const t = await getTranslations("entities");
+  const tCrm = await getTranslations("crm");
 
-  const authz = await requirePermission('parties.read')
-  const payrollEnabled = await isFeatureEnabled(authz.user.orgId, 'payroll')
-  const autopayEnabled = await isFeatureEnabled(authz.user.orgId, 'autopay')
-  const multiCurrency = await isFeatureEnabled(authz.user.orgId, 'multiCurrency')
-  const crmEnabled = await isFeatureEnabled(authz.user.orgId, 'crm')
-  const crossBorderTaxOn = await isFeatureEnabled(authz.user.orgId, 'crossBorderTax')
-  const complianceEnabled = await isFeatureEnabled(authz.user.orgId, 'subcontractorCompliance')
-  const informationReturnsEnabled = await isFeatureEnabled(authz.user.orgId, 'informationReturns')
+  const authz = await requirePermission("parties.read");
+  const payrollEnabled = await isFeatureEnabled(authz.user.orgId, "payroll");
+  const autopayEnabled = await isFeatureEnabled(authz.user.orgId, "autopay");
+  const multiCurrency = await isFeatureEnabled(authz.user.orgId, "multiCurrency");
+  const crmEnabled = await isFeatureEnabled(authz.user.orgId, "crm");
+  const crossBorderTaxOn = await isFeatureEnabled(authz.user.orgId, "crossBorderTax");
+  const complianceEnabled = await isFeatureEnabled(authz.user.orgId, "subcontractorCompliance");
+  const informationReturnsEnabled = await isFeatureEnabled(authz.user.orgId, "informationReturns");
   // The Employment tab's double gate: the HRM feature switch plus the
   // employment read grant. The drawer shows the tab only when both hold.
-  const hrmEnabled = await isFeatureEnabled(authz.user.orgId, 'hrm')
-  const canReadHrm = hrmEnabled && can(authz, 'hrm.employment.read')
-  const canManage = can(authz, 'parties.manage')
-  const orgId = authz.user.orgId
-  const canReadCrmAccounts = crmEnabled && can(authz, 'crm.accounts.read')
-  const canManageCrmAccounts = crmEnabled && can(authz, 'crm.accounts.manage')
+  const hrmEnabled = await isFeatureEnabled(authz.user.orgId, "hrm");
+  const canReadHrm = hrmEnabled && can(authz, "hrm.employment.read");
+  const canManage = can(authz, "parties.manage");
+  const orgId = authz.user.orgId;
+  const canReadCrmAccounts = crmEnabled && can(authz, "crm.accounts.read");
+  const canManageCrmAccounts = crmEnabled && can(authz, "crm.accounts.manage");
 
   // The lifecycle segment the customer list is on. It is the SAME `status`
   // param the list's own chips write, so the header follows the chips: the
   // title names the segment and New mints the right kind of record. The
   // list's own default is `customer`, so an absent param means customers.
-  const stageParam = pickString(sp.status)
-  const segment = slug === 'customers' && canReadCrmAccounts
-    && (stageParam === 'lead' || stageParam === 'prospect' || stageParam === 'all')
-    ? stageParam
-    : 'customer'
-  const segmentTitle = segment === 'customer'
-    ? t(`roles.${slug}.title`)
-    : segment === 'all'
-      ? tCrm('accounts.allTitle')
-      : tCrm(`accounts.${segment}.title`)
-  const segmentDescription = segment === 'customer'
-    ? t(`roles.${slug}.description`)
-    : segment === 'all'
-      ? tCrm('accounts.allDescription')
-      : tCrm(`accounts.${segment}.description`)
-  const newLabel = t(`roles.${slug}.newLabel`)
+  const stageParam = pickString(sp.status);
+  const segment =
+    slug === "customers" &&
+    canReadCrmAccounts &&
+    (stageParam === "lead" || stageParam === "prospect" || stageParam === "all")
+      ? stageParam
+      : "customer";
+  const segmentTitle =
+    segment === "customer"
+      ? t(`roles.${slug}.title`)
+      : segment === "all"
+        ? tCrm("accounts.allTitle")
+        : tCrm(`accounts.${segment}.title`);
+  const segmentDescription =
+    segment === "customer"
+      ? t(`roles.${slug}.description`)
+      : segment === "all"
+        ? tCrm("accounts.allDescription")
+        : tCrm(`accounts.${segment}.description`);
+  const newLabel = t(`roles.${slug}.newLabel`);
 
-  const partyId = typeof sp.party === 'string' ? sp.party : undefined
+  const partyId = typeof sp.party === "string" ? sp.party : undefined;
   // Unsaved-create: ?partyNew=1 opens an editable drawer on no persisted
   // row — zero writes on open, zero on Cancel, one idempotent POST on Save.
-  const creating = (pickString(sp.partyNew) === '1' || partyId === 'new') && canManage
-  const partyTransactionId = pickString(sp.partyTxn)
-  const partyTransactionKind = pickString(sp.partyTxnKind)
-  const requestedPartyTab = pickString(sp.partyTab)
-  const partyTab: PartyTab = requestedPartyTab === 'benefits' || requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
-    || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'compensation'
-    || requestedPartyTab === 'payroll' || requestedPartyTab === 'employment' || requestedPartyTab === 'compliance'
-    || requestedPartyTab === 'pulse' || requestedPartyTab === 'relationship' || requestedPartyTab === 'external-ids'
-    || requestedPartyTab === 'invoicing' || requestedPartyTab === 'pricing'
-    || requestedPartyTab === 'paymentMethods' || requestedPartyTab === 'debitMandates'
-    ? requestedPartyTab
-    : requestedPartyTab === 'wages' ? 'compensation' : 'overview'
+  const creating = (pickString(sp.partyNew) === "1" || partyId === "new") && canManage;
+  const partyTransactionId = pickString(sp.partyTxn);
+  const partyTransactionKind = pickString(sp.partyTxnKind);
+  const requestedPartyTab = pickString(sp.partyTab);
+  const partyTab: PartyTab =
+    requestedPartyTab === "benefits" ||
+    requestedPartyTab === "transactions" ||
+    requestedPartyTab === "activities" ||
+    requestedPartyTab === "contacts" ||
+    requestedPartyTab === "addresses" ||
+    requestedPartyTab === "accounting" ||
+    requestedPartyTab === "compensation" ||
+    requestedPartyTab === "payroll" ||
+    requestedPartyTab === "employment" ||
+    requestedPartyTab === "compliance" ||
+    requestedPartyTab === "pulse" ||
+    requestedPartyTab === "relationship" ||
+    requestedPartyTab === "external-ids" ||
+    requestedPartyTab === "invoicing" ||
+    requestedPartyTab === "pricing" ||
+    requestedPartyTab === "paymentMethods" ||
+    requestedPartyTab === "debitMandates"
+      ? requestedPartyTab
+      : requestedPartyTab === "wages"
+        ? "compensation"
+        : "overview";
   const [openParty, pickers] = await Promise.all([
-    partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(authz) }) : null,
-    (partyId && partyId !== 'new') || creating
+    partyId && partyId !== "new" && isUuid(partyId)
+      ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds, {
+          customFieldViewer: customFieldViewerFor(authz),
+        })
+      : null,
+    (partyId && partyId !== "new") || creating
       ? Promise.all([
-          db.execute<ElementOf<PartyDrawerProps['paymentTerms']>>(sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`),
-          db.execute<ElementOf<PartyDrawerProps['departments']>>(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`),
-          db.execute<ElementOf<PartyDrawerProps['trades']>>(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`),
-          loadFieldDefs('parties'),
-          subsidiaryUiOptions(orgId).then((options) => authz.allowedSubsidiaryIds
-            ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
-            : options),
-          listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }).then((rows) => ({
-            rows: rows.map(({ id, name, type, number }) => ({ id, name, type, label: [number, name].filter(Boolean).join(' · ') })),
+          db.execute<ElementOf<PartyDrawerProps["paymentTerms"]>>(
+            sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`,
+          ),
+          db.execute<ElementOf<PartyDrawerProps["departments"]>>(
+            sql`select id, name from departments where org_id = ${orgId} and is_active order by name`,
+          ),
+          db.execute<ElementOf<PartyDrawerProps["trades"]>>(
+            sql`select id, name from trades where org_id = ${orgId} and is_active order by name`,
+          ),
+          loadFieldDefs("parties"),
+          subsidiaryUiOptions(orgId).then((options) =>
+            authz.allowedSubsidiaryIds
+              ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
+              : options,
+          ),
+          listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, {
+            activeOnly: true,
+            postingOnly: true,
+          }).then((rows) => ({
+            rows: rows.map(({ id, name, type, number }) => ({
+              id,
+              name,
+              type,
+              label: [number, name].filter(Boolean).join(" · "),
+            })),
           })),
-          db.execute<ElementOf<PartyDrawerProps['taxCodes']>>(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`),
-          db.execute<ElementOf<PartyDrawerProps['salesReps']>>(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active and er.is_sales_rep where p.org_id = ${orgId} and p.is_active
+          db.execute<ElementOf<PartyDrawerProps["taxCodes"]>>(
+            sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`,
+          ),
+          db.execute<
+            ElementOf<PartyDrawerProps["salesReps"]>
+          >(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active and er.is_sales_rep where p.org_id = ${orgId} and p.is_active
             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name`),
           loadWorkerCompGroups(orgId, payrollEnabled),
         ])
       : null,
-  ])
+  ]);
   // The open account's lifecycle stage. The flyout needs it before its first
   // save: on a lead or prospect it must NOT force the AR customer role on.
   // Deliberately NOT filtered on `is_active`: a relationship draft's profile
   // is inactive until the draft is named, and that is exactly the save that
   // must not mint an AR role. The stage is a property of the record, not of
   // whether it is live yet.
-  const openLifecycleStage = crmEnabled && openParty
-    ? ((await db.execute<{ lifecycle_stage: string }>(sql`
+  const openLifecycleStage =
+    crmEnabled && openParty
+      ? ((
+          await db.execute<{ lifecycle_stage: string }>(
+            sql`
         select lifecycle_stage from crm_account_profiles
-         where org_id = ${orgId} and party_id = ${String(openParty.party.id)} limit 1`, 'objects'))[0]?.lifecycle_stage ?? null)
-    : null
+         where org_id = ${orgId} and party_id = ${String(openParty.party.id)} limit 1`,
+            "objects",
+          )
+        )[0]?.lifecycle_stage ?? null)
+      : null;
 
-  const resolvedPartyForm = (openParty || creating) && pickers
-    ? await resolveFormLayout({
-        orgId,
-        userId: authz.user.id,
-        recordType: role,
-        userRoles: authz.user.roles.map(({ key }) => key),
-        headerDefs: visibleCustomFieldDefs(pickers[3], customFieldViewerFor(authz)),
-        lineDefs: [],
-        explicitLayoutId: pickString(sp.partyForm),
-      })
-    : null
+  const resolvedPartyForm =
+    (openParty || creating) && pickers
+      ? await resolveFormLayout({
+          orgId,
+          userId: authz.user.id,
+          recordType: role,
+          userRoles: authz.user.roles.map(({ key }) => key),
+          headerDefs: visibleCustomFieldDefs(pickers[3], customFieldViewerFor(authz)),
+          lineDefs: [],
+          explicitLayoutId: pickString(sp.partyForm),
+        })
+      : null;
 
   return {
     recordType: role,
@@ -206,202 +276,231 @@ export async function loadEntityRole(
     // The employees list is a sibling tab of the Human Resources workspace
     // whenever the workspace exists for this viewer (feature on plus the
     // employment read grant), so the strip looks identical from either side.
-    tabs: slug === 'customers'
-      ? await customerGroupTabs(authz, '/entities/customers')
-      : slug === 'employees' && canReadHrm
-        ? await hrmGroupTabs(authz, '/entities/employees')
-        : [],
-    newAccount: (segment === 'lead' || segment === 'prospect') && can(authz, 'crm.accounts.create')
-      ? { label: tCrm(`accounts.${segment}.new`), failed: tCrm('feedback.createFailed'), lifecycleStage: segment }
-      : null,
-    showNewParty: segment !== 'lead' && segment !== 'prospect',
-    drawer: (openParty || creating) && pickers
-      ? {
-          remountKey: creating ? 'new-party' : String(openParty!.party.id),
-          payload: (creating
-            ? {
-                party: {
-                  id: '',
-                  display_name: '',
-                  legal_name: null,
-                  short_code: null,
-                  // Employees are people; customers and vendors default to a company.
-                  kind: role === 'employee' ? 'person' : 'company',
-                  email: null,
-                  phone: null,
-                  website: null,
-                  subsidiary_id: null,
-                  is_active: true,
-                  updated_at: '',
-                  custom: {},
-                  invoicing_preference: null,
-                },
-                customer: null,
-                vendor: null,
-                employee: null,
-                addresses: [],
-                contacts: [],
-                bankAccounts: [],
-                transactionSummary: { count: 0, openCount: 0, lastDate: null, currencies: [] },
-                additionalSubsidiaryIds: [],
-              }
-            : openParty) as unknown as PartyDrawerProps['payload'],
-          canManage,
-          // Direct-deposit capture at hire: the employee Bank accounts
-          // sections (payroll tab and Employment tab) manage through the
-          // native party bank path when the viewer holds the master-data
-          // grant or the HR/payroll manage grant. The bank-accounts route
-          // re-checks the same rule per party, so this flag only reveals
-          // the Add control the server will honor.
-          canManageEmployeeBanks:
-            canManage ||
-            (hrmEnabled && can(authz, 'hrm.employment.manage')) ||
-            (payrollEnabled && can(authz, 'payroll.manage')),
-          // First-employment Hire chaining for the unsaved-create flow:
-          // employee drawers only, behind the employment manage grant (the
-          // hire route re-checks it). Readers keep the read-only record.
-          canHire: role === 'employee' && canReadHrm && can(authz, 'hrm.employment.manage'),
-          complianceEnabled,
-          // Customer tax IDs ride the drawer like compliance does: identity
-          // and the manage grant from the loader, rows from the section's
-          // own read. Hidden while the feature is off; data is kept.
-          taxIds:
-            crossBorderTaxOn && openParty && partyId && partyId !== 'new' && isUuid(partyId)
-              ? { partyId, canManage }
-              : null,
-          canManageCompliance: can(authz, 'compliance.manage'),
-          // The vendor Compliance tab — drawer-open vendors only.
-          compliance: complianceEnabled && role === 'vendor' && partyId && isUuid(partyId)
-            ? {
-                classId: await loadVendorComplianceClass(orgId, partyId),
-                classes: await loadComplianceClasses(orgId),
-              }
-            : null,
-          informationReturnsEnabled,
-          // Masked tax identity from the already-loaded party payload
-          // (ciphertext stripped) — drawer-open vendors only, tax switch on.
-          taxIdentity: informationReturnsEnabled && role === 'vendor' && openParty?.vendor != null
-            ? vendorTaxIdentityFromRole(openParty.vendor as Record<string, unknown> | null)
-            : null,
-          taxIdentityFormTypes: [...FORM_TYPES],
-          canReadActivities: crmEnabled && can(authz, 'crm.activities.read'),
-          canManageActivities: crmEnabled && can(authz, 'crm.activities.manage'),
-          // The party's scoped employments for the Employment tab (null =
-          // gated, so the tab never renders without the read surface behind
-          // it). Employee drawers only: other roles never resolve HRM. A
-          // manager holding the report on their team opens the same tab
-          // through the structural team fallback (canManageHrm stays false
-          // — the record routes re-check every grant); payroll, wages, and
-          // compliance stay hidden below unless their own grants hold.
-          hrm: canReadHrm && role === 'employee' && partyId && isUuid(partyId)
-            ? {
-                employmentIds: [
-                  ...(await findEmploymentsByParty({
-                    orgId,
-                    actorId: authz.user.id,
-                    workerPartyId: partyId,
-                  })),
-                ],
-                // Authoring rides the manage grant; readers see the request
-                // list only. The change-request routes re-check this grant.
-                canManageHrm: can(authz, 'hrm.employment.manage'),
-                // Verb buttons (Rescind/Correct) ride Human resources
-                // (already held here) and the approve grant — the routes
-                // refuse anything else, so the buttons hide without it.
-                canVerb: can(authz, 'hrm.employment.approve'),
-                // The exit section rides the retention read grant (record
-                // display) and the performance manage grant (recording);
-                // the exit routes re-check both.
-                canReadExits: can(authz, 'hrm.retention.read'),
-                canRecordExit: can(authz, 'hrm.performance.manage'),
-              }
-            : !canReadHrm && hrmEnabled && can(authz, 'hrm.self.read') && role === 'employee' && partyId && isUuid(partyId)
-              ? await loadTeamEmploymentPayload(orgId, authz.user.id, partyId)
-              : null,
-          canReadCrmAccounts,
-          canManageCrmAccounts,
-          // Customer storefront identities: the drawer tab renders rows with
-          // an audited unlink action. Stripe-owned links (no channel) read
-          // without a button — usage billing owns their unlinking.
-          externalIdsTab: role === 'customer' && partyId && isUuid(partyId) &&
-            (await isFeatureEnabled(orgId, 'salesChannels') || await isFeatureEnabled(orgId, 'usageBilling'))
-            ? {
-                links: (await withOrgContext(orgId, () => listLinksByNative(orgId, 'parties', partyId))).map((link) => ({
-                  id: link.id,
-                  channelId: link.channelId,
-                  provider: link.provider,
-                  externalAccount: link.externalAccount,
-                  objectType: link.objectType,
-                  externalId: link.externalId,
-                  lastSyncedAt: link.lastSyncedAt,
-                })),
-                canUnlink: can(authz, 'channels.manage'),
-              }
-            : null,
-          lifecycleStage: openLifecycleStage,
-          canManageWages: can(authz, 'admin.setup.manage'),
-          canReadCompensation: hrmEnabled && can(authz, 'hrm.compensation.read'),
-          canReadBenefits: hrmEnabled && can(authz, 'hrm.benefits.read'),
-          canManagePayroll: payrollEnabled && can(authz, 'payroll.manage'),
-          payrollEnabled,
-          // Stored methods ride the autopay feature plus the read grant;
-          // null hides the tab even on a customer drawer.
-          autopay: autopayEnabled && role === 'customer' && can(authz, 'payment_methods.read')
-            ? {
-                canManageMethods: can(authz, 'payment_methods.manage'),
-                canManageAutopay: can(authz, 'autopay.manage'),
-              }
-            : null,
-          // Debit mandates ride the grant the mandate routes enforce plus
-          // the persisted customer role row; null hides the tab.
-          debitMandates: role === 'customer' && can(authz, 'admin.setup.manage') && openParty?.customer != null
-            ? { partyId: String(openParty.party.id) }
-            : null,
-          multiCurrency,
-          role,
-          initialTab: creating ? 'overview' : partyTab,
-          initialMode: creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view',
-          createMode: creating,
-          closeHref: mergeHref(basePath, sp, {
-            party: undefined,
-            partyNew: undefined,
-            mode: undefined,
-            partyTab: undefined,
-            partyForm: undefined,
-            partyTxn: undefined,
-            partyTxnKind: undefined,
-            form: undefined,
-          }),
-          basePath,
-          paymentTerms: pickers[0].rows,
-          departments: pickers[1].rows,
-          trades: pickers[2].rows,
-          workerCompGroups: pickers[8].rows,
-          fieldDefs: visibleCustomFieldDefs(pickers[3], customFieldViewerFor(authz)) as unknown as PartyDrawerProps['fieldDefs'],
-          customFieldViewer: customFieldViewerFor(authz),
-          subsidiaries: pickers[4],
-          accounts: pickers[5].rows,
-          taxCodes: pickers[6].rows,
-          salesReps: pickers[7].rows,
-          layout: resolvedPartyForm?.layout,
-          forms: resolvedPartyForm?.available ?? [],
-          currentFormId: resolvedPartyForm?.row?.id ?? null,
-          recordType: role,
-          canCustomize: can(authz, 'admin.customization.manage'),
-        }
-      : null,
-    txnDrawer: openParty && partyTransactionId && isUuid(partyTransactionId) && partyTransactionKind
-      ? {
-          id: partyTransactionId,
-          kind: partyTransactionKind,
-          partyId: String(openParty.party.id),
-          formLayoutId: pickString(sp.form),
-        }
-      : null,
-  }
+    tabs:
+      slug === "customers"
+        ? await customerGroupTabs(authz, "/entities/customers")
+        : slug === "employees" && canReadHrm
+          ? await hrmGroupTabs(authz, "/entities/employees")
+          : [],
+    newAccount:
+      (segment === "lead" || segment === "prospect") && can(authz, "crm.accounts.create")
+        ? {
+            label: tCrm(`accounts.${segment}.new`),
+            failed: tCrm("feedback.createFailed"),
+            lifecycleStage: segment,
+          }
+        : null,
+    showNewParty: segment !== "lead" && segment !== "prospect",
+    drawer:
+      (openParty || creating) && pickers
+        ? {
+            remountKey: creating ? "new-party" : String(openParty!.party.id),
+            payload: (creating
+              ? {
+                  party: {
+                    id: "",
+                    display_name: "",
+                    legal_name: null,
+                    short_code: null,
+                    // Employees are people; customers and vendors default to a company.
+                    kind: role === "employee" ? "person" : "company",
+                    email: null,
+                    phone: null,
+                    website: null,
+                    subsidiary_id: null,
+                    is_active: true,
+                    updated_at: "",
+                    custom: {},
+                    invoicing_preference: null,
+                  },
+                  customer: null,
+                  vendor: null,
+                  employee: null,
+                  addresses: [],
+                  contacts: [],
+                  bankAccounts: [],
+                  transactionSummary: { count: 0, openCount: 0, lastDate: null, currencies: [] },
+                  additionalSubsidiaryIds: [],
+                }
+              : openParty) as unknown as PartyDrawerProps["payload"],
+            canManage,
+            // Direct-deposit capture at hire: the employee Bank accounts
+            // sections (payroll tab and Employment tab) manage through the
+            // native party bank path when the viewer holds the master-data
+            // grant or the HR/payroll manage grant. The bank-accounts route
+            // re-checks the same rule per party, so this flag only reveals
+            // the Add control the server will honor.
+            canManageEmployeeBanks:
+              canManage ||
+              (hrmEnabled && can(authz, "hrm.employment.manage")) ||
+              (payrollEnabled && can(authz, "payroll.manage")),
+            // First-employment Hire chaining for the unsaved-create flow:
+            // employee drawers only, behind the employment manage grant (the
+            // hire route re-checks it). Readers keep the read-only record.
+            canHire: role === "employee" && canReadHrm && can(authz, "hrm.employment.manage"),
+            complianceEnabled,
+            // Customer tax IDs ride the drawer like compliance does: identity
+            // and the manage grant from the loader, rows from the section's
+            // own read. Hidden while the feature is off; data is kept.
+            taxIds:
+              crossBorderTaxOn && openParty && partyId && partyId !== "new" && isUuid(partyId)
+                ? { partyId, canManage }
+                : null,
+            canManageCompliance: can(authz, "compliance.manage"),
+            // The vendor Compliance tab — drawer-open vendors only.
+            compliance:
+              complianceEnabled && role === "vendor" && partyId && isUuid(partyId)
+                ? {
+                    classId: await loadVendorComplianceClass(orgId, partyId),
+                    classes: await loadComplianceClasses(orgId),
+                  }
+                : null,
+            informationReturnsEnabled,
+            // Masked tax identity from the already-loaded party payload
+            // (ciphertext stripped) — drawer-open vendors only, tax switch on.
+            taxIdentity:
+              informationReturnsEnabled && role === "vendor" && openParty?.vendor != null
+                ? vendorTaxIdentityFromRole(openParty.vendor as Record<string, unknown> | null)
+                : null,
+            taxIdentityFormTypes: [...FORM_TYPES],
+            canReadActivities: crmEnabled && can(authz, "crm.activities.read"),
+            canManageActivities: crmEnabled && can(authz, "crm.activities.manage"),
+            // The party's scoped employments for the Employment tab (null =
+            // gated, so the tab never renders without the read surface behind
+            // it). Employee drawers only: other roles never resolve HRM. A
+            // manager holding the report on their team opens the same tab
+            // through the structural team fallback (canManageHrm stays false
+            // — the record routes re-check every grant); payroll, wages, and
+            // compliance stay hidden below unless their own grants hold.
+            hrm:
+              canReadHrm && role === "employee" && partyId && isUuid(partyId)
+                ? {
+                    employmentIds: [
+                      ...(await findEmploymentsByParty({
+                        orgId,
+                        actorId: authz.user.id,
+                        workerPartyId: partyId,
+                      })),
+                    ],
+                    // Authoring rides the manage grant; readers see the request
+                    // list only. The change-request routes re-check this grant.
+                    canManageHrm: can(authz, "hrm.employment.manage"),
+                    // Verb buttons (Rescind/Correct) ride Human resources
+                    // (already held here) and the approve grant — the routes
+                    // refuse anything else, so the buttons hide without it.
+                    canVerb: can(authz, "hrm.employment.approve"),
+                    // The exit section rides the retention read grant (record
+                    // display) and the performance manage grant (recording);
+                    // the exit routes re-check both.
+                    canReadExits: can(authz, "hrm.retention.read"),
+                    canRecordExit: can(authz, "hrm.performance.manage"),
+                  }
+                : !canReadHrm &&
+                    hrmEnabled &&
+                    can(authz, "hrm.self.read") &&
+                    role === "employee" &&
+                    partyId &&
+                    isUuid(partyId)
+                  ? await loadTeamEmploymentPayload(orgId, authz.user.id, partyId)
+                  : null,
+            canReadCrmAccounts,
+            canManageCrmAccounts,
+            // Customer storefront identities: the drawer tab renders rows with
+            // an audited unlink action. Stripe-owned links (no channel) read
+            // without a button — usage billing owns their unlinking.
+            externalIdsTab:
+              role === "customer" &&
+              partyId &&
+              isUuid(partyId) &&
+              ((await isFeatureEnabled(orgId, "salesChannels")) ||
+                (await isFeatureEnabled(orgId, "usageBilling")))
+                ? {
+                    links: (
+                      await withOrgContext(orgId, () =>
+                        listLinksByNative(orgId, "parties", partyId),
+                      )
+                    ).map((link) => ({
+                      id: link.id,
+                      channelId: link.channelId,
+                      provider: link.provider,
+                      externalAccount: link.externalAccount,
+                      objectType: link.objectType,
+                      externalId: link.externalId,
+                      lastSyncedAt: link.lastSyncedAt,
+                    })),
+                    canUnlink: can(authz, "channels.manage"),
+                  }
+                : null,
+            lifecycleStage: openLifecycleStage,
+            canManageWages: can(authz, "admin.setup.manage"),
+            canReadCompensation: hrmEnabled && can(authz, "hrm.compensation.read"),
+            canReadBenefits: hrmEnabled && can(authz, "hrm.benefits.read"),
+            canManagePayroll: payrollEnabled && can(authz, "payroll.manage"),
+            payrollEnabled,
+            // Stored methods ride the autopay feature plus the read grant;
+            // null hides the tab even on a customer drawer.
+            autopay:
+              autopayEnabled && role === "customer" && can(authz, "payment_methods.read")
+                ? {
+                    canManageMethods: can(authz, "payment_methods.manage"),
+                    canManageAutopay: can(authz, "autopay.manage"),
+                  }
+                : null,
+            // Debit mandates ride the grant the mandate routes enforce plus
+            // the persisted customer role row; null hides the tab.
+            debitMandates:
+              role === "customer" && can(authz, "admin.setup.manage") && openParty?.customer != null
+                ? { partyId: String(openParty.party.id) }
+                : null,
+            multiCurrency,
+            role,
+            initialTab: creating ? "overview" : partyTab,
+            initialMode: creating || pickString(sp.mode) === "edit" ? "edit" : "view",
+            createMode: creating,
+            closeHref: mergeHref(basePath, sp, {
+              party: undefined,
+              partyNew: undefined,
+              mode: undefined,
+              partyTab: undefined,
+              partyForm: undefined,
+              partyTxn: undefined,
+              partyTxnKind: undefined,
+              form: undefined,
+            }),
+            basePath,
+            paymentTerms: pickers[0].rows,
+            departments: pickers[1].rows,
+            trades: pickers[2].rows,
+            workerCompGroups: pickers[8].rows,
+            fieldDefs: visibleCustomFieldDefs(
+              pickers[3],
+              customFieldViewerFor(authz),
+            ) as unknown as PartyDrawerProps["fieldDefs"],
+            customFieldViewer: customFieldViewerFor(authz),
+            subsidiaries: pickers[4],
+            accounts: pickers[5].rows,
+            taxCodes: pickers[6].rows,
+            salesReps: pickers[7].rows,
+            layout: resolvedPartyForm?.layout,
+            forms: resolvedPartyForm?.available ?? [],
+            currentFormId: resolvedPartyForm?.row?.id ?? null,
+            recordType: role,
+            canCustomize: can(authz, "admin.customization.manage"),
+          }
+        : null,
+    txnDrawer:
+      openParty && partyTransactionId && isUuid(partyTransactionId) && partyTransactionKind
+        ? {
+            id: partyTransactionId,
+            kind: partyTransactionKind,
+            partyId: String(openParty.party.id),
+            formLayoutId: pickString(sp.form),
+          }
+        : null,
+  };
 }
 
-const f = ref<EntityRoleData>()
+const f = ref<EntityRoleData>();
 
 export function entityRoleSpec(data: EntityRoleData): PageSpec {
   // On a lead/prospect segment the create action mints a relationship draft
@@ -409,50 +508,58 @@ export function entityRoleSpec(data: EntityRoleData): PageSpec {
   // party create it has always been. One button, segment-shaped.
   const newParty = data.newAccount
     ? {
-        widget: 'crm-new-button',
+        widget: "crm-new-button",
         props: {
-          apiPath: '/api/crm/accounts/draft',
+          apiPath: "/api/crm/accounts/draft",
           basePath: data.newParty.basePath,
-          param: 'party',
+          param: "party",
           label: data.newAccount.label,
           failed: data.newAccount.failed,
           body: { lifecycleStage: data.newAccount.lifecycleStage },
         },
       }
     : data.showNewParty
-      ? { widget: 'new-role-party', props: { ...data.newParty } }
-      : null
+      ? { widget: "new-role-party", props: { ...data.newParty } }
+      : null;
   // The relationship factory has its own permission (crm.accounts.create,
   // already resolved into `newAccount`), so that button is unconditional
   // once present; the party factory keeps its parties.manage ref.
-  const canCreate = newParty != null && (data.newAccount != null || data.canManage)
+  const canCreate = newParty != null && (data.newAccount != null || data.canManage);
   return page({
-    route: '/entities/[role]',
-    layout: 'list',
+    route: "/entities/[role]",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex items-center gap-3",
         actions: [
-          ...(newParty ? [widget(newParty.widget, newParty.props, data.newAccount ? undefined : f('canManage'))] : []),
-          ...(data.tabs.length ? [widget('module-home-tabs', { tabs: data.tabs })] : []),
+          ...(newParty
+            ? [
+                widget(
+                  newParty.widget,
+                  newParty.props,
+                  data.newAccount ? undefined : f("canManage"),
+                ),
+              ]
+            : []),
+          ...(data.tabs.length ? [widget("module-home-tabs", { tabs: data.tabs })] : []),
         ],
       }),
     ],
     body: [
-      widgetBlock('entity-list-view', {
+      widgetBlock("entity-list-view", {
         recordType: data.recordType,
         sp: data.currentParams,
         emptyAction: canCreate ? newParty : null,
         // The record flyout and transaction flyout stack in this order.
         drawer: [
-          data.drawer ? { widget: 'party-drawer', props: { drawer: data.drawer } } : null,
+          data.drawer ? { widget: "party-drawer", props: { drawer: data.drawer } } : null,
           data.txnDrawer
-            ? { widget: 'related-txn-drawer', props: { drawer: data.txnDrawer } }
+            ? { widget: "related-txn-drawer", props: { drawer: data.txnDrawer } }
             : null,
         ].filter(Boolean),
       }),
     ],
-  })
+  });
 }

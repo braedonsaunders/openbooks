@@ -95,18 +95,16 @@ export function formatTimestampInZone(date: Date, timeZone: string): string {
  * no runtime accepts is a misconfigured org, not a UTC org — it refuses by
  * name so the operator fixes the setting instead of posting on the wrong day.
  */
-export async function businessTimeZoneInTx(
-  executor: SqlExecutor,
-  orgId: string,
-): Promise<string> {
-  const r = (await executor.execute<{ time_zone: string | null }>(sql`
+export async function businessTimeZoneInTx(executor: SqlExecutor, orgId: string): Promise<string> {
+  const r = await executor.execute<{ time_zone: string | null }>(
+    sql`
     select settings->>'timeZone' as time_zone from orgs where id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = r[0];
   if (!row) {
-    throw new Error(
-      `organization ${orgId} not found — cannot resolve its business time zone`,
-    );
+    throw new Error(`organization ${orgId} not found — cannot resolve its business time zone`);
   }
   const stored = row.time_zone;
   if (!stored || !stored.trim()) return "UTC";
@@ -124,10 +122,7 @@ export async function businessTimeZone(orgId: string): Promise<string> {
 }
 
 /** The org's business day (YYYY-MM-DD) bound to a supplied executor. */
-export async function businessTodayInTx(
-  executor: SqlExecutor,
-  orgId: string,
-): Promise<string> {
+export async function businessTodayInTx(executor: SqlExecutor, orgId: string): Promise<string> {
   return formatInZone(now(), await businessTimeZoneInTx(executor, orgId));
 }
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
-import { stubModules } from '@/testing/stub-modules'
+import { stubModules } from "@/testing/stub-modules";
 
 interface RouteState {
   authz: {
@@ -49,11 +49,9 @@ const routeState: RouteState = {
   scopeChecks: [],
   decisions: [],
   decideThrow: null,
-  decideResult: { ok: true, resumed: 'approve', runStatus: 'completed' },
+  decideResult: { ok: true, resumed: "approve", runStatus: "completed" },
 };
-(
-  globalThis as typeof globalThis & Record<symbol, unknown>
-)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
@@ -96,9 +94,8 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksFlowDecideNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksFlowDecideNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -107,7 +104,7 @@ const mockUrls = new Map<string, string>([
   ["../../_lib", "mock:lib"],
 ]);
 
-stubModules({ navigation: true, authz: false, features: { enabled: ['flows'] } })
+stubModules({ navigation: true, authz: false, features: { enabled: ["flows"] } });
 
 let postRoute: typeof import("./route.ts").POST | undefined;
 if (!isVitest) {
@@ -125,7 +122,7 @@ if (!isVitest) {
   });
 
   const routeUrl = "./route.ts?flow-decide-subsidiary-scope";
-  postRoute = (await import(routeUrl) as typeof import("./route.ts")).POST;
+  postRoute = ((await import(routeUrl)) as typeof import("./route.ts")).POST;
 }
 
 const GATE_ID = "00000000-0000-4000-8000-000000000012";
@@ -133,7 +130,7 @@ const SUBJECT_SUBSIDIARY = "00000000-0000-4000-8000-000000000013";
 
 function reset(allowedSubsidiaryIds: Set<string> | null): void {
   routeState.decideThrow = null;
-  routeState.decideResult = { ok: true, resumed: 'approve', runStatus: 'completed' };
+  routeState.decideResult = { ok: true, resumed: "approve", runStatus: "completed" };
   routeState.authz.allowedSubsidiaryIds = allowedSubsidiaryIds;
   routeState.gate = {
     id: GATE_ID,
@@ -185,7 +182,8 @@ test("an in-scope approver carries the subsidiary scope into the engine", async 
 
 test("an engine throw delegates to the shared error mapping, never a 200", async () => {
   reset(new Set([SUBJECT_SUBSIDIARY]));
-  const cause = "approval release failed: boom. The decision to approve was not recorded and the approval is still pending — retry your decision.";
+  const cause =
+    "approval release failed: boom. The decision to approve was not recorded and the approval is still pending — retry your decision.";
   routeState.decideThrow = cause;
 
   const response = await postRoute!(request());

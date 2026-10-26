@@ -22,8 +22,11 @@ async function oppCount(
   viewFilters: Filter[] = [],
   adhocFilters: Record<string, string> = {},
 ): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from crm_opportunities o
-      where ${opportunityWhere({ ...defaultListView("opportunity"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`, "objects");
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from crm_opportunities o
+      where ${opportunityWhere({ ...defaultListView("opportunity"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
@@ -37,7 +40,9 @@ test("malformed opportunity filters match nothing instead of throwing", { skip: 
       "malformed status filter matches nothing",
     );
     assert.equal(
-      await oppCount(org.orgId, [{ key: "expected_close_date", operator: "gte", value: "not-a-date" }]),
+      await oppCount(org.orgId, [
+        { key: "expected_close_date", operator: "gte", value: "not-a-date" },
+      ]),
       0,
       "malformed close-date filter matches nothing",
     );

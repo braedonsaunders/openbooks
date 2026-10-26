@@ -4,4 +4,3 @@ export function normalizeDocumentReference(raw: string | null | undefined): stri
   const normalized = raw.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
   return normalized === "" ? null : normalized;
 }
-

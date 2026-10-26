@@ -9,18 +9,75 @@ const CZ_DPH_2026: TaxReturnPack = {
   submissionChannel: "file_upload",
   governmentFormat: "certified_file",
   submissionUrl: "https://adisspr.mfcr.cz/pmd/",
-  watermark: "Working copy — základní zdaňovací období je kalendářní měsíc; čtvrtletní volba (obrat do 15 mil. Kč a 2 roky od registrace) je nemodelovaná; kontrolní hlášení je samostatné povinné podání mimo tento pack; měna CZK; file through MOJE daně (EPO)",
+  watermark:
+    "Working copy — základní zdaňovací období je kalendářní měsíc; čtvrtletní volba (obrat do 15 mil. Kč a 2 roky od registrace) je nemodelovaná; kontrolní hlášení je samostatné povinné podání mimo tento pack; měna CZK; file through MOJE daně (EPO)",
   boxes: [
-    { lineCode: "1", label: "Řádek 1 — dodání zboží nebo poskytnutí služby s místem plnění v tuzemsku, základní sazba: základ daně a daň", sign: 1, sequence: 10 },
-    { lineCode: "2", label: "Řádek 2 — dodání zboží nebo poskytnutí služby s místem plnění v tuzemsku, snížená sazba: základ daně a daň", sign: 1, sequence: 20 },
-    { lineCode: "20", label: "Řádek 20 — dodání zboží do jiného členského státu (§ 64)", sign: 1, sequence: 30 },
-    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all rates", sign: -1, sequence: 40, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "40", label: "Řádek 40 — odpočet z přijatých zdanitelných plnění od plátců, základní sazba", sign: 1, sequence: 50 },
-    { lineCode: "41", label: "Řádek 41 — odpočet z přijatých zdanitelných plnění od plátců, snížená sazba", sign: 1, sequence: 60 },
-    { lineCode: "46", label: "Řádek 46 — odpočet daně celkem (40 + 41 + 42 + 43 + 44 + 45)", sign: 1, sequence: 70 },
-    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — input VAT from the ledger, all rates", sign: 1, sequence: 80, basis: "tax_paid", glMap: "purchases" },
-    { lineCode: "62", label: "Řádek 62 — daň na výstupu (součet 1 až 13 – 61 + daň podle § 108 jinde neuvedená)", sign: 1, sequence: 90 },
-    { lineCode: "63", label: "Řádek 63 — odpočet daně (46 V plné výši + 52 Odpočet + 53 Změna odpočtu + 60)", sign: 1, sequence: 100 },
+    {
+      lineCode: "1",
+      label:
+        "Řádek 1 — dodání zboží nebo poskytnutí služby s místem plnění v tuzemsku, základní sazba: základ daně a daň",
+      sign: 1,
+      sequence: 10,
+    },
+    {
+      lineCode: "2",
+      label:
+        "Řádek 2 — dodání zboží nebo poskytnutí služby s místem plnění v tuzemsku, snížená sazba: základ daně a daň",
+      sign: 1,
+      sequence: 20,
+    },
+    {
+      lineCode: "20",
+      label: "Řádek 20 — dodání zboží do jiného členského státu (§ 64)",
+      sign: 1,
+      sequence: 30,
+    },
+    {
+      lineCode: "OB_OUTPUT",
+      label: "OpenBooks workpaper — output VAT from the ledger, all rates",
+      sign: -1,
+      sequence: 40,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "40",
+      label: "Řádek 40 — odpočet z přijatých zdanitelných plnění od plátců, základní sazba",
+      sign: 1,
+      sequence: 50,
+    },
+    {
+      lineCode: "41",
+      label: "Řádek 41 — odpočet z přijatých zdanitelných plnění od plátců, snížená sazba",
+      sign: 1,
+      sequence: 60,
+    },
+    {
+      lineCode: "46",
+      label: "Řádek 46 — odpočet daně celkem (40 + 41 + 42 + 43 + 44 + 45)",
+      sign: 1,
+      sequence: 70,
+    },
+    {
+      lineCode: "OB_INPUT",
+      label: "OpenBooks workpaper — input VAT from the ledger, all rates",
+      sign: 1,
+      sequence: 80,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
+    {
+      lineCode: "62",
+      label: "Řádek 62 — daň na výstupu (součet 1 až 13 – 61 + daň podle § 108 jinde neuvedená)",
+      sign: 1,
+      sequence: 90,
+    },
+    {
+      lineCode: "63",
+      label: "Řádek 63 — odpočet daně (46 V plné výši + 52 Odpočet + 53 Změna odpočtu + 60)",
+      sign: 1,
+      sequence: 100,
+    },
     { lineCode: "64", label: "Řádek 64 — vlastní daň (62 – 63)", sign: 1, sequence: 110 },
     { lineCode: "65", label: "Řádek 65 — nadměrný odpočet (63 – 62)", sign: 1, sequence: 120 },
   ],
@@ -120,31 +177,36 @@ export const CZECHIA_TAX_PACK: CountryTaxPackDefinition = {
   sources: [
     {
       id: "fs_dph_form_5401_26",
-      title: "Finanční správa — Tiskopis 25 5401 vzor 26, Přiznání k dani z přidané hodnoty: řádky 1, 2, 20, 40, 41, 46, 62–65",
+      title:
+        "Finanční správa — Tiskopis 25 5401 vzor 26, Přiznání k dani z přidané hodnoty: řádky 1, 2, 20, 40, 41, 46, 62–65",
       url: "https://financnisprava.gov.cz/assets/tiskopisy/5401_26.pdf",
       asOf: "2026-09-18",
     },
     {
       id: "esbirka_349_2023",
-      title: "e-Sbírka (official legislation portal) — Zákon č. 349/2023 Sb., konsolidační balíček, Čl. LX: single 12% reduced band replacing 15%/10%, books § 71i exempt with deduction, effective 2024-01-01 per Čl. CXIV (origin for 12%/books)",
+      title:
+        "e-Sbírka (official legislation portal) — Zákon č. 349/2023 Sb., konsolidační balíček, Čl. LX: single 12% reduced band replacing 15%/10%, books § 71i exempt with deduction, effective 2024-01-01 per Čl. CXIV (origin for 12%/books)",
       url: "https://www.e-sbirka.cz/sb/2023/349",
       asOf: "2026-09-18",
     },
     {
       id: "gfr_rate_change_2024",
-      title: "Generální finanční ředitelství — Informace ke změnám sazeb DPH od 1. 1. 2024: 21% unchanged, single 12% replacing 15%/10% per zákon č. 349/2023 Sb., books § 71i exempt with deduction (corroboration; applicability for 21%)",
+      title:
+        "Generální finanční ředitelství — Informace ke změnám sazeb DPH od 1. 1. 2024: 21% unchanged, single 12% replacing 15%/10% per zákon č. 349/2023 Sb., books § 71i exempt with deduction (corroboration; applicability for 21%)",
       url: "https://financnisprava.gov.cz/assets/cs/prilohy/d-seznam-dani/Informace_GFR_ke_zmenam_sazeb_DPH_od_1_1_2024.pdf",
       asOf: "2026-09-18",
     },
     {
       id: "fs_dph_leaflet_2023",
-      title: "Finanční správa — DPH Easy-to-read leaflet 6.6.2023: basic rate 21%, first reduced 15%, second reduced 10% (three-rate regime applicability)",
+      title:
+        "Finanční správa — DPH Easy-to-read leaflet 6.6.2023: basic rate 21%, first reduced 15%, second reduced 10% (three-rate regime applicability)",
       url: "https://financnisprava.gov.cz/assets/cs/prilohy/fs-financni-sprava-cr/EtR_DPH_20230606.pdf",
       asOf: "2026-09-18",
     },
     {
       id: "fs_dph_leaflet_2026",
-      title: "Finanční správa — DPH leaflet: 21% basic and 12% reduced rates, books exempt with right of deduction, monthly period, quarterly election, mandatory kontrolní hlášení, EPO registration (applicability, no origin claimed)",
+      title:
+        "Finanční správa — DPH leaflet: 21% basic and 12% reduced rates, books exempt with right of deduction, monthly period, quarterly election, mandatory kontrolní hlášení, EPO registration (applicability, no origin claimed)",
       url: "https://financnisprava.gov.cz/assets/cs/prilohy/fs-financni-sprava-cr/EtR_Dan_z_pridane_hodnoty_2026.pdf",
       asOf: "2026-09-18",
     },
@@ -164,7 +226,9 @@ export const CZECHIA_TAX_PACK: CountryTaxPackDefinition = {
         name: "Czechia standard DPH",
         ratePercent: "21",
         role: "standard",
-        rates: [{ ratePercent: "21", effectiveFrom: "2023-06-06", sourceId: "fs_dph_leaflet_2023" }],
+        rates: [
+          { ratePercent: "21", effectiveFrom: "2023-06-06", sourceId: "fs_dph_leaflet_2023" },
+        ],
       },
       {
         code: "CZ-VAT-RED12",

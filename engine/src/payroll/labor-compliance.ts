@@ -163,9 +163,7 @@ export function constructionRulesFor(
 ): readonly PackConstructionRule[] {
   if (!construction) return [];
   if (!region) return construction.rules;
-  return construction.rules.filter(
-    (rule) => !("region" in rule) || rule.region === region,
-  );
+  return construction.rules.filter((rule) => !("region" in rule) || rule.region === region);
 }
 
 /**

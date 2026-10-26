@@ -1,14 +1,24 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const distributionScanning: DocArticle = {
-  slug: 'distribution-scanning',
-  title: 'Customer part numbers and scanning',
-  category: 'transactions',
+  slug: "distribution-scanning",
+  title: "Customer part numbers and scanning",
+  category: "transactions",
   order: 8,
-  summary: 'Map customer product codes to catalog items and resolve exact barcode or scanner values in warehouse pickers.',
-  updated: '2026-09-27',
-  keywords: ['customer part number', 'customer SKU', 'barcode', 'GTIN', 'UPC', 'EAN', 'scanner', 'keyboard wedge'],
-  related: ['distribution-pick-ship', 'distribution-warehouses'],
+  summary:
+    "Map customer product codes to catalog items and resolve exact barcode or scanner values in warehouse pickers.",
+  updated: "2026-09-27",
+  keywords: [
+    "customer part number",
+    "customer SKU",
+    "barcode",
+    "GTIN",
+    "UPC",
+    "EAN",
+    "scanner",
+    "keyboard wedge",
+  ],
+  related: ["distribution-pick-ship", "distribution-warehouses"],
   body: `# Customer part numbers and scanning
 
 Customers may order an item using their own product code. Add a customer part
@@ -36,4 +46,4 @@ Barcode scanning and customer part numbers are independent switches under
 Company Settings → Features. Turning either switch off hides its controls and
 keeps the configured identifiers and customer mappings intact.
 `,
-}
+};

@@ -43,7 +43,11 @@ export const EQUITY_POLICY_ACCOUNT_FIELDS: readonly EquityPolicyAccountField[] =
   { key: "apicShareBasedAccountId", kind: "equity", types: EQUITY_TYPES },
   { key: "compensationExpenseAccountId", kind: "expense", types: PNL_COST_TYPES },
   { key: "treasuryStockAccountId", kind: "equity", types: EQUITY_TYPES },
-  { key: "convertibleInstrumentsAccountId", kind: "liabilityOrEquity", types: [...LIABILITY_TYPES, ...EQUITY_TYPES] },
+  {
+    key: "convertibleInstrumentsAccountId",
+    kind: "liabilityOrEquity",
+    types: [...LIABILITY_TYPES, ...EQUITY_TYPES],
+  },
 ];
 
 /** Accrued interest and deposits are other current or long-term liabilities, never payables or card balances. */
@@ -68,10 +72,15 @@ export async function equityAccountPolicyRefusal(
   status: 409 | 422 = 422,
 ): Promise<EquityError | null> {
   const subsidiaryId = body.subsidiaryId;
-  if (typeof subsidiaryId !== "string" || !isUuid(subsidiaryId)) return equityError("accountPolicyEntityMissing", {}, { status });
+  if (typeof subsidiaryId !== "string" || !isUuid(subsidiaryId))
+    return equityError("accountPolicyEntityMissing", {}, { status });
   const effectiveFrom = body.effectiveFrom;
   if (typeof effectiveFrom !== "string" || !isIsoCalendarDate(effectiveFrom)) {
-    return equityError("accountPolicyEffectiveDateInvalid", { field: fig.term("effectiveFrom") }, { status });
+    return equityError(
+      "accountPolicyEffectiveDateInvalid",
+      { field: fig.term("effectiveFrom") },
+      { status },
+    );
   }
   const fields = [
     ...EQUITY_POLICY_ACCOUNT_FIELDS.map((field) => ({ ...field, required: true })),
@@ -79,20 +88,44 @@ export async function equityAccountPolicyRefusal(
   ];
   for (const field of fields) {
     const accountId = body[field.key];
-    if (!field.required && (accountId === undefined || accountId === null || accountId === "")) continue;
-    if (typeof accountId !== "string" || !isUuid(accountId)) return equityError("accountPolicyAccountMissing", { account: fig.term(field.key) }, { status });
-    const row = (await runner.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
-      select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`, "objects"))[0];
+    if (!field.required && (accountId === undefined || accountId === null || accountId === ""))
+      continue;
+    if (typeof accountId !== "string" || !isUuid(accountId))
+      return equityError(
+        "accountPolicyAccountMissing",
+        { account: fig.term(field.key) },
+        { status },
+      );
+    const row = (
+      await runner.execute<{ type: string; is_active: boolean; is_summary: boolean }>(
+        sql`
+      select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`,
+        "objects",
+      )
+    )[0];
     if (!row || !row.is_active || row.is_summary || !field.types.includes(row.type)) {
-      return equityError("accountPolicyAccountType", { account: fig.term(field.key), kind: fig.choice(field.kind) }, { status });
+      return equityError(
+        "accountPolicyAccountType",
+        { account: fig.term(field.key), kind: fig.choice(field.kind) },
+        { status },
+      );
     }
   }
-  const latest = (await runner.execute<{ posting_date: string }>(sql`
+  const latest = (
+    await runner.execute<{ posting_date: string }>(
+      sql`
     select max(posting_date)::text as posting_date from journal_entries
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and origin = ${EQUITY_JOURNAL_ORIGIN}
-       and status in ('posted', 'reversed')`, "objects"))[0];
+       and status in ('posted', 'reversed')`,
+      "objects",
+    )
+  )[0];
   if (latest?.posting_date && effectiveFrom <= latest.posting_date) {
-    return equityError("accountPolicyBeforeLatestPosting", { date: fig.date(latest.posting_date) }, { status });
+    return equityError(
+      "accountPolicyBeforeLatestPosting",
+      { date: fig.date(latest.posting_date) },
+      { status },
+    );
   }
   return null;
 }
@@ -120,27 +153,52 @@ export interface RecordAccountPolicyInput {
  * action an Equity action Flow may require approval for). Versions are
  * retained: a change is a new version from its date.
  */
-export async function recordEquityAccountPolicy(input: RecordAccountPolicyInput): Promise<{ id: string | null; status: GovernedStatus; requestId: string }> {
+export async function recordEquityAccountPolicy(
+  input: RecordAccountPolicyInput,
+): Promise<{ id: string | null; status: GovernedStatus; requestId: string }> {
   const reason = requireReason(input.reason, "accountPolicy");
-  const refusal = await withOrgTransaction(input.orgId, () => equityAccountPolicyRefusal(db, input.orgId, input as unknown as Record<string, unknown>, 422));
+  const refusal = await withOrgTransaction(input.orgId, () =>
+    equityAccountPolicyRefusal(db, input.orgId, input as unknown as Record<string, unknown>, 422),
+  );
   if (refusal) throw refusal;
   const { orgId: _org, actorId: _actor, ...payload } = input;
-  const outcome = await governEquityAction({
-    orgId: input.orgId, actorId: input.actorId, subsidiaryId: input.subsidiaryId, action: "account_policy",
-    subjectId: null, subjectLabel: `Equity accounts from ${input.effectiveFrom}`, effectiveOn: input.effectiveFrom, reason,
-    summary: {}, payload, idempotencyKey: null,
-  }, (actorId) => applyEquityAccountPolicy({ ...input, actorId }));
+  const outcome = await governEquityAction(
+    {
+      orgId: input.orgId,
+      actorId: input.actorId,
+      subsidiaryId: input.subsidiaryId,
+      action: "account_policy",
+      subjectId: null,
+      subjectLabel: `Equity accounts from ${input.effectiveFrom}`,
+      effectiveOn: input.effectiveFrom,
+      reason,
+      summary: {},
+      payload,
+      idempotencyKey: null,
+    },
+    (actorId) => applyEquityAccountPolicy({ ...input, actorId }),
+  );
   return { id: outcome.result?.id ?? null, status: outcome.status, requestId: outcome.requestId };
 }
 
 /** Apply an account policy version: the command its approval releases. */
-export async function applyEquityAccountPolicy(input: RecordAccountPolicyInput): Promise<{ id: string }> {
+export async function applyEquityAccountPolicy(
+  input: RecordAccountPolicyInput,
+): Promise<{ id: string }> {
   const reason = requireReason(input.reason, "accountPolicy");
   return inEquityCommand(input, "equity.manage", async () => {
-    const refusal = await equityAccountPolicyRefusal(db, input.orgId, input as unknown as Record<string, unknown>, 409);
+    const refusal = await equityAccountPolicyRefusal(
+      db,
+      input.orgId,
+      input as unknown as Record<string, unknown>,
+      409,
+    );
     if (refusal) throw refusal;
-    const optional = (value: string | null | undefined) => (typeof value === "string" && value !== "" ? value : null);
-    const row = (await db.execute<{ id: string }>(sql`
+    const optional = (value: string | null | undefined) =>
+      typeof value === "string" && value !== "" ? value : null;
+    const row = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into equity_account_policies (org_id, subsidiary_id, effective_from, common_stock_account_id, preferred_stock_account_id,
         apic_account_id, apic_share_based_account_id, compensation_expense_account_id, treasury_stock_account_id,
         convertible_instruments_account_id, interest_expense_account_id, accrued_interest_account_id, early_exercise_deposit_account_id,
@@ -149,10 +207,17 @@ export async function applyEquityAccountPolicy(input: RecordAccountPolicyInput):
         ${input.apicAccountId}, ${input.apicShareBasedAccountId}, ${input.compensationExpenseAccountId}, ${input.treasuryStockAccountId},
         ${input.convertibleInstrumentsAccountId}, ${optional(input.interestExpenseAccountId)}, ${optional(input.accruedInterestAccountId)},
         ${optional(input.earlyExerciseDepositAccountId)}, ${reason}, ${input.actorId}, ${input.actorId})
-      returning id`, "objects"))[0];
+      returning id`,
+        "objects",
+      )
+    )[0];
     if (!row) throw equityError("notSaved", { record: fig.choice("accountPolicy") });
     await writeEquityAudit(db, {
-      orgId: input.orgId, table: "equity_account_policies", rowId: row.id, action: "equity.account_policy.create", actorId: input.actorId,
+      orgId: input.orgId,
+      table: "equity_account_policies",
+      rowId: row.id,
+      action: "equity.account_policy.create",
+      actorId: input.actorId,
       changes: { before: null, after: { ...input, orgId: undefined, actorId: undefined }, reason },
     });
     return { id: row.id };

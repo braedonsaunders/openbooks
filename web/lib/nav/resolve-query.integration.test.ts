@@ -7,9 +7,8 @@ import { sql } from "drizzle-orm";
 const { resolveNav } = await import("./resolve.ts");
 
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -49,10 +48,18 @@ test(
         groups.flatMap((group) => group.items.map((item) => item.href));
 
       async function setProjectsEnabled(enabled: boolean): Promise<void> {
-        const row = (await db.execute<{ settings: unknown }>(sql`
-          select settings from orgs where id = ${org.orgId}`, "objects"))[0];
+        const row = (
+          await db.execute<{ settings: unknown }>(
+            sql`
+          select settings from orgs where id = ${org.orgId}`,
+            "objects",
+          )
+        )[0];
         const current = (row?.settings ?? {}) as Record<string, unknown>;
-        const features = { ...((current.features ?? {}) as Record<string, unknown>), projects: enabled };
+        const features = {
+          ...((current.features ?? {}) as Record<string, unknown>),
+          projects: enabled,
+        };
         await db.execute(sql`
           update orgs set settings = ${JSON.stringify({ ...current, features })}::jsonb
            where id = ${org.orgId}`);

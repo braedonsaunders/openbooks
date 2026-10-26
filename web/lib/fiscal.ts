@@ -1,11 +1,17 @@
-import 'server-only'
-import { cache } from 'react'
-import { sql } from 'drizzle-orm'
-import { addCalendarDays, businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
-import { canonicalPeriodLabel } from '@openbooks/engine/periods/period-policy'
-import { fiscalContextFor, fiscalYearOf, fiscalYearStartOn, type FiscalContext, type FiscalPeriod } from '@openbooks/reports'
-import { resolveOrgId } from './org-scope'
+import "server-only";
+import { cache } from "react";
+import { sql } from "drizzle-orm";
+import { addCalendarDays, businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
+import { canonicalPeriodLabel } from "@openbooks/engine/periods/period-policy";
+import {
+  fiscalContextFor,
+  fiscalYearOf,
+  fiscalYearStartOn,
+  type FiscalContext,
+  type FiscalPeriod,
+} from "@openbooks/reports";
+import { resolveOrgId } from "./org-scope";
 
 /**
  * Fiscal calendar configuration. The pure calendar math (fiscal year / quarter
@@ -17,33 +23,36 @@ import { resolveOrgId } from './org-scope'
  */
 
 // Re-export the pure helpers so existing `./fiscal` imports keep working.
-export { fiscalYearOf, fiscalYearRangeFor, fiscalYearStartOn, priorFiscalYearEndOn } from '@openbooks/reports'
+export {
+  fiscalYearOf,
+  fiscalYearRangeFor,
+  fiscalYearStartOn,
+  priorFiscalYearEndOn,
+} from "@openbooks/reports";
 
 /** The org's fiscal position (current FY / FYTD / quarter / PYTD) as of `today`. */
-export async function orgFiscalContext(
-  today?: string,
-  orgId?: string,
-): Promise<FiscalContext> {
-  const asOf = today ?? await orgBusinessDay(orgId)
-  return fiscalContextFor(asOf, await fiscalStartMonth(orgId))
+export async function orgFiscalContext(today?: string, orgId?: string): Promise<FiscalContext> {
+  const asOf = today ?? (await orgBusinessDay(orgId));
+  return fiscalContextFor(asOf, await fiscalStartMonth(orgId));
 }
 
 export async function fiscalStartMonth(orgId?: string): Promise<number> {
-  return startMonthOf(await resolveOrgId(orgId))
+  return startMonthOf(await resolveOrgId(orgId));
 }
 
 // Fiscal configuration is read by many loaders of one page (statements,
 // cockpits, analytics). Within a server render each organization's
 // configuration is read once; outside a render these are plain reads.
 const startMonthOf = cache(async (orgId: string): Promise<number> => {
-  const r = (await db.execute<{ m: number }>(
+  const r = await db.execute<{ m: number }>(
     sql`select coalesce((settings->>'fiscalYearStartMonth')::int, 1) as m
           from orgs
-         where id = ${orgId}`, 'objects',
-  ))
-  const m = r[0]?.m ?? 1
-  return m >= 1 && m <= 12 ? m : 1
-})
+         where id = ${orgId}`,
+    "objects",
+  );
+  const m = r[0]?.m ?? 1;
+  return m >= 1 && m <= 12 ? m : 1;
+});
 
 /**
  * The default active fiscal calendar's cadence plus its non-adjustment
@@ -56,44 +65,56 @@ const startMonthOf = cache(async (orgId: string): Promise<number> => {
 export async function defaultFiscalCalendarPeriods(
   orgId?: string,
 ): Promise<{ cadence: string; periods: FiscalPeriod[] } | null> {
-  return calendarPeriodsOf(await resolveOrgId(orgId))
+  return calendarPeriodsOf(await resolveOrgId(orgId));
 }
 
-const calendarPeriodsOf = cache(async (activeOrgId: string): Promise<{ cadence: string; periods: FiscalPeriod[] } | null> => {
-  const cal = (await db.execute<{ cadence: string }>(sql`
+const calendarPeriodsOf = cache(
+  async (activeOrgId: string): Promise<{ cadence: string; periods: FiscalPeriod[] } | null> => {
+    const cal = await db.execute<{ cadence: string }>(
+      sql`
     select cadence from fiscal_calendars
      where org_id = ${activeOrgId} and is_default and is_active
-     order by created_at limit 1`, 'objects'))
-  const cadence = cal[0]?.cadence
-  if (!cadence) return null
-  const r = (await db.execute<{
-    fiscal_year: number
-    period_number: number
-    starts_on: string
-    ends_on: string
-  }>(sql`
+     order by created_at limit 1`,
+      "objects",
+    );
+    const cadence = cal[0]?.cadence;
+    if (!cadence) return null;
+    const r = await db.execute<{
+      fiscal_year: number;
+      period_number: number;
+      starts_on: string;
+      ends_on: string;
+    }>(
+      sql`
     select p.fiscal_year, p.period_number,
            p.starts_on::text as starts_on, p.ends_on::text as ends_on
       from accounting_periods p
       join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
      where p.org_id = ${activeOrgId} and fc.is_default and fc.is_active and not p.is_adjustment
-     order by p.starts_on, p.ends_on`, 'objects'))
-  return {
-    cadence,
-    periods: r.map((p) => ({
-      fiscalYear: p.fiscal_year,
-      periodNumber: p.period_number,
-      // Labelled from the fiscal position, not the free-text stored name, so
-      // every fiscal year's windows and columns read in one format.
-      name: canonicalPeriodLabel({ fiscalYear: p.fiscal_year, periodNumber: p.period_number, adjustment: false }),
-      from: p.starts_on,
-      to: p.ends_on,
-    })),
-  }
-})
+     order by p.starts_on, p.ends_on`,
+      "objects",
+    );
+    return {
+      cadence,
+      periods: r.map((p) => ({
+        fiscalYear: p.fiscal_year,
+        periodNumber: p.period_number,
+        // Labelled from the fiscal position, not the free-text stored name, so
+        // every fiscal year's windows and columns read in one format.
+        name: canonicalPeriodLabel({
+          fiscalYear: p.fiscal_year,
+          periodNumber: p.period_number,
+          adjustment: false,
+        }),
+        from: p.starts_on,
+        to: p.ends_on,
+      })),
+    };
+  },
+);
 
 async function orgBusinessDay(orgId?: string): Promise<string> {
-  return businessToday(await resolveOrgId(orgId))
+  return businessToday(await resolveOrgId(orgId));
 }
 
 /**
@@ -110,38 +131,30 @@ async function orgBusinessDay(orgId?: string): Promise<string> {
  * active calendar or no declared period covers the date — the only signal
  * available there, and the historical behaviour.
  */
-export async function fiscalYearStartOnDate(
-  asOf: string,
-  orgId?: string,
-): Promise<string> {
-  const activeOrgId = await resolveOrgId(orgId)
-  const declared = await defaultFiscalCalendarPeriods(activeOrgId)
-  const containing = declared && declared.cadence !== 'monthly'
-    ? declared.periods.find((p) => p.from <= asOf && asOf <= p.to)
-    : undefined
+export async function fiscalYearStartOnDate(asOf: string, orgId?: string): Promise<string> {
+  const activeOrgId = await resolveOrgId(orgId);
+  const declared = await defaultFiscalCalendarPeriods(activeOrgId);
+  const containing =
+    declared && declared.cadence !== "monthly"
+      ? declared.periods.find((p) => p.from <= asOf && asOf <= p.to)
+      : undefined;
   if (containing && declared) {
-    let start = containing.from
+    let start = containing.from;
     for (const p of declared.periods) {
-      if (p.fiscalYear === containing.fiscalYear && p.from < start) start = p.from
+      if (p.fiscalYear === containing.fiscalYear && p.from < start) start = p.from;
     }
-    return start
+    return start;
   }
-  return fiscalYearStartOn(asOf, await fiscalStartMonth(activeOrgId))
+  return fiscalYearStartOn(asOf, await fiscalStartMonth(activeOrgId));
 }
 
 /** Inclusive last day of the fiscal year that ended before the year of `asOf`, on declared boundaries. */
-export async function priorFiscalYearEndOnDate(
-  asOf: string,
-  orgId?: string,
-): Promise<string> {
-  return addCalendarDays(await fiscalYearStartOnDate(asOf, orgId), -1)
+export async function priorFiscalYearEndOnDate(asOf: string, orgId?: string): Promise<string> {
+  return addCalendarDays(await fiscalYearStartOnDate(asOf, orgId), -1);
 }
 
 /** The current fiscal year (end year) for today, per the org's start month. */
-export async function currentFiscalYear(
-  today?: string,
-  orgId?: string,
-): Promise<number> {
-  const asOf = today ?? await orgBusinessDay(orgId)
-  return fiscalYearOf(asOf, await fiscalStartMonth(orgId))
+export async function currentFiscalYear(today?: string, orgId?: string): Promise<number> {
+  const asOf = today ?? (await orgBusinessDay(orgId));
+  return fiscalYearOf(asOf, await fiscalStartMonth(orgId));
 }

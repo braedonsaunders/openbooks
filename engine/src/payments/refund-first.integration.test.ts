@@ -10,7 +10,10 @@ import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-function signedStripeBody(secret: string, event: unknown): { body: string; headers: Record<string, string> } {
+function signedStripeBody(
+  secret: string,
+  event: unknown,
+): { body: string; headers: Record<string, string> } {
   const body = JSON.stringify(event);
   const t = Math.floor(Date.now() / 1000);
   const v1 = createHmac("sha256", secret).update(`${t}.${body}`, "utf8").digest("hex");
@@ -27,18 +30,21 @@ function signedStripeBody(secret: string, event: unknown): { body: string; heade
  * carries no refunded amount, so the replay queues for review with the
  * amount to confirm instead of guessing.
  */
-test("a refund arriving before its success parks, settles, and queues exactly once", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const userId = await createScratchUser(org.orgId, "Clawback Tester", "admin");
-    await db.execute(sql`
-      update orgs set settings = settings || '{"features":{"onlinePayments":true}}'::jsonb where id = ${org.orgId}`);
-    const today = new Date().toISOString().slice(0, 10);
-    if (today < "2026-07-01" || today > "2026-07-31") {
-      const [year, month] = today.split("-").map(Number) as [number, number, number];
-      const startsOn = `${year}-${String(month).padStart(2, "0")}-01`;
-      const endsOn = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+test(
+  "a refund arriving before its success parks, settles, and queues exactly once",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const userId = await createScratchUser(org.orgId, "Clawback Tester", "admin");
       await db.execute(sql`
+      update orgs set settings = settings || '{"features":{"onlinePayments":true}}'::jsonb where id = ${org.orgId}`);
+      const today = new Date().toISOString().slice(0, 10);
+      if (today < "2026-07-01" || today > "2026-07-31") {
+        const [year, month] = today.split("-").map(Number) as [number, number, number];
+        const startsOn = `${year}-${String(month).padStart(2, "0")}-01`;
+        const endsOn = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+        await db.execute(sql`
         insert into accounting_periods
           (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
            starts_on, ends_on, is_adjustment)
@@ -48,107 +54,154 @@ test("a refund arriving before its success parks, settles, and queues exactly on
          where id = ${org.periodId}
         on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing
       `);
-    }
+      }
 
-    const invoiceId = randomUUID();
-    await db.execute(sql`
+      const invoiceId = randomUUID();
+      await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
       values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-CLAWBACK',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
               '100', '0', '100', ${userId})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
       values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`);
-    await db.execute(sql`update documents set status = 'approved', updated_at = now() where id = ${invoiceId} and org_id = ${org.orgId}`);
-    await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+      await db.execute(
+        sql`update documents set status = 'approved', updated_at = now() where id = ${invoiceId} and org_id = ${org.orgId}`,
+      );
+      await postDocument(invoiceId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
 
-    const secret = `whsec_clawback_${randomUUID()}`;
-    await db.execute(sql`
+      const secret = `whsec_clawback_${randomUUID()}`;
+      await db.execute(sql`
       insert into psp_provider_configs
         (org_id, provider, display_name, is_enabled, acceptance_enabled,
          default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'stripe', 'Stripe', true, true,
               ${org.accounts.bank}, ${sealJson({ apiKey: "sk_test_clawback", webhookSecret: secret }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})`);
-    const linkId = randomUUID(), linkToken = `clawback-link-${randomUUID()}`;
-    const sessionId = `cs_test_clawback_${randomUUID().slice(0, 8)}`;
-    const intentId = `pi_clawback_${randomUUID().slice(0, 8)}`;
-    await db.execute(sql`
+      const linkId = randomUUID(),
+        linkToken = `clawback-link-${randomUUID()}`;
+      const sessionId = `cs_test_clawback_${randomUUID().slice(0, 8)}`;
+      const intentId = `pi_clawback_${randomUUID().slice(0, 8)}`;
+      await db.execute(sql`
       insert into payment_links
         (id, org_id, token_hash, token_sealed, document_id, party_id, subsidiary_id, provider,
          bank_account_id, amount, surcharge_amount, currency, created_by, updated_by)
       values (${linkId}, ${org.orgId}, ${createHash("sha256").update(linkToken, "utf8").digest("hex")}, ${sealSecret(linkToken, { orgId: org.orgId, purpose: "payment.link.token" })}, ${invoiceId}, ${org.customerId},
               ${org.subsidiaryId}, 'stripe', ${org.accounts.bank}, '100', '0', 'CAD',
               ${userId}, ${userId})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into payment_attempts (org_id, link_id, provider, external_ref, status, amount, surcharge_amount)
       values (${org.orgId}, ${linkId}, 'stripe', ${sessionId}, 'initiated', '100', '0')`);
 
-    // The refund beats the settlement event: parked, not dropped.
-    const refunded = signedStripeBody(secret, {
-      id: `evt_refund_${randomUUID().slice(0, 8)}`,
-      type: "charge.refunded",
-      data: { object: { id: "ch_1", payment_intent: intentId } },
-    });
-    const first = await handleProviderWebhook("stripe", refunded.headers, refunded.body);
-    assert.equal(first?.status, "pending_clawback");
-    const marker = (await db.execute<{ consumed_at: string | null }>(sql`
+      // The refund beats the settlement event: parked, not dropped.
+      const refunded = signedStripeBody(secret, {
+        id: `evt_refund_${randomUUID().slice(0, 8)}`,
+        type: "charge.refunded",
+        data: { object: { id: "ch_1", payment_intent: intentId } },
+      });
+      const first = await handleProviderWebhook("stripe", refunded.headers, refunded.body);
+      assert.equal(first?.status, "pending_clawback");
+      const marker = (
+        await db.execute<{ consumed_at: string | null }>(
+          sql`
       select consumed_at from payment_pending_clawbacks
-       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`, "objects"))[0];
-    assert.ok(marker, "refund-first parks a pending-clawback marker");
-    assert.equal(marker.consumed_at, null);
-    const untouched = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
-      select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`, "objects"))[0]!;
-    assert.equal(untouched.status, "initiated");
+       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`,
+          "objects",
+        )
+      )[0];
+      assert.ok(marker, "refund-first parks a pending-clawback marker");
+      assert.equal(marker.consumed_at, null);
+      const untouched = (
+        await db.execute<{ status: string; journal_entry_id: string | null }>(
+          sql`
+      select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(untouched.status, "initiated");
 
-    // The real settlement lands late: books the receipt AND replays the
-    // parked return into the review queue (the fixture reports no amount).
-    const succeeded = signedStripeBody(secret, {
-      id: `evt_succeeded_${randomUUID().slice(0, 8)}`,
-      type: "checkout.session.completed",
-      data: { object: { id: sessionId, client_reference_id: linkToken, payment_intent: intentId, amount_total: 10_000, currency: "cad", payment_status: "paid" } },
-    });
-    const second = await handleProviderWebhook("stripe", succeeded.headers, succeeded.body);
-    assert.equal(second?.status, "settled");
-    const receipts = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_payment'`, "objects"));
-    assert.equal(receipts[0]!.n, 1);
-    const attempt = (await db.execute<{ status: string; journal_entry_id: string | null }>(sql`
-      select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`, "objects"))[0]!;
-    assert.equal(attempt.status, "succeeded");
-    assert.ok(attempt.journal_entry_id);
-    const consumed = (await db.execute<{ consumed_at: string | null; consumed_attempt_id: string | null }>(sql`
+      // The real settlement lands late: books the receipt AND replays the
+      // parked return into the review queue (the fixture reports no amount).
+      const succeeded = signedStripeBody(secret, {
+        id: `evt_succeeded_${randomUUID().slice(0, 8)}`,
+        type: "checkout.session.completed",
+        data: {
+          object: {
+            id: sessionId,
+            client_reference_id: linkToken,
+            payment_intent: intentId,
+            amount_total: 10_000,
+            currency: "cad",
+            payment_status: "paid",
+          },
+        },
+      });
+      const second = await handleProviderWebhook("stripe", succeeded.headers, succeeded.body);
+      assert.equal(second?.status, "settled");
+      const receipts = await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_payment'`,
+        "objects",
+      );
+      assert.equal(receipts[0]!.n, 1);
+      const attempt = (
+        await db.execute<{ status: string; journal_entry_id: string | null }>(
+          sql`
+      select status, journal_entry_id from payment_attempts where org_id = ${org.orgId} and link_id = ${linkId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(attempt.status, "succeeded");
+      assert.ok(attempt.journal_entry_id);
+      const consumed = (
+        await db.execute<{ consumed_at: string | null; consumed_attempt_id: string | null }>(
+          sql`
       select consumed_at, consumed_attempt_id from payment_pending_clawbacks
-       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`, "objects"))[0]!;
-    assert.ok(consumed.consumed_at, "marker consumed by the settlement");
-    const queued = await db.execute<{ status: string; reason: string }>(sql`
-      select status, reason from payment_disputes where org_id = ${org.orgId}`, "objects");
-    assert.equal(queued.length, 1);
-    assert.equal(queued[0]!.status, "pending_review");
-    assert.match(queued[0]!.reason ?? "", /did not report a refund amount/);
+       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.ok(consumed.consumed_at, "marker consumed by the settlement");
+      const queued = await db.execute<{ status: string; reason: string }>(
+        sql`
+      select status, reason from payment_disputes where org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.equal(queued.length, 1);
+      assert.equal(queued[0]!.status, "pending_review");
+      assert.match(queued[0]!.reason ?? "", /did not report a refund amount/);
 
-    // The refund redelivery is a new provider event, so it queues as its own
-    // review row — but the marker stays single and nothing posts twice.
-    const redelivered = signedStripeBody(secret, {
-      id: `evt_refund2_${randomUUID().slice(0, 8)}`,
-      type: "charge.refunded",
-      data: { object: { id: "ch_1", payment_intent: intentId } },
-    });
-    const third = await handleProviderWebhook("stripe", redelivered.headers, redelivered.body);
-    assert.equal(third?.status, "refunded_pending_review");
-    const markers = (await db.execute<{ n: number }>(sql`
+      // The refund redelivery is a new provider event, so it queues as its own
+      // review row — but the marker stays single and nothing posts twice.
+      const redelivered = signedStripeBody(secret, {
+        id: `evt_refund2_${randomUUID().slice(0, 8)}`,
+        type: "charge.refunded",
+        data: { object: { id: "ch_1", payment_intent: intentId } },
+      });
+      const third = await handleProviderWebhook("stripe", redelivered.headers, redelivered.body);
+      assert.equal(third?.status, "refunded_pending_review");
+      const markers = await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from payment_pending_clawbacks
-       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`, "objects"));
-    assert.equal(markers[0]!.n, 1);
-    const queuedAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from payment_disputes where org_id = ${org.orgId}`, "objects"));
-    assert.equal(queuedAfter[0]!.n, 2);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`,
+        "objects",
+      );
+      assert.equal(markers[0]!.n, 1);
+      const queuedAfter = await db.execute<{ n: number }>(
+        sql`
+      select count(*)::int as n from payment_disputes where org_id = ${org.orgId}`,
+        "objects",
+      );
+      assert.equal(queuedAfter[0]!.n, 2);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /**
  * A refund redelivery that lands in the park branch AFTER its marker was
@@ -196,8 +249,12 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
       insert into document_lines
         (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
       values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`);
-    await db.execute(sql`update documents set status = 'approved', updated_at = now() where id = ${invoiceId} and org_id = ${org.orgId}`);
-    await postDocument(invoiceId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+    await db.execute(
+      sql`update documents set status = 'approved', updated_at = now() where id = ${invoiceId} and org_id = ${org.orgId}`,
+    );
+    await postDocument(invoiceId, {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    });
 
     const secret = `whsec_clawback_rearm_${randomUUID()}`;
     await db.execute(sql`
@@ -206,7 +263,8 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
          default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'stripe', 'Stripe', true, true,
               ${org.accounts.bank}, ${sealJson({ apiKey: "sk_test_rearm", webhookSecret: secret }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})`);
-    const linkId = randomUUID(), linkToken = `clawback-rearm-link-${randomUUID()}`;
+    const linkId = randomUUID(),
+      linkToken = `clawback-rearm-link-${randomUUID()}`;
     const sessionId = `cs_test_rearm_${randomUUID().slice(0, 8)}`;
     const intentId = `pi_rearm_${randomUUID().slice(0, 8)}`;
     await db.execute(sql`
@@ -223,16 +281,28 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
       const signed = signedStripeBody(secret, event);
       return handleProviderWebhook("stripe", signed.headers, signed.body);
     };
-    const marker = async () => (await db.execute<{
-      consumed_at: string | null;
-      consumed_attempt_id: string | null;
-    }>(sql`
+    const marker = async () =>
+      (
+        await db.execute<{
+          consumed_at: string | null;
+          consumed_attempt_id: string | null;
+        }>(
+          sql`
       select consumed_at, consumed_attempt_id from payment_pending_clawbacks
-       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`, "objects"))[0];
-    const notes = async () => (await db.execute<{ n: number }>(sql`
+       where org_id = ${org.orgId} and provider = 'stripe' and intent_ref = ${intentId}`,
+          "objects",
+        )
+      )[0];
+    const notes = async () =>
+      (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from audit_log
        where org_id = ${org.orgId} and table_name = 'payment_attempts'
-         and changes->'after'->>'note' like '%before its settlement event%'`, "objects"))[0]!.n;
+         and changes->'after'->>'note' like '%before its settlement event%'`,
+          "objects",
+        )
+      )[0]!.n;
 
     // The refund beats settlement and parks (the intent is unresolvable).
     const parked = await fire({
@@ -248,7 +318,15 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
     const settled = await fire({
       id: `evt_rearm_succeeded_${randomUUID().slice(0, 8)}`,
       type: "checkout.session.completed",
-      data: { object: { id: sessionId, client_reference_id: linkToken, amount_total: 10_000, currency: "cad", payment_status: "paid" } },
+      data: {
+        object: {
+          id: sessionId,
+          client_reference_id: linkToken,
+          amount_total: 10_000,
+          currency: "cad",
+          payment_status: "paid",
+        },
+      },
     });
     assert.equal(settled?.status, "settled");
     assert.equal((await marker())?.consumed_at, null);
@@ -260,14 +338,26 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
     const duplicate = await fire({
       id: `evt_rearm_dup_${randomUUID().slice(0, 8)}`,
       type: "checkout.session.completed",
-      data: { object: { id: sessionId, client_reference_id: linkToken, payment_intent: intentId, amount_total: 10_000, currency: "cad", payment_status: "paid" } },
+      data: {
+        object: {
+          id: sessionId,
+          client_reference_id: linkToken,
+          payment_intent: intentId,
+          amount_total: 10_000,
+          currency: "cad",
+          payment_status: "paid",
+        },
+      },
     });
     assert.equal(duplicate?.status, "duplicate");
     assert.equal(await notes(), 0);
     const consumedOnce = await marker();
     assert.ok(consumedOnce?.consumed_at, "marker consumed by the duplicate success");
-    const queued = await db.execute<{ status: string }>(sql`
-      select status from payment_disputes where org_id = ${org.orgId}`, "objects");
+    const queued = await db.execute<{ status: string }>(
+      sql`
+      select status from payment_disputes where org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.equal(queued.length, 1);
     assert.equal(queued[0]!.status, "pending_review");
 
@@ -280,7 +370,11 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
     });
     assert.equal(redelivered?.status, "pending_clawback");
     const afterRedelivery = await marker();
-    assert.equal(afterRedelivery?.consumed_at, consumedOnce?.consumed_at, "redelivery refreshes tracking, never re-arms");
+    assert.equal(
+      afterRedelivery?.consumed_at,
+      consumedOnce?.consumed_at,
+      "redelivery refreshes tracking, never re-arms",
+    );
     assert.equal(afterRedelivery?.consumed_attempt_id, consumedOnce?.consumed_attempt_id);
 
     // A further duplicate success must find the marker closed: no replay, no
@@ -288,13 +382,25 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
     const late = await fire({
       id: `evt_rearm_late_${randomUUID().slice(0, 8)}`,
       type: "checkout.session.completed",
-      data: { object: { id: sessionId, client_reference_id: linkToken, payment_intent: intentId, amount_total: 10_000, currency: "cad", payment_status: "paid" } },
+      data: {
+        object: {
+          id: sessionId,
+          client_reference_id: linkToken,
+          payment_intent: intentId,
+          amount_total: 10_000,
+          currency: "cad",
+          payment_status: "paid",
+        },
+      },
     });
     assert.equal(late?.status, "duplicate");
     assert.equal(await notes(), 0, "no controller notes; the queue carries the return");
     assert.equal((await marker())?.consumed_at, consumedOnce?.consumed_at);
-    const queuedAfter = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from payment_disputes where org_id = ${org.orgId}`, "objects"));
+    const queuedAfter = await db.execute<{ n: number }>(
+      sql`
+      select count(*)::int as n from payment_disputes where org_id = ${org.orgId}`,
+      "objects",
+    );
     assert.equal(queuedAfter[0]!.n, 1, "one return queues exactly once");
   } finally {
     await dropScratchOrg(org.orgId);

@@ -11,7 +11,7 @@ function sqlText(query: unknown): string {
   let out = "";
   for (const chunk of chunks) {
     if (chunk && typeof chunk === "object" && Array.isArray((chunk as { value?: unknown }).value)) {
-      out += ((chunk as { value: string[] }).value).join("");
+      out += (chunk as { value: string[] }).value.join("");
     }
   }
   return out;
@@ -26,10 +26,12 @@ type FakeOptions = {
 function fakeExec(options: FakeOptions): SqlExecutor {
   return {
     execute: (async (query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       const text = sqlText(query);
       options.statements.push(text);
-      if (/from users/i.test(text)) return inMode({ rows: [{ isSuperAdmin: false, isActive: true }] });
+      if (/from users/i.test(text))
+        return inMode({ rows: [{ isSuperAdmin: false, isActive: true }] });
       if (/select role\.permissions/i.test(text)) {
         return inMode({ rows: [{ permissions: options.permission ? ["hrm.leave.read"] : [] }] });
       }
@@ -76,7 +78,10 @@ test("org leave list uses one bounded scoped request query", async () => {
     { status: "submitted", limit: 1 },
   );
 
-  assert.deepEqual(result.requests.map((row) => row.id), [first]);
+  assert.deepEqual(
+    result.requests.map((row) => row.id),
+    [first],
+  );
   assert.equal(result.truncated, true);
   const requestStatements = statements.filter((text) => /from hrm_leave_requests/i.test(text));
   assert.equal(requestStatements.length, 1, "the queue never queries once per employment");
@@ -119,7 +124,11 @@ test("org leave list maps recorded days beside requests in the same statement", 
   assert.equal(day.reason, "approved verbally by the owner");
   assert.equal(result.requests.find((row) => row.source === "request")?.absenceId, null);
   const requestStatements = statements.filter((text) => /from hrm_leave_requests/i.test(text));
-  assert.equal(requestStatements.length, 1, "recorded days ride the same statement, never a second list");
+  assert.equal(
+    requestStatements.length,
+    1,
+    "recorded days ride the same statement, never a second list",
+  );
   assert.match(requestStatements[0]!, /union all/i);
   assert.match(requestStatements[0]!, /hrm_absences/i);
 });
@@ -127,12 +136,12 @@ test("org leave list maps recorded days beside requests in the same statement", 
 test("org leave list refuses a missing read grant before querying requests", async () => {
   const statements: string[] = [];
   await assert.rejects(
-    listOrgLeaveRequests(
-      fakeExec({ permission: false, statements }),
-      randomUUID(),
-      randomUUID(),
-    ),
-    (error: unknown) => error instanceof HrmAuthorizationError && /hrm\.leave\.read/.test(error.message),
+    listOrgLeaveRequests(fakeExec({ permission: false, statements }), randomUUID(), randomUUID()),
+    (error: unknown) =>
+      error instanceof HrmAuthorizationError && /hrm\.leave\.read/.test(error.message),
   );
-  assert.equal(statements.some((text) => /from hrm_leave_requests/i.test(text)), false);
+  assert.equal(
+    statements.some((text) => /from hrm_leave_requests/i.test(text)),
+    false,
+  );
 });

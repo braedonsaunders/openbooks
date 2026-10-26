@@ -142,13 +142,16 @@ test("an all-closed period refuses every posting route", { skip: !DB }, async ()
     const controlBill = await approvedBill(org, actor, "BILL-ROUTES-OPEN");
     await postDocument(controlBill, POST_DEPS(org));
     const controlState = await db.execute<{ status: string }>(
-      sql`select status from documents where id = ${controlBill}`, "objects",
+      sql`select status from documents where id = ${controlBill}`,
+      "objects",
     );
     assert.equal(controlState[0]!.status, "posted");
 
     // Shut every module; GL goes last (the closer refuses GL before its
     // subledgers, so a loop in declared order would trip its own guard).
-    for (const module of [...CLOSE_MODULES].sort((a, b) => (a === "gl" ? 1 : b === "gl" ? -1 : 0))) {
+    for (const module of [...CLOSE_MODULES].sort((a, b) =>
+      a === "gl" ? 1 : b === "gl" ? -1 : 0,
+    )) {
       await setPeriodLockState({
         orgId: org.orgId,
         periodId: org.periodId,
@@ -165,19 +168,23 @@ test("an all-closed period refuses every posting route", { skip: !DB }, async ()
     await assert.rejects(
       postDocument(bill, POST_DEPS(org)),
       (error: unknown) =>
-        error instanceof PostingError && chainMatches(error, /AP is closed for this period and accounting book/),
+        error instanceof PostingError &&
+        chainMatches(error, /AP is closed for this period and accounting book/),
     );
     const invoice = await approvedInvoice(org, actor, "INV-ROUTES-SHUT");
     await assert.rejects(
       postDocument(invoice, POST_DEPS(org)),
       (error: unknown) =>
-        error instanceof PostingError && chainMatches(error, /AR is closed for this period and accounting book/),
+        error instanceof PostingError &&
+        chainMatches(error, /AR is closed for this period and accounting book/),
     );
 
     // Transfer (banking) through the full approval flow + kernel.
     const transfer = await approvedTransfer(org, actor, "TRF-ROUTES-SHUT");
     await assert.rejects(
-      withOrgTransaction(org.orgId, () => postDocument(transfer, POST_DEPS(org), { deferEffects: true })),
+      withOrgTransaction(org.orgId, () =>
+        postDocument(transfer, POST_DEPS(org), { deferEffects: true }),
+      ),
       (error: unknown) => chainMatches(error, /BANKING is closed/),
     );
 
@@ -185,15 +192,22 @@ test("an all-closed period refuses every posting route", { skip: !DB }, async ()
     // storage GL backstop is the only fence — and it must hold.
     const manual = await draftManualEntry(org, actor);
     await assert.rejects(
-      db.execute(sql`update journal_entries set status = 'posted', posted_by = ${actor} where id = ${manual}`),
+      db.execute(
+        sql`update journal_entries set status = 'posted', posted_by = ${actor} where id = ${manual}`,
+      ),
       (error: unknown) => chainMatches(error, /period is closed for GL posting/),
     );
 
     // Non-document engine route: an inventory receipt fences GL itself.
     await assert.rejects(
       receiveInventory(org.orgId, null, {
-        itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "5", unitCost: "2.00",
-        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "5",
+        unitCost: "2.00",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
       }),
       (error: unknown) => error instanceof InventoryError && chainMatches(error, /GL is closed/),
     );
@@ -201,10 +215,13 @@ test("an all-closed period refuses every posting route", { skip: !DB }, async ()
     // Atomicity spot-check: the refused bill sits approved with no partial
     // journal behind it.
     const untouched = await withBypassContext(async () => {
-      const r = await db.execute<{ status: string; entries: number }>(sql`
+      const r = await db.execute<{ status: string; entries: number }>(
+        sql`
         select status,
                (select count(*)::int from journal_entries where source_document_id = ${bill}) as entries
-          from documents where id = ${bill} and org_id = ${org.orgId}`, "objects");
+          from documents where id = ${bill} and org_id = ${org.orgId}`,
+        "objects",
+      );
       return r[0]!;
     });
     assert.deepEqual(untouched, { status: "approved", entries: 0 });

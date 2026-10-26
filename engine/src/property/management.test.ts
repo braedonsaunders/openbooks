@@ -27,48 +27,91 @@ test("blank optional refs coerce to null instead of failing uuid validation", ()
   assert.equal(emptyRefToNull("   "), null);
   assert.equal(emptyRefToNull(null), null);
   assert.equal(emptyRefToNull(undefined), null);
-  assert.equal(emptyRefToNull("3fa85f64-5717-4562-b3fc-2c963f66afa6"), "3fa85f64-5717-4562-b3fc-2c963f66afa6");
+  assert.equal(
+    emptyRefToNull("3fa85f64-5717-4562-b3fc-2c963f66afa6"),
+    "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  );
 });
 
 test("lease proration uses exact inclusive calendar days", () => {
-  assert.equal(prorateLeaseCharge("3100", "2026-01-01", "2026-01-31", "2026-01-16", "2026-01-31"), "1600.0000");
-  assert.equal(prorateLeaseCharge("2800", "2026-02-01", "2026-02-28", "2026-02-01", "2026-02-14"), "1400.0000");
-  assert.equal(prorateLeaseCharge("100", "2026-01-01", "2026-01-31", "2026-02-01", "2026-02-28"), "0.0000");
+  assert.equal(
+    prorateLeaseCharge("3100", "2026-01-01", "2026-01-31", "2026-01-16", "2026-01-31"),
+    "1600.0000",
+  );
+  assert.equal(
+    prorateLeaseCharge("2800", "2026-02-01", "2026-02-28", "2026-02-01", "2026-02-14"),
+    "1400.0000",
+  );
+  assert.equal(
+    prorateLeaseCharge("100", "2026-01-01", "2026-01-31", "2026-02-01", "2026-02-28"),
+    "0.0000",
+  );
 });
 
 test("recurring schedules clamp billing day and prorate first and last periods", () => {
-  assert.deepEqual(leaseChargeSchedule({
-    amount: "3100",
-    frequency: "monthly",
-    effectiveFrom: "2026-01-16",
-    effectiveTo: "2026-03-10",
-    leaseStartsOn: "2026-01-01",
-    leaseEndsOn: "2026-12-31",
-    throughOn: "2026-12-31",
-    billingDay: 31,
-  }), [
-    { periodStartsOn: "2026-01-16", periodEndsOn: "2026-01-31", dueOn: "2026-01-31", amount: "1600.0000" },
-    { periodStartsOn: "2026-02-01", periodEndsOn: "2026-02-28", dueOn: "2026-02-28", amount: "3100.0000" },
-    { periodStartsOn: "2026-03-01", periodEndsOn: "2026-03-10", dueOn: "2026-03-31", amount: "1000.0000" },
-  ]);
-  assert.deepEqual(leaseChargeSchedule({
-    amount: "250",
-    frequency: "one_time",
-    effectiveFrom: "2026-05-12",
-    leaseStartsOn: "2026-01-01",
-    throughOn: "2026-12-31",
-    billingDay: 1,
-  }), [{ periodStartsOn: "2026-05-12", periodEndsOn: "2026-05-12", dueOn: "2026-05-12", amount: "250.0000" }]);
-  assert.throws(
-    () => leaseChargeSchedule({
-      amount: "2.5e2",
+  assert.deepEqual(
+    leaseChargeSchedule({
+      amount: "3100",
+      frequency: "monthly",
+      effectiveFrom: "2026-01-16",
+      effectiveTo: "2026-03-10",
+      leaseStartsOn: "2026-01-01",
+      leaseEndsOn: "2026-12-31",
+      throughOn: "2026-12-31",
+      billingDay: 31,
+    }),
+    [
+      {
+        periodStartsOn: "2026-01-16",
+        periodEndsOn: "2026-01-31",
+        dueOn: "2026-01-31",
+        amount: "1600.0000",
+      },
+      {
+        periodStartsOn: "2026-02-01",
+        periodEndsOn: "2026-02-28",
+        dueOn: "2026-02-28",
+        amount: "3100.0000",
+      },
+      {
+        periodStartsOn: "2026-03-01",
+        periodEndsOn: "2026-03-10",
+        dueOn: "2026-03-31",
+        amount: "1000.0000",
+      },
+    ],
+  );
+  assert.deepEqual(
+    leaseChargeSchedule({
+      amount: "250",
       frequency: "one_time",
       effectiveFrom: "2026-05-12",
       leaseStartsOn: "2026-01-01",
       throughOn: "2026-12-31",
       billingDay: 1,
     }),
-    (error: unknown) => error instanceof PropertyManagementError && /Charge amount must be an exact decimal/.test(error.message),
+    [
+      {
+        periodStartsOn: "2026-05-12",
+        periodEndsOn: "2026-05-12",
+        dueOn: "2026-05-12",
+        amount: "250.0000",
+      },
+    ],
+  );
+  assert.throws(
+    () =>
+      leaseChargeSchedule({
+        amount: "2.5e2",
+        frequency: "one_time",
+        effectiveFrom: "2026-05-12",
+        leaseStartsOn: "2026-01-01",
+        throughOn: "2026-12-31",
+        billingDay: 1,
+      }),
+    (error: unknown) =>
+      error instanceof PropertyManagementError &&
+      /Charge amount must be an exact decimal/.test(error.message),
   );
 });
 
@@ -81,12 +124,27 @@ test("rent escalations preserve exact ledger precision", () => {
 
 test("deposit posting shapes put party-bearing liability and AR on the correct sides", () => {
   for (const kind of ["received", "interest", "adjustment_increase"]) {
-    assert.deepEqual(depositPostingShape(kind), { kind, liabilitySide: "credit", offsetSide: "debit", offsetIsArOpenItem: false });
+    assert.deepEqual(depositPostingShape(kind), {
+      kind,
+      liabilitySide: "credit",
+      offsetSide: "debit",
+      offsetIsArOpenItem: false,
+    });
   }
   for (const kind of ["refunded", "adjustment_decrease"]) {
-    assert.deepEqual(depositPostingShape(kind), { kind, liabilitySide: "debit", offsetSide: "credit", offsetIsArOpenItem: false });
+    assert.deepEqual(depositPostingShape(kind), {
+      kind,
+      liabilitySide: "debit",
+      offsetSide: "credit",
+      offsetIsArOpenItem: false,
+    });
   }
-  assert.deepEqual(depositPostingShape("applied"), { kind: "applied", liabilitySide: "debit", offsetSide: "credit", offsetIsArOpenItem: true });
+  assert.deepEqual(depositPostingShape("applied"), {
+    kind: "applied",
+    liabilitySide: "debit",
+    offsetSide: "credit",
+    offsetIsArOpenItem: true,
+  });
   assert.throws(() => depositPostingShape("chargeback"), /Unsupported deposit transaction type/);
 });
 
@@ -101,14 +159,20 @@ test("deposit corrections reverse the subledger sign without deleting evidence",
 });
 
 test("deposit balance cannot mistake an unsupported transaction for a decrease", () => {
-  assert.equal(depositBalance([
-    { kind: "received", amount: "2500" },
-    { kind: "interest", amount: "25" },
-    { kind: "applied", amount: "300" },
-    { kind: "refunded", amount: "1000" },
-    { kind: "adjustment_decrease", amount: "25" },
-  ]), "1200.0000");
-  assert.throws(() => depositBalance([{ kind: "unknown", amount: "10" }]), /Unsupported deposit transaction type/);
+  assert.equal(
+    depositBalance([
+      { kind: "received", amount: "2500" },
+      { kind: "interest", amount: "25" },
+      { kind: "applied", amount: "300" },
+      { kind: "refunded", amount: "1000" },
+      { kind: "adjustment_decrease", amount: "25" },
+    ]),
+    "1200.0000",
+  );
+  assert.throws(
+    () => depositBalance([{ kind: "unknown", amount: "10" }]),
+    /Unsupported deposit transaction type/,
+  );
 });
 
 test("CAM overlap is inclusive and excludes non-overlapping occupancy", () => {
@@ -118,14 +182,29 @@ test("CAM overlap is inclusive and excludes non-overlapping occupancy", () => {
 });
 
 test("CAM estimate proration assigns each day once and preserves total minor units", () => {
-  const january = prorateCamEstimateByDays("3100", "2026-01-15", "2026-02-14", Array.from({ length: 17 }, (_, day) => `2026-01-${String(day + 15).padStart(2, "0")}`));
-  const february = prorateCamEstimateByDays("3100", "2026-01-15", "2026-02-14", Array.from({ length: 14 }, (_, day) => `2026-02-${String(day + 1).padStart(2, "0")}`));
+  const january = prorateCamEstimateByDays(
+    "3100",
+    "2026-01-15",
+    "2026-02-14",
+    Array.from({ length: 17 }, (_, day) => `2026-01-${String(day + 15).padStart(2, "0")}`),
+  );
+  const february = prorateCamEstimateByDays(
+    "3100",
+    "2026-01-15",
+    "2026-02-14",
+    Array.from({ length: 14 }, (_, day) => `2026-02-${String(day + 1).padStart(2, "0")}`),
+  );
   assert.equal(january, "1700.0000");
   assert.equal(february, "1400.0000");
-  assert.equal(prorateCamEstimateByDays("0.0001", "2026-01-01", "2026-01-03", ["2026-01-01"]), "0.0001");
+  assert.equal(
+    prorateCamEstimateByDays("0.0001", "2026-01-01", "2026-01-03", ["2026-01-01"]),
+    "0.0001",
+  );
   assert.throws(
     () => prorateCamEstimateByDays("10", "2026-01-01", "2026-01-03", ["2026-01-04"]),
-    (error: unknown) => error instanceof PropertyManagementError && /unique dates within the schedule period/.test(error.message),
+    (error: unknown) =>
+      error instanceof PropertyManagementError &&
+      /unique dates within the schedule period/.test(error.message),
   );
 });
 
@@ -134,39 +213,46 @@ test("escalation and schedule helpers reject unknown policies instead of miscomp
   // branch: escalatedRent("2000", "bogus", "50") silently returned "50.0000".
   assert.throws(
     () => escalatedRent("2000", "bogus" as never, "50"),
-    (error: unknown) => error instanceof PropertyManagementError && /Invalid escalation method/.test(error.message),
+    (error: unknown) =>
+      error instanceof PropertyManagementError && /Invalid escalation method/.test(error.message),
   );
   // Before the guard, an unknown frequency fell through to the annual
   // branch and materialised one twelve-month period.
   assert.throws(
-    () => leaseChargeSchedule({
-      amount: "1200",
-      frequency: "bogus" as never,
-      effectiveFrom: "2026-01-01",
-      leaseStartsOn: "2026-01-01",
-      throughOn: "2026-12-31",
-      billingDay: 1,
-    }),
-    (error: unknown) => error instanceof PropertyManagementError && /Invalid charge frequency/.test(error.message),
+    () =>
+      leaseChargeSchedule({
+        amount: "1200",
+        frequency: "bogus" as never,
+        effectiveFrom: "2026-01-01",
+        leaseStartsOn: "2026-01-01",
+        throughOn: "2026-12-31",
+        billingDay: 1,
+      }),
+    (error: unknown) =>
+      error instanceof PropertyManagementError && /Invalid charge frequency/.test(error.message),
   );
   // The enum is validated before the empty-window early return: an unknown
   // frequency with no overlapping window still throws instead of [].
   assert.throws(
-    () => leaseChargeSchedule({
-      amount: "1200",
-      frequency: "bogus" as never,
-      effectiveFrom: "2027-01-01",
-      leaseStartsOn: "2026-01-01",
-      throughOn: "2026-12-31",
-      billingDay: 1,
-    }),
-    (error: unknown) => error instanceof PropertyManagementError && /Invalid charge frequency/.test(error.message),
+    () =>
+      leaseChargeSchedule({
+        amount: "1200",
+        frequency: "bogus" as never,
+        effectiveFrom: "2027-01-01",
+        leaseStartsOn: "2026-01-01",
+        throughOn: "2026-12-31",
+        billingDay: 1,
+      }),
+    (error: unknown) =>
+      error instanceof PropertyManagementError && /Invalid charge frequency/.test(error.message),
   );
 });
 
 test("the import-conflict mapper only recognises the known deposit backstop", () => {
   const conflict = new Error("duplicate key value violates unique constraint", {
-    cause: Object.assign(new Error("duplicate key"), { constraint: "security_deposits_import_key_once" }),
+    cause: Object.assign(new Error("duplicate key"), {
+      constraint: "security_deposits_import_key_once",
+    }),
   });
   assert.equal(isSecurityDepositImportConflict(conflict), true);
   const other = new Error("duplicate key value violates unique constraint", {
@@ -218,8 +304,16 @@ test("lease creation validates billing, terms, deposit, CAM, and late-fee policy
     ["negative deposit", { securityDepositRequired: "-5" }, /Security deposit cannot be negative/],
     ["unknown CAM method", { camMethod: "bogus" }, /Invalid CAM method/],
     ["unknown late-fee type", { lateFeeType: "bogus", lateFeeValue: "5" }, /Invalid late-fee type/],
-    ["late-fee percent over 100", { lateFeeType: "percent", lateFeeValue: "150" }, /Late-fee percent cannot exceed 100/],
-    ["zero fixed late fee", { lateFeeType: "fixed", lateFeeValue: "0" }, /Late-fee value must be positive/],
+    [
+      "late-fee percent over 100",
+      { lateFeeType: "percent", lateFeeValue: "150" },
+      /Late-fee percent cannot exceed 100/,
+    ],
+    [
+      "zero fixed late fee",
+      { lateFeeType: "fixed", lateFeeValue: "0" },
+      /Late-fee value must be positive/,
+    ],
   ];
   for (const [label, override, pattern] of cases) {
     await assert.rejects(
@@ -232,12 +326,16 @@ test("lease creation validates billing, terms, deposit, CAM, and late-fee policy
 
 test("property, unit, charge, escalation, and CAM creation validate enums, dates, and windows before touching storage", async () => {
   await assert.rejects(
-    () => createManagedProperty({ ...CREATE_IDS, code: "P-1", name: "Bogus", propertyType: "castle" }),
-    (error: unknown) => error instanceof PropertyManagementError && /Invalid property type/.test(error.message),
+    () =>
+      createManagedProperty({ ...CREATE_IDS, code: "P-1", name: "Bogus", propertyType: "castle" }),
+    (error: unknown) =>
+      error instanceof PropertyManagementError && /Invalid property type/.test(error.message),
   );
   await assert.rejects(
     () => createPropertyUnit({ ...CREATE_IDS, code: "U-1", bedrooms: -2 }),
-    (error: unknown) => error instanceof PropertyManagementError && /Bedrooms must be a non-negative whole number/.test(error.message),
+    (error: unknown) =>
+      error instanceof PropertyManagementError &&
+      /Bedrooms must be a non-negative whole number/.test(error.message),
   );
   const chargeBase = {
     ...CREATE_IDS,
@@ -249,31 +347,45 @@ test("property, unit, charge, escalation, and CAM creation validate enums, dates
   };
   await assert.rejects(
     () => addLeaseCharge({ ...chargeBase, effectiveFrom: "not-a-date" }),
-    (error: unknown) => error instanceof PropertyManagementError && /Charge start is invalid/.test(error.message),
+    (error: unknown) =>
+      error instanceof PropertyManagementError && /Charge start is invalid/.test(error.message),
   );
   await assert.rejects(
     () => addLeaseCharge({ ...chargeBase, effectiveFrom: "" }),
-    (error: unknown) => error instanceof PropertyManagementError && /Charge start is required/.test(error.message),
+    (error: unknown) =>
+      error instanceof PropertyManagementError && /Charge start is required/.test(error.message),
   );
   await assert.rejects(
     () => addLeaseCharge({ ...chargeBase, effectiveTo: "2026-04-01" }),
-    (error: unknown) => error instanceof PropertyManagementError && /Charge end cannot precede start/.test(error.message),
+    (error: unknown) =>
+      error instanceof PropertyManagementError &&
+      /Charge end cannot precede start/.test(error.message),
   );
   await assert.rejects(
     () => addLeaseCharge({ ...chargeBase, frequency: "bogus" }),
-    (error: unknown) => error instanceof PropertyManagementError && /Invalid charge frequency/.test(error.message),
+    (error: unknown) =>
+      error instanceof PropertyManagementError && /Invalid charge frequency/.test(error.message),
   );
   await assert.rejects(
     () => addLeaseCharge({ ...chargeBase, chargeType: "bogus" }),
-    (error: unknown) => error instanceof PropertyManagementError && /Invalid charge type/.test(error.message),
+    (error: unknown) =>
+      error instanceof PropertyManagementError && /Invalid charge type/.test(error.message),
   );
   await assert.rejects(
-    () => addLeaseEscalation({ ...CREATE_IDS, effectiveOn: "2026-07-01", method: "bogus" as never, value: "50" }),
-    (error: unknown) => error instanceof PropertyManagementError && /Invalid escalation method/.test(error.message),
+    () =>
+      addLeaseEscalation({
+        ...CREATE_IDS,
+        effectiveOn: "2026-07-01",
+        method: "bogus" as never,
+        value: "50",
+      }),
+    (error: unknown) =>
+      error instanceof PropertyManagementError && /Invalid escalation method/.test(error.message),
   );
   await assert.rejects(
     () => addLeaseEscalation({ ...CREATE_IDS, effectiveOn: "", method: "percent", value: "50" }),
-    (error: unknown) => error instanceof PropertyManagementError && /Escalation date is required/.test(error.message),
+    (error: unknown) =>
+      error instanceof PropertyManagementError && /Escalation date is required/.test(error.message),
   );
   const poolBase = {
     ...CREATE_IDS,
@@ -287,19 +399,33 @@ test("property, unit, charge, escalation, and CAM creation validate enums, dates
   };
   await assert.rejects(
     () => createCamPool({ ...poolBase }),
-    (error: unknown) => error instanceof PropertyManagementError && /Invalid CAM allocation basis/.test(error.message),
+    (error: unknown) =>
+      error instanceof PropertyManagementError &&
+      /Invalid CAM allocation basis/.test(error.message),
   );
   await assert.rejects(
     () => updateCamPool({ ...poolBase, poolId: CREATE_IDS.poolId }),
-    (error: unknown) => error instanceof PropertyManagementError && /Invalid CAM allocation basis/.test(error.message),
+    (error: unknown) =>
+      error instanceof PropertyManagementError &&
+      /Invalid CAM allocation basis/.test(error.message),
   );
 });
 
 test("lease termination requires an explicit date before touching storage", async () => {
   // A blank date previously terminated the lease with a null move-out date.
   await assert.rejects(
-    () => terminatePropertyLease(CREATE_IDS.orgId, CREATE_IDS.actorId, CREATE_IDS.allowedSubsidiaryIds, CREATE_IDS.leaseId, "", "Tenant left"),
-    (error: unknown) => error instanceof PropertyManagementError && /Termination date is required/.test(error.message),
+    () =>
+      terminatePropertyLease(
+        CREATE_IDS.orgId,
+        CREATE_IDS.actorId,
+        CREATE_IDS.allowedSubsidiaryIds,
+        CREATE_IDS.leaseId,
+        "",
+        "Tenant left",
+      ),
+    (error: unknown) =>
+      error instanceof PropertyManagementError &&
+      /Termination date is required/.test(error.message),
   );
 });
 
@@ -308,14 +434,23 @@ test("lease money wider than the ledger refuses by name before any proration", (
   // charge is refused with the shared ledger message instead of dying in
   // Postgres, while the 15-digit column maximum still prices.
   assert.throws(
-    () => prorateLeaseCharge("1000000000000000", "2026-01-01", "2026-01-31", "2026-01-01", "2026-01-31"),
+    () =>
+      prorateLeaseCharge(
+        "1000000000000000",
+        "2026-01-01",
+        "2026-01-31",
+        "2026-01-01",
+        "2026-01-31",
+      ),
     (error: unknown) =>
-      error instanceof PropertyManagementError && /at most 15 whole digits fit the ledger/.test(error.message),
+      error instanceof PropertyManagementError &&
+      /at most 15 whole digits fit the ledger/.test(error.message),
   );
   assert.throws(
     () => escalatedRent("1000000000000000", "fixed", "0"),
     (error: unknown) =>
-      error instanceof PropertyManagementError && /at most 15 whole digits fit the ledger/.test(error.message),
+      error instanceof PropertyManagementError &&
+      /at most 15 whole digits fit the ledger/.test(error.message),
   );
   assert.equal(
     prorateLeaseCharge("999999999999999", "2026-01-01", "2026-01-31", "2026-01-01", "2026-01-31"),
@@ -340,7 +475,7 @@ test("the generic lease-charge API refuses base_rent before touching storage", a
       effectiveFrom: "2026-08-01",
     }),
     (error: unknown) =>
-      error instanceof PropertyManagementError
-      && /Base rent changes belong on the lease/.test(error.message),
+      error instanceof PropertyManagementError &&
+      /Base rent changes belong on the lease/.test(error.message),
   );
 });

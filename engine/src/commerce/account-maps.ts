@@ -29,12 +29,19 @@ export interface UpsertAccountMapInput {
   effectiveFrom: string;
 }
 
-function refuse(code: string, message: string, remedy: string, field: string | null = null, status: 422 | 409 = 422): never {
+function refuse(
+  code: string,
+  message: string,
+  remedy: string,
+  field: string | null = null,
+  status: 422 | 409 = 422,
+): never {
   throw new CommerceError(code, message, remedy, { field, status });
 }
 
 function checkRole(role: string): ChannelAccountRole {
-  if ((CHANNEL_ACCOUNT_ROLES as readonly string[]).includes(role)) return role as ChannelAccountRole;
+  if ((CHANNEL_ACCOUNT_ROLES as readonly string[]).includes(role))
+    return role as ChannelAccountRole;
   refuse(
     "channel_map_role_unknown",
     `Posting role "${role}" is not a channel posting role.`,
@@ -92,12 +99,15 @@ export async function resolveAccountMap(
 ): Promise<string> {
   const roleValue = checkRole(role);
   checkDate(date);
-  const rows = await db.execute<MapDbRow>(sql`
+  const rows = await db.execute<MapDbRow>(
+    sql`
     select ${MAP_COLUMNS} from sales_channel_account_maps
      where org_id = ${orgId} and channel_id = ${channelId}
        and role = ${roleValue} and key = ${key}
        and effective_from <= ${date}
-       and (effective_to is null or effective_to >= ${date})`, "objects");
+       and (effective_to is null or effective_to >= ${date})`,
+    "objects",
+  );
   if (rows.length > 1) {
     throw new Error(
       `Overlapping account maps for channel ${channelId} role ${roleValue} key "${key}" on ${date}; storage must hold exactly one open row`,
@@ -105,8 +115,13 @@ export async function resolveAccountMap(
   }
   const row = rows[0];
   if (!row) {
-    const channel = (await db.execute<{ name: string }>(sql`
-      select name from sales_channels where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
+    const channel = (
+      await db.execute<{ name: string }>(
+        sql`
+      select name from sales_channels where org_id = ${orgId} and id = ${channelId}`,
+        "objects",
+      )
+    )[0];
     refuse(
       "channel_map_unmapped",
       channel
@@ -138,8 +153,13 @@ export async function upsertAccountMap(
     if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
       refuse("feature_off", "Sales Channels is turned off for this organization.", FEATURE_REMEDY);
     }
-    const channel = (await db.execute<{ id: string }>(sql`
-      select id from sales_channels where org_id = ${orgId} and id = ${input.channelId}`, "objects"))[0];
+    const channel = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from sales_channels where org_id = ${orgId} and id = ${input.channelId}`,
+        "objects",
+      )
+    )[0];
     if (!channel) {
       refuse(
         "channel_not_found",
@@ -148,8 +168,13 @@ export async function upsertAccountMap(
         "channelId",
       );
     }
-    const account = (await db.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${orgId} and id = ${input.accountId}`, "objects"))[0];
+    const account = (
+      await db.execute<{ id: string }>(
+        sql`
+      select id from accounts where org_id = ${orgId} and id = ${input.accountId}`,
+        "objects",
+      )
+    )[0];
     if (!account) {
       refuse(
         "channel_map_account_unavailable",
@@ -160,19 +185,26 @@ export async function upsertAccountMap(
     }
     // Lock the role's rows before closing: a concurrent remap waits here,
     // then sees the closed window instead of writing over it.
-    const open = await db.execute<MapDbRow>(sql`
+    const open = await db.execute<MapDbRow>(
+      sql`
       select ${MAP_COLUMNS} from sales_channel_account_maps
        where org_id = ${orgId} and channel_id = ${input.channelId}
          and role = ${role} and key = ${key}
          and effective_to is null
-       for update`, "objects");
+       for update`,
+      "objects",
+    );
     if (open.length > 1) {
       throw new Error(
         `Overlapping open account maps for channel ${input.channelId} role ${role} key "${key}"; storage must hold exactly one open row`,
       );
     }
     const prior = open[0];
-    if (prior && prior.effective_from === input.effectiveFrom && prior.account_id === input.accountId) {
+    if (
+      prior &&
+      prior.effective_from === input.effectiveFrom &&
+      prior.account_id === input.accountId
+    ) {
       return toRow(prior);
     }
     if (prior) {
@@ -199,18 +231,25 @@ export async function upsertAccountMap(
     }
     let id: string;
     try {
-      const inserted = await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into sales_channel_account_maps
           (org_id, channel_id, role, key, account_id, effective_from, created_by, updated_by)
         values (${orgId}, ${input.channelId}, ${role}, ${key}, ${input.accountId},
           ${input.effectiveFrom}, ${actor}, ${actor})
-        returning id`, "objects");
-      if (inserted.length !== 1) throw new Error("Account map insert returned an unexpected row count");
+        returning id`,
+        "objects",
+      );
+      if (inserted.length !== 1)
+        throw new Error("Account map insert returned an unexpected row count");
       id = inserted[0]!.id;
     } catch (error) {
       if (error instanceof CommerceError) throw error;
       const candidate = error as { code?: unknown; constraint?: unknown };
-      if (candidate.code === "23P01" || candidate.constraint === "sales_channel_account_maps_no_overlap") {
+      if (
+        candidate.code === "23P01" ||
+        candidate.constraint === "sales_channel_account_maps_no_overlap"
+      ) {
         refuse(
           "channel_map_overlaps",
           `The new ${role} map overlaps an existing window for this channel and key.`,
@@ -221,9 +260,14 @@ export async function upsertAccountMap(
       }
       throw error;
     }
-    const row = (await db.execute<MapDbRow>(sql`
+    const row = (
+      await db.execute<MapDbRow>(
+        sql`
       select ${MAP_COLUMNS} from sales_channel_account_maps
-       where org_id = ${orgId} and id = ${id}`, "objects"))[0]!;
+       where org_id = ${orgId} and id = ${id}`,
+        "objects",
+      )
+    )[0]!;
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'sales_channel_account_maps', ${id}, 'insert',
@@ -233,9 +277,12 @@ export async function upsertAccountMap(
 }
 
 export async function listAccountMaps(orgId: string, channelId: string): Promise<AccountMapRow[]> {
-  const rows = await db.execute<MapDbRow>(sql`
+  const rows = await db.execute<MapDbRow>(
+    sql`
     select ${MAP_COLUMNS} from sales_channel_account_maps
      where org_id = ${orgId} and channel_id = ${channelId}
-     order by role, key, effective_from`, "objects");
+     order by role, key, effective_from`,
+    "objects",
+  );
   return rows.map(toRow);
 }

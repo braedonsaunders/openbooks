@@ -1,11 +1,16 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
-import { confirmFixturePick } from '@openbooks/engine/testing/warehouse-execution'
-import { db, withBypassContext } from '@openbooks/engine/platform/db'
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/testing/fixtures'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import { confirmFixturePick } from "@openbooks/engine/testing/warehouse-execution";
+import { db, withBypassContext } from "@openbooks/engine/platform/db";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  type ScratchOrg,
+} from "@openbooks/engine/testing/fixtures";
 
 /**
  * The distribution modules' OFF state, one fence for every surface: with the
@@ -17,9 +22,9 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } fro
  * after a test registration, so test discovery completes before execution.
  */
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL)
-const state: { authz: unknown } = { authz: null }
-Object.assign(globalThis, { __distributionFence: state })
+const DB = Boolean(process.env.OPENBOOKS_DB_URL);
+const state: { authz: unknown } = { authz: null };
+Object.assign(globalThis, { __distributionFence: state });
 const AUTHZ_DOUBLE = `data:text/javascript,${encodeURIComponent(`
 const current = () => globalThis.__distributionFence.authz
 export async function getAuthz() { return current() }
@@ -30,466 +35,896 @@ export function can() { return true }
 export function guardUnrestrictedScope() { return null }
 export async function guardRootSubsidiaryScope() { return null }
 export function guardSubsidiaryScope() { return null }
-`)}`
+`)}`;
 // Report loaders read their copy through next-intl; outside a Next request the
 // key stands in for the translation.
 const INTL_DOUBLE = `data:text/javascript,${encodeURIComponent(`
 export async function getTranslations() { return (key) => key }
 export async function getLocale() { return 'en' }
-`)}`
-registerHooks({ resolve(specifier, context, next) {
-  const parent = context.parentURL ?? ''
-  const authzImport = specifier === './authz' || specifier.endsWith('/lib/authz')
-  const fenced = ['/lib/api/route', '/lib/feature-gates', '/warehouse/view', '/api/admin/setup/', '/reports/',
-    '/api/reports/statement/', '/api/scan/resolve', '/picks/view', '/shipments/view', '/sales-orders/view', '/purchase-orders/view',
-    '/api/sales-orders/', '/api/purchase-orders/', '/returns/view', '/api/returns/'].some((path) => parent.includes(path))
-  if (authzImport && fenced) return { shortCircuit: true, url: AUTHZ_DOUBLE }
-  const reportCopy = ['/reports/', '/lib/availability-report', '/sales-orders/view', '/purchase-orders/view'].some((path) => parent.includes(path))
-  if (specifier === 'next-intl/server' && reportCopy) return { shortCircuit: true, url: INTL_DOUBLE }
-  return next(specifier, context)
-} })
+`)}`;
+registerHooks({
+  resolve(specifier, context, next) {
+    const parent = context.parentURL ?? "";
+    const authzImport = specifier === "./authz" || specifier.endsWith("/lib/authz");
+    const fenced = [
+      "/lib/api/route",
+      "/lib/feature-gates",
+      "/warehouse/view",
+      "/api/admin/setup/",
+      "/reports/",
+      "/api/reports/statement/",
+      "/api/scan/resolve",
+      "/picks/view",
+      "/shipments/view",
+      "/sales-orders/view",
+      "/purchase-orders/view",
+      "/api/sales-orders/",
+      "/api/purchase-orders/",
+      "/returns/view",
+      "/api/returns/",
+    ].some((path) => parent.includes(path));
+    if (authzImport && fenced) return { shortCircuit: true, url: AUTHZ_DOUBLE };
+    const reportCopy = [
+      "/reports/",
+      "/lib/availability-report",
+      "/sales-orders/view",
+      "/purchase-orders/view",
+    ].some((path) => parent.includes(path));
+    if (specifier === "next-intl/server" && reportCopy)
+      return { shortCircuit: true, url: INTL_DOUBLE };
+    return next(specifier, context);
+  },
+});
 
-const setup = await import('../app/api/admin/setup/[entity]/route')
-const warehousesRoute = await import('../app/api/warehouses/route')
-const warehouseRoute = await import('../app/api/warehouses/[id]/route')
-const lifecycleRoute = await import('../app/api/warehouses/[id]/lifecycle/route')
-const putawayRoute = await import('../app/api/warehouses/[id]/putaway/route')
-const { loadWarehouse } = await import('../app/(app)/warehouse/view')
-const { resolveNav } = await import('./nav/resolve')
-const { resolvedFeatureState } = await import('./features')
-const { canRunTool } = await import('./assistant/gate')
-const { WAREHOUSE_TOOLS } = await import('./assistant/tools-warehouses')
-const { receiveInventory } = await import('@openbooks/engine/inventory/movements')
-const { resolvePutawayLocation } = await import('@openbooks/engine/inventory/putaway')
-const warehouses = await import('@openbooks/engine/inventory/warehouses')
-const availability = await import('@openbooks/engine/inventory/availability')
-const { replenishmentProposals } = await import('@openbooks/engine/inventory/replenishment')
-const { loadAvailability } = await import('../app/(app)/reports/availability/view')
-const { loadReplenishment } = await import('../app/(app)/reports/replenishment/view')
-const { loadReportsHub } = await import('../app/(app)/reports/view')
-const statementExport = await import('../app/api/reports/statement/[kind]/export/route')
-const scanResolveRoute = await import('../app/api/scan/resolve/route')
-const itemIdentifiers = await import('@openbooks/engine/inventory/item-identifiers')
-const { optionalScanResolver } = await import('./scan')
-const returnsRoute = await import('../app/api/returns/route')
-const returnRoute = await import('../app/api/returns/[id]/route')
-const returnReceiveRoute = await import('../app/api/returns/[id]/receive/route')
-const returnInspectRoute = await import('../app/api/returns/[id]/inspect/route')
-const returnRejectRoute = await import('../app/api/returns/[id]/reject/route')
-const returnEmailRoute = await import('../app/api/returns/[id]/email/route')
-const returnSourcesRoute = await import('../app/api/returns/sources/route')
-const { loadReturns } = await import('../app/(app)/returns/view')
-const returnEngine = await import('@openbooks/engine/sales/returns')
-const { RETURNS_TOOLS } = await import('./assistant/tools-returns')
-const pickRoutes = await import('../app/api/picks/route')
-const pickRoute = await import('../app/api/picks/[id]/route')
-const pickReleaseRoute = await import('../app/api/picks/[id]/release/route')
-const pickVoidRoute = await import('../app/api/picks/[id]/void/route')
-const pickCandidatesRoute = await import('../app/api/picks/candidates/route')
-const shipmentRoutes = await import('../app/api/shipments/route')
-const shipmentRoute = await import('../app/api/shipments/[id]/route')
-const shipmentCompleteRoute = await import('../app/api/shipments/[id]/complete/route')
-const shipmentVoidRoute = await import('../app/api/shipments/[id]/void/route')
-const shipmentTrackingRoute = await import('../app/api/shipments/[id]/send-tracking/route')
-const backordersRoute = await import('../app/api/sales-orders/[id]/backorders/route')
-const { loadPicks } = await import('../app/(app)/picks/view')
-const { loadShipments } = await import('../app/(app)/shipments/view')
-const { loadSalesOrders, orderFulfillmentActions } = await import('../app/(app)/sales-orders/view')
-const { loadPurchaseOrders } = await import('../app/(app)/purchase-orders/view')
-const { enabledListSource } = await import('./list/sources')
-const { guardReportEntity, hiddenReportEntityKeys } = await import('./report-authz')
-const { FULFILLMENT_TOOLS } = await import('./assistant/tools-fulfillment')
-const fulfillment = await import('@openbooks/engine/sales/fulfillment/module')
-const { backorderPosition, cancelOrderLineRemainder } = await import('@openbooks/engine/sales/backorders')
-const { salesOrderLineRemainders } = await import('@openbooks/engine/records/order-line-remainders')
-const dropShipEngine = await import('@openbooks/engine/sales/drop-ship')
-const dropShipServices = await import('./drop-ship.ts')
-const dropShipRoute = await import('../app/api/sales-orders/[id]/drop-ship/route')
-const dropShipPurchaseOrderRoute = await import('../app/api/sales-orders/[id]/drop-ship/purchase-orders/route')
-const dropShipConfirmationRoute = await import('../app/api/purchase-orders/[id]/drop-ship-confirmation/route')
-const { createOrderDraft } = await import('./order-cycle.ts')
+const setup = await import("../app/api/admin/setup/[entity]/route");
+const warehousesRoute = await import("../app/api/warehouses/route");
+const warehouseRoute = await import("../app/api/warehouses/[id]/route");
+const lifecycleRoute = await import("../app/api/warehouses/[id]/lifecycle/route");
+const putawayRoute = await import("../app/api/warehouses/[id]/putaway/route");
+const { loadWarehouse } = await import("../app/(app)/warehouse/view");
+const { resolveNav } = await import("./nav/resolve");
+const { resolvedFeatureState } = await import("./features");
+const { canRunTool } = await import("./assistant/gate");
+const { WAREHOUSE_TOOLS } = await import("./assistant/tools-warehouses");
+const { receiveInventory } = await import("@openbooks/engine/inventory/movements");
+const { resolvePutawayLocation } = await import("@openbooks/engine/inventory/putaway");
+const warehouses = await import("@openbooks/engine/inventory/warehouses");
+const availability = await import("@openbooks/engine/inventory/availability");
+const { replenishmentProposals } = await import("@openbooks/engine/inventory/replenishment");
+const { loadAvailability } = await import("../app/(app)/reports/availability/view");
+const { loadReplenishment } = await import("../app/(app)/reports/replenishment/view");
+const { loadReportsHub } = await import("../app/(app)/reports/view");
+const statementExport = await import("../app/api/reports/statement/[kind]/export/route");
+const scanResolveRoute = await import("../app/api/scan/resolve/route");
+const itemIdentifiers = await import("@openbooks/engine/inventory/item-identifiers");
+const { optionalScanResolver } = await import("./scan");
+const returnsRoute = await import("../app/api/returns/route");
+const returnRoute = await import("../app/api/returns/[id]/route");
+const returnReceiveRoute = await import("../app/api/returns/[id]/receive/route");
+const returnInspectRoute = await import("../app/api/returns/[id]/inspect/route");
+const returnRejectRoute = await import("../app/api/returns/[id]/reject/route");
+const returnEmailRoute = await import("../app/api/returns/[id]/email/route");
+const returnSourcesRoute = await import("../app/api/returns/sources/route");
+const { loadReturns } = await import("../app/(app)/returns/view");
+const returnEngine = await import("@openbooks/engine/sales/returns");
+const { RETURNS_TOOLS } = await import("./assistant/tools-returns");
+const pickRoutes = await import("../app/api/picks/route");
+const pickRoute = await import("../app/api/picks/[id]/route");
+const pickReleaseRoute = await import("../app/api/picks/[id]/release/route");
+const pickVoidRoute = await import("../app/api/picks/[id]/void/route");
+const pickCandidatesRoute = await import("../app/api/picks/candidates/route");
+const shipmentRoutes = await import("../app/api/shipments/route");
+const shipmentRoute = await import("../app/api/shipments/[id]/route");
+const shipmentCompleteRoute = await import("../app/api/shipments/[id]/complete/route");
+const shipmentVoidRoute = await import("../app/api/shipments/[id]/void/route");
+const shipmentTrackingRoute = await import("../app/api/shipments/[id]/send-tracking/route");
+const backordersRoute = await import("../app/api/sales-orders/[id]/backorders/route");
+const { loadPicks } = await import("../app/(app)/picks/view");
+const { loadShipments } = await import("../app/(app)/shipments/view");
+const { loadSalesOrders, orderFulfillmentActions } = await import("../app/(app)/sales-orders/view");
+const { loadPurchaseOrders } = await import("../app/(app)/purchase-orders/view");
+const { enabledListSource } = await import("./list/sources");
+const { guardReportEntity, hiddenReportEntityKeys } = await import("./report-authz");
+const { FULFILLMENT_TOOLS } = await import("./assistant/tools-fulfillment");
+const fulfillment = await import("@openbooks/engine/sales/fulfillment/module");
+const { backorderPosition, cancelOrderLineRemainder } =
+  await import("@openbooks/engine/sales/backorders");
+const { salesOrderLineRemainders } =
+  await import("@openbooks/engine/records/order-line-remainders");
+const dropShipEngine = await import("@openbooks/engine/sales/drop-ship");
+const dropShipServices = await import("./drop-ship.ts");
+const dropShipRoute = await import("../app/api/sales-orders/[id]/drop-ship/route");
+const dropShipPurchaseOrderRoute =
+  await import("../app/api/sales-orders/[id]/drop-ship/purchase-orders/route");
+const dropShipConfirmationRoute =
+  await import("../app/api/purchase-orders/[id]/drop-ship-confirmation/route");
+const { createOrderDraft } = await import("./order-cycle.ts");
 
-const FEATURES_REMEDY = /turn on Warehousing in Company Settings → Features/
+const FEATURES_REMEDY = /turn on Warehousing in Company Settings → Features/;
 
 async function setFeature(orgId: string, key: string, on: boolean) {
-  const result = await withBypassContext(() => db.execute(sql`
+  const result = await withBypassContext(() =>
+    db.execute(
+      sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || jsonb_build_object(${key}::text, ${on}::boolean))
-     where id = ${orgId} returning id`, 'objects'))
-  assert.equal(result.length, 1, `feature setting for ${key} must be stored`)
+     where id = ${orgId} returning id`,
+      "objects",
+    ),
+  );
+  assert.equal(result.length, 1, `feature setting for ${key} must be stored`);
 }
 
 async function withFencedOrg(run: (org: ScratchOrg, actorId: string) => Promise<void>) {
-  const org = await withBypassContext(() => createScratchOrg())
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(async () => {
-      const id = (await seedFlowActors(org.orgId)).adminId
-      const grant = await db.execute(sql`update app_roles set permissions=permissions || '["orders.fulfill"]'::jsonb
+      const id = (await seedFlowActors(org.orgId)).adminId;
+      const grant = await db.execute(
+        sql`update app_roles set permissions=permissions || '["orders.fulfill"]'::jsonb
         where org_id=${org.orgId} and id in (select role_id from role_assignments
-          where org_id=${org.orgId} and user_id=${id}) returning id`, 'objects')
-      assert.ok(grant.length, 'fulfillment fixture requires an actual assigned operator grant')
-      return id
-    })
+          where org_id=${org.orgId} and user_id=${id}) returning id`,
+        "objects",
+      );
+      assert.ok(grant.length, "fulfillment fixture requires an actual assigned operator grant");
+      return id;
+    });
     state.authz = {
       user: { orgId: org.orgId, id: actorId, roles: [] },
-      permissions: new Set(['assistant.use', 'items.read', 'items.warehouses', 'items.post', 'admin.setup.manage', 'orders.fulfill', 'ar.create', 'ar.read']),
+      permissions: new Set([
+        "assistant.use",
+        "items.read",
+        "items.warehouses",
+        "items.post",
+        "admin.setup.manage",
+        "orders.fulfill",
+        "ar.create",
+        "ar.read",
+      ]),
       allowedSubsidiaryIds: null,
-    }
-    await run(org, actorId)
+    };
+    await run(org, actorId);
   } finally {
-    state.authz = null
-    await dropScratchOrg(org.orgId)
+    state.authz = null;
+    await dropScratchOrg(org.orgId);
   }
 }
 
 function json(method: string, url: string, body?: unknown, headers: Record<string, string> = {}) {
   return new Request(`http://fence.local${url}`, {
     method,
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: { "Content-Type": "application/json", ...headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  })
+  });
 }
 
-async function setupWrite(method: 'POST' | 'PATCH', entity: string, body: Record<string, unknown>) {
-  const request = json(method, `/api/admin/setup/${entity}`, body, method === 'POST' ? { 'Idempotency-Key': randomUUID() } : {})
-  return setup[method](request, { params: Promise.resolve({ entity }) })
+async function setupWrite(method: "POST" | "PATCH", entity: string, body: Record<string, unknown>) {
+  const request = json(
+    method,
+    `/api/admin/setup/${entity}`,
+    body,
+    method === "POST" ? { "Idempotency-Key": randomUUID() } : {},
+  );
+  return setup[method](request, { params: Promise.resolve({ entity }) });
 }
 
 async function navHrefs(orgId: string): Promise<string[]> {
-  const groups = await resolveNav(orgId, () => true, ['admin'], (key) => key, () => true)
-  return groups.flatMap((group) => group.items.map((item) => item.href))
+  const groups = await resolveNav(
+    orgId,
+    () => true,
+    ["admin"],
+    (key) => key,
+    () => true,
+  );
+  return groups.flatMap((group) => group.items.map((item) => item.href));
 }
 
 async function engineRefusal(run: () => Promise<unknown>) {
-  await assert.rejects(withBypassContext(run), (error: unknown) =>
-    error instanceof warehouses.WarehouseRefusal && error.code === 'warehousing_disabled' && FEATURES_REMEDY.test(error.remedy))
+  await assert.rejects(
+    withBypassContext(run),
+    (error: unknown) =>
+      error instanceof warehouses.WarehouseRefusal &&
+      error.code === "warehousing_disabled" &&
+      FEATURES_REMEDY.test(error.remedy),
+  );
 }
 
 async function evidence(orgId: string) {
-  return withBypassContext(async () => (await db.execute<{ state: unknown }>(sql`select jsonb_build_object(
+  return withBypassContext(
+    async () =>
+      (
+        await db.execute<{ state: unknown }>(
+          sql`select jsonb_build_object(
     'warehouses', (select jsonb_agg(to_jsonb(w) order by stock_location_id) from warehouses w where org_id = ${orgId}),
     'rules', (select jsonb_agg(to_jsonb(r) order by id) from putaway_rules r where org_id = ${orgId}),
     'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${orgId} and table_name in ('warehouses', 'putaway_rules'))
-  ) as state`, 'objects'))[0]!.state)
+  ) as state`,
+          "objects",
+        )
+      )[0]!.state,
+  );
 }
 
 // ---- Warehousing ----------------------------------------------------------
 
-test('warehousing off hides every surface, preserves its rows, and keeps a suspension in force', { skip: !DB }, async () => {
-  await withFencedOrg(async (org, actorId) => {
-    await setFeature(org.orgId, 'warehousing', true)
-    assert.ok((await navHrefs(org.orgId)).includes('/warehouse'), 'the nav entry is present while the feature is on')
-    const warehouse = await withBypassContext(() => warehouses.createWarehouse(org.orgId, actorId, {
-      code: 'WH-OFF', name: 'Fenced warehouse', locationId: org.locationId,
-    }))
-    const bin = randomUUID()
-    await withBypassContext(() => db.execute(sql`
+test(
+  "warehousing off hides every surface, preserves its rows, and keeps a suspension in force",
+  { skip: !DB },
+  async () => {
+    await withFencedOrg(async (org, actorId) => {
+      await setFeature(org.orgId, "warehousing", true);
+      assert.ok(
+        (await navHrefs(org.orgId)).includes("/warehouse"),
+        "the nav entry is present while the feature is on",
+      );
+      const warehouse = await withBypassContext(() =>
+        warehouses.createWarehouse(org.orgId, actorId, {
+          code: "WH-OFF",
+          name: "Fenced warehouse",
+          locationId: org.locationId,
+        }),
+      );
+      const bin = randomUUID();
+      await withBypassContext(() =>
+        db.execute(sql`
       insert into stock_locations (id, org_id, location_id, parent_id, code, kind, is_active)
-      values (${bin}, ${org.orgId}, ${org.locationId}, ${warehouse.id}, 'OFF-A1', 'bin', true)`))
-    const rule = await setupWrite('POST', 'putaway-rules', {
-      warehouseId: warehouse.id, sequence: 1, strategy: 'fixed-bin', targetLocationId: bin,
-    })
-    assert.equal(rule.status, 200, JSON.stringify(await rule.clone().json()))
-    const ruleId = String((await rule.json()).id)
-    await withBypassContext(() => warehouses.activateWarehouse(org.orgId, actorId, { warehouseId: warehouse.id }))
-    await withBypassContext(() => warehouses.suspendWarehouse(org.orgId, actorId, { warehouseId: warehouse.id, reason: 'annual stocktake' }))
-    const before = await evidence(org.orgId)
+      values (${bin}, ${org.orgId}, ${org.locationId}, ${warehouse.id}, 'OFF-A1', 'bin', true)`),
+      );
+      const rule = await setupWrite("POST", "putaway-rules", {
+        warehouseId: warehouse.id,
+        sequence: 1,
+        strategy: "fixed-bin",
+        targetLocationId: bin,
+      });
+      assert.equal(rule.status, 200, JSON.stringify(await rule.clone().json()));
+      const ruleId = String((await rule.json()).id);
+      await withBypassContext(() =>
+        warehouses.activateWarehouse(org.orgId, actorId, { warehouseId: warehouse.id }),
+      );
+      await withBypassContext(() =>
+        warehouses.suspendWarehouse(org.orgId, actorId, {
+          warehouseId: warehouse.id,
+          reason: "annual stocktake",
+        }),
+      );
+      const before = await evidence(org.orgId);
 
-    await setFeature(org.orgId, 'warehousing', false)
-    assert.equal((await navHrefs(org.orgId)).includes('/warehouse'), false, 'the nav entry disappears')
-    await assert.rejects(loadWarehouse({}), (error: unknown) =>
-      String((error as { digest?: string }).digest).includes('/feature-required?feature=warehousing'))
+      await setFeature(org.orgId, "warehousing", false);
+      assert.equal(
+        (await navHrefs(org.orgId)).includes("/warehouse"),
+        false,
+        "the nav entry disappears",
+      );
+      await assert.rejects(loadWarehouse({}), (error: unknown) =>
+        String((error as { digest?: string }).digest).includes(
+          "/feature-required?feature=warehousing",
+        ),
+      );
 
-    const id = warehouse.id
-    const params = { params: Promise.resolve({ id }) }
-    const responses = [
-      await warehousesRoute.GET(json('GET', '/api/warehouses')),
-      await warehousesRoute.POST(json('POST', '/api/warehouses', { code: 'WH-NEW', name: 'New', locationId: org.locationId })),
-      await warehouseRoute.GET(json('GET', `/api/warehouses/${id}`), params),
-      await warehouseRoute.PATCH(json('PATCH', `/api/warehouses/${id}`, { name: 'Renamed' }), params),
-      await lifecycleRoute.POST(json('POST', `/api/warehouses/${id}/lifecycle`, { action: 'activate' }), params),
-      await putawayRoute.POST(json('POST', `/api/warehouses/${id}/putaway`, {
-        stagingLocationId: bin, itemId: org.items.fifo, subsidiaryId: org.subsidiaryId, quantity: '1', idempotencyKey: randomUUID(),
-      }), params),
-    ]
-    for (const response of responses) {
-      assert.equal(response.status, 404)
-      assert.deepEqual(await response.json(), { error: 'not_found' })
-    }
+      const id = warehouse.id;
+      const params = { params: Promise.resolve({ id }) };
+      const responses = [
+        await warehousesRoute.GET(json("GET", "/api/warehouses")),
+        await warehousesRoute.POST(
+          json("POST", "/api/warehouses", {
+            code: "WH-NEW",
+            name: "New",
+            locationId: org.locationId,
+          }),
+        ),
+        await warehouseRoute.GET(json("GET", `/api/warehouses/${id}`), params),
+        await warehouseRoute.PATCH(
+          json("PATCH", `/api/warehouses/${id}`, { name: "Renamed" }),
+          params,
+        ),
+        await lifecycleRoute.POST(
+          json("POST", `/api/warehouses/${id}/lifecycle`, { action: "activate" }),
+          params,
+        ),
+        await putawayRoute.POST(
+          json("POST", `/api/warehouses/${id}/putaway`, {
+            stagingLocationId: bin,
+            itemId: org.items.fifo,
+            subsidiaryId: org.subsidiaryId,
+            quantity: "1",
+            idempotencyKey: randomUUID(),
+          }),
+          params,
+        ),
+      ];
+      for (const response of responses) {
+        assert.equal(response.status, 404);
+        assert.deepEqual(await response.json(), { error: "not_found" });
+      }
 
-    await engineRefusal(() => warehouses.listWarehouses(db, org.orgId))
-    await engineRefusal(() => warehouses.createWarehouse(org.orgId, actorId, { code: 'WH-NEW', name: 'New', locationId: org.locationId }))
-    await engineRefusal(() => warehouses.activateWarehouse(org.orgId, actorId, { warehouseId: id }))
-    await engineRefusal(() => resolvePutawayLocation(db, org.orgId, { itemId: org.items.fifo, quantity: '1', warehouseId: id, subsidiaryId: org.subsidiaryId }))
+      await engineRefusal(() => warehouses.listWarehouses(db, org.orgId));
+      await engineRefusal(() =>
+        warehouses.createWarehouse(org.orgId, actorId, {
+          code: "WH-NEW",
+          name: "New",
+          locationId: org.locationId,
+        }),
+      );
+      await engineRefusal(() =>
+        warehouses.activateWarehouse(org.orgId, actorId, { warehouseId: id }),
+      );
+      await engineRefusal(() =>
+        resolvePutawayLocation(db, org.orgId, {
+          itemId: org.items.fifo,
+          quantity: "1",
+          warehouseId: id,
+          subsidiaryId: org.subsidiaryId,
+        }),
+      );
 
-    assert.equal((await setupWrite('PATCH', 'warehouses', { id, name: 'Renamed' })).status, 404)
-    assert.equal((await setupWrite('PATCH', 'putaway-rules', { id: ruleId, warehouseId: id, sequence: 2, strategy: 'fixed-bin', targetLocationId: bin })).status, 404)
-    assert.equal((await setupWrite('POST', 'putaway-rules', { warehouseId: id, sequence: 3, strategy: 'fixed-bin', targetLocationId: bin })).status, 404)
+      assert.equal((await setupWrite("PATCH", "warehouses", { id, name: "Renamed" })).status, 404);
+      assert.equal(
+        (
+          await setupWrite("PATCH", "putaway-rules", {
+            id: ruleId,
+            warehouseId: id,
+            sequence: 2,
+            strategy: "fixed-bin",
+            targetLocationId: bin,
+          })
+        ).status,
+        404,
+      );
+      assert.equal(
+        (
+          await setupWrite("POST", "putaway-rules", {
+            warehouseId: id,
+            sequence: 3,
+            strategy: "fixed-bin",
+            targetLocationId: bin,
+          })
+        ).status,
+        404,
+      );
 
-    const features = await resolvedFeatureState(org.orgId)
-    for (const tool of WAREHOUSE_TOOLS) {
-      assert.equal(canRunTool(state.authz as never, tool, features), false, `${tool.name} is withheld`)
-    }
-    assert.deepEqual(await WAREHOUSE_TOOLS[0]!.execute({}, state.authz as never), { ok: false, error: 'warehousing_feature_disabled' })
+      const features = await resolvedFeatureState(org.orgId);
+      for (const tool of WAREHOUSE_TOOLS) {
+        assert.equal(
+          canRunTool(state.authz as never, tool, features),
+          false,
+          `${tool.name} is withheld`,
+        );
+      }
+      assert.deepEqual(await WAREHOUSE_TOOLS[0]!.execute({}, state.authz as never), {
+        ok: false,
+        error: "warehousing_feature_disabled",
+      });
 
-    await assert.rejects(
-      withBypassContext(() => receiveInventory(org.orgId, actorId, {
-        itemId: org.items.fifo, stockLocationId: bin, quantity: '1', unitCost: '1.00',
-        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
-      })),
-      (error: unknown) => error instanceof warehouses.WarehouseRefusal
-        && error.remedy === 'ask an administrator to turn on Warehousing in Company Settings → Features, then reactivate WH-OFF'
-        && /WH-OFF is suspended and refuses inbound movements/.test(error.message),
-    )
+      await assert.rejects(
+        withBypassContext(() =>
+          receiveInventory(org.orgId, actorId, {
+            itemId: org.items.fifo,
+            stockLocationId: bin,
+            quantity: "1",
+            unitCost: "1.00",
+            subsidiaryId: org.subsidiaryId,
+            offsetAccountId: org.accounts.clearing,
+            date: org.date,
+          }),
+        ),
+        (error: unknown) =>
+          error instanceof warehouses.WarehouseRefusal &&
+          error.remedy ===
+            "ask an administrator to turn on Warehousing in Company Settings → Features, then reactivate WH-OFF" &&
+          /WH-OFF is suspended and refuses inbound movements/.test(error.message),
+      );
 
-    await setFeature(org.orgId, 'warehousing', true)
-    assert.deepEqual(await evidence(org.orgId), before, 'off and on again changes no warehouse, rule, status or audit row')
-  })
-})
+      await setFeature(org.orgId, "warehousing", true);
+      assert.deepEqual(
+        await evidence(org.orgId),
+        before,
+        "off and on again changes no warehouse, rule, status or audit row",
+      );
+    });
+  },
+);
 
 // ---- Availability and replenishment -----------------------------------------
 
-const STOCK_REPORTS = ['/reports/availability', '/reports/replenishment']
+const STOCK_REPORTS = ["/reports/availability", "/reports/replenishment"];
 
 async function hubHrefs(): Promise<string[]> {
-  return (await loadReportsHub()).groups.flatMap((group) => group.cards.map((card) => card.href))
+  return (await loadReportsHub()).groups.flatMap((group) => group.cards.map((card) => card.href));
 }
 
-test('availability and replenishment vanish with warehousing, and releasable backorders with fulfillment', { skip: !DB }, async () => {
-  await withFencedOrg(async (org) => {
-    const toolNamed = (name: string) => WAREHOUSE_TOOLS.find((tool) => tool.name === name)!
-    const itemTool = toolNamed('get_item_availability')
-    const replenishmentTool = toolNamed('list_replenishment_proposals')
-    const query = { subsidiaryId: org.subsidiaryId }
+test(
+  "availability and replenishment vanish with warehousing, and releasable backorders with fulfillment",
+  { skip: !DB },
+  async () => {
+    await withFencedOrg(async (org) => {
+      const toolNamed = (name: string) => WAREHOUSE_TOOLS.find((tool) => tool.name === name)!;
+      const itemTool = toolNamed("get_item_availability");
+      const replenishmentTool = toolNamed("list_replenishment_proposals");
+      const query = { subsidiaryId: org.subsidiaryId };
 
-    await setFeature(org.orgId, 'warehousing', true)
-    await setFeature(org.orgId, 'fulfillment', true)
-    assert.deepEqual((await hubHrefs()).filter((href) => STOCK_REPORTS.includes(href)), STOCK_REPORTS, 'both hub cards show while Warehousing is on')
-    assert.equal((await loadAvailability({})).showReleasable, true)
+      await setFeature(org.orgId, "warehousing", true);
+      await setFeature(org.orgId, "fulfillment", true);
+      assert.deepEqual(
+        (await hubHrefs()).filter((href) => STOCK_REPORTS.includes(href)),
+        STOCK_REPORTS,
+        "both hub cards show while Warehousing is on",
+      );
+      assert.equal((await loadAvailability({})).showReleasable, true);
 
-    await setFeature(org.orgId, 'fulfillment', false)
-    const withoutFulfillment = await loadAvailability({})
-    assert.deepEqual([withoutFulfillment.showReleasable, withoutFulfillment.releasable], [false, []], 'the releasable section is absent')
-    await assert.rejects(withBypassContext(() => availability.releasableBackorders(db, org.orgId, query)), (error: unknown) =>
-      error instanceof availability.AvailabilityRefusal && error.code === 'fulfillment_disabled'
-        && error.remedy === 'turn on Fulfillment in Company Settings → Features')
+      await setFeature(org.orgId, "fulfillment", false);
+      const withoutFulfillment = await loadAvailability({});
+      assert.deepEqual(
+        [withoutFulfillment.showReleasable, withoutFulfillment.releasable],
+        [false, []],
+        "the releasable section is absent",
+      );
+      await assert.rejects(
+        withBypassContext(() => availability.releasableBackorders(db, org.orgId, query)),
+        (error: unknown) =>
+          error instanceof availability.AvailabilityRefusal &&
+          error.code === "fulfillment_disabled" &&
+          error.remedy === "turn on Fulfillment in Company Settings → Features",
+      );
 
-    await setFeature(org.orgId, 'warehousing', false)
-    for (const load of [loadAvailability, loadReplenishment]) {
-      await assert.rejects(load({}), (error: unknown) =>
-        String((error as { digest?: string }).digest).includes('/feature-required?feature=warehousing'))
-    }
-    assert.deepEqual((await hubHrefs()).filter((href) => STOCK_REPORTS.includes(href)), [], 'the hub cards disappear')
-    for (const kind of ['availability', 'replenishment']) {
-      const response = await statementExport.GET(json('GET', `/api/reports/statement/${kind}/export?format=csv`), { params: Promise.resolve({ kind }) })
-      assert.equal(response.status, 404, `${kind} export answers a bare 404`)
-    }
-    await engineRefusal(() => availability.getAvailableToPromise(db, org.orgId, { ...query, itemId: org.items.fifo }))
-    await engineRefusal(() => replenishmentProposals(db, org.orgId, query))
-    assert.deepEqual(await itemTool.execute({ itemId: org.items.fifo }, state.authz as never), { ok: false, error: 'warehousing_feature_disabled' })
-    assert.deepEqual(await replenishmentTool.execute({}, state.authz as never), { ok: false, error: 'warehousing_feature_disabled' })
-  })
-})
+      await setFeature(org.orgId, "warehousing", false);
+      for (const load of [loadAvailability, loadReplenishment]) {
+        await assert.rejects(load({}), (error: unknown) =>
+          String((error as { digest?: string }).digest).includes(
+            "/feature-required?feature=warehousing",
+          ),
+        );
+      }
+      assert.deepEqual(
+        (await hubHrefs()).filter((href) => STOCK_REPORTS.includes(href)),
+        [],
+        "the hub cards disappear",
+      );
+      for (const kind of ["availability", "replenishment"]) {
+        const response = await statementExport.GET(
+          json("GET", `/api/reports/statement/${kind}/export?format=csv`),
+          { params: Promise.resolve({ kind }) },
+        );
+        assert.equal(response.status, 404, `${kind} export answers a bare 404`);
+      }
+      await engineRefusal(() =>
+        availability.getAvailableToPromise(db, org.orgId, { ...query, itemId: org.items.fifo }),
+      );
+      await engineRefusal(() => replenishmentProposals(db, org.orgId, query));
+      assert.deepEqual(await itemTool.execute({ itemId: org.items.fifo }, state.authz as never), {
+        ok: false,
+        error: "warehousing_feature_disabled",
+      });
+      assert.deepEqual(await replenishmentTool.execute({}, state.authz as never), {
+        ok: false,
+        error: "warehousing_feature_disabled",
+      });
+    });
+  },
+);
 
 // ---- Fulfillment ----------------------------------------------------------
 
-const FULFILLMENT_REMEDY = 'Turn on Warehousing and Fulfillment on Company Settings → Features'
+const FULFILLMENT_REMEDY = "Turn on Warehousing and Fulfillment on Company Settings → Features";
 
 async function fulfillmentEvidence(orgId: string) {
-  return withBypassContext(async () => (await db.execute<{ state: unknown }>(sql`select jsonb_build_object(
+  return withBypassContext(
+    async () =>
+      (
+        await db.execute<{ state: unknown }>(
+          sql`select jsonb_build_object(
     'carriers', (select jsonb_agg(to_jsonb(c) order by id) from carriers c where org_id = ${orgId}),
     'documents', (select jsonb_agg(to_jsonb(d) - 'revision_seq' order by id) from documents d where org_id = ${orgId} and kind in ('pick_list', 'shipment')),
     'stages', (select jsonb_agg(to_jsonb(f) order by document_id) from fulfillment_documents f where org_id = ${orgId}),
     'lines', (select jsonb_agg(to_jsonb(l) order by line_id) from fulfillment_lines l where org_id = ${orgId}),
     'cancellations', (select jsonb_agg(to_jsonb(x) order by id) from order_line_cancellations x where org_id = ${orgId}),
     'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${orgId} and table_name in ('fulfillment_documents', 'document_lines', 'carriers'))
-  ) as state`, 'objects'))[0]!.state)
+  ) as state`,
+          "objects",
+        )
+      )[0]!.state,
+  );
 }
 
 async function fulfillmentRefusal(run: () => Promise<unknown>) {
-  await assert.rejects(withBypassContext(run), (error: unknown) =>
-    error instanceof fulfillment.FulfillmentRefusal && error.code === 'feature_disabled' && error.remedy === FULFILLMENT_REMEDY)
+  await assert.rejects(
+    withBypassContext(run),
+    (error: unknown) =>
+      error instanceof fulfillment.FulfillmentRefusal &&
+      error.code === "feature_disabled" &&
+      error.remedy === FULFILLMENT_REMEDY,
+  );
 }
 
-test('fulfillment off hides picks, shipments and backorders at every layer and preserves their rows', { skip: !DB }, async () => {
-  await withFencedOrg(async (org, actorId) => {
-    state.authz = { ...(state.authz as object), permissions: new Set(['assistant.use', 'items.read', 'items.post', 'orders.fulfill', 'ar.read', 'admin.setup.manage']) }
-    await setFeature(org.orgId, 'warehousing', true)
-    await setFeature(org.orgId, 'fulfillment', true)
-    const [bin, orderId, lineId] = [randomUUID(), randomUUID(), randomUUID()]
-    await withBypassContext(async () => {
-      await db.execute(sql`
+test(
+  "fulfillment off hides picks, shipments and backorders at every layer and preserves their rows",
+  { skip: !DB },
+  async () => {
+    await withFencedOrg(async (org, actorId) => {
+      state.authz = {
+        ...(state.authz as object),
+        permissions: new Set([
+          "assistant.use",
+          "items.read",
+          "items.post",
+          "orders.fulfill",
+          "ar.read",
+          "admin.setup.manage",
+        ]),
+      };
+      await setFeature(org.orgId, "warehousing", true);
+      await setFeature(org.orgId, "fulfillment", true);
+      const [bin, orderId, lineId] = [randomUUID(), randomUUID(), randomUUID()];
+      await withBypassContext(async () => {
+        await db.execute(sql`
         insert into stock_locations (id, org_id, location_id, parent_id, code, kind, is_active)
-        values (${bin}, ${org.orgId}, ${org.locationId}, ${org.stockLocationId}, 'F-A1', 'bin', true)`)
-      await receiveInventory(org.orgId, actorId, {
-        itemId: org.items.fifo, stockLocationId: bin, quantity: '10', unitCost: '2',
-        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
-      })
-      await db.execute(sql`
+        values (${bin}, ${org.orgId}, ${org.locationId}, ${org.stockLocationId}, 'F-A1', 'bin', true)`);
+        await receiveInventory(org.orgId, actorId, {
+          itemId: org.items.fifo,
+          stockLocationId: bin,
+          quantity: "10",
+          unitCost: "2",
+          subsidiaryId: org.subsidiaryId,
+          offsetAccountId: org.accounts.clearing,
+          date: org.date,
+        });
+        await db.execute(sql`
         insert into documents (id, org_id, kind, document_number, party_id, document_date, currency, status, subsidiary_id, subtotal, tax_total, total)
-        values (${orderId}, ${org.orgId}, 'sales_order', 'SO-FENCE', ${org.customerId}, ${org.date}, 'CAD', 'draft', ${org.subsidiaryId}, '0', '0', '0')`)
-      await db.execute(sql`
+        values (${orderId}, ${org.orgId}, 'sales_order', 'SO-FENCE', ${org.customerId}, ${org.date}, 'CAD', 'draft', ${org.subsidiaryId}, '0', '0', '0')`);
+        await db.execute(sql`
         insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount, tax_amount, stock_location_id)
-        values (${lineId}, ${org.orgId}, ${orderId}, 1, ${org.items.fifo}, ${org.accounts.revenue}, '8', '10', '80', '0', ${org.stockLocationId})`)
-      await db.execute(sql`update documents set status = 'approved', subtotal = '80', total = '80' where id = ${orderId}`)
-    })
-    assert.ok((await navHrefs(org.orgId)).includes('/picks'), 'the nav entry is present while the feature is on')
-    const carrier = await setupWrite('POST', 'carriers', { code: 'PARCEL', name: 'Parcel Co', services: ['Ground'], trackingUrlTemplate: 'https://track.example/{tracking}' })
-    assert.equal(carrier.status, 200, JSON.stringify(await carrier.clone().json()))
-    const carrierId = String((await carrier.json()).id)
-    const scope = { allowedSubsidiaryIds: null }
-    const pickList = await withBypassContext(() => db.transaction((tx) => fulfillment.createPickList(tx, org.orgId, actorId, {
-      salesOrderId: orderId, lines: [{ salesOrderLineId: lineId, binId: bin, quantity: '5' }], ...scope,
-    })))
-    await withBypassContext(() => fulfillment.releasePickList(org.orgId, actorId, { pickListId: pickList.id, ...scope }))
-    await confirmFixturePick(org.orgId,actorId,pickList.id)
-    const shipment = await withBypassContext(() => db.transaction((tx) => fulfillment.createShipment(tx, org.orgId, actorId, { pickListId: pickList.id, ...scope })))
-    await withBypassContext(() => db.transaction((tx) => fulfillment.setShipmentCarrier(tx, org.orgId, actorId, { shipmentId: shipment.id, carrierId, service: 'Ground', ...scope })))
-    await withBypassContext(() => db.transaction((tx) => cancelOrderLineRemainder(tx, org.orgId, actorId, {
-      documentId: orderId, lineId, quantity: '1', reason: 'customer reduced the order', ...scope,
-    })))
-    const openAfterCancel = async () => (await withBypassContext(() => salesOrderLineRemainders(db, org.orgId, { lineId })))[0]!.open
-    assert.equal(await openAfterCancel(), '7.00000000')
-    const before = await fulfillmentEvidence(org.orgId)
+        values (${lineId}, ${org.orgId}, ${orderId}, 1, ${org.items.fifo}, ${org.accounts.revenue}, '8', '10', '80', '0', ${org.stockLocationId})`);
+        await db.execute(
+          sql`update documents set status = 'approved', subtotal = '80', total = '80' where id = ${orderId}`,
+        );
+      });
+      assert.ok(
+        (await navHrefs(org.orgId)).includes("/picks"),
+        "the nav entry is present while the feature is on",
+      );
+      const carrier = await setupWrite("POST", "carriers", {
+        code: "PARCEL",
+        name: "Parcel Co",
+        services: ["Ground"],
+        trackingUrlTemplate: "https://track.example/{tracking}",
+      });
+      assert.equal(carrier.status, 200, JSON.stringify(await carrier.clone().json()));
+      const carrierId = String((await carrier.json()).id);
+      const scope = { allowedSubsidiaryIds: null };
+      const pickList = await withBypassContext(() =>
+        db.transaction((tx) =>
+          fulfillment.createPickList(tx, org.orgId, actorId, {
+            salesOrderId: orderId,
+            lines: [{ salesOrderLineId: lineId, binId: bin, quantity: "5" }],
+            ...scope,
+          }),
+        ),
+      );
+      await withBypassContext(() =>
+        fulfillment.releasePickList(org.orgId, actorId, { pickListId: pickList.id, ...scope }),
+      );
+      await confirmFixturePick(org.orgId, actorId, pickList.id);
+      const shipment = await withBypassContext(() =>
+        db.transaction((tx) =>
+          fulfillment.createShipment(tx, org.orgId, actorId, { pickListId: pickList.id, ...scope }),
+        ),
+      );
+      await withBypassContext(() =>
+        db.transaction((tx) =>
+          fulfillment.setShipmentCarrier(tx, org.orgId, actorId, {
+            shipmentId: shipment.id,
+            carrierId,
+            service: "Ground",
+            ...scope,
+          }),
+        ),
+      );
+      await withBypassContext(() =>
+        db.transaction((tx) =>
+          cancelOrderLineRemainder(tx, org.orgId, actorId, {
+            documentId: orderId,
+            lineId,
+            quantity: "1",
+            reason: "customer reduced the order",
+            ...scope,
+          }),
+        ),
+      );
+      const openAfterCancel = async () =>
+        (await withBypassContext(() => salesOrderLineRemainders(db, org.orgId, { lineId })))[0]!
+          .open;
+      assert.equal(await openAfterCancel(), "7.00000000");
+      const before = await fulfillmentEvidence(org.orgId);
 
-    const assertUnreachable = async (feature: string) => {
-      const hrefs = await navHrefs(org.orgId)
-      assert.equal(hrefs.includes('/picks') || hrefs.includes('/shipments'), false, 'both nav entries disappear')
-      for (const load of [loadPicks, loadShipments]) {
-        await assert.rejects(load({}), (error: unknown) => String((error as { digest?: string }).digest).includes(`/feature-required?feature=${feature}`))
-      }
-      const on = (id: string) => ({ params: Promise.resolve({ id }) })
-      const responses = [
-        await pickRoutes.POST(json('POST', '/api/picks', { salesOrderId: orderId, lines: [{ salesOrderLineId: lineId, binId: bin, quantity: '1' }] })),
-        await pickRoute.GET(json('GET', `/api/picks/${pickList.id}`), on(pickList.id)),
-        await pickReleaseRoute.POST(json('POST', `/api/picks/${pickList.id}/release`), on(pickList.id)),
-        await pickVoidRoute.POST(json('POST', `/api/picks/${pickList.id}/void`, { reason: 'x' }), on(pickList.id)),
-        await pickCandidatesRoute.GET(json('GET', `/api/picks/candidates?salesOrderId=${orderId}`)),
-        await shipmentRoutes.POST(json('POST', '/api/shipments', { pickListId: pickList.id })),
-        await shipmentRoute.GET(json('GET', `/api/shipments/${shipment.id}`), on(shipment.id)),
-        await shipmentRoute.PATCH(json('PATCH', `/api/shipments/${shipment.id}`, { cartons: [] }), on(shipment.id)),
-        await shipmentCompleteRoute.POST(json('POST', `/api/shipments/${shipment.id}/complete`), on(shipment.id)),
-        await shipmentVoidRoute.POST(json('POST', `/api/shipments/${shipment.id}/void`, { reason: 'x' }), on(shipment.id)),
-        await shipmentTrackingRoute.POST(json('POST', `/api/shipments/${shipment.id}/send-tracking`, {}), on(shipment.id)),
-        await backordersRoute.GET(json('GET', `/api/sales-orders/${orderId}/backorders`), on(orderId)),
-        await backordersRoute.POST(json('POST', `/api/sales-orders/${orderId}/backorders`, { lineId, quantity: '1', reason: 'x' }), on(orderId)),
-      ]
-      for (const response of responses) {
-        assert.equal(response.status, 404)
-        assert.deepEqual(await response.json(), { error: 'not_found' })
-      }
-      await fulfillmentRefusal(() => db.transaction((tx) => fulfillment.createPickList(tx, org.orgId, actorId, {
-        salesOrderId: orderId, lines: [{ salesOrderLineId: lineId, binId: bin, quantity: '1' }], ...scope,
-      })))
-      await fulfillmentRefusal(() => fulfillment.releasePickList(org.orgId, actorId, { pickListId: pickList.id, ...scope }))
-      await fulfillmentRefusal(() => db.transaction((tx) => fulfillment.voidShipment(tx, org.orgId, actorId, { shipmentId: shipment.id, reason: 'x', ...scope })))
-      await fulfillmentRefusal(() => fulfillment.getFulfillmentDocument(db, org.orgId, shipment.id, null))
-      await assert.rejects(withBypassContext(() => backorderPosition(db, org.orgId, { documentId: orderId, ...scope })), { code: 'feature_disabled' })
-      assert.equal((await setupWrite('PATCH', 'carriers', { id: carrierId, name: 'Renamed' })).status, 404)
-      assert.equal((await setupWrite('POST', 'carriers', { code: 'OTHER', name: 'Other', services: ['Ground'] })).status, 404)
-      assert.equal(await enabledListSource(org.orgId, 'pick_list'), null)
-      assert.equal(await enabledListSource(org.orgId, 'shipment'), null)
-      assert.ok((await hiddenReportEntityKeys(state.authz as never)).includes('backorders'))
-      assert.equal((await guardReportEntity(state.authz as never, { entity: 'backorders' }))?.status, 404)
-      assert.deepEqual(await orderFulfillmentActions(state.authz as never), { backorders: false, pickLists: false, returnAuthorizations: false },
-        'the order drawer offers no fulfillment actions')
-      const features = await resolvedFeatureState(org.orgId)
-      for (const tool of FULFILLMENT_TOOLS) {
-        assert.equal(canRunTool(state.authz as never, tool, features), false, `${tool.name} is withheld`)
-      }
-      assert.equal(await openAfterCancel(), '7.00000000', 'cancelled quantity is still subtracted')
-    }
+      const assertUnreachable = async (feature: string) => {
+        const hrefs = await navHrefs(org.orgId);
+        assert.equal(
+          hrefs.includes("/picks") || hrefs.includes("/shipments"),
+          false,
+          "both nav entries disappear",
+        );
+        for (const load of [loadPicks, loadShipments]) {
+          await assert.rejects(load({}), (error: unknown) =>
+            String((error as { digest?: string }).digest).includes(
+              `/feature-required?feature=${feature}`,
+            ),
+          );
+        }
+        const on = (id: string) => ({ params: Promise.resolve({ id }) });
+        const responses = [
+          await pickRoutes.POST(
+            json("POST", "/api/picks", {
+              salesOrderId: orderId,
+              lines: [{ salesOrderLineId: lineId, binId: bin, quantity: "1" }],
+            }),
+          ),
+          await pickRoute.GET(json("GET", `/api/picks/${pickList.id}`), on(pickList.id)),
+          await pickReleaseRoute.POST(
+            json("POST", `/api/picks/${pickList.id}/release`),
+            on(pickList.id),
+          ),
+          await pickVoidRoute.POST(
+            json("POST", `/api/picks/${pickList.id}/void`, { reason: "x" }),
+            on(pickList.id),
+          ),
+          await pickCandidatesRoute.GET(
+            json("GET", `/api/picks/candidates?salesOrderId=${orderId}`),
+          ),
+          await shipmentRoutes.POST(json("POST", "/api/shipments", { pickListId: pickList.id })),
+          await shipmentRoute.GET(json("GET", `/api/shipments/${shipment.id}`), on(shipment.id)),
+          await shipmentRoute.PATCH(
+            json("PATCH", `/api/shipments/${shipment.id}`, { cartons: [] }),
+            on(shipment.id),
+          ),
+          await shipmentCompleteRoute.POST(
+            json("POST", `/api/shipments/${shipment.id}/complete`),
+            on(shipment.id),
+          ),
+          await shipmentVoidRoute.POST(
+            json("POST", `/api/shipments/${shipment.id}/void`, { reason: "x" }),
+            on(shipment.id),
+          ),
+          await shipmentTrackingRoute.POST(
+            json("POST", `/api/shipments/${shipment.id}/send-tracking`, {}),
+            on(shipment.id),
+          ),
+          await backordersRoute.GET(
+            json("GET", `/api/sales-orders/${orderId}/backorders`),
+            on(orderId),
+          ),
+          await backordersRoute.POST(
+            json("POST", `/api/sales-orders/${orderId}/backorders`, {
+              lineId,
+              quantity: "1",
+              reason: "x",
+            }),
+            on(orderId),
+          ),
+        ];
+        for (const response of responses) {
+          assert.equal(response.status, 404);
+          assert.deepEqual(await response.json(), { error: "not_found" });
+        }
+        await fulfillmentRefusal(() =>
+          db.transaction((tx) =>
+            fulfillment.createPickList(tx, org.orgId, actorId, {
+              salesOrderId: orderId,
+              lines: [{ salesOrderLineId: lineId, binId: bin, quantity: "1" }],
+              ...scope,
+            }),
+          ),
+        );
+        await fulfillmentRefusal(() =>
+          fulfillment.releasePickList(org.orgId, actorId, { pickListId: pickList.id, ...scope }),
+        );
+        await fulfillmentRefusal(() =>
+          db.transaction((tx) =>
+            fulfillment.voidShipment(tx, org.orgId, actorId, {
+              shipmentId: shipment.id,
+              reason: "x",
+              ...scope,
+            }),
+          ),
+        );
+        await fulfillmentRefusal(() =>
+          fulfillment.getFulfillmentDocument(db, org.orgId, shipment.id, null),
+        );
+        await assert.rejects(
+          withBypassContext(() =>
+            backorderPosition(db, org.orgId, { documentId: orderId, ...scope }),
+          ),
+          { code: "feature_disabled" },
+        );
+        assert.equal(
+          (await setupWrite("PATCH", "carriers", { id: carrierId, name: "Renamed" })).status,
+          404,
+        );
+        assert.equal(
+          (
+            await setupWrite("POST", "carriers", {
+              code: "OTHER",
+              name: "Other",
+              services: ["Ground"],
+            })
+          ).status,
+          404,
+        );
+        assert.equal(await enabledListSource(org.orgId, "pick_list"), null);
+        assert.equal(await enabledListSource(org.orgId, "shipment"), null);
+        assert.ok((await hiddenReportEntityKeys(state.authz as never)).includes("backorders"));
+        assert.equal(
+          (await guardReportEntity(state.authz as never, { entity: "backorders" }))?.status,
+          404,
+        );
+        assert.deepEqual(
+          await orderFulfillmentActions(state.authz as never),
+          { backorders: false, pickLists: false, returnAuthorizations: false },
+          "the order drawer offers no fulfillment actions",
+        );
+        const features = await resolvedFeatureState(org.orgId);
+        for (const tool of FULFILLMENT_TOOLS) {
+          assert.equal(
+            canRunTool(state.authz as never, tool, features),
+            false,
+            `${tool.name} is withheld`,
+          );
+        }
+        assert.equal(
+          await openAfterCancel(),
+          "7.00000000",
+          "cancelled quantity is still subtracted",
+        );
+      };
 
-    await setFeature(org.orgId, 'fulfillment', false)
-    await assertUnreachable('fulfillment')
-    assert.deepEqual(await FULFILLMENT_TOOLS[0]!.execute({}, state.authz as never),
-      { ok: false, error: 'fulfillment_feature_disabled' })
-    // Fulfillment on but Warehousing off: fulfillment still resolves off.
-    await setFeature(org.orgId, 'fulfillment', true)
-    await setFeature(org.orgId, 'warehousing', false)
-    await assertUnreachable('fulfillment')
-    assert.deepEqual(await FULFILLMENT_TOOLS[0]!.execute({}, state.authz as never),
-      { ok: false, error: 'warehousing_feature_disabled' })
+      await setFeature(org.orgId, "fulfillment", false);
+      await assertUnreachable("fulfillment");
+      assert.deepEqual(await FULFILLMENT_TOOLS[0]!.execute({}, state.authz as never), {
+        ok: false,
+        error: "fulfillment_feature_disabled",
+      });
+      // Fulfillment on but Warehousing off: fulfillment still resolves off.
+      await setFeature(org.orgId, "fulfillment", true);
+      await setFeature(org.orgId, "warehousing", false);
+      await assertUnreachable("fulfillment");
+      assert.deepEqual(await FULFILLMENT_TOOLS[0]!.execute({}, state.authz as never), {
+        ok: false,
+        error: "warehousing_feature_disabled",
+      });
 
-    await setFeature(org.orgId, 'warehousing', true)
-    assert.deepEqual(await fulfillmentEvidence(org.orgId), before, 'off and on again changes no carrier, pick list, shipment, cancellation or audit row')
-    assert.equal(await openAfterCancel(), '7.00000000')
-  })
-})
+      await setFeature(org.orgId, "warehousing", true);
+      assert.deepEqual(
+        await fulfillmentEvidence(org.orgId),
+        before,
+        "off and on again changes no carrier, pick list, shipment, cancellation or audit row",
+      );
+      assert.equal(await openAfterCancel(), "7.00000000");
+    });
+  },
+);
 
-test('return authorizations are hidden while off and retain their records and audit history', { skip: !DB }, async () => {
-  await withFencedOrg(async (org, actorId) => {
-    await setFeature(org.orgId, 'warehousing', true)
-    await setFeature(org.orgId, 'fulfillment', true)
-    await setFeature(org.orgId, 'returnAuthorizations', true)
-    const sourceId = randomUUID()
-    const rmaId = randomUUID()
-    const auditId = randomUUID()
-    await withBypassContext(async () => {
-      await db.execute(sql`
+test(
+  "return authorizations are hidden while off and retain their records and audit history",
+  { skip: !DB },
+  async () => {
+    await withFencedOrg(async (org, actorId) => {
+      await setFeature(org.orgId, "warehousing", true);
+      await setFeature(org.orgId, "fulfillment", true);
+      await setFeature(org.orgId, "returnAuthorizations", true);
+      const sourceId = randomUUID();
+      const rmaId = randomUUID();
+      const auditId = randomUUID();
+      await withBypassContext(async () => {
+        await db.execute(sql`
         insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, currency,
                                status, subtotal, tax_total, total, created_by)
         values (${sourceId}, ${org.orgId}, 'customer_invoice', 'INV-RMA-FENCE', ${org.customerId}, ${org.subsidiaryId},
-                ${org.date}, 'CAD', 'draft', '0', '0', '0', ${actorId})`)
-      await db.execute(sql`
+                ${org.date}, 'CAD', 'draft', '0', '0', '0', ${actorId})`);
+        await db.execute(sql`
         insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, currency,
                                status, subtotal, tax_total, total, created_by)
         values (${rmaId}, ${org.orgId}, 'rma', 'RMA-FENCE', ${org.customerId}, ${org.subsidiaryId},
-                ${org.date}, 'CAD', 'draft', '0', '0', '0', ${actorId})`)
-      await db.execute(sql`
+                ${org.date}, 'CAD', 'draft', '0', '0', '0', ${actorId})`);
+        await db.execute(sql`
         insert into rma_documents (document_id, org_id, source_document_id, created_by, updated_by)
-        values (${rmaId}, ${org.orgId}, ${sourceId}, ${actorId}, ${actorId})`)
-      await db.execute(sql`
+        values (${rmaId}, ${org.orgId}, ${sourceId}, ${actorId}, ${actorId})`);
+        await db.execute(sql`
         insert into audit_log (id, org_id, table_name, row_id, action, changes, actor_id)
-        values (${auditId}, ${org.orgId}, 'rma_documents', ${rmaId}, 'insert', '{"stage":"requested"}'::jsonb, ${actorId})`)
-    })
-    assert.ok((await navHrefs(org.orgId)).includes('/returns'))
-    const before = await withBypassContext(() => db.execute(sql`
+        values (${auditId}, ${org.orgId}, 'rma_documents', ${rmaId}, 'insert', '{"stage":"requested"}'::jsonb, ${actorId})`);
+      });
+      assert.ok((await navHrefs(org.orgId)).includes("/returns"));
+      const before = await withBypassContext(() =>
+        db.execute(
+          sql`
       select jsonb_build_object(
         'authorization', (select to_jsonb(r) from rma_documents r where org_id = ${org.orgId} and document_id = ${rmaId}),
         'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${org.orgId} and table_name = 'rma_documents')
-      ) as state`, 'objects')).then((result) => result[0]!.state)
-    const listed = await withBypassContext(() => returnEngine.listReturnAuthorizations(db, org.orgId, null))
-    assert.equal(listed.some((entry: { id: string }) => entry.id === rmaId), true)
+      ) as state`,
+          "objects",
+        ),
+      ).then((result) => result[0]!.state);
+      const listed = await withBypassContext(() =>
+        returnEngine.listReturnAuthorizations(db, org.orgId, null),
+      );
+      assert.equal(
+        listed.some((entry: { id: string }) => entry.id === rmaId),
+        true,
+      );
 
-    await setFeature(org.orgId, 'returnAuthorizations', false)
-    assert.equal((await navHrefs(org.orgId)).includes('/returns'), false)
-    await assert.rejects(loadReturns({}), (error: unknown) => String((error as { digest?: string }).digest).includes('/feature-required?feature=returnAuthorizations'))
-    const params = { params: Promise.resolve({ id: rmaId }) }
-    const responses = [
-      await returnsRoute.GET(json('GET', '/api/returns')),
-      await returnsRoute.POST(json('POST', '/api/returns', {})),
-      await returnRoute.GET(json('GET', `/api/returns/${rmaId}`), params),
-      await returnReceiveRoute.POST(json('POST', `/api/returns/${rmaId}/receive`, { lines: [] }), params),
-      await returnInspectRoute.POST(json('POST', `/api/returns/${rmaId}/inspect`, { lines: [] }), params),
-      await returnRejectRoute.POST(json('POST', `/api/returns/${rmaId}/reject`, { reason: 'No return' }), params),
-      await returnEmailRoute.POST(json('POST', `/api/returns/${rmaId}/email`, { type: 'decision' }), params),
-      await returnSourcesRoute.GET(json('GET', '/api/returns/sources')),
-    ]
-    for (const response of responses) {
-      assert.equal(response.status, 404)
-      assert.deepEqual(await response.json(), { error: 'not_found' })
-    }
-    await assert.rejects(withBypassContext(() => returnEngine.listReturnAuthorizations(db, org.orgId, null)),
-      (error: unknown) => error instanceof returnEngine.ReturnRefusal && error.code === 'feature_disabled'
-        && /Return Authorizations/.test(error.message) && /Company Settings → Features/.test(error.remedy ?? ''))
-    const features = await resolvedFeatureState(org.orgId)
-    for (const tool of RETURNS_TOOLS) assert.equal(canRunTool(state.authz as never, tool, features), false)
-    assert.deepEqual(await RETURNS_TOOLS[0]!.execute({}, state.authz as never),
-      { ok: false, error: 'returnAuthorizations_feature_disabled' })
-    await setFeature(org.orgId, 'returnAuthorizations', true)
-    const after = await withBypassContext(() => db.execute(sql`
+      await setFeature(org.orgId, "returnAuthorizations", false);
+      assert.equal((await navHrefs(org.orgId)).includes("/returns"), false);
+      await assert.rejects(loadReturns({}), (error: unknown) =>
+        String((error as { digest?: string }).digest).includes(
+          "/feature-required?feature=returnAuthorizations",
+        ),
+      );
+      const params = { params: Promise.resolve({ id: rmaId }) };
+      const responses = [
+        await returnsRoute.GET(json("GET", "/api/returns")),
+        await returnsRoute.POST(json("POST", "/api/returns", {})),
+        await returnRoute.GET(json("GET", `/api/returns/${rmaId}`), params),
+        await returnReceiveRoute.POST(
+          json("POST", `/api/returns/${rmaId}/receive`, { lines: [] }),
+          params,
+        ),
+        await returnInspectRoute.POST(
+          json("POST", `/api/returns/${rmaId}/inspect`, { lines: [] }),
+          params,
+        ),
+        await returnRejectRoute.POST(
+          json("POST", `/api/returns/${rmaId}/reject`, { reason: "No return" }),
+          params,
+        ),
+        await returnEmailRoute.POST(
+          json("POST", `/api/returns/${rmaId}/email`, { type: "decision" }),
+          params,
+        ),
+        await returnSourcesRoute.GET(json("GET", "/api/returns/sources")),
+      ];
+      for (const response of responses) {
+        assert.equal(response.status, 404);
+        assert.deepEqual(await response.json(), { error: "not_found" });
+      }
+      await assert.rejects(
+        withBypassContext(() => returnEngine.listReturnAuthorizations(db, org.orgId, null)),
+        (error: unknown) =>
+          error instanceof returnEngine.ReturnRefusal &&
+          error.code === "feature_disabled" &&
+          /Return Authorizations/.test(error.message) &&
+          /Company Settings → Features/.test(error.remedy ?? ""),
+      );
+      const features = await resolvedFeatureState(org.orgId);
+      for (const tool of RETURNS_TOOLS)
+        assert.equal(canRunTool(state.authz as never, tool, features), false);
+      assert.deepEqual(await RETURNS_TOOLS[0]!.execute({}, state.authz as never), {
+        ok: false,
+        error: "returnAuthorizations_feature_disabled",
+      });
+      await setFeature(org.orgId, "returnAuthorizations", true);
+      const after = await withBypassContext(() =>
+        db.execute(
+          sql`
       select jsonb_build_object(
         'authorization', (select to_jsonb(r) from rma_documents r where org_id = ${org.orgId} and document_id = ${rmaId}),
         'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${org.orgId} and table_name = 'rma_documents')
-      ) as state`, 'objects')).then((result) => result[0]!.state)
-    assert.deepEqual(after, before, 'turning the feature off and on preserves authorization evidence and audit history')
-  })
-})
+      ) as state`,
+          "objects",
+        ),
+      ).then((result) => result[0]!.state);
+      assert.deepEqual(
+        after,
+        before,
+        "turning the feature off and on preserves authorization evidence and audit history",
+      );
+    });
+  },
+);
 
 // ---- Drop shipping ----------------------------------------------------------
 
 async function dropShipEvidence(orgId: string) {
-  return withBypassContext(async () => (await db.execute<{ state: unknown }>(sql`select jsonb_build_object(
+  return withBypassContext(
+    async () =>
+      (
+        await db.execute<{ state: unknown }>(
+          sql`select jsonb_build_object(
     'routes', (select jsonb_agg(to_jsonb(r) order by sales_order_line_id) from drop_ship_lines r where org_id = ${orgId}),
     'orders', (select jsonb_agg(to_jsonb(o) order by purchase_order_id) from drop_ship_orders o where org_id = ${orgId}),
     'confirmations', (select jsonb_agg(jsonb_build_object('id', d.id, 'status', d.status, 'custom', d.custom) order by d.id)
@@ -497,125 +932,265 @@ async function dropShipEvidence(orgId: string) {
         and d.custom ? 'dropShipConfirmation'),
     'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${orgId}
       and table_name in ('drop_ship_lines', 'drop_ship_orders', 'documents'))
-  ) as state`, 'objects'))[0]!.state)
+  ) as state`,
+          "objects",
+        )
+      )[0]!.state,
+  );
 }
 
-test('drop shipping off hides drawer actions, returns bare route 404s, and preserves routed confirmation history', { skip: !DB }, async () => {
-  await withFencedOrg(async (org, actorId) => {
-    state.authz = {
-      ...(state.authz as object),
-      permissions: new Set(['assistant.use', 'items.read', 'items.post', 'orders.fulfill', 'ap.create', 'ar.read', 'ap.read', 'ar.create', 'purchase_orders.read', 'purchase_orders.create', 'goods_receipts.create', 'admin.setup.manage']),
-    }
-    await setFeature(org.orgId, 'orders', true)
-    await setFeature(org.orgId, 'inventory', true)
-    await setFeature(org.orgId, 'dropShipping', true)
-    await withBypassContext(async () => {
-      await db.execute(sql`update items set default_cost = '20' where org_id = ${org.orgId} and id = ${org.items.fifo}`)
-      await db.execute(sql`insert into vendor_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.vendorId}, true)`)
-      await db.execute(sql`
+test(
+  "drop shipping off hides drawer actions, returns bare route 404s, and preserves routed confirmation history",
+  { skip: !DB },
+  async () => {
+    await withFencedOrg(async (org, actorId) => {
+      state.authz = {
+        ...(state.authz as object),
+        permissions: new Set([
+          "assistant.use",
+          "items.read",
+          "items.post",
+          "orders.fulfill",
+          "ap.create",
+          "ar.read",
+          "ap.read",
+          "ar.create",
+          "purchase_orders.read",
+          "purchase_orders.create",
+          "goods_receipts.create",
+          "admin.setup.manage",
+        ]),
+      };
+      await setFeature(org.orgId, "orders", true);
+      await setFeature(org.orgId, "inventory", true);
+      await setFeature(org.orgId, "dropShipping", true);
+      await withBypassContext(async () => {
+        await db.execute(
+          sql`update items set default_cost = '20' where org_id = ${org.orgId} and id = ${org.items.fifo}`,
+        );
+        await db.execute(
+          sql`insert into vendor_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.vendorId}, true)`,
+        );
+        await db.execute(sql`
         insert into addresses (id, org_id, party_id, label, line1, city, region, postal_code, country, is_default_shipping)
-        values (${randomUUID()}, ${org.orgId}, ${org.customerId}, 'Receiving', '10 Main St', 'Toronto', 'ON', 'M5V 1A1', 'CA', true)`)
-    })
-    const order = await withBypassContext(() => createOrderDraft(org.orgId, actorId, 'sales_order', randomUUID(), org.subsidiaryId))
-    const sourceLineId = randomUUID()
-    await withBypassContext(async () => {
-      await db.execute(sql`
+        values (${randomUUID()}, ${org.orgId}, ${org.customerId}, 'Receiving', '10 Main St', 'Toronto', 'ON', 'M5V 1A1', 'CA', true)`);
+      });
+      const order = await withBypassContext(() =>
+        createOrderDraft(org.orgId, actorId, "sales_order", randomUUID(), org.subsidiaryId),
+      );
+      const sourceLineId = randomUUID();
+      await withBypassContext(async () => {
+        await db.execute(sql`
         insert into document_lines
           (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount, tax_amount,
            quantity_fulfilled, quantity_billed, stock_location_id)
         values (${sourceLineId}, ${org.orgId}, ${order.id}, 1, ${org.items.fifo}, ${org.accounts.revenue},
-          '2', '50', '100', '0', '0', '0', ${org.stockLocationId})`)
-      await db.execute(sql`
+          '2', '50', '100', '0', '0', '0', ${org.stockLocationId})`);
+        await db.execute(sql`
         update documents set status = 'approved', party_id = ${org.customerId}, document_date = ${org.date},
-          subtotal = '100', total = '100' where id = ${order.id} and org_id = ${org.orgId}`)
-    })
-    const context = { authz: state.authz, source: 'api', requestId: randomUUID(), apiKeyId: null } as Parameters<typeof dropShipServices.routeSalesOrderLine>[0]
-    await withBypassContext(() => dropShipServices.routeSalesOrderLine(context, { salesOrderId: order.id, salesOrderLineId: sourceLineId, routed: true }))
-    const po = await withBypassContext(() => dropShipServices.createDropShipPurchaseOrder(context, {
-      salesOrderId: order.id, vendorId: org.vendorId, idempotencyKey: randomUUID(),
-    }))
-    const poLine = (await withBypassContext(() => db.execute<{ id: string }>(sql`
-      select id from document_lines where org_id = ${org.orgId} and document_id = ${po.id}`, 'objects')))[0]!
-    await withBypassContext(() => db.execute(sql`
-      update documents set status = 'approved' where org_id = ${org.orgId} and id = ${po.id} and status = 'draft'`))
-    const confirmation = await withBypassContext(() => dropShipServices.confirmDropShip(context, {
-      purchaseOrderId: po.id, confirmationDate: org.date, idempotencyKey: randomUUID(),
-      lines: [{ purchaseOrderLineId: poLine.id, quantity: '2' }],
-    }))
-    const before = await dropShipEvidence(org.orgId)
+          subtotal = '100', total = '100' where id = ${order.id} and org_id = ${org.orgId}`);
+      });
+      const context = {
+        authz: state.authz,
+        source: "api",
+        requestId: randomUUID(),
+        apiKeyId: null,
+      } as Parameters<typeof dropShipServices.routeSalesOrderLine>[0];
+      await withBypassContext(() =>
+        dropShipServices.routeSalesOrderLine(context, {
+          salesOrderId: order.id,
+          salesOrderLineId: sourceLineId,
+          routed: true,
+        }),
+      );
+      const po = await withBypassContext(() =>
+        dropShipServices.createDropShipPurchaseOrder(context, {
+          salesOrderId: order.id,
+          vendorId: org.vendorId,
+          idempotencyKey: randomUUID(),
+        }),
+      );
+      const poLine = (
+        await withBypassContext(() =>
+          db.execute<{ id: string }>(
+            sql`
+      select id from document_lines where org_id = ${org.orgId} and document_id = ${po.id}`,
+            "objects",
+          ),
+        )
+      )[0]!;
+      await withBypassContext(() =>
+        db.execute(sql`
+      update documents set status = 'approved' where org_id = ${org.orgId} and id = ${po.id} and status = 'draft'`),
+      );
+      const confirmation = await withBypassContext(() =>
+        dropShipServices.confirmDropShip(context, {
+          purchaseOrderId: po.id,
+          confirmationDate: org.date,
+          idempotencyKey: randomUUID(),
+          lines: [{ purchaseOrderLineId: poLine.id, quantity: "2" }],
+        }),
+      );
+      const before = await dropShipEvidence(org.orgId);
 
-    await setFeature(org.orgId, 'dropShipping', false)
-    const sales = await withBypassContext(() => loadSalesOrders({ order: order.id }))
-    const salesDrawer = sales.drawer as unknown as { dropShipping: boolean; dropShipLines: unknown[]; canRouteDropShip: boolean; canCreateDropShipPurchaseOrder: boolean }
-    assert.equal(salesDrawer.dropShipping, false)
-    assert.deepEqual(salesDrawer.dropShipLines, [])
-    assert.equal(salesDrawer.canRouteDropShip, false)
-    assert.equal(salesDrawer.canCreateDropShipPurchaseOrder, false)
-    const purchase = await withBypassContext(() => loadPurchaseOrders({ order: po.id }))
-    assert.equal((purchase.drawer as unknown as { canConfirmDropShip: boolean }).canConfirmDropShip, false)
+      await setFeature(org.orgId, "dropShipping", false);
+      const sales = await withBypassContext(() => loadSalesOrders({ order: order.id }));
+      const salesDrawer = sales.drawer as unknown as {
+        dropShipping: boolean;
+        dropShipLines: unknown[];
+        canRouteDropShip: boolean;
+        canCreateDropShipPurchaseOrder: boolean;
+      };
+      assert.equal(salesDrawer.dropShipping, false);
+      assert.deepEqual(salesDrawer.dropShipLines, []);
+      assert.equal(salesDrawer.canRouteDropShip, false);
+      assert.equal(salesDrawer.canCreateDropShipPurchaseOrder, false);
+      const purchase = await withBypassContext(() => loadPurchaseOrders({ order: po.id }));
+      assert.equal(
+        (purchase.drawer as unknown as { canConfirmDropShip: boolean }).canConfirmDropShip,
+        false,
+      );
 
-    const soParams = { params: Promise.resolve({ id: order.id }) }
-    const poParams = { params: Promise.resolve({ id: po.id }) }
-    const offResponses = [
-      await withBypassContext(() => dropShipRoute.POST(json('POST', `/api/sales-orders/${order.id}/drop-ship`, { salesOrderLineId: sourceLineId, routed: false }), soParams)),
-      await withBypassContext(() => dropShipPurchaseOrderRoute.POST(json('POST', `/api/sales-orders/${order.id}/drop-ship/purchase-orders`, { vendorId: org.vendorId, idempotencyKey: randomUUID() }), soParams)),
-      await withBypassContext(() => dropShipConfirmationRoute.POST(json('POST', `/api/purchase-orders/${po.id}/drop-ship-confirmation`, {
-        lines: [{ purchaseOrderLineId: poLine.id, quantity: '1' }],
-      }, { 'Idempotency-Key': randomUUID() }), poParams)),
-    ]
-    for (const response of offResponses) {
-      assert.equal(response.status, 404)
-      assert.deepEqual(await response.json(), { error: 'not_found' })
-    }
-    await assert.rejects(withBypassContext(() => dropShipEngine.routeDropShipLine({
-      orgId: org.orgId, actorId, salesOrderId: order.id, salesOrderLineId: sourceLineId, allowedSubsidiaryIds: null,
-    })), (error: unknown) => error instanceof dropShipEngine.DropShipRefusal
-      && error.code === 'feature_disabled' && /Company Settings → Features/.test(error.remedy ?? ''))
-    await assert.rejects(withBypassContext(() => dropShipServices.confirmDropShip(context, {
-      purchaseOrderId: po.id, confirmationDate: org.date, idempotencyKey: randomUUID(),
-      lines: [{ purchaseOrderLineId: poLine.id, quantity: '1' }],
-    })), (error: unknown) => error instanceof dropShipEngine.DropShipRefusal
-      && error.code === 'feature_disabled' && /Company Settings → Features/.test(error.remedy ?? ''))
-    await assert.rejects(withBypassContext(() => dropShipEngine.applyDropShipConfirmationInventory(db, org.orgId, actorId, confirmation.purchaseReceipt.id)),
-      (error: unknown) => error instanceof dropShipEngine.DropShipRefusal
-        && error.code === 'feature_disabled' && /Company Settings → Features/.test(error.remedy ?? ''))
+      const soParams = { params: Promise.resolve({ id: order.id }) };
+      const poParams = { params: Promise.resolve({ id: po.id }) };
+      const offResponses = [
+        await withBypassContext(() =>
+          dropShipRoute.POST(
+            json("POST", `/api/sales-orders/${order.id}/drop-ship`, {
+              salesOrderLineId: sourceLineId,
+              routed: false,
+            }),
+            soParams,
+          ),
+        ),
+        await withBypassContext(() =>
+          dropShipPurchaseOrderRoute.POST(
+            json("POST", `/api/sales-orders/${order.id}/drop-ship/purchase-orders`, {
+              vendorId: org.vendorId,
+              idempotencyKey: randomUUID(),
+            }),
+            soParams,
+          ),
+        ),
+        await withBypassContext(() =>
+          dropShipConfirmationRoute.POST(
+            json(
+              "POST",
+              `/api/purchase-orders/${po.id}/drop-ship-confirmation`,
+              {
+                lines: [{ purchaseOrderLineId: poLine.id, quantity: "1" }],
+              },
+              { "Idempotency-Key": randomUUID() },
+            ),
+            poParams,
+          ),
+        ),
+      ];
+      for (const response of offResponses) {
+        assert.equal(response.status, 404);
+        assert.deepEqual(await response.json(), { error: "not_found" });
+      }
+      await assert.rejects(
+        withBypassContext(() =>
+          dropShipEngine.routeDropShipLine({
+            orgId: org.orgId,
+            actorId,
+            salesOrderId: order.id,
+            salesOrderLineId: sourceLineId,
+            allowedSubsidiaryIds: null,
+          }),
+        ),
+        (error: unknown) =>
+          error instanceof dropShipEngine.DropShipRefusal &&
+          error.code === "feature_disabled" &&
+          /Company Settings → Features/.test(error.remedy ?? ""),
+      );
+      await assert.rejects(
+        withBypassContext(() =>
+          dropShipServices.confirmDropShip(context, {
+            purchaseOrderId: po.id,
+            confirmationDate: org.date,
+            idempotencyKey: randomUUID(),
+            lines: [{ purchaseOrderLineId: poLine.id, quantity: "1" }],
+          }),
+        ),
+        (error: unknown) =>
+          error instanceof dropShipEngine.DropShipRefusal &&
+          error.code === "feature_disabled" &&
+          /Company Settings → Features/.test(error.remedy ?? ""),
+      );
+      await assert.rejects(
+        withBypassContext(() =>
+          dropShipEngine.applyDropShipConfirmationInventory(
+            db,
+            org.orgId,
+            actorId,
+            confirmation.purchaseReceipt.id,
+          ),
+        ),
+        (error: unknown) =>
+          error instanceof dropShipEngine.DropShipRefusal &&
+          error.code === "feature_disabled" &&
+          /Company Settings → Features/.test(error.remedy ?? ""),
+      );
 
-    await setFeature(org.orgId, 'dropShipping', true)
-    assert.deepEqual(await dropShipEvidence(org.orgId), before, 'turning the feature off and on preserves routes, ship-to, confirmation documents and audit history')
-    assert.ok(confirmation.purchaseReceipt.id)
-  })
-})
+      await setFeature(org.orgId, "dropShipping", true);
+      assert.deepEqual(
+        await dropShipEvidence(org.orgId),
+        before,
+        "turning the feature off and on preserves routes, ship-to, confirmation documents and audit history",
+      );
+      assert.ok(confirmation.purchaseReceipt.id);
+    });
+  },
+);
 
 // ---- Customer part numbers and scanning -----------------------------------
 
-test('customer part numbers and barcode resolution refuse when their feature keys are off', { skip: !DB }, async () => {
-  await withFencedOrg(async (org) => {
-    await setFeature(org.orgId, 'barcodeScanning', false)
-    await setFeature(org.orgId, 'customerPartNumbers', false)
-    assert.equal(optionalScanResolver(false, () => ({ field: 'item' })), undefined,
-      'shared pickers receive no scan resolver, so the scan affordance is absent')
+test(
+  "customer part numbers and barcode resolution refuse when their feature keys are off",
+  { skip: !DB },
+  async () => {
+    await withFencedOrg(async (org) => {
+      await setFeature(org.orgId, "barcodeScanning", false);
+      await setFeature(org.orgId, "customerPartNumbers", false);
+      assert.equal(
+        optionalScanResolver(false, () => ({ field: "item" })),
+        undefined,
+        "shared pickers receive no scan resolver, so the scan affordance is absent",
+      );
 
-    const response = await scanResolveRoute.POST(json('POST', '/api/scan/resolve', { field: 'item', value: 'SKU-UNKNOWN' }))
-    assert.equal(response.status, 404)
-    assert.deepEqual(await response.json(), { error: 'not_found' })
+      const response = await scanResolveRoute.POST(
+        json("POST", "/api/scan/resolve", { field: "item", value: "SKU-UNKNOWN" }),
+      );
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: "not_found" });
 
-    await assert.rejects(
-      withBypassContext(() => itemIdentifiers.resolveScan(db, org.orgId, { field: 'item', value: 'SKU-UNKNOWN' })),
-      (error: unknown) => error instanceof itemIdentifiers.ScanRefusal
-        && error.name === 'ScanRefusal'
-        && error.code === 'barcode_scanning_disabled'
-        && error.remedy === 'turn on Barcode scanning in Company Settings → Features',
-    )
+      await assert.rejects(
+        withBypassContext(() =>
+          itemIdentifiers.resolveScan(db, org.orgId, { field: "item", value: "SKU-UNKNOWN" }),
+        ),
+        (error: unknown) =>
+          error instanceof itemIdentifiers.ScanRefusal &&
+          error.name === "ScanRefusal" &&
+          error.code === "barcode_scanning_disabled" &&
+          error.remedy === "turn on Barcode scanning in Company Settings → Features",
+      );
 
-    const customerRef = await setupWrite('POST', 'customer-item-refs', {
-      customerId: org.customerId, itemId: org.items.fifo, customerSku: 'OFF-CUSTOMER-SKU',
-    })
-    const identifier = await setupWrite('POST', 'item-identifiers', {
-      itemId: org.items.fifo, kind: 'internal', value: 'OFF-ITEM-ID',
-    })
-    assert.equal(customerRef.status, 404)
-    assert.deepEqual(await customerRef.json(), { error: 'not_found' })
-    assert.equal(identifier.status, 404)
-    assert.deepEqual(await identifier.json(), { error: 'not_found' })
-  })
-})
+      const customerRef = await setupWrite("POST", "customer-item-refs", {
+        customerId: org.customerId,
+        itemId: org.items.fifo,
+        customerSku: "OFF-CUSTOMER-SKU",
+      });
+      const identifier = await setupWrite("POST", "item-identifiers", {
+        itemId: org.items.fifo,
+        kind: "internal",
+        value: "OFF-ITEM-ID",
+      });
+      assert.equal(customerRef.status, 404);
+      assert.deepEqual(await customerRef.json(), { error: "not_found" });
+      assert.equal(identifier.status, 404);
+      assert.deepEqual(await identifier.json(), { error: "not_found" });
+    });
+  },
+);

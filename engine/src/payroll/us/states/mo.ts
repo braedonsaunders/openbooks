@@ -23,7 +23,9 @@
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
-  certificateAmount, certificateChoice, type PayrollCertificate,
+  certificateAmount,
+  certificateChoice,
+  type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -37,12 +39,21 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/mo.ts";
 const DOLLAR = 10_000n;
 
 const MO_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "annual",
+  "daily",
 ];
 
 export type MoFilingStatus =
@@ -98,17 +109,19 @@ const MO_EDITIONS_BY_YEAR: Record<number, MoYearRates> = {
   [MO_RATES_2026.year]: MO_RATES_2026,
 };
 
-export const MO_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "2026 Missouri Withholding Tax Formula",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Missouri Department of Revenue, 2026 Missouri Withholding Tax Formula "
-    + "— Step 1 standard deductions, Step 2 annual percentage table, $35,000 "
-    + "married-spouse-works example ($707.81 / $59.00)",
-  status: "published",
-  region: "MO",
-}];
+export const MO_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "2026 Missouri Withholding Tax Formula",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Missouri Department of Revenue, 2026 Missouri Withholding Tax Formula " +
+      "— Step 1 standard deductions, Step 2 annual percentage table, $35,000 " +
+      "married-spouse-works example ($707.81 / $59.00)",
+    status: "published",
+    region: "MO",
+  },
+];
 
 export function moRoundToDollar(units: bigint): bigint {
   return roundDiv(units, DOLLAR) * DOLLAR;
@@ -116,11 +129,16 @@ export function moRoundToDollar(units: bigint): bigint {
 
 export function moStandardDeduction(status: MoFilingStatus, rates: MoYearRates): bigint {
   switch (status) {
-    case "married_spouse_does_not_work": return U(rates.marriedSpouseDoesNotWorkDeduction);
-    case "head_household": return U(rates.headHouseholdDeduction);
-    case "married_spouse_works": return U(rates.marriedSpouseWorksDeduction);
-    case "married_separate": return U(rates.marriedSeparateDeduction);
-    default: return U(rates.singleDeduction);
+    case "married_spouse_does_not_work":
+      return U(rates.marriedSpouseDoesNotWorkDeduction);
+    case "head_household":
+      return U(rates.headHouseholdDeduction);
+    case "married_spouse_works":
+      return U(rates.marriedSpouseWorksDeduction);
+    case "married_separate":
+      return U(rates.marriedSeparateDeduction);
+    default:
+      return U(rates.singleDeduction);
   }
 }
 
@@ -152,7 +170,8 @@ function compute(
   }
 
   // No MO W-4: "withhold at a single tax rate."
-  const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as MoFilingStatus;
+  const status = (certificateChoice(input.certificate, "filing_status") ??
+    "single") as MoFilingStatus;
   let wages = U(input.wages) + U(input.supplemental ?? "0");
   if (input.basis === "nonresident") {
     wages = U(requireUsSourceWages(input.wageAllocations, "MO", null));
@@ -198,7 +217,12 @@ export const MO_FACTOR_LABELS: Readonly<Record<string, string>> = {
 };
 
 const MO_STATE_ENGINE = defineStateEngine({
-  state: { state: "MO", label: "Missouri income tax", printedPeriods: MO_PERIODS, fixedPeriodsOnly: true },
+  state: {
+    state: "MO",
+    label: "Missouri income tax",
+    printedPeriods: MO_PERIODS,
+    fixedPeriodsOnly: true,
+  },
   editions: pairStateRateEditions(Object.values(MO_EDITIONS_BY_YEAR), MO_TAX_YEAR_EDITIONS),
   compute: compute,
 });
@@ -233,13 +257,13 @@ export const MO_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "MO" },
   purpose: "withholding",
   citation:
-    "Missouri Department of Revenue, 2026 Missouri Withholding Tax Formula; "
-    + "Form 4282 Employer's Tax Guide (Revised 03-2026); Form MO W-4. "
-    + "Missouri has no reciprocity agreement with any other state.",
+    "Missouri Department of Revenue, 2026 Missouri Withholding Tax Formula; " +
+    "Form 4282 Employer's Tax Guide (Revised 03-2026); Form MO W-4. " +
+    "Missouri has no reciprocity agreement with any other state.",
   summary:
-    "Sets Missouri filing status for the standard deduction. If the employee "
-    + "does not complete Form MO W-4, Form 4282 requires withholding at a "
-    + "single tax rate.",
+    "Sets Missouri filing status for the standard deduction. If the employee " +
+    "does not complete Form MO W-4, Form 4282 requires withholding at a " +
+    "single tax rate.",
   storage: "certificate_rows",
   fields: [
     {
@@ -258,9 +282,9 @@ export const MO_CERTIFICATE: PayrollCertificate = {
         { value: "head_household", label: "Head of household ($24,150)" },
       ],
       help:
-        "The 2026 formula subtracts the printed standard deduction for this "
-        + "status and no other allowance. Default Single is Form 4282's own "
-        + "rule when no MO W-4 is on file.",
+        "The 2026 formula subtracts the printed standard deduction for this " +
+        "status and no other allowance. Default Single is Form 4282's own " +
+        "rule when no MO W-4 is on file.",
     },
     {
       key: "additional_per_period",
@@ -269,8 +293,8 @@ export const MO_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "A written additional amount on Form MO W-4 Line 2. Added AFTER the "
-        + "formula is de-annualized and rounded to the nearest whole dollar.",
+        "A written additional amount on Form MO W-4 Line 2. Added AFTER the " +
+        "formula is de-annualized and rounded to the nearest whole dollar.",
     },
     {
       key: "reduced_withholding_per_period",
@@ -279,16 +303,16 @@ export const MO_CERTIFICATE: PayrollCertificate = {
       decimals: 4,
       min: "0",
       help:
-        "When entered, this is the only Missouri income tax withheld per pay period. "
-        + "It replaces the standard formula and Line 2 additional amount.",
+        "When entered, this is the only Missouri income tax withheld per pay period. " +
+        "It replaces the standard formula and Line 2 additional amount.",
     },
     {
       key: "exempt",
       label: "Exempt from Missouri withholding",
       kind: "flag",
       help:
-        "A current exempt claim on Form MO W-4 withholds zero. Employees must "
-        + "file a new MO W-4 annually to continue the exemption.",
+        "A current exempt claim on Form MO W-4 withholds zero. Employees must " +
+        "file a new MO W-4 annually to continue the exemption.",
     },
   ],
 };
@@ -308,6 +332,6 @@ export const MO_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Missouri Department of Revenue, 2026 Missouri Withholding Tax Formula; "
-    + "Form 4282 (Revised 03-2026); Form MO W-4",
+    "Missouri Department of Revenue, 2026 Missouri Withholding Tax Formula; " +
+    "Form 4282 (Revised 03-2026); Form MO W-4",
 };

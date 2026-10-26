@@ -32,7 +32,9 @@ export const depreciationMethods = pgTable(
     name: text("name").notNull(),
     /** Expression over the variable set, e.g. "(OC-RV)*(AL-CP+1)/(AL*(AL+1)/2)". */
     formula: text("formula").notNull(),
-    endOfLife: text("end_of_life", { enum: ["fully_depreciate", "retain_balance"] }).notNull().default("fully_depreciate"),
+    endOfLife: text("end_of_life", { enum: ["fully_depreciate", "retain_balance"] })
+      .notNull()
+      .default("fully_depreciate"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
@@ -54,7 +56,17 @@ export const fixedAssets = pgTable(
     name: text("name").notNull(),
     description: text("description"),
     /** construction = construction in progress (never depreciates); capitalized = a closed CIP record. */
-    status: text("status", { enum: ["draft", "in_service", "fully_depreciated", "disposed", "written_off", "construction", "capitalized"] })
+    status: text("status", {
+      enum: [
+        "draft",
+        "in_service",
+        "fully_depreciated",
+        "disposed",
+        "written_off",
+        "construction",
+        "capitalized",
+      ],
+    })
       .notNull()
       .default("draft"),
     acquiredOn: date("acquired_on"),
@@ -71,7 +83,13 @@ export const fixedAssets = pgTable(
     custodianPartyId: uuid("custodian_party_id"),
     /** Native per-asset depreciation overrides. Null means use the category/book policy. */
     depreciationMethod: text("depreciation_method", {
-      enum: ["straight_line", "declining_balance", "double_declining", "units_of_production", "manual"],
+      enum: [
+        "straight_line",
+        "declining_balance",
+        "double_declining",
+        "units_of_production",
+        "manual",
+      ],
     }),
     /** Active tenant formula override; built-in depreciationMethod is the fallback. */
     depreciationMethodId: uuid("depreciation_method_id"),
@@ -90,12 +108,11 @@ export const fixedAssets = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("fixed_assets_org_asset_number_unique").on(
-      t.orgId,
-      t.assetNumber,
-    ),
+    uniqueIndex("fixed_assets_org_asset_number_unique").on(t.orgId, t.assetNumber),
     index("assets_org_status").on(t.orgId, t.status),
-    index("fixed_assets_parent").on(t.orgId, t.parentAssetId).where(sql`${t.parentAssetId} is not null`),
+    index("fixed_assets_parent")
+      .on(t.orgId, t.parentAssetId)
+      .where(sql`${t.parentAssetId} is not null`),
   ],
 );
 
@@ -114,7 +131,9 @@ export const equipmentUnits = pgTable(
     unitNumber: text("unit_number").notNull(),
     name: text("name").notNull(),
     description: text("description"),
-    status: text("status", { enum: ["draft", "active", "inactive", "retired"] }).notNull().default("draft"),
+    status: text("status", { enum: ["draft", "active", "inactive", "retired"] })
+      .notNull()
+      .default("draft"),
     chargeItemId: uuid("charge_item_id"),
     fixedAssetId: uuid("fixed_asset_id"),
     rateBookId: uuid("rate_book_id"),
@@ -133,14 +152,21 @@ export const equipmentUnits = pgTable(
     index("equipment_units_org_status").on(t.orgId, t.status),
     index("equipment_units_charge_item").on(t.orgId, t.chargeItemId),
     check("equipment_units_nonnegative_purchase", sql`${t.purchasePrice} >= 0`),
-    check("equipment_units_positive_capacity", sql`${t.capacityQuantity} is null or ${t.capacityQuantity} > 0`),
-    check("equipment_units_valid_dates", sql`${t.acquiredOn} is null or ${t.inServiceOn} is null or ${t.inServiceOn} >= ${t.acquiredOn}`),
+    check(
+      "equipment_units_positive_capacity",
+      sql`${t.capacityQuantity} is null or ${t.capacityQuantity} > 0`,
+    ),
+    check(
+      "equipment_units_valid_dates",
+      sql`${t.acquiredOn} is null or ${t.inServiceOn} is null or ${t.inServiceOn} >= ${t.acquiredOn}`,
+    ),
   ],
 );
 
 export const assetBasisChanges = pgTable("asset_basis_changes", {
-  ordinal:bigserial("ordinal",{mode:"bigint"}).notNull(),
-  unitsRemaining:money("units_remaining"),depreciableAfter:money("depreciable_after"),
+  ordinal: bigserial("ordinal", { mode: "bigint" }).notNull(),
+  unitsRemaining: money("units_remaining"),
+  depreciableAfter: money("depreciable_after"),
   id: id(),
   orgId: orgRef(),
   assetId: uuid("asset_id").notNull(),
@@ -154,8 +180,6 @@ export const assetBasisChanges = pgTable("asset_basis_changes", {
   salvageDelta: money("salvage_delta").notNull(),
   journalEntryId: uuid("journal_entry_id"),
   stubJournalEntryId: uuid("stub_journal_entry_id"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   createdBy: uuid("created_by").notNull(),
 });

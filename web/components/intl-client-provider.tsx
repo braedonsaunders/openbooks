@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import { use, type ReactNode } from 'react'
-import { NextIntlClientProvider } from 'next-intl'
+import { use, type ReactNode } from "react";
+import { NextIntlClientProvider } from "next-intl";
 
-type Messages = Record<string, unknown>
+type Messages = Record<string, unknown>;
 
 /**
  * Client message provider. The catalog travels as a separately cached,
@@ -22,43 +22,48 @@ export function IntlClientProvider({
   url,
   children,
 }: {
-  locale: string
-  timeZone: string
-  version: string
-  url: string
-  children: ReactNode
+  locale: string;
+  timeZone: string;
+  version: string;
+  url: string;
+  children: ReactNode;
 }) {
-  const messages = typeof window === 'undefined' ? publishedCatalog(locale, version) : use(browserCatalog(url))
+  const messages =
+    typeof window === "undefined" ? publishedCatalog(locale, version) : use(browserCatalog(url));
   return (
     <NextIntlClientProvider locale={locale} timeZone={timeZone} messages={messages}>
       {children}
     </NextIntlClientProvider>
-  )
+  );
 }
 
-const PUBLISHED_CATALOGS = Symbol.for('openbooks.i18n.client-catalogs')
+const PUBLISHED_CATALOGS = Symbol.for("openbooks.i18n.client-catalogs");
 
 function publishedCatalog(locale: string, version: string): Messages {
-  const catalogs = (globalThis as { [PUBLISHED_CATALOGS]?: Map<string, { version: string; messages: Messages }> })[PUBLISHED_CATALOGS]
-  const published = catalogs?.get(locale)
-  if (!published) throw new Error(`Message catalog ${locale}@${version} was not published for server rendering`)
+  const catalogs = (
+    globalThis as { [PUBLISHED_CATALOGS]?: Map<string, { version: string; messages: Messages }> }
+  )[PUBLISHED_CATALOGS];
+  const published = catalogs?.get(locale);
+  if (!published)
+    throw new Error(`Message catalog ${locale}@${version} was not published for server rendering`);
   // A catalog edited between the layout and this render publishes a newer
   // version; the newest is the one the browser will load.
-  return published.messages
+  return published.messages;
 }
 
-const browserCatalogs = new Map<string, Promise<Messages>>()
+const browserCatalogs = new Map<string, Promise<Messages>>();
 
 function browserCatalog(url: string): Promise<Messages> {
-  let catalog = browserCatalogs.get(url)
+  let catalog = browserCatalogs.get(url);
   if (!catalog) {
-    catalog = fetch(url, { credentials: 'same-origin' }).then(async (response) => {
-      if (!response.ok) throw new Error(`Message catalog request failed with status ${response.status}`)
-      return (await response.json()) as Messages
-    })
-    browserCatalogs.set(url, catalog)
+    catalog = fetch(url, { credentials: "same-origin" }).then(async (response) => {
+      if (!response.ok)
+        throw new Error(`Message catalog request failed with status ${response.status}`);
+      return (await response.json()) as Messages;
+    });
+    browserCatalogs.set(url, catalog);
     // A failed load is retried by the next render rather than remembered.
-    catalog.catch(() => browserCatalogs.delete(url))
+    catalog.catch(() => browserCatalogs.delete(url));
   }
-  return catalog
+  return catalog;
 }

@@ -14,8 +14,7 @@ export const POST = defineRoute({
   body: leaseChangeSchema,
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid lease" }, { status: 422 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid lease" }, { status: 422 });
 
     try {
       return NextResponse.json(

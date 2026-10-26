@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../lib/list-params";
 import { lockSuperAdminActor, requireSuperAdmin } from "../../../lib/super-admin";
-import { getTranslations } from 'next-intl/server'
+import { getTranslations } from "next-intl/server";
 
 function assertUuid(value: string, invalidMessage: string): void {
   if (!isUuid(value)) throw new Error(invalidMessage);
@@ -66,11 +66,11 @@ export async function setSuperAdminAction(
   value: boolean,
 ): Promise<PlatformMutationResult> {
   try {
-    const t = await getTranslations('platform.actions')
+    const t = await getTranslations("platform.actions");
     const authz = await requireSuperAdmin();
-    assertUuid(userId, t('invalidUser'));
+    assertUuid(userId, t("invalidUser"));
     if (userId === authz.user.homeUserId && !value) {
-      throw new Error(t('cannotRevokeOwn'));
+      throw new Error(t("cannotRevokeOwn"));
     }
 
     // bypass: cross-org-by-design — platform super-admin status is installation-wide, not an organization's.
@@ -84,32 +84,36 @@ export async function setSuperAdminAction(
       await lockSuperAdminActor(db, authz.user.homeUserId);
 
       const targetResult = await db.execute<{
-          id: string;
-          orgId: string;
-          email: string;
-          name: string;
-          isSuperAdmin: boolean;
-          isActive: boolean;
-        }>(sql`
+        id: string;
+        orgId: string;
+        email: string;
+        name: string;
+        isSuperAdmin: boolean;
+        isActive: boolean;
+      }>(
+        sql`
         select id, org_id as "orgId", email, name, is_super_admin as "isSuperAdmin", is_active as "isActive"
           from users
          where id = ${userId}
          for update
-      `, "objects");
+      `,
+        "objects",
+      );
       const target = targetResult[0];
-      if (!target) throw new Error(t('userNotFound'));
+      if (!target) throw new Error(t("userNotFound"));
       if (target.isSuperAdmin === value) return;
 
       if (!value) {
-        const countResult = await db.execute<{ count: number }>(sql`
+        const countResult = await db.execute<{ count: number }>(
+          sql`
           select count(*)::int as count
             from users
            where is_super_admin and is_active
-        `, "objects");
+        `,
+          "objects",
+        );
         if (Number(countResult[0]?.count ?? 0) <= 1) {
-          throw new Error(
-            t('finalSuperAdmin'),
-          );
+          throw new Error(t("finalSuperAdmin"));
         }
       }
 
@@ -137,7 +141,7 @@ export async function setSuperAdminAction(
     revalidatePath(`/platform/users/${userId}`);
     return { ok: true };
   } catch (error) {
-    return refusal(error, (await getTranslations('platform.actions'))('superAdminFailed'));
+    return refusal(error, (await getTranslations("platform.actions"))("superAdminFailed"));
   }
 }
 
@@ -148,26 +152,27 @@ export async function setSuperAdminAction(
  */
 export async function grantAccessAction(formData: FormData): Promise<PlatformMutationResult> {
   try {
-    const t = await getTranslations('platform.actions')
+    const t = await getTranslations("platform.actions");
     const authz = await requireSuperAdmin();
     const memberUserId = String(formData.get("memberUserId") ?? "");
     const orgId = String(formData.get("orgId") ?? "");
     const actingUserId = String(formData.get("actingUserId") ?? "");
-    assertUuid(memberUserId, t('invalidMember'));
-    assertUuid(orgId, t('invalidOrganization'));
-    assertUuid(actingUserId, t('invalidActingUser'));
+    assertUuid(memberUserId, t("invalidMember"));
+    assertUuid(orgId, t("invalidOrganization"));
+    assertUuid(actingUserId, t("invalidActingUser"));
 
     // bypass: cross-org-by-design — an access grant links a member of one organization to another organization.
     await withBypass(async () => {
       await lockPlatformAdminMutations();
       await lockSuperAdminActor(db, authz.user.homeUserId);
       const validation = await db.execute<{
-          memberOrgId: string;
-          memberEnvKind: string;
-          actingOrgId: string;
-          actingActive: boolean;
-          targetEnvKind: string;
-        }>(sql`
+        memberOrgId: string;
+        memberEnvKind: string;
+        actingOrgId: string;
+        actingActive: boolean;
+        targetEnvKind: string;
+      }>(
+        sql`
         select m.org_id as "memberOrgId", mo.env_kind as "memberEnvKind",
                au.org_id as "actingOrgId", au.is_active as "actingActive",
                target.env_kind as "targetEnvKind"
@@ -176,35 +181,34 @@ export async function grantAccessAction(formData: FormData): Promise<PlatformMut
           join users au on au.id = ${actingUserId}
           join orgs target on target.id = ${orgId}
          where m.id = ${memberUserId}
-      `, "objects");
+      `,
+        "objects",
+      );
       const row = validation[0];
-      if (!row)
-        throw new Error(t('grantIdentityNotFound'));
-      if (row.memberEnvKind !== "production")
-        throw new Error(
-          t('memberMustBeProduction'),
-        );
-      if (row.targetEnvKind !== "production")
-        throw new Error(
-          t('targetMustBeProduction'),
-        );
-      if (row.memberOrgId === orgId)
-        throw new Error(
-          t('homeAccessAlreadyImplicit'),
-        );
-      if (row.actingOrgId !== orgId)
-        throw new Error(t('actingUserMustBelongToTarget'));
-      if (!row.actingActive) throw new Error(t('actingUserMustBeActive'));
+      if (!row) throw new Error(t("grantIdentityNotFound"));
+      if (row.memberEnvKind !== "production") throw new Error(t("memberMustBeProduction"));
+      if (row.targetEnvKind !== "production") throw new Error(t("targetMustBeProduction"));
+      if (row.memberOrgId === orgId) throw new Error(t("homeAccessAlreadyImplicit"));
+      if (row.actingOrgId !== orgId) throw new Error(t("actingUserMustBelongToTarget"));
+      if (!row.actingActive) throw new Error(t("actingUserMustBeActive"));
 
-      const beforeResult = await db.execute<{ id: string; actingUserId: string; isActive: boolean }>(sql`
+      const beforeResult = await db.execute<{
+        id: string;
+        actingUserId: string;
+        isActive: boolean;
+      }>(
+        sql`
         select id, acting_user_id as "actingUserId", is_active as "isActive"
           from user_org_access
          where member_user_id = ${memberUserId} and org_id = ${orgId}
          for update
-      `, "objects");
+      `,
+        "objects",
+      );
       const before = beforeResult[0] ?? null;
 
-      const result = await db.execute<{ id: string }>(sql`
+      const result = await db.execute<{ id: string }>(
+        sql`
         insert into user_org_access (
           member_user_id, org_id, acting_user_id, is_active, created_by, updated_by
         )
@@ -217,9 +221,11 @@ export async function grantAccessAction(formData: FormData): Promise<PlatformMut
           updated_by = excluded.updated_by
         where user_org_access.org_id = ${orgId}
         returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       const accessId = result[0]?.id;
-      if (!accessId) throw new Error(t('grantCouldNotSave'));
+      if (!accessId) throw new Error(t("grantCouldNotSave"));
 
       await auditPlatformMutation({
         orgId,
@@ -227,18 +233,14 @@ export async function grantAccessAction(formData: FormData): Promise<PlatformMut
         rowId: accessId,
         action: before ? "update" : "insert",
         actorId: authz.user.homeUserId,
-        before: before
-          ? { acting_user_id: before.actingUserId, is_active: before.isActive }
-          : null,
+        before: before ? { acting_user_id: before.actingUserId, is_active: before.isActive } : null,
         after: {
           member_user_id: memberUserId,
           org_id: orgId,
           acting_user_id: actingUserId,
           is_active: true,
         },
-        reason: before
-          ? "Updated cross-organization access"
-          : "Granted cross-organization access",
+        reason: before ? "Updated cross-organization access" : "Granted cross-organization access",
       });
     });
 
@@ -248,16 +250,16 @@ export async function grantAccessAction(formData: FormData): Promise<PlatformMut
     revalidatePath(`/platform/users/${memberUserId}`);
     return { ok: true };
   } catch (error) {
-    return refusal(error, (await getTranslations('platform.actions'))('grantFailed'));
+    return refusal(error, (await getTranslations("platform.actions"))("grantFailed"));
   }
 }
 
 /** Soft-revoke an access grant so the control history remains intact. */
 export async function revokeAccessAction(accessId: string): Promise<PlatformMutationResult> {
   try {
-    const t = await getTranslations('platform.actions')
+    const t = await getTranslations("platform.actions");
     const authz = await requireSuperAdmin();
-    assertUuid(accessId, t('invalidGrant'));
+    assertUuid(accessId, t("invalidGrant"));
     let memberUserId: string | null = null;
 
     // bypass: cross-org-by-design — an access grant links a member of one organization to another organization.
@@ -265,20 +267,23 @@ export async function revokeAccessAction(accessId: string): Promise<PlatformMuta
       await lockPlatformAdminMutations();
       await lockSuperAdminActor(db, authz.user.homeUserId);
       const beforeResult = await db.execute<{
-          id: string;
-          orgId: string;
-          memberUserId: string;
-          actingUserId: string;
-          isActive: boolean;
-        }>(sql`
+        id: string;
+        orgId: string;
+        memberUserId: string;
+        actingUserId: string;
+        isActive: boolean;
+      }>(
+        sql`
         select id, org_id as "orgId", member_user_id as "memberUserId",
                acting_user_id as "actingUserId", is_active as "isActive"
           from user_org_access
          where id = ${accessId}
          for update
-      `, "objects");
+      `,
+        "objects",
+      );
       const before = beforeResult[0];
-      if (!before) throw new Error(t('grantNotFound'));
+      if (!before) throw new Error(t("grantNotFound"));
       memberUserId = before.memberUserId;
       if (!before.isActive) return;
 
@@ -305,6 +310,6 @@ export async function revokeAccessAction(accessId: string): Promise<PlatformMuta
     if (memberUserId) revalidatePath(`/platform/users/${memberUserId}`);
     return { ok: true };
   } catch (error) {
-    return refusal(error, (await getTranslations('platform.actions'))('revokeFailed'));
+    return refusal(error, (await getTranslations("platform.actions"))("revokeFailed"));
   }
 }

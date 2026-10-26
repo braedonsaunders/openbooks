@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { nextPeriodAfter, payPeriodsPerYearProblem, semiMonthlyAnchorProblem, semiMonthlyBoundaries } from "./run-calendar.ts";
+import {
+  nextPeriodAfter,
+  payPeriodsPerYearProblem,
+  semiMonthlyAnchorProblem,
+  semiMonthlyBoundaries,
+} from "./run-calendar.ts";
 import { PayrollError } from "./error.ts";
 
 /**
@@ -18,7 +23,10 @@ import { PayrollError } from "./error.ts";
 
 /** Walk the schedule forward, `count` periods from `from`. */
 function series(
-  frequency: string, anchorPeriodEnd: string, from: string | null, count: number,
+  frequency: string,
+  anchorPeriodEnd: string,
+  from: string | null,
+  count: number,
 ): { periodStart: string; periodEnd: string }[] {
   const out: { periodStart: string; periodEnd: string }[] = [];
   let cursor = from;
@@ -37,7 +45,10 @@ test("a semi-monthly anchor on the 20th pays the 6th–20th and the 21st–5th",
   assert.deepEqual(boundaries, { firstDay: 5, secondDay: 20 });
 
   // The anchor itself is the FIRST period this schedule produces.
-  const first = nextPeriodAfter({ frequency: "semi_monthly", anchor_period_end: "2026-01-20" }, null);
+  const first = nextPeriodAfter(
+    { frequency: "semi_monthly", anchor_period_end: "2026-01-20" },
+    null,
+  );
   assert.deepEqual(first, { periodStart: "2026-01-06", periodEnd: "2026-01-20" });
 });
 
@@ -194,18 +205,16 @@ test("every other day of the month derives a schedule", () => {
   // later change cannot quietly widen it.
   const refused: string[] = [];
   for (const month of ["2026-01", "2026-02", "2026-04", "2028-02"]) {
-    const length = new Date(Date.UTC(
-      Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0,
-    )).getUTCDate();
+    const length = new Date(
+      Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0),
+    ).getUTCDate();
     for (let day = 1; day <= length; day++) {
       const anchor = `${month}-${String(day).padStart(2, "0")}`;
       if (semiMonthlyAnchorProblem(anchor)) refused.push(anchor);
       else semiMonthlyBoundaries(anchor); // must not throw
     }
   }
-  assert.deepEqual(refused, [
-    "2026-01-14", "2026-02-14", "2026-02-28", "2026-04-14", "2028-02-14",
-  ]);
+  assert.deepEqual(refused, ["2026-01-14", "2026-02-14", "2026-02-28", "2026-04-14", "2028-02-14"]);
 });
 
 test("a non-date anchor is refused rather than producing an Invalid Date period", () => {
@@ -274,11 +283,17 @@ test("an aligned last end still advances exactly one span", () => {
 
 test("each frequency accepts exactly the period counts its calendar can produce", () => {
   for (const [frequency, legal] of Object.entries({
-    weekly: [52, 53], biweekly: [26, 27], semi_monthly: [24], monthly: [12],
+    weekly: [52, 53],
+    biweekly: [26, 27],
+    semi_monthly: [24],
+    monthly: [12],
   })) {
     for (const count of legal) {
-      assert.equal(payPeriodsPerYearProblem(frequency, count), null,
-        `${frequency} must accept ${count}`);
+      assert.equal(
+        payPeriodsPerYearProblem(frequency, count),
+        null,
+        `${frequency} must accept ${count}`,
+      );
     }
   }
 });

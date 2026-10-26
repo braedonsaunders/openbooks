@@ -27,19 +27,25 @@ const REASON = "Correct the project tagging on this posted invoice";
 // reopen remedy — never a reversal into another fiscal year.
 
 async function seedClerk(org: ScratchOrg): Promise<string> {
-  const actor = await withBypassContext(() => createScratchUser(org.orgId, "Amendment Clerk", "correction-clerk"));
-  await withBypassContext(() => db.execute(sql`
+  const actor = await withBypassContext(() =>
+    createScratchUser(org.orgId, "Amendment Clerk", "correction-clerk"),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     update app_roles set permissions = '["ar.read","ar.create","ar.post"]'::jsonb
      where org_id = ${org.orgId}
-       and id in (select role_id from role_assignments where org_id = ${org.orgId} and user_id = ${actor})`));
+       and id in (select role_id from role_assignments where org_id = ${org.orgId} and user_id = ${actor})`),
+  );
   return actor;
 }
 
 async function seedProject(org: ScratchOrg, code: string): Promise<string> {
   const project = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into projects(id, org_id, subsidiary_id, code, name, customer_id, status, is_active)
-    values (${project}, ${org.orgId}, ${org.subsidiaryId}, ${code}, ${code}, ${org.customerId}, 'active', true)`));
+    values (${project}, ${org.orgId}, ${org.subsidiaryId}, ${code}, ${code}, ${org.customerId}, 'active', true)`),
+  );
   return project;
 }
 
@@ -52,19 +58,25 @@ async function seedPostedInvoice(
   options: { departmentId?: string | null; documentDate?: string; postingDate?: string } = {},
 ): Promise<string> {
   const invoice = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into documents
       (id, org_id, kind, status, document_number, party_id, document_date, posting_date, subsidiary_id,
        currency, subtotal, tax_total, total, department_id, project_id, created_by)
     values (${invoice}, ${org.orgId}, 'customer_invoice', 'draft', ${documentNumber},
             ${org.customerId}, ${options.documentDate ?? org.date}, ${options.postingDate ?? org.date}, ${org.subsidiaryId},
-            'CAD', ${amount}, '0', ${amount}, ${options.departmentId ?? null}, ${projectId}, ${actorId})`));
-  await withBypassContext(() => db.execute(sql`
+            'CAD', ${amount}, '0', ${amount}, ${options.departmentId ?? null}, ${projectId}, ${actorId})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into document_lines
       (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
-    values (${org.orgId}, ${invoice}, 1, ${org.accounts.revenue}, '1', ${amount}, ${amount}, '0', ${amount})`));
-  await withBypassContext(() => db.execute(sql`
-    update documents set status = 'approved' where id = ${invoice} and org_id = ${org.orgId}`));
+    values (${org.orgId}, ${invoice}, 1, ${org.accounts.revenue}, '1', ${amount}, ${amount}, '0', ${amount})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
+    update documents set status = 'approved' where id = ${invoice} and org_id = ${org.orgId}`),
+  );
   await postDocument(invoice, {
     control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
   });
@@ -72,283 +84,450 @@ async function seedPostedInvoice(
 }
 
 async function revision(orgId: string, id: string): Promise<string> {
-  return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
+  return (
+    await withBypassContext(() =>
+      db.execute<{ revision: string }>(
+        sql`
     select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
-      from documents where id = ${id} and org_id = ${orgId}`, "objects")))[0]!.revision;
+      from documents where id = ${id} and org_id = ${orgId}`,
+        "objects",
+      ),
+    )
+  )[0]!.revision;
 }
 
 function writerFor(orgId: string, actorId: string) {
   return {
-    createDraft: (kind: string, options: {
-      allowedSubsidiaryIds: ReadonlySet<string> | null;
-      subsidiaryId: string | null;
-      runFlows: false;
-      source: "api";
-    }) => createDocumentDraft(orgId, actorId, kind, options),
+    createDraft: (
+      kind: string,
+      options: {
+        allowedSubsidiaryIds: ReadonlySet<string> | null;
+        subsidiaryId: string | null;
+        runFlows: false;
+        source: "api";
+      },
+    ) => createDocumentDraft(orgId, actorId, kind, options),
     applyEdit: applyDocumentEdit,
   };
 }
 
 async function closeAR(org: ScratchOrg, actorId: string): Promise<void> {
-  await withBypassContext(() => setPeriodLockState({
-    orgId: org.orgId,
-    periodId: org.periodId,
-    bookId: org.bookId,
-    module: "ar",
-    state: "closed",
-    actorId,
-    reason: "Probe: October AR closed with the invoice still posted",
-  }));
+  await withBypassContext(() =>
+    setPeriodLockState({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      module: "ar",
+      state: "closed",
+      actorId,
+      reason: "Probe: October AR closed with the invoice still posted",
+    }),
+  );
 }
 
 async function docState(orgId: string, id: string) {
-  return (await withBypassContext(() => db.execute<{
-    status: string; departmentId: string | null; projectId: string | null; memo: string | null; voidRequested: string | null;
-  }>(sql`
+  return (
+    await withBypassContext(() =>
+      db.execute<{
+        status: string;
+        departmentId: string | null;
+        projectId: string | null;
+        memo: string | null;
+        voidRequested: string | null;
+      }>(
+        sql`
     select status, department_id as "departmentId", project_id as "projectId", memo,
            void_requested_at::text as "voidRequested"
-      from documents where id = ${id} and org_id = ${orgId}`, "objects")))[0]!;
+      from documents where id = ${id} and org_id = ${orgId}`,
+        "objects",
+      ),
+    )
+  )[0]!;
 }
 
 async function entryCount(orgId: string, id: string): Promise<number> {
-  return (await withBypassContext(() => db.execute<{ count: number }>(sql`
+  return (
+    await withBypassContext(() =>
+      db.execute<{ count: number }>(
+        sql`
     select count(*)::int as count from journal_entries
-     where org_id = ${orgId} and source_document_id = ${id}`, "objects")))[0]!.count;
+     where org_id = ${orgId} and source_document_id = ${id}`,
+        "objects",
+      ),
+    )
+  )[0]!.count;
 }
 
 async function correctionAudits(orgId: string, id: string) {
-  return await withBypassContext(() => db.execute<{ action: string; changes: unknown }>(sql`
+  return await withBypassContext(() =>
+    db.execute<{ action: string; changes: unknown }>(
+      sql`
     select action, changes from audit_log
      where org_id = ${orgId} and table_name = 'documents' and row_id = ${id}
        and changes->>'mode' like 'posted\\_%'
-     order by id`, "objects"));
+     order by id`,
+      "objects",
+    ),
+  );
 }
 
-test("a locked-period project amendment refuses with the reopen remedy and changes nothing", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const actor = await seedClerk(org);
-    const projectA = await seedProject(org, "LOCK-A");
-    const projectB = await seedProject(org, "LOCK-B");
-    const invoice = await seedPostedInvoice(org, actor, projectA, "INV-LOCKED", "4200");
-    const entriesBefore = await entryCount(org.orgId, invoice);
-    await closeAR(org, actor);
-    const token = await revision(org.orgId, invoice);
-    await assert.rejects(
-      correctPostedDocument(invoice, {
-        projectId: projectB, expectedUpdatedAt: token, amendmentReason: REASON,
-      }, { orgId: org.orgId, userId: actor, source: "api" }, writerFor(org.orgId, actor)),
-      (error: unknown) => error instanceof PostedCorrectionError &&
-        error.code === "closed-period" &&
-        /closed/.test(error.message) &&
-        /reopen/.test(error.remedy),
-    );
-    const kept = await docState(org.orgId, invoice);
-    assert.equal(kept.status, "posted");
-    assert.equal(kept.projectId, projectA);
-    assert.equal(kept.voidRequested, null);
-    assert.equal(await entryCount(org.orgId, invoice), entriesBefore);
-    assert.deepEqual(await correctionAudits(org.orgId, invoice), []);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+test(
+  "a locked-period project amendment refuses with the reopen remedy and changes nothing",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actor = await seedClerk(org);
+      const projectA = await seedProject(org, "LOCK-A");
+      const projectB = await seedProject(org, "LOCK-B");
+      const invoice = await seedPostedInvoice(org, actor, projectA, "INV-LOCKED", "4200");
+      const entriesBefore = await entryCount(org.orgId, invoice);
+      await closeAR(org, actor);
+      const token = await revision(org.orgId, invoice);
+      await assert.rejects(
+        correctPostedDocument(
+          invoice,
+          {
+            projectId: projectB,
+            expectedUpdatedAt: token,
+            amendmentReason: REASON,
+          },
+          { orgId: org.orgId, userId: actor, source: "api" },
+          writerFor(org.orgId, actor),
+        ),
+        (error: unknown) =>
+          error instanceof PostedCorrectionError &&
+          error.code === "closed-period" &&
+          /closed/.test(error.message) &&
+          /reopen/.test(error.remedy),
+      );
+      const kept = await docState(org.orgId, invoice);
+      assert.equal(kept.status, "posted");
+      assert.equal(kept.projectId, projectA);
+      assert.equal(kept.voidRequested, null);
+      assert.equal(await entryCount(org.orgId, invoice), entriesBefore);
+      assert.deepEqual(await correctionAudits(org.orgId, invoice), []);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a multi-dimension correction moves balances once and stays in the source posting period", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const actor = await seedClerk(org);
-    const projectA = await seedProject(org, "OPEN-A");
-    const projectB = await seedProject(org, "OPEN-B");
-    const departmentA = randomUUID();
-    const departmentB = randomUUID();
-    await withBypassContext(async () => {
-      await db.execute(sql`insert into departments (id, org_id, name) values (${departmentA}, ${org.orgId}, 'Open A')`);
-      await db.execute(sql`insert into departments (id, org_id, name) values (${departmentB}, ${org.orgId}, 'Open B')`);
-    });
-    const invoice = await seedPostedInvoice(org, actor, projectA, "INV-OPEN", "4200", {
-      departmentId: departmentA,
-      documentDate: "2026-06-15",
-      postingDate: org.date,
-    });
-    const token = await revision(org.orgId, invoice);
-    const outcome = await correctPostedDocument(invoice, {
-      projectId: projectB, departmentId: departmentB, expectedUpdatedAt: token, amendmentReason: REASON,
-    }, { orgId: org.orgId, userId: actor, source: "api" }, writerFor(org.orgId, actor));
-    assert.equal(outcome.kind, "reclass");
-    assert.equal(outcome.voidResult, null);
-    assert.equal(outcome.replacement.id, invoice);
-    const kept = await docState(org.orgId, invoice);
-    assert.equal(kept.status, "posted");
-    assert.equal(kept.voidRequested, null);
-    assert.equal(kept.departmentId, departmentB);
-    assert.equal(kept.projectId, projectB);
-    assert.equal(outcome.reclassEntryIds.length, 1);
-    const reclass = (await withBypassContext(() => db.execute<{
-      postingDate: string; periodId: string; origin: string;
-    }>(sql`
+test(
+  "a multi-dimension correction moves balances once and stays in the source posting period",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actor = await seedClerk(org);
+      const projectA = await seedProject(org, "OPEN-A");
+      const projectB = await seedProject(org, "OPEN-B");
+      const departmentA = randomUUID();
+      const departmentB = randomUUID();
+      await withBypassContext(async () => {
+        await db.execute(
+          sql`insert into departments (id, org_id, name) values (${departmentA}, ${org.orgId}, 'Open A')`,
+        );
+        await db.execute(
+          sql`insert into departments (id, org_id, name) values (${departmentB}, ${org.orgId}, 'Open B')`,
+        );
+      });
+      const invoice = await seedPostedInvoice(org, actor, projectA, "INV-OPEN", "4200", {
+        departmentId: departmentA,
+        documentDate: "2026-06-15",
+        postingDate: org.date,
+      });
+      const token = await revision(org.orgId, invoice);
+      const outcome = await correctPostedDocument(
+        invoice,
+        {
+          projectId: projectB,
+          departmentId: departmentB,
+          expectedUpdatedAt: token,
+          amendmentReason: REASON,
+        },
+        { orgId: org.orgId, userId: actor, source: "api" },
+        writerFor(org.orgId, actor),
+      );
+      assert.equal(outcome.kind, "reclass");
+      assert.equal(outcome.voidResult, null);
+      assert.equal(outcome.replacement.id, invoice);
+      const kept = await docState(org.orgId, invoice);
+      assert.equal(kept.status, "posted");
+      assert.equal(kept.voidRequested, null);
+      assert.equal(kept.departmentId, departmentB);
+      assert.equal(kept.projectId, projectB);
+      assert.equal(outcome.reclassEntryIds.length, 1);
+      const reclass = (
+        await withBypassContext(() =>
+          db.execute<{
+            postingDate: string;
+            periodId: string;
+            origin: string;
+          }>(
+            sql`
       select posting_date::text as "postingDate", period_id as "periodId", origin
-        from journal_entries where id = ${outcome.reclassEntryIds[0]} and org_id = ${org.orgId}`, "objects")))[0]!;
-    assert.equal(reclass.postingDate, org.date);
-    assert.equal(reclass.periodId, org.periodId);
-    assert.equal(reclass.origin, "correction");
-    // Every leg moves once from the old combination to the new combination.
-    const dimensions = await withBypassContext(() => db.execute<{
-      department: string | null; project: string | null; account: string; total: string;
-    }>(sql`
+        from journal_entries where id = ${outcome.reclassEntryIds[0]} and org_id = ${org.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!;
+      assert.equal(reclass.postingDate, org.date);
+      assert.equal(reclass.periodId, org.periodId);
+      assert.equal(reclass.origin, "correction");
+      // Every leg moves once from the old combination to the new combination.
+      const dimensions = await withBypassContext(() =>
+        db.execute<{
+          department: string | null;
+          project: string | null;
+          account: string;
+          total: string;
+        }>(
+          sql`
       select l.department_id as department, l.project_id as project, l.account_id as account, sum(l.amount)::text as total
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${org.orgId} and e.source_document_id = ${invoice}
-       group by l.department_id, l.project_id, l.account_id`, "objects"));
-    const original = await withBypassContext(() => db.execute<{
-      account: string; total: string;
-    }>(sql`
+       group by l.department_id, l.project_id, l.account_id`,
+          "objects",
+        ),
+      );
+      const original = await withBypassContext(() =>
+        db.execute<{
+          account: string;
+          total: string;
+        }>(
+          sql`
       select l.account_id as account, sum(l.amount)::text as total
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${org.orgId} and e.source_document_id = ${invoice}
          and e.id <> ${outcome.reclassEntryIds[0]}
-       group by l.account_id`, "objects"));
-    const moved = new Map(original.map((row) => [row.account, row.total]));
-    for (const row of dimensions) {
-      if (row.department === departmentA && row.project === projectA) assert.equal(row.total, "0.0000");
-      else if (row.department === departmentB && row.project === projectB) assert.equal(row.total, moved.get(row.account));
-      else assert.equal(row.total, "0.0000", "no partial dimension combination remains");
+       group by l.account_id`,
+          "objects",
+        ),
+      );
+      const moved = new Map(original.map((row) => [row.account, row.total]));
+      for (const row of dimensions) {
+        if (row.department === departmentA && row.project === projectA)
+          assert.equal(row.total, "0.0000");
+        else if (row.department === departmentB && row.project === projectB)
+          assert.equal(row.total, moved.get(row.account));
+        else assert.equal(row.total, "0.0000", "no partial dimension combination remains");
+      }
+      assert.ok(
+        dimensions.some((row) => row.department === departmentB && row.project === projectB),
+      );
+      const before = await resolveProjectFinancials(org.orgId, projectA, fixedPrice);
+      const after = await resolveProjectFinancials(org.orgId, projectB, fixedPrice);
+      assert.equal(before.measures.invoiced_to_date, "0.0000");
+      assert.equal(after.measures.invoiced_to_date, "4200.0000");
+      for (const [departmentId, projectId] of [
+        [departmentA, projectA],
+        [departmentB, projectB],
+        [departmentA, projectA],
+      ] as const) {
+        const nextToken = await revision(org.orgId, invoice);
+        const repeated = await correctPostedDocument(
+          invoice,
+          {
+            departmentId,
+            projectId,
+            expectedUpdatedAt: nextToken,
+            amendmentReason: REASON,
+          },
+          { orgId: org.orgId, userId: actor, source: "api" },
+          writerFor(org.orgId, actor),
+        );
+        assert.equal(repeated.kind, "reclass");
+      }
+      const audits = await correctionAudits(org.orgId, invoice);
+      assert.equal(audits.length, 4);
+      assert.match(JSON.stringify(audits[0]!.changes), /posted_dimension_reclass/);
+      assert.match(JSON.stringify(audits[0]!.changes), new RegExp(projectB));
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
-    assert.ok(dimensions.some((row) => row.department === departmentB && row.project === projectB));
-    const before = await resolveProjectFinancials(org.orgId, projectA, fixedPrice);
-    const after = await resolveProjectFinancials(org.orgId, projectB, fixedPrice);
-    assert.equal(before.measures.invoiced_to_date, "0.0000");
-    assert.equal(after.measures.invoiced_to_date, "4200.0000");
-    for (const [departmentId, projectId] of [[departmentA, projectA], [departmentB, projectB], [departmentA, projectA]] as const) {
-      const nextToken = await revision(org.orgId, invoice);
-      const repeated = await correctPostedDocument(invoice, {
-        departmentId, projectId, expectedUpdatedAt: nextToken, amendmentReason: REASON,
-      }, { orgId: org.orgId, userId: actor, source: "api" }, writerFor(org.orgId, actor));
-      assert.equal(repeated.kind, "reclass");
-    }
-    const audits = await correctionAudits(org.orgId, invoice);
-    assert.equal(audits.length, 4);
-    assert.match(JSON.stringify(audits[0]!.changes), /posted_dimension_reclass/);
-    assert.match(JSON.stringify(audits[0]!.changes), new RegExp(projectB));
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+  },
+);
 
-test("an open-period amount change voids with the reversal in the original period and reissues", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const actor = await seedClerk(org);
-    const project = await seedProject(org, "AMT-A");
-    const invoice = await seedPostedInvoice(org, actor, project, "INV-AMT", "4200");
-    const originalEntry = (await withBypassContext(() => db.execute<{ entry: string }>(sql`
-      select posted_entry_id as entry from documents where id = ${invoice} and org_id = ${org.orgId}`, "objects")))[0]!.entry;
-    const token = await revision(org.orgId, invoice);
-    const outcome = await correctPostedDocument(invoice, {
-      documentDate: org.date,
-      lines: [{
-        accountId: org.accounts.revenue, quantity: "1", unitPrice: "5000",
-        amount: "5000", taxAmount: "0",
-      }],
-      expectedUpdatedAt: token,
-      amendmentReason: "Rebill the posted invoice at the agreed five thousand",
-    }, { orgId: org.orgId, userId: actor, source: "api" }, writerFor(org.orgId, actor));
-    assert.equal(outcome.kind, "void-and-reissue");
-    assert.notEqual(outcome.voidResult, null);
-    const kept = await docState(org.orgId, invoice);
-    assert.equal(kept.status, "voided");
-    const reversal = (await withBypassContext(() => db.execute<{ postingDate: string }>(sql`
+test(
+  "an open-period amount change voids with the reversal in the original period and reissues",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actor = await seedClerk(org);
+      const project = await seedProject(org, "AMT-A");
+      const invoice = await seedPostedInvoice(org, actor, project, "INV-AMT", "4200");
+      const originalEntry = (
+        await withBypassContext(() =>
+          db.execute<{ entry: string }>(
+            sql`
+      select posted_entry_id as entry from documents where id = ${invoice} and org_id = ${org.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]!.entry;
+      const token = await revision(org.orgId, invoice);
+      const outcome = await correctPostedDocument(
+        invoice,
+        {
+          documentDate: org.date,
+          lines: [
+            {
+              accountId: org.accounts.revenue,
+              quantity: "1",
+              unitPrice: "5000",
+              amount: "5000",
+              taxAmount: "0",
+            },
+          ],
+          expectedUpdatedAt: token,
+          amendmentReason: "Rebill the posted invoice at the agreed five thousand",
+        },
+        { orgId: org.orgId, userId: actor, source: "api" },
+        writerFor(org.orgId, actor),
+      );
+      assert.equal(outcome.kind, "void-and-reissue");
+      assert.notEqual(outcome.voidResult, null);
+      const kept = await docState(org.orgId, invoice);
+      assert.equal(kept.status, "voided");
+      const reversal = (
+        await withBypassContext(() =>
+          db.execute<{ postingDate: string }>(
+            sql`
       select posting_date::text as "postingDate" from journal_entries
-       where org_id = ${org.orgId} and reverses_entry_id = ${originalEntry}`, "objects")))[0]!;
-    assert.equal(reversal.postingDate, org.date);
-    const replacement = (await withBypassContext(() => db.execute<{
-      id: string; status: string; documentDate: string;
-    }>(sql`
+       where org_id = ${org.orgId} and reverses_entry_id = ${originalEntry}`,
+            "objects",
+          ),
+        )
+      )[0]!;
+      assert.equal(reversal.postingDate, org.date);
+      const replacement = (
+        await withBypassContext(() =>
+          db.execute<{
+            id: string;
+            status: string;
+            documentDate: string;
+          }>(
+            sql`
       select id, status, document_date::text as "documentDate" from documents
-       where org_id = ${org.orgId} and custom->>'correctionOf' = ${invoice}`, "objects")))[0]!;
-    assert.equal(replacement.status, "draft");
-    assert.equal(replacement.documentDate, org.date);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+       where org_id = ${org.orgId} and custom->>'correctionOf' = ${invoice}`,
+            "objects",
+          ),
+        )
+      )[0]!;
+      assert.equal(replacement.status, "draft");
+      assert.equal(replacement.documentDate, org.date);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a drawer-shaped memo edit resending unchanged lines stays a metadata correction", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const actor = await seedClerk(org);
-    const project = await seedProject(org, "ROUND-A");
-    const invoice = await seedPostedInvoice(org, actor, project, "INV-ROUND", "4200");
-    const stored = (await withBypassContext(() => db.execute<{
-      id: string; description: string | null;
-    }>(sql`
+test(
+  "a drawer-shaped memo edit resending unchanged lines stays a metadata correction",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actor = await seedClerk(org);
+      const project = await seedProject(org, "ROUND-A");
+      const invoice = await seedPostedInvoice(org, actor, project, "INV-ROUND", "4200");
+      const stored = (
+        await withBypassContext(() =>
+          db.execute<{
+            id: string;
+            description: string | null;
+          }>(
+            sql`
       select id, description from document_lines
-       where org_id = ${org.orgId} and document_id = ${invoice}`, "objects")))[0]!;
-    const token = await revision(org.orgId, invoice);
-    // The drawer always resends every row; an untouched row must round-trip
-    // without tripping the financial path — otherwise every posted memo edit
-    // would still void and reissue through the UI.
-    const outcome = await correctPostedDocument(invoice, {
-      memo: "Add the purchase order reference to the posted record",
-      lines: [{
-        lineId: stored.id,
-        accountId: org.accounts.revenue,
-        itemId: null,
-        description: stored.description,
-        quantity: "1",
-        unit: null,
-        unitPrice: "4200",
-        amount: "4200",
-        taxCodeId: null,
-        taxGroupId: null,
-        taxOverridden: false,
-        taxAmount: null,
-        partyId: null,
-        departmentId: null,
-        projectId: null,
-        locationId: null,
-        classId: null,
-      }],
-      expectedUpdatedAt: token,
-      amendmentReason: "Record the buyer purchase order on the posted invoice",
-    }, { orgId: org.orgId, userId: actor, source: "api" }, writerFor(org.orgId, actor));
-    assert.equal(outcome.kind, "metadata-correction");
-    const kept = await docState(org.orgId, invoice);
-    assert.equal(kept.status, "posted");
-    assert.equal(kept.memo, "Add the purchase order reference to the posted record");
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+       where org_id = ${org.orgId} and document_id = ${invoice}`,
+            "objects",
+          ),
+        )
+      )[0]!;
+      const token = await revision(org.orgId, invoice);
+      // The drawer always resends every row; an untouched row must round-trip
+      // without tripping the financial path — otherwise every posted memo edit
+      // would still void and reissue through the UI.
+      const outcome = await correctPostedDocument(
+        invoice,
+        {
+          memo: "Add the purchase order reference to the posted record",
+          lines: [
+            {
+              lineId: stored.id,
+              accountId: org.accounts.revenue,
+              itemId: null,
+              description: stored.description,
+              quantity: "1",
+              unit: null,
+              unitPrice: "4200",
+              amount: "4200",
+              taxCodeId: null,
+              taxGroupId: null,
+              taxOverridden: false,
+              taxAmount: null,
+              partyId: null,
+              departmentId: null,
+              projectId: null,
+              locationId: null,
+              classId: null,
+            },
+          ],
+          expectedUpdatedAt: token,
+          amendmentReason: "Record the buyer purchase order on the posted invoice",
+        },
+        { orgId: org.orgId, userId: actor, source: "api" },
+        writerFor(org.orgId, actor),
+      );
+      assert.equal(outcome.kind, "metadata-correction");
+      const kept = await docState(org.orgId, invoice);
+      assert.equal(kept.status, "posted");
+      assert.equal(kept.memo, "Add the purchase order reference to the posted record");
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a memo change corrects in place with audit, even in a locked period", { skip: !DB }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  try {
-    const actor = await seedClerk(org);
-    const project = await seedProject(org, "MEMO-A");
-    const invoice = await seedPostedInvoice(org, actor, project, "INV-MEMO", "4200");
-    const entriesBefore = await entryCount(org.orgId, invoice);
-    await closeAR(org, actor);
-    const token = await revision(org.orgId, invoice);
-    const outcome = await correctPostedDocument(invoice, {
-      memo: "Add the purchase order reference to the posted record",
-      expectedUpdatedAt: token,
-      amendmentReason: "Record the buyer purchase order on the posted invoice",
-    }, { orgId: org.orgId, userId: actor, source: "api" }, writerFor(org.orgId, actor));
-    assert.equal(outcome.kind, "metadata-correction");
-    const kept = await docState(org.orgId, invoice);
-    assert.equal(kept.status, "posted");
-    assert.equal(kept.voidRequested, null);
-    assert.equal(kept.memo, "Add the purchase order reference to the posted record");
-    assert.equal(await entryCount(org.orgId, invoice), entriesBefore);
-    const audits = await correctionAudits(org.orgId, invoice);
-    assert.equal(audits.length, 1);
-    const changes = JSON.stringify(audits[0]!.changes);
-    assert.match(changes, /posted_metadata_correction/);
-    assert.match(changes, /Add the purchase order reference/);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
-  }
-});
+test(
+  "a memo change corrects in place with audit, even in a locked period",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actor = await seedClerk(org);
+      const project = await seedProject(org, "MEMO-A");
+      const invoice = await seedPostedInvoice(org, actor, project, "INV-MEMO", "4200");
+      const entriesBefore = await entryCount(org.orgId, invoice);
+      await closeAR(org, actor);
+      const token = await revision(org.orgId, invoice);
+      const outcome = await correctPostedDocument(
+        invoice,
+        {
+          memo: "Add the purchase order reference to the posted record",
+          expectedUpdatedAt: token,
+          amendmentReason: "Record the buyer purchase order on the posted invoice",
+        },
+        { orgId: org.orgId, userId: actor, source: "api" },
+        writerFor(org.orgId, actor),
+      );
+      assert.equal(outcome.kind, "metadata-correction");
+      const kept = await docState(org.orgId, invoice);
+      assert.equal(kept.status, "posted");
+      assert.equal(kept.voidRequested, null);
+      assert.equal(kept.memo, "Add the purchase order reference to the posted record");
+      assert.equal(await entryCount(org.orgId, invoice), entriesBefore);
+      const audits = await correctionAudits(org.orgId, invoice);
+      assert.equal(audits.length, 1);
+      const changes = JSON.stringify(audits[0]!.changes);
+      assert.match(changes, /posted_metadata_correction/);
+      assert.match(changes, /Add the purchase order reference/);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

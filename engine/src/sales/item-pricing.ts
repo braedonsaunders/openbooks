@@ -15,14 +15,18 @@ export function selectQuantityPrice(
   const ordered = [...breaks].sort((a, b) => cmp(a.minimumQuantity, b.minimumQuantity));
   let prior: QuantityPriceBreak | null = null;
   for (const entry of ordered) {
-    if (cmp(entry.minimumQuantity, "0") <= 0) throw new Error("Price break quantities must be greater than zero");
-    if (cmp(entry.unitPrice, "0") < 0) throw new Error("Price break unit prices cannot be negative");
+    if (cmp(entry.minimumQuantity, "0") <= 0)
+      throw new Error("Price break quantities must be greater than zero");
+    if (cmp(entry.unitPrice, "0") < 0)
+      throw new Error("Price break unit prices cannot be negative");
     if (prior && cmp(prior.minimumQuantity, entry.minimumQuantity) === 0) {
       throw new Error("Price break quantities must be unique");
     }
     if (cmp(entry.minimumQuantity, quantity) <= 0) prior = entry;
   }
-  return prior ? { minimumQuantity: prior.minimumQuantity, unitPrice: normalizeMoney(prior.unitPrice) } : null;
+  return prior
+    ? { minimumQuantity: prior.minimumQuantity, unitPrice: normalizeMoney(prior.unitPrice) }
+    : null;
 }
 
 export type PriceLevelFormula =

@@ -7,9 +7,20 @@ import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
 import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/money/money";
 import { sql } from "drizzle-orm";
-import { addMonthsClamped, businessToday, calendarDaysBetween, utcDateFromParts } from "@openbooks/engine/platform/business-date/module";
+import {
+  addMonthsClamped,
+  businessToday,
+  calendarDaysBetween,
+  utcDateFromParts,
+} from "@openbooks/engine/platform/business-date/module";
 import { analyticsConfig, type ConfigValuesOf } from "./config";
-import { fiscalBucketJoin, fiscalBucketKey, fiscalBucketLabel, fiscalBucketScope, fiscalMonthlyBoxes } from "./fiscal-buckets";
+import {
+  fiscalBucketJoin,
+  fiscalBucketKey,
+  fiscalBucketLabel,
+  fiscalBucketScope,
+  fiscalMonthlyBoxes,
+} from "./fiscal-buckets";
 import { vendorStrings, type VendorStrings } from "./vendor-strings";
 import { englishCatalogMessage } from "./catalog-strings";
 
@@ -108,19 +119,35 @@ export interface VendorData {
 }
 
 interface VendorSpendRow extends Record<string, unknown> {
-  id: string; name: string; spend: string | number; prior_spend: string | number;
-  func: string | null; late: string | null; late_prior: string | null;
+  id: string;
+  name: string;
+  spend: string | number;
+  prior_spend: string | number;
+  func: string | null;
+  late: string | null;
+  late_prior: string | null;
 }
 interface VendorBillRow extends Record<string, unknown> {
-  id: string; bills: string | number; last_bill: string | null;
+  id: string;
+  bills: string | number;
+  last_bill: string | null;
 }
 interface MonthSpendRow extends Record<string, unknown> {
-  bucket: string; bucket_label: string | null; spend: string | number; func: string | null; late: string | null;
+  bucket: string;
+  bucket_label: string | null;
+  spend: string | number;
+  func: string | null;
+  late: string | null;
 }
 interface VendorPaymentRow extends Record<string, unknown> {
-  id: string; func: string | null; paid_lines: string | number;
-  on_time: string | number; days_sum: string | number | null;
-  late_amount: string | number; late_dt: string | null; undated: string | number;
+  id: string;
+  func: string | null;
+  paid_lines: string | number;
+  on_time: string | number;
+  days_sum: string | number | null;
+  late_amount: string | number;
+  late_dt: string | null;
+  undated: string | number;
 }
 
 function priorYear(iso: string): string {
@@ -146,7 +173,7 @@ export async function vendorData(
   const { from, to } = period;
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
-  const includeMonthly = analyticsSection('vendor-performance', ['overview'], { summary: true });
+  const includeMonthly = analyticsSection("vendor-performance", ["overview"], { summary: true });
   const [today, config, buckets] = await Promise.all([
     businessToday(orgId),
     analyticsConfig(orgId, "vendorPerformance"),
@@ -205,7 +232,14 @@ export async function vendorData(
       join parties p on p.id = spend.id and p.org_id = ${orgId}
       join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
     `),
-    (analyticsSection('vendor-performance', ["overview","payment","scorecard","matrix","vendors"]) ? analyticsQuery<VendorBillRow>(sql`
+    analyticsSection("vendor-performance", [
+      "overview",
+      "payment",
+      "scorecard",
+      "matrix",
+      "vendors",
+    ])
+      ? analyticsQuery<VendorBillRow>(sql`
       with bill_movements as (
         select d.party_id, d.posting_date::date as movement_date, 1::int as direction
           from documents d
@@ -227,8 +261,10 @@ export async function vendorData(
         from bill_movements
        group by party_id
       having sum(direction) <> 0
-    `) : Promise.resolve({rows:[]})),
-    (includeMonthly ? analyticsQuery<MonthSpendRow>(sql`
+    `)
+      : Promise.resolve({ rows: [] }),
+    includeMonthly
+      ? analyticsQuery<MonthSpendRow>(sql`
       with ew as materialized (
         select id, org_id, posting_date from journal_entries
          where org_id = ${orgId} and posting_date >= ${startIso} and posting_date <= ${to}
@@ -250,7 +286,8 @@ export async function vendorData(
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
         and a.type in ('cogs','expense','expense_deferred') and l.party_id is not null
       group by 1, 2, sub.base_currency
-    `) : Promise.resolve({ rows: [] })),
+    `)
+      : Promise.resolve({ rows: [] }),
     // Payment behaviour: collapse applications to one row per AP open-item
     // line before rolling up by vendor. A bill paid in installments must still
     // contribute one paid bill, one on-time decision, and one days-to-pay
@@ -318,41 +355,91 @@ export async function vendorData(
   // re-average from summed day-diffs, weighted by paid bills below.
   const spendRowsTyped = spendRows.rows;
   const flowCtx = await flowRates(orgId, [
-    ...spendRowsTyped.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
-    ...spendRowsTyped.filter((r) => r.prior_spend != null).map((r) => ({ func: r.func ?? null, date: String(r.late_prior ?? pTo).slice(0, 10) })),
-    ...payRows.rows.map((r) => ({ func: r.func ?? null, date: String(r.late_dt ?? to).slice(0, 10) })),
-    ...monthRows.rows.map((r) => ({ func: r.func ?? null, date: String(r.late ?? to).slice(0, 10) })),
+    ...spendRowsTyped.map((r) => ({
+      func: r.func ?? null,
+      date: String(r.late ?? to).slice(0, 10),
+    })),
+    ...spendRowsTyped
+      .filter((r) => r.prior_spend != null)
+      .map((r) => ({ func: r.func ?? null, date: String(r.late_prior ?? pTo).slice(0, 10) })),
+    ...payRows.rows.map((r) => ({
+      func: r.func ?? null,
+      date: String(r.late_dt ?? to).slice(0, 10),
+    })),
+    ...monthRows.rows.map((r) => ({
+      func: r.func ?? null,
+      date: String(r.late ?? to).slice(0, 10),
+    })),
   ]);
   const spendByParty = new Map<string, { name: string; spend: string; priorSpend: string }>();
   for (const r of spendRowsTyped) {
-    const cur = spendByParty.get(String(r.id)) ?? { name: strings.displayVendorName(String(r.name)), spend: "0", priorSpend: "0" };
-    cur.spend = add(cur.spend, mulDecimal(String(r.spend ?? 0), flowCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10))));
+    const cur = spendByParty.get(String(r.id)) ?? {
+      name: strings.displayVendorName(String(r.name)),
+      spend: "0",
+      priorSpend: "0",
+    };
+    cur.spend = add(
+      cur.spend,
+      mulDecimal(
+        String(r.spend ?? 0),
+        flowCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10)),
+      ),
+    );
     if (r.prior_spend != null) {
-      cur.priorSpend = add(cur.priorSpend, mulDecimal(String(r.prior_spend), flowCtx.rateAt(r.func ?? null, String(r.late_prior ?? pTo).slice(0, 10))));
+      cur.priorSpend = add(
+        cur.priorSpend,
+        mulDecimal(
+          String(r.prior_spend),
+          flowCtx.rateAt(r.func ?? null, String(r.late_prior ?? pTo).slice(0, 10)),
+        ),
+      );
     }
     spendByParty.set(String(r.id), cur);
   }
-  const paidByParty = new Map<string, { paidBills: number; onTime: number; daysSum: number; lateSpend: string; undated: number }>();
+  const paidByParty = new Map<
+    string,
+    { paidBills: number; onTime: number; daysSum: number; lateSpend: string; undated: number }
+  >();
   for (const r of payRows.rows) {
-    const cur = paidByParty.get(String(r.id)) ?? { paidBills: 0, onTime: 0, daysSum: 0, lateSpend: "0", undated: 0 };
+    const cur = paidByParty.get(String(r.id)) ?? {
+      paidBills: 0,
+      onTime: 0,
+      daysSum: 0,
+      lateSpend: "0",
+      undated: 0,
+    };
     cur.paidBills += Number(r.paid_lines ?? 0);
     cur.onTime += Number(r.on_time ?? 0);
     cur.daysSum += Number(r.days_sum ?? 0);
-    cur.lateSpend = add(cur.lateSpend, mulDecimal(String(r.late_amount ?? 0),
-      flowCtx.rateAt(r.func ?? null, String(r.late_dt ?? to).slice(0, 10))));
+    cur.lateSpend = add(
+      cur.lateSpend,
+      mulDecimal(
+        String(r.late_amount ?? 0),
+        flowCtx.rateAt(r.func ?? null, String(r.late_dt ?? to).slice(0, 10)),
+      ),
+    );
     cur.undated += Number(r.undated ?? 0);
     paidByParty.set(String(r.id), cur);
   }
   const spendByBucket = new Map<string, string>();
   for (const r of monthRows.rows) {
     const key = String(r.bucket);
-    spendByBucket.set(key, add(spendByBucket.get(key) ?? "0",
-      mulDecimal(String(r.spend ?? 0), flowCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10)))));
+    spendByBucket.set(
+      key,
+      add(
+        spendByBucket.get(key) ?? "0",
+        mulDecimal(
+          String(r.spend ?? 0),
+          flowCtx.rateAt(r.func ?? null, String(r.late ?? to).slice(0, 10)),
+        ),
+      ),
+    );
   }
   const bucketLabels = new Map<string, string>();
   for (const r of monthRows.rows) {
     const key = String(r.bucket);
-    if (!bucketLabels.has(key) && r.bucket_label != null) bucketLabels.set(key, String(r.bucket_label));
+    if (!bucketLabels.has(key) && r.bucket_label != null)
+      bucketLabels.set(key, String(r.bucket_label));
   }
 
   const billMap = new Map(billRows.rows.map((r) => [r.id, r]));
@@ -403,7 +490,12 @@ export async function vendorData(
   // High-spend threshold at the configured percentile of the vendor spend
   // distribution (80th by default).
   const highSpendThreshold = sortedSpends.length
-    ? sortedSpends[Math.min(sortedSpends.length - 1, Math.floor(sortedSpends.length * config.highSpendPercentile / 100))]!
+    ? sortedSpends[
+        Math.min(
+          sortedSpends.length - 1,
+          Math.floor((sortedSpends.length * config.highSpendPercentile) / 100),
+        )
+      ]!
     : zero;
   const n = base.length;
   const significance: Record<SpendTier, number> = {
@@ -415,9 +507,14 @@ export async function vendorData(
 
   const rows: VendorRow[] = base.map((r, i) => {
     const sharePct = spendPositive ? Number(div(r.spend, totalSpend)) : 0;
-    const tier: SpendTier = i < n * config.tierStrategicPct / 100 ? "strategic"
-      : i < n * config.tierCorePct / 100 ? "core"
-      : i < n * config.tierTacticalPct / 100 ? "tactical" : "tail";
+    const tier: SpendTier =
+      i < (n * config.tierStrategicPct) / 100
+        ? "strategic"
+        : i < (n * config.tierCorePct) / 100
+          ? "core"
+          : i < (n * config.tierTacticalPct) / 100
+            ? "tactical"
+            : "tail";
 
     // Relationship-value scorecard (0–100): how strategic/healthy the vendor
     // relationship is. Payment reliability is deliberately NOT in the grade
@@ -425,8 +522,13 @@ export async function vendorData(
     // and feeds the leverage-matrix risk axis instead. Sub-score ceilings
     // come from the organization's own vendorPerformance config.
     const tierSignificance = significance[tier];
-    const engagement = config.engagementMaxPoints * clamp(Math.min(r.bills, config.engagementCapBills) / config.engagementCapBills, 0, 1);
-    const stability = r.yoyPct === null ? config.neutralStabilityScore : config.stabilityMaxPoints * clamp(1 - Math.min(Math.abs(r.yoyPct), 1), 0, 1);
+    const engagement =
+      config.engagementMaxPoints *
+      clamp(Math.min(r.bills, config.engagementCapBills) / config.engagementCapBills, 0, 1);
+    const stability =
+      r.yoyPct === null
+        ? config.neutralStabilityScore
+        : config.stabilityMaxPoints * clamp(1 - Math.min(Math.abs(r.yoyPct), 1), 0, 1);
     const score = clamp(tierSignificance + engagement + stability);
 
     // Leverage matrix: spend (financial impact) × performance, where our only
@@ -435,21 +537,49 @@ export async function vendorData(
     const performance = r.onTimePct === null ? null : r.onTimePct * 100;
     const highSpend = cmp(r.spend, highSpendThreshold) >= 0;
     const highPerf = (performance ?? -1) >= config.highPerformanceScore;
-    const quadrant: Quadrant = performance === null ? "unrated"
-      : highSpend ? highPerf ? "strategic" : "commodity"
-      : highPerf ? "niche" : "transactional";
-    const unratedReason = performance === null ? (r.paidBills === 0 ? "no-payments" : "undated") : null;
+    const quadrant: Quadrant =
+      performance === null
+        ? "unrated"
+        : highSpend
+          ? highPerf
+            ? "strategic"
+            : "commodity"
+          : highPerf
+            ? "niche"
+            : "transactional";
+    const unratedReason =
+      performance === null ? (r.paidBills === 0 ? "no-payments" : "undated") : null;
 
-    return { ...r, sharePct, tier, score, grade: gradeOf(score, config), performance, quadrant, unratedReason };
+    return {
+      ...r,
+      sharePct,
+      tier,
+      score,
+      grade: gradeOf(score, config),
+      performance,
+      quadrant,
+      unratedReason,
+    };
   });
 
-  const monthly: MonthSpend[] = !includeMonthly ? [] : buckets.useFiscal
-    ? fiscalMonthlyBoxes(buckets.periods, startIso, to, spendByBucket, zero, bucketLabels, (ym) => strings.monthLabel(ym), strings.locale)
-    : Array.from({ length: 12 }, (_, i) => {
-        const dt = utcDateFromParts(start.getUTCFullYear(), start.getUTCMonth() + i, 1);
-        const ym = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
-        return { month: ym, label: strings.monthLabel(ym), spend: spendByBucket.get(ym) ?? zero };
-      });
+  const monthly: MonthSpend[] = !includeMonthly
+    ? []
+    : buckets.useFiscal
+      ? fiscalMonthlyBoxes(
+          buckets.periods,
+          startIso,
+          to,
+          spendByBucket,
+          zero,
+          bucketLabels,
+          (ym) => strings.monthLabel(ym),
+          strings.locale,
+        )
+      : Array.from({ length: 12 }, (_, i) => {
+          const dt = utcDateFromParts(start.getUTCFullYear(), start.getUTCMonth() + i, 1);
+          const ym = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
+          return { month: ym, label: strings.monthLabel(ym), spend: spendByBucket.get(ym) ?? zero };
+        });
 
   const spend = rows.reduce((a, r) => add(a, r.spend), zero);
   const priorSpend = rows.reduce((a, r) => add(a, r.priorSpend), zero);
@@ -461,8 +591,14 @@ export async function vendorData(
   const top10 = rows.slice(0, 10).reduce((a, r) => add(a, r.spend), zero);
   const paidTotal = rows.reduce((a, r) => a + r.paidBills, 0);
   const datedTotal = rows.reduce((a, r) => a + (r.paidBills - r.undatedBills), 0);
-  const onTimeTotal = rows.reduce((a, r) => a + ((r.paidBills - r.undatedBills) * (r.onTimePct ?? 0)), 0);
-  const daysWeighted = rows.reduce((a, r) => a + (r.avgDaysToPay !== null ? r.avgDaysToPay * r.paidBills : 0), 0);
+  const onTimeTotal = rows.reduce(
+    (a, r) => a + (r.paidBills - r.undatedBills) * (r.onTimePct ?? 0),
+    0,
+  );
+  const daysWeighted = rows.reduce(
+    (a, r) => a + (r.avgDaysToPay !== null ? r.avgDaysToPay * r.paidBills : 0),
+    0,
+  );
   const lateSpend = rows.reduce((a, r) => add(a, r.lateSpend), zero);
   // Undated bills count only vendors actually shown: summing the payment
   // map would include vendors filtered out of the rows above.

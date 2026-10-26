@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import {
   Banknote,
   Building2,
@@ -22,106 +22,263 @@ import {
   UsersRound,
   WalletCards,
   Rows3,
-} from 'lucide-react'
-import { Popover, cn, queryDrawerRouteGuard, useMenuTrigger } from '@openbooks/ui'
-import { toast } from 'sonner'
-import { documentCreateHref } from '../lib/document-kinds'
-import { refusalMessageFromBody } from '../lib/api-error'
+} from "lucide-react";
+import { Popover, cn, queryDrawerRouteGuard, useMenuTrigger } from "@openbooks/ui";
+import { toast } from "sonner";
+import { documentCreateHref } from "../lib/document-kinds";
+import { refusalMessageFromBody } from "../lib/api-error";
 
 export interface GlobalCreatePermissions {
-  accountsReceivable: boolean
-  accountsPayable: boolean
+  accountsReceivable: boolean;
+  accountsPayable: boolean;
   /** Cash-sales create grant + the Cash Sales switch (absent = hidden). */
-  cashSales?: boolean
-  journal: boolean
-  customerPayments: boolean
-  vendorPayments: boolean
-  expenses: boolean
-  parties: boolean
-  items: boolean
-  projects: boolean
-  assets: boolean
+  cashSales?: boolean;
+  journal: boolean;
+  customerPayments: boolean;
+  vendorPayments: boolean;
+  expenses: boolean;
+  parties: boolean;
+  items: boolean;
+  projects: boolean;
+  assets: boolean;
   /** The Orders Features switch — quotes/SOs/POs must disappear from the menu when it is off. */
-  orders: boolean
+  orders: boolean;
 }
 
 type CreateKey =
-  | 'invoice'
-  | 'creditMemo'
-  | 'cashSale'
-  | 'cashRefund'
-  | 'estimate'
-  | 'salesOrder'
-  | 'customerPayment'
-  | 'bill'
-  | 'billBatch'
-  | 'vendorCredit'
-  | 'purchaseOrder'
-  | 'vendorPayment'
-  | 'journal'
-  | 'expense'
-  | 'cardCharge'
-  | 'cardRefund'
-  | 'check'
-  | 'deposit'
-  | 'transfer'
-  | 'customer'
-  | 'vendor'
-  | 'employee'
-  | 'item'
-  | 'project'
-  | 'asset'
+  | "invoice"
+  | "creditMemo"
+  | "cashSale"
+  | "cashRefund"
+  | "estimate"
+  | "salesOrder"
+  | "customerPayment"
+  | "bill"
+  | "billBatch"
+  | "vendorCredit"
+  | "purchaseOrder"
+  | "vendorPayment"
+  | "journal"
+  | "expense"
+  | "cardCharge"
+  | "cardRefund"
+  | "check"
+  | "deposit"
+  | "transfer"
+  | "customer"
+  | "vendor"
+  | "employee"
+  | "item"
+  | "project"
+  | "asset";
 
-type GroupKey = 'sales' | 'purchases' | 'accounting' | 'peopleAndLists'
+type GroupKey = "sales" | "purchases" | "accounting" | "peopleAndLists";
 
 interface CreateAction {
-  key: CreateKey
-  group: GroupKey
-  enabled: (permissions: GlobalCreatePermissions) => boolean
-  icon: typeof Plus
-  endpoint?: string
+  key: CreateKey;
+  group: GroupKey;
+  enabled: (permissions: GlobalCreatePermissions) => boolean;
+  icon: typeof Plus;
+  endpoint?: string;
   /** URL-only create surfaces do not allocate a record until their Save. */
-  directHref?: string
-  body?: Record<string, string>
-  destination?: (id: string) => string
+  directHref?: string;
+  body?: Record<string, string>;
+  destination?: (id: string) => string;
 }
 
 // Ledger documents open the native unsaved-create drawer (`?doc=new&kind=`):
 // choosing one allocates no record and no number until the operator saves,
 // so an abandoned create leaves nothing behind.
 const ACTIONS: CreateAction[] = [
-  { key: 'invoice', group: 'sales', enabled: (p) => p.accountsReceivable, icon: FilePlus2, directHref: documentCreateHref('/ar/invoices', 'customer_invoice') },
-  { key: 'creditMemo', group: 'sales', enabled: (p) => p.accountsReceivable, icon: FileMinus2, directHref: documentCreateHref('/ar/invoices', 'customer_credit') },
-  { key: 'cashSale', group: 'sales', enabled: (p) => p.cashSales ?? false, icon: Banknote, directHref: documentCreateHref('/cash-sales', 'cash_sale') },
-  { key: 'cashRefund', group: 'sales', enabled: (p) => p.cashSales ?? false, icon: RotateCcw, directHref: documentCreateHref('/cash-sales', 'cash_refund') },
-  { key: 'estimate', group: 'sales', enabled: (p) => p.accountsReceivable && p.orders, icon: ClipboardList, endpoint: '/api/estimates/draft', destination: (id) => `/estimates?estimate=${id}&mode=edit` },
-  { key: 'salesOrder', group: 'sales', enabled: (p) => p.accountsReceivable && p.orders, icon: Send, endpoint: '/api/sales-orders/draft', destination: (id) => `/sales-orders?order=${id}&mode=edit` },
-  { key: 'customerPayment', group: 'sales', enabled: (p) => p.customerPayments, icon: WalletCards, endpoint: '/api/payments/draft', body: { kind: 'customer_payment' }, destination: (id) => `/receipts?payment=${id}&mode=edit` },
-  { key: 'bill', group: 'purchases', enabled: (p) => p.accountsPayable, icon: Receipt, directHref: documentCreateHref('/ap/bills', 'vendor_bill') },
-  { key: 'billBatch', group: 'purchases', enabled: (p) => p.accountsPayable, icon: Rows3, directHref: '/ap/bills/batch' },
-  { key: 'vendorCredit', group: 'purchases', enabled: (p) => p.accountsPayable, icon: FileMinus2, directHref: documentCreateHref('/ap/bills', 'vendor_credit') },
-  { key: 'purchaseOrder', group: 'purchases', enabled: (p) => p.accountsPayable && p.orders, icon: ShoppingCart, endpoint: '/api/purchase-orders/draft', destination: (id) => `/purchase-orders?order=${id}&mode=edit` },
-  { key: 'vendorPayment', group: 'purchases', enabled: (p) => p.vendorPayments, icon: WalletCards, endpoint: '/api/payments/draft', body: { kind: 'vendor_payment' }, destination: (id) => `/payments?payment=${id}&mode=edit` },
+  {
+    key: "invoice",
+    group: "sales",
+    enabled: (p) => p.accountsReceivable,
+    icon: FilePlus2,
+    directHref: documentCreateHref("/ar/invoices", "customer_invoice"),
+  },
+  {
+    key: "creditMemo",
+    group: "sales",
+    enabled: (p) => p.accountsReceivable,
+    icon: FileMinus2,
+    directHref: documentCreateHref("/ar/invoices", "customer_credit"),
+  },
+  {
+    key: "cashSale",
+    group: "sales",
+    enabled: (p) => p.cashSales ?? false,
+    icon: Banknote,
+    directHref: documentCreateHref("/cash-sales", "cash_sale"),
+  },
+  {
+    key: "cashRefund",
+    group: "sales",
+    enabled: (p) => p.cashSales ?? false,
+    icon: RotateCcw,
+    directHref: documentCreateHref("/cash-sales", "cash_refund"),
+  },
+  {
+    key: "estimate",
+    group: "sales",
+    enabled: (p) => p.accountsReceivable && p.orders,
+    icon: ClipboardList,
+    endpoint: "/api/estimates/draft",
+    destination: (id) => `/estimates?estimate=${id}&mode=edit`,
+  },
+  {
+    key: "salesOrder",
+    group: "sales",
+    enabled: (p) => p.accountsReceivable && p.orders,
+    icon: Send,
+    endpoint: "/api/sales-orders/draft",
+    destination: (id) => `/sales-orders?order=${id}&mode=edit`,
+  },
+  {
+    key: "customerPayment",
+    group: "sales",
+    enabled: (p) => p.customerPayments,
+    icon: WalletCards,
+    endpoint: "/api/payments/draft",
+    body: { kind: "customer_payment" },
+    destination: (id) => `/receipts?payment=${id}&mode=edit`,
+  },
+  {
+    key: "bill",
+    group: "purchases",
+    enabled: (p) => p.accountsPayable,
+    icon: Receipt,
+    directHref: documentCreateHref("/ap/bills", "vendor_bill"),
+  },
+  {
+    key: "billBatch",
+    group: "purchases",
+    enabled: (p) => p.accountsPayable,
+    icon: Rows3,
+    directHref: "/ap/bills/batch",
+  },
+  {
+    key: "vendorCredit",
+    group: "purchases",
+    enabled: (p) => p.accountsPayable,
+    icon: FileMinus2,
+    directHref: documentCreateHref("/ap/bills", "vendor_credit"),
+  },
+  {
+    key: "purchaseOrder",
+    group: "purchases",
+    enabled: (p) => p.accountsPayable && p.orders,
+    icon: ShoppingCart,
+    endpoint: "/api/purchase-orders/draft",
+    destination: (id) => `/purchase-orders?order=${id}&mode=edit`,
+  },
+  {
+    key: "vendorPayment",
+    group: "purchases",
+    enabled: (p) => p.vendorPayments,
+    icon: WalletCards,
+    endpoint: "/api/payments/draft",
+    body: { kind: "vendor_payment" },
+    destination: (id) => `/payments?payment=${id}&mode=edit`,
+  },
   // Manual journals open the unsaved create form: no draft row and no JE
   // number exist until the operator's first Save.
-  { key: 'journal', group: 'accounting', enabled: (p) => p.journal, icon: ScrollText, directHref: '/journal?entryNew=1&mode=edit' },
-  { key: 'expense', group: 'accounting', enabled: (p) => p.expenses, icon: Receipt, directHref: '/expenses/reports?expense=new&mode=edit' },
-  { key: 'cardCharge', group: 'accounting', enabled: (p) => p.accountsPayable, icon: WalletCards, directHref: documentCreateHref('/banking/transactions', 'card_charge') },
-  { key: 'cardRefund', group: 'accounting', enabled: (p) => p.accountsPayable, icon: WalletCards, directHref: documentCreateHref('/banking/transactions', 'card_refund') },
-  { key: 'check', group: 'accounting', enabled: (p) => p.accountsPayable, icon: FileMinus2, directHref: documentCreateHref('/banking/transactions', 'check') },
-  { key: 'deposit', group: 'accounting', enabled: (p) => p.journal, icon: Landmark, directHref: documentCreateHref('/banking/transactions', 'deposit') },
-  { key: 'transfer', group: 'accounting', enabled: (p) => p.journal, icon: Send, directHref: documentCreateHref('/banking/transactions', 'transfer') },
-  { key: 'asset', group: 'accounting', enabled: (p) => p.assets, icon: Landmark, directHref: '/assets?assetNew=1' },
-  { key: 'customer', group: 'peopleAndLists', enabled: (p) => p.parties, icon: UsersRound, directHref: '/entities/customers?partyNew=1&role=customer' },
-  { key: 'vendor', group: 'peopleAndLists', enabled: (p) => p.parties, icon: Building2, directHref: '/entities/vendors?partyNew=1&role=vendor' },
-  { key: 'employee', group: 'peopleAndLists', enabled: (p) => p.parties, icon: UserRound, directHref: '/entities/employees?partyNew=1&role=employee' },
-  { key: 'item', group: 'peopleAndLists', enabled: (p) => p.items, icon: Package, directHref: '/items?item=new' },
-  { key: 'project', group: 'peopleAndLists', enabled: (p) => p.projects, icon: Contact, directHref: '/projects?projectNew=1' },
-]
+  {
+    key: "journal",
+    group: "accounting",
+    enabled: (p) => p.journal,
+    icon: ScrollText,
+    directHref: "/journal?entryNew=1&mode=edit",
+  },
+  {
+    key: "expense",
+    group: "accounting",
+    enabled: (p) => p.expenses,
+    icon: Receipt,
+    directHref: "/expenses/reports?expense=new&mode=edit",
+  },
+  {
+    key: "cardCharge",
+    group: "accounting",
+    enabled: (p) => p.accountsPayable,
+    icon: WalletCards,
+    directHref: documentCreateHref("/banking/transactions", "card_charge"),
+  },
+  {
+    key: "cardRefund",
+    group: "accounting",
+    enabled: (p) => p.accountsPayable,
+    icon: WalletCards,
+    directHref: documentCreateHref("/banking/transactions", "card_refund"),
+  },
+  {
+    key: "check",
+    group: "accounting",
+    enabled: (p) => p.accountsPayable,
+    icon: FileMinus2,
+    directHref: documentCreateHref("/banking/transactions", "check"),
+  },
+  {
+    key: "deposit",
+    group: "accounting",
+    enabled: (p) => p.journal,
+    icon: Landmark,
+    directHref: documentCreateHref("/banking/transactions", "deposit"),
+  },
+  {
+    key: "transfer",
+    group: "accounting",
+    enabled: (p) => p.journal,
+    icon: Send,
+    directHref: documentCreateHref("/banking/transactions", "transfer"),
+  },
+  {
+    key: "asset",
+    group: "accounting",
+    enabled: (p) => p.assets,
+    icon: Landmark,
+    directHref: "/assets?assetNew=1",
+  },
+  {
+    key: "customer",
+    group: "peopleAndLists",
+    enabled: (p) => p.parties,
+    icon: UsersRound,
+    directHref: "/entities/customers?partyNew=1&role=customer",
+  },
+  {
+    key: "vendor",
+    group: "peopleAndLists",
+    enabled: (p) => p.parties,
+    icon: Building2,
+    directHref: "/entities/vendors?partyNew=1&role=vendor",
+  },
+  {
+    key: "employee",
+    group: "peopleAndLists",
+    enabled: (p) => p.parties,
+    icon: UserRound,
+    directHref: "/entities/employees?partyNew=1&role=employee",
+  },
+  {
+    key: "item",
+    group: "peopleAndLists",
+    enabled: (p) => p.items,
+    icon: Package,
+    directHref: "/items?item=new",
+  },
+  {
+    key: "project",
+    group: "peopleAndLists",
+    enabled: (p) => p.projects,
+    icon: Contact,
+    directHref: "/projects?projectNew=1",
+  },
+];
 
-const GROUPS: GroupKey[] = ['sales', 'purchases', 'accounting', 'peopleAndLists']
+const GROUPS: GroupKey[] = ["sales", "purchases", "accounting", "peopleAndLists"];
 
-export type GlobalCreateKey = CreateKey
+export type GlobalCreateKey = CreateKey;
 
 /**
  * The shell's create paths, shared by the create menu and the keyboard
@@ -130,66 +287,69 @@ export type GlobalCreateKey = CreateKey
  * be left.
  */
 export function useGlobalCreate(permissions: GlobalCreatePermissions) {
-  const t = useTranslations('shell.globalCreate')
-  const router = useRouter()
-  const [busy, setBusy] = useState<CreateKey | null>(null)
-  const pending = useRef(false)
-  const available = useMemo(() => ACTIONS.filter((action) => action.enabled(permissions)), [permissions])
+  const t = useTranslations("shell.globalCreate");
+  const router = useRouter();
+  const [busy, setBusy] = useState<CreateKey | null>(null);
+  const pending = useRef(false);
+  const available = useMemo(
+    () => ACTIONS.filter((action) => action.enabled(permissions)),
+    [permissions],
+  );
 
   async function create(key: CreateKey) {
-    const action = available.find((candidate) => candidate.key === key)
-    if (!action || pending.current) return
-    pending.current = true
+    const action = available.find((candidate) => candidate.key === key);
+    if (!action || pending.current) return;
+    pending.current = true;
     try {
-      if (!(await queryDrawerRouteGuard())) return
+      if (!(await queryDrawerRouteGuard())) return;
       if (action.directHref) {
-        router.push(action.directHref as never)
-        return
+        router.push(action.directHref as never);
+        return;
       }
-      setBusy(action.key)
+      setBusy(action.key);
       // Order drafts mint server-side under the canonical idempotent-create
       // contract: every instant-create POST carries a caller UUID as its
       // Idempotency-Key, so a lost-response retry replays the same draft
       // instead of minting a second numbered document.
-      const idempotencyKey = crypto.randomUUID()
-      const headers: Record<string, string> = { 'Idempotency-Key': idempotencyKey }
+      const idempotencyKey = crypto.randomUUID();
+      const headers: Record<string, string> = { "Idempotency-Key": idempotencyKey };
       const response = await fetch(action.endpoint!, {
-        method: 'POST',
-        headers: action.body
-          ? { ...headers, 'content-type': 'application/json' }
-          : headers,
+        method: "POST",
+        headers: action.body ? { ...headers, "content-type": "application/json" } : headers,
         ...(action.body ? { body: JSON.stringify(action.body) } : {}),
-      })
-      const data = await response.json().catch(() => ({}))
+      });
+      const data = await response.json().catch(() => ({}));
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of the bare `error` field.
-      if (!response.ok || typeof data.id !== 'string') {
-        throw new Error(refusalMessageFromBody(data, { fallback: t('createFailed') }) ?? t('createFailed'))
+      if (!response.ok || typeof data.id !== "string") {
+        throw new Error(
+          refusalMessageFromBody(data, { fallback: t("createFailed") }) ?? t("createFailed"),
+        );
       }
-      router.push(action.destination!(data.id) as never)
-      router.refresh()
+      router.push(action.destination!(data.id) as never);
+      router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('createFailed'))
+      toast.error(error instanceof Error ? error.message : t("createFailed"));
     } finally {
-      pending.current = false
-      setBusy(null)
+      pending.current = false;
+      setBusy(null);
     }
   }
 
-  return { available, busy, create }
+  return { available, busy, create };
 }
 
 /** Prominent shell-level instant-create menu for every record the user may create. */
 export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePermissions }) {
-  const t = useTranslations('shell.globalCreate')
-  const [open, setOpen] = useState(false)
-  const { available, busy, create } = useGlobalCreate(permissions)
+  const t = useTranslations("shell.globalCreate");
+  const [open, setOpen] = useState(false);
+  const { available, busy, create } = useGlobalCreate(permissions);
   // The trigger answers the pointer release as well as the click, so a
   // press whose release never becomes a click still opens the menu.
   // Keyboard activation (no pointer events) opens through onClick.
-  const triggerActivation = useMenuTrigger(() => setOpen(true))
+  const triggerActivation = useMenuTrigger(() => setOpen(true));
 
-  if (available.length === 0) return null
+  if (available.length === 0) return null;
 
   return (
     <Popover
@@ -202,27 +362,34 @@ export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePer
           type="button"
           {...triggerActivation}
           disabled={busy !== null}
-          aria-label={t('ariaLabel')}
+          aria-label={t("ariaLabel")}
           aria-expanded={open}
           className={cn(
-            'group relative grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 text-white shadow-sm shadow-teal-600/25 transition-all',
-            'hover:-translate-y-0.5 hover:shadow-md hover:shadow-teal-600/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2',
-            'disabled:cursor-wait disabled:opacity-70 dark:from-teal-400 dark:to-cyan-500 dark:text-slate-950 dark:shadow-black/20 dark:focus-visible:ring-offset-slate-900',
+            "group relative grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 text-white shadow-sm shadow-teal-600/25 transition-all",
+            "hover:-translate-y-0.5 hover:shadow-md hover:shadow-teal-600/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2",
+            "disabled:cursor-wait disabled:opacity-70 dark:from-teal-400 dark:to-cyan-500 dark:text-slate-950 dark:shadow-black/20 dark:focus-visible:ring-offset-slate-900",
           )}
         >
           <span className="absolute inset-0 bg-white/0 transition-colors group-hover:bg-white/10" />
-          <Plus className={cn('relative h-5 w-5 transition-transform', open && 'rotate-45', busy && 'animate-pulse')} strokeWidth={2.5} />
+          <Plus
+            className={cn(
+              "relative h-5 w-5 transition-transform",
+              open && "rotate-45",
+              busy && "animate-pulse",
+            )}
+            strokeWidth={2.5}
+          />
         </button>
       }
     >
       <div className="border-b border-slate-100 bg-gradient-to-r from-teal-50 to-cyan-50 px-4 py-3 dark:border-slate-800 dark:from-teal-950/50 dark:to-cyan-950/30">
-        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</p>
-        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t('description')}</p>
+        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("title")}</p>
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t("description")}</p>
       </div>
       <div className="grid max-h-[min(32rem,calc(100vh-8rem))] grid-cols-1 gap-x-2 overflow-y-auto p-2 sm:grid-cols-2">
         {GROUPS.map((group) => {
-          const actions = available.filter((action) => action.group === group)
-          if (actions.length === 0) return null
+          const actions = available.filter((action) => action.group === group);
+          if (actions.length === 0) return null;
           return (
             <section key={group} className="p-1.5">
               <h3 className="px-2 pb-1.5 text-[11px] font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
@@ -230,15 +397,15 @@ export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePer
               </h3>
               <div className="space-y-0.5">
                 {actions.map((action) => {
-                  const Icon = action.icon
+                  const Icon = action.icon;
                   return (
                     <button
                       key={action.key}
                       type="button"
                       disabled={busy !== null}
                       onClick={() => {
-                        setOpen(false)
-                        void create(action.key)
+                        setOpen(false);
+                        void create(action.key);
                       }}
                       className="group/item flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-teal-50 hover:text-teal-900 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-teal-950/40 dark:hover:text-teal-100"
                     >
@@ -247,13 +414,13 @@ export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePer
                       </span>
                       <span className="font-medium">{t(`items.${action.key}`)}</span>
                     </button>
-                  )
+                  );
                 })}
               </div>
             </section>
-          )
+          );
         })}
       </div>
     </Popover>
-  )
+  );
 }

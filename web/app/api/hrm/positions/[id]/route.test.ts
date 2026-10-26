@@ -90,7 +90,8 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmPositionRouteNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmPositionRouteNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -100,21 +101,28 @@ const mockUrls = new Map<string, string>([
   ["../_lib", "mock:lib"],
 ]);
 
-  registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier) ?? (specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-position-item";
-  const itemRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-
+registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked =
+      mockUrls.get(specifier) ??
+      (specifier === "./authz"
+        ? "mock:authz"
+        : specifier === "./features"
+          ? "mock:features"
+          : undefined);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-position-item";
+const itemRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
 
 const POSITION_ID = "00000000-0000-4000-8000-000000000031";
 const PERIOD_ID = "00000000-0000-4000-8000-000000000032";
@@ -192,12 +200,14 @@ test("patch validates the action-discriminated body before the service runs", as
   reset();
   assert.equal((await itemRoute!.PATCH(patchRequest({}), params)).status, 400);
   assert.equal((await itemRoute!.PATCH(patchRequest({ action: "revise" }), params)).status, 400);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "close" }), params)).status, 400);
   assert.equal(
-    (await itemRoute!.PATCH(patchRequest({ action: "close" }), params)).status,
-    400,
-  );
-  assert.equal(
-    (await itemRoute!.PATCH(patchRequest({ action: "close", effectiveDate: "15-07-2026", reason: "x" }), params)).status,
+    (
+      await itemRoute!.PATCH(
+        patchRequest({ action: "close", effectiveDate: "15-07-2026", reason: "x" }),
+        params,
+      )
+    ).status,
     400,
   );
   assert.deepEqual(routeState.calls, []);

@@ -1,14 +1,21 @@
 import { entityMappingMetadata } from "./entity-mapping-contract.ts";
 import { xeroAttachmentProvider } from "./attachment-providers.ts";
-import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
+import {
+  syncTransactionAttachments,
+  type AttachmentSyncOptions,
+} from "./transaction-attachments.ts";
 import { businessToday, parseIsoDate, utcDateFromParts } from "../platform/business-date.ts";
 import { XeroClient, xeroDate } from "../connectors/xero.ts";
 import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money/money.ts";
 import { buildNativeFromXero, type XeroBuildOpts, type XeroDoc } from "./xero-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
-  EntityStream, MigrationSource, NativeChanges, SourceEntity,
-  SourceOpenItem, SourceTrialBalanceRow,
+  EntityStream,
+  MigrationSource,
+  NativeChanges,
+  SourceEntity,
+  SourceOpenItem,
+  SourceTrialBalanceRow,
 } from "./source.ts";
 import { allModules, fiscalYearsForEndingRule, monthlySourcePeriods } from "./periods.ts";
 
@@ -57,19 +64,48 @@ const XERO_ACCOUNT_TYPE: Record<string, string> = {
 };
 
 interface XeroAccount {
-  AccountID: string; Code?: string; Name: string; Type: string;
-  Status?: string; SystemAccount?: string; CurrencyCode?: string;
+  AccountID: string;
+  Code?: string;
+  Name: string;
+  Type: string;
+  Status?: string;
+  SystemAccount?: string;
+  CurrencyCode?: string;
 }
-interface XeroContact { ContactID: string; Name: string; EmailAddress?: string; ContactStatus?: string; IsCustomer?: boolean; IsSupplier?: boolean }
+interface XeroContact {
+  ContactID: string;
+  Name: string;
+  EmailAddress?: string;
+  ContactStatus?: string;
+  IsCustomer?: boolean;
+  IsSupplier?: boolean;
+}
 interface XeroItem {
-  ItemID: string; Code?: string; Name: string; IsTrackedAsInventory?: boolean;
+  ItemID: string;
+  Code?: string;
+  Name: string;
+  IsTrackedAsInventory?: boolean;
 }
-interface XeroTaxRate { Name: string; TaxType: string; EffectiveRate?: number; Status?: string }
+interface XeroTaxRate {
+  Name: string;
+  TaxType: string;
+  EffectiveRate?: number;
+  Status?: string;
+}
 
 /** Xero report JSON (TrialBalance): header row + sections of account rows. */
-interface XeroReportCell { Value?: string; Attributes?: { Id?: string; Value?: string }[] }
-interface XeroReportRow { RowType?: string; Cells?: XeroReportCell[]; Rows?: XeroReportRow[] }
-interface XeroReport { Reports?: { Rows?: XeroReportRow[] }[] }
+interface XeroReportCell {
+  Value?: string;
+  Attributes?: { Id?: string; Value?: string }[];
+}
+interface XeroReportRow {
+  RowType?: string;
+  Cells?: XeroReportCell[];
+  Rows?: XeroReportRow[];
+}
+interface XeroReport {
+  Reports?: { Rows?: XeroReportRow[] }[];
+}
 
 /**
  * Safety cap on report-based coverage (one TrialBalance call per month).
@@ -89,13 +125,17 @@ export function xeroCoverageMonths(earliestMonth: string, today: Date): string[]
   }
   const [ey, em] = earliestMonth.split("-").map(Number) as [number, number];
   const months: string[] = [];
-  let y = ey, m = em;
+  let y = ey,
+    m = em;
   const ty = today.getUTCFullYear();
   const tm = today.getUTCMonth() + 1;
   while (y < ty || (y === ty && m <= tm)) {
     months.push(`${y}-${String(m).padStart(2, "0")}`);
     m++;
-    if (m > 12) { m = 1; y++; }
+    if (m > 12) {
+      m = 1;
+      y++;
+    }
   }
   if (months.length > TB_COVERAGE_MONTH_CAP) {
     throw new Error(
@@ -120,18 +160,34 @@ const TXN_ENTITIES: [path: string, key: string][] = [
   ["BankTransfers", "BankTransfers"],
 ];
 const ENTITY_NAME: Record<string, string> = {
-  Invoices: "Invoice", CreditNotes: "CreditNote", Payments: "Payment",
-  ManualJournals: "ManualJournal", BankTransactions: "BankTransaction", BankTransfers: "BankTransfer",
+  Invoices: "Invoice",
+  CreditNotes: "CreditNote",
+  Payments: "Payment",
+  ManualJournals: "ManualJournal",
+  BankTransactions: "BankTransaction",
+  BankTransfers: "BankTransfer",
 };
 
 export class XeroSource implements MigrationSource {
   readonly name = "xero";
-  readonly entityMappingMetadata = entityMappingMetadata(['accounting_periods', 'accounts', 'tax_codes', 'parties', 'items', 'files'], ['customers', 'vendors'], { 'accounts': ['number', 'name', 'type', 'isActive'], 'parties': ['displayName', 'kind', 'isActive', 'email'], 'items': ['code', 'name', 'kind', 'isActive'], 'tax_codes': ['code', 'name', 'ratePercent', 'appliesTo'] });
+  readonly entityMappingMetadata = entityMappingMetadata(
+    ["accounting_periods", "accounts", "tax_codes", "parties", "items", "files"],
+    ["customers", "vendors"],
+    {
+      accounts: ["number", "name", "type", "isActive"],
+      parties: ["displayName", "kind", "isActive", "email"],
+      items: ["code", "name", "kind", "isActive"],
+      tax_codes: ["code", "name", "ratePercent", "appliesTo"],
+    },
+  );
   readonly refKey = "xeroId";
   readonly baseCurrency: string;
   private readonly orgId: string;
 
-  constructor(private client: XeroClient, opts: { orgId: string; baseCurrency?: string }) {
+  constructor(
+    private client: XeroClient,
+    opts: { orgId: string; baseCurrency?: string },
+  ) {
     this.orgId = opts.orgId;
     this.baseCurrency = opts.baseCurrency ?? "USD";
   }
@@ -161,7 +217,9 @@ export class XeroSource implements MigrationSource {
   }
 
   async accountingPeriods(): Promise<SourceEntity[]> {
-    const organisation = await this.client.get<{ Organisations?: XeroOrganisation[] }>("Organisation");
+    const organisation = await this.client.get<{ Organisations?: XeroOrganisation[] }>(
+      "Organisation",
+    );
     const org = organisation.Organisations?.[0];
     if (!org?.FinancialYearEndMonth || !org.FinancialYearEndDay) {
       throw new Error("Xero organisation fiscal year end is required for period migration");
@@ -173,8 +231,20 @@ export class XeroSource implements MigrationSource {
     const yearLock = xeroDate(org.EndOfYearLockDate)?.slice(0, 10) ?? null;
     return monthlySourcePeriods(
       "xero-period",
-      fiscalYearsForEndingRule(fallbackStart, horizon, org.FinancialYearEndMonth, org.FinancialYearEndDay),
-      (endsOn) => allModules(yearLock && endsOn <= yearLock ? "closed" : periodLock && endsOn <= periodLock ? "soft_closed" : "open"),
+      fiscalYearsForEndingRule(
+        fallbackStart,
+        horizon,
+        org.FinancialYearEndMonth,
+        org.FinancialYearEndDay,
+      ),
+      (endsOn) =>
+        allModules(
+          yearLock && endsOn <= yearLock
+            ? "closed"
+            : periodLock && endsOn <= periodLock
+              ? "soft_closed"
+              : "open",
+        ),
     );
   }
 
@@ -189,9 +259,11 @@ export class XeroSource implements MigrationSource {
     for (const a of rows) {
       // System Debtors/Creditors carry generic types — override to AR/AP.
       const type =
-        a.SystemAccount === "DEBTORS" ? "asset_receivable" :
-        a.SystemAccount === "CREDITORS" ? "liability_payable" :
-        XERO_ACCOUNT_TYPE[a.Type];
+        a.SystemAccount === "DEBTORS"
+          ? "asset_receivable"
+          : a.SystemAccount === "CREDITORS"
+            ? "liability_payable"
+            : XERO_ACCOUNT_TYPE[a.Type];
       if (!type) continue;
       out.push({
         sourceRef: a.AccountID,
@@ -227,10 +299,18 @@ export class XeroSource implements MigrationSource {
     // arrives as isActive false above) — there is no survivor pointer on the
     // wire. No mergedIntoRef is emitted; a merged-away contact takes the
     // mirror's held path.
-    const rows = await this.client.listAll<XeroContact>("Contacts", "Contacts", { includeArchived: "true" }, since);
+    const rows = await this.client.listAll<XeroContact>(
+      "Contacts",
+      "Contacts",
+      { includeArchived: "true" },
+      since,
+    );
     return rows.map((c) => ({
       sourceRef: c.ContactID,
-      mappingEntities: [...(c.IsCustomer ? ["customers"] : []), ...(c.IsSupplier ? ["vendors"] : [])],
+      mappingEntities: [
+        ...(c.IsCustomer ? ["customers"] : []),
+        ...(c.IsSupplier ? ["vendors"] : []),
+      ],
       fields: {
         displayName: String(c.Name).slice(0, 500),
         kind: "company",
@@ -256,7 +336,9 @@ export class XeroSource implements MigrationSource {
 
   // --- control accounts --------------------------------------------------------------
 
-  async controlAccounts(): Promise<Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>> {
+  async controlAccounts(): Promise<
+    Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>
+  > {
     const rows = await this.xeroAccounts();
     const sys = (s: string) => rows.find((a) => a.SystemAccount === s)?.AccountID;
     const gst = sys("GST");
@@ -297,7 +379,12 @@ export class XeroSource implements MigrationSource {
         track(t.UpdatedDateUTC);
         const built = buildNativeFromXero(ctx, entity, t, opts);
         const id =
-          t.InvoiceID ?? t.CreditNoteID ?? t.PaymentID ?? t.ManualJournalID ?? t.BankTransactionID ?? t.BankTransferID;
+          t.InvoiceID ??
+          t.CreditNoteID ??
+          t.PaymentID ??
+          t.ManualJournalID ??
+          t.BankTransactionID ??
+          t.BankTransferID;
         if ("skip" in built) unbuildable.push({ ref: `${entity}:${id}`, reason: built.skip });
         else documents.push(built);
       }
@@ -317,7 +404,10 @@ export class XeroSource implements MigrationSource {
       if (v.InvoiceID && v.CurrencyCode) {
         invFx.set(v.InvoiceID, {
           currency: v.CurrencyCode,
-          rate: typeof v.CurrencyRate === "number" && v.CurrencyRate > 0 ? String(v.CurrencyRate) : null,
+          rate:
+            typeof v.CurrencyRate === "number" && v.CurrencyRate > 0
+              ? String(v.CurrencyRate)
+              : null,
         });
       }
     }
@@ -331,11 +421,17 @@ export class XeroSource implements MigrationSource {
       if (c.CreditNoteID && c.CurrencyCode) {
         cnFx.set(c.CreditNoteID, {
           currency: c.CurrencyCode,
-          rate: typeof c.CurrencyRate === "number" && c.CurrencyRate > 0 ? String(c.CurrencyRate) : null,
+          rate:
+            typeof c.CurrencyRate === "number" && c.CurrencyRate > 0
+              ? String(c.CurrencyRate)
+              : null,
         });
       }
     }
-    const pays = await this.client.listAll<XeroDoc & { Amount?: number; CurrencyRate?: number }>("Payments", "Payments");
+    const pays = await this.client.listAll<XeroDoc & { Amount?: number; CurrencyRate?: number }>(
+      "Payments",
+      "Payments",
+    );
     for (const p of pays) {
       // Xero payment legs are unsigned magnitudes on both sides of the books:
       // the published Accounting API contract (XeroAPI/xero-openapi
@@ -356,9 +452,15 @@ export class XeroSource implements MigrationSource {
           ? { ref: `Invoice:${p.Invoice.InvoiceID}`, fx: invFx.get(p.Invoice.InvoiceID) }
           : null,
         p.CreditNote?.CreditNoteID
-          ? { ref: `CreditNote:${p.CreditNote.CreditNoteID}`, fx: cnFx.get(p.CreditNote.CreditNoteID) }
+          ? {
+              ref: `CreditNote:${p.CreditNote.CreditNoteID}`,
+              fx: cnFx.get(p.CreditNote.CreditNoteID),
+            }
           : null,
-      ].filter((t): t is { ref: string; fx: { currency: string; rate: string | null } | undefined } => t !== null);
+      ].filter(
+        (t): t is { ref: string; fx: { currency: string; rate: string | null } | undefined } =>
+          t !== null,
+      );
       // Prepayment/Overpayment pointers resolve to no imported document (those
       // endpoints are not pulled), so a payment against one has no open item
       // to link: it posts standalone and is skipped here rather than linked
@@ -377,7 +479,7 @@ export class XeroSource implements MigrationSource {
         // Xero rate (home-per-target-ccy). A missing target code means a
         // deleted target; the reconciler refuses the link honestly.
         currency: target.fx?.currency ?? "",
-        rate: target.fx && producerRate ? producerRate : target.fx?.rate ?? null,
+        rate: target.fx && producerRate ? producerRate : (target.fx?.rate ?? null),
       });
     }
     for (const c of credits) {
@@ -407,7 +509,13 @@ export class XeroSource implements MigrationSource {
       }
     }
 
-    return { documents, applications, deletedRefs: [], syncedThrough: maxWrite ?? since ?? new Date(0), unbuildable };
+    return {
+      documents,
+      applications,
+      deletedRefs: [],
+      syncedThrough: maxWrite ?? since ?? new Date(0),
+      unbuildable,
+    };
   }
 
   // --- verification ---------------------------------------------------------------------
@@ -436,7 +544,9 @@ export class XeroSource implements MigrationSource {
         .filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s))
         .sort();
       if (startsOn.length === 0) {
-        throw new Error("Xero organisation exposes no accounting periods; refusing a windowed trial balance");
+        throw new Error(
+          "Xero organisation exposes no accounting periods; refusing a windowed trial balance",
+        );
       }
       const months = xeroCoverageMonths(startsOn[0]!.slice(0, 7), today);
       for (const month of months) {
@@ -460,7 +570,9 @@ export class XeroSource implements MigrationSource {
             const accountRef = row.Cells[0]?.Attributes?.find((a) => a.Id === "account")?.Value;
             if (!accountRef) continue;
             const num = (i: number) => {
-              const v = String(row.Cells?.[i]?.Value ?? "").replace(/,/g, "").trim();
+              const v = String(row.Cells?.[i]?.Value ?? "")
+                .replace(/,/g, "")
+                .trim();
               return v === "" ? 0n : toUnits(String(v));
             };
             const movement = num(debitCol) - num(creditCol);
@@ -483,7 +595,10 @@ export class XeroSource implements MigrationSource {
       const accountRef = key.split("|")[0]!;
       byAccount.set(accountRef, (byAccount.get(accountRef) ?? 0n) + amt);
     }
-    return [...byAccount.entries()].map(([accountRef, bal]) => ({ accountRef, balance: fromUnits(bal) }));
+    return [...byAccount.entries()].map(([accountRef, bal]) => ({
+      accountRef,
+      balance: fromUnits(bal),
+    }));
   }
 
   async monthlyActivity(): Promise<{ accountRef: string; month: string; amount: string }[]> {
@@ -497,20 +612,32 @@ export class XeroSource implements MigrationSource {
   async openItems(): Promise<SourceOpenItem[]> {
     const out: SourceOpenItem[] = [];
     const invoices = await this.client.listAll<{
-      InvoiceID: string; AmountDue?: number; CurrencyRate?: number; Status?: string;
+      InvoiceID: string;
+      AmountDue?: number;
+      CurrencyRate?: number;
+      Status?: string;
     }>("Invoices", "Invoices");
     for (const i of invoices) {
       if (!["AUTHORISED", "PAID"].includes(i.Status ?? "")) continue;
       const rate = i.CurrencyRate && i.CurrencyRate > 0 ? i.CurrencyRate : 1;
-      out.push({ ref: `Invoice:${i.InvoiceID}`, unpaid: formatMoney(mulDecimal(String(i.AmountDue ?? 0), String(rate)), 2) });
+      out.push({
+        ref: `Invoice:${i.InvoiceID}`,
+        unpaid: formatMoney(mulDecimal(String(i.AmountDue ?? 0), String(rate)), 2),
+      });
     }
     const credits = await this.client.listAll<{
-      CreditNoteID: string; RemainingCredit?: number; CurrencyRate?: number; Status?: string;
+      CreditNoteID: string;
+      RemainingCredit?: number;
+      CurrencyRate?: number;
+      Status?: string;
     }>("CreditNotes", "CreditNotes");
     for (const c of credits) {
       if (!["AUTHORISED", "PAID"].includes(c.Status ?? "")) continue;
       const rate = c.CurrencyRate && c.CurrencyRate > 0 ? c.CurrencyRate : 1;
-      out.push({ ref: `CreditNote:${c.CreditNoteID}`, unpaid: formatMoney(mulDecimal(String(c.RemainingCredit ?? 0), String(rate)), 2) });
+      out.push({
+        ref: `CreditNote:${c.CreditNoteID}`,
+        unpaid: formatMoney(mulDecimal(String(c.RemainingCredit ?? 0), String(rate)), 2),
+      });
     }
     return out;
   }

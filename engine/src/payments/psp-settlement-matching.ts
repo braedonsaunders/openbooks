@@ -104,16 +104,26 @@ export async function setSettlementLineDocument(
   if (scope === undefined) throw new ScopeNotFoundError();
   return withOrg(orgId, async () => {
     await requireBankingFeature(orgId);
-    const batch = (await db.execute<{ id: string; subsidiary_id: string | null; external_ref: string }>(sql`
+    const batch = (
+      await db.execute<{ id: string; subsidiary_id: string | null; external_ref: string }>(
+        sql`
       select id, subsidiary_id, external_ref from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!batch) throw new ScopeNotFoundError();
     if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
-    const line = (await db.execute<SettlementLineLock>(sql`
+    const line = (
+      await db.execute<SettlementLineLock>(
+        sql`
       select id, kind, document_id, amount::text, currency from psp_settlement_lines
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!line) {
       throw new PspSettlementError(
         `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and link the line again`,
@@ -122,10 +132,21 @@ export async function setSettlementLineDocument(
     // The candidate receipt is locked with the batch and line: a subsidiary
     // rehome committing between this read and the link update would otherwise
     // move the receipt under the scope and entity checks below.
-    const doc = (await db.execute<{ id: string; kind: string; status: string; document_number: string | null; subsidiary_id: string | null }>(sql`
+    const doc = (
+      await db.execute<{
+        id: string;
+        kind: string;
+        status: string;
+        document_number: string | null;
+        subsidiary_id: string | null;
+      }>(
+        sql`
       select id, kind, status, document_number, subsidiary_id from documents
        where id = ${documentId} and org_id = ${orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!doc) {
       throw new PspSettlementError(
         "the linked record does not belong to this organization; choose a posted sales document in this organization",
@@ -152,9 +173,17 @@ export async function setSettlementLineDocument(
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId}
     `);
     if ((updated.rowCount ?? 0) !== 1) {
-      throw new PspSettlementError(`settlement line ${lineId} could not be linked; reload the payout and try again`);
+      throw new PspSettlementError(
+        `settlement line ${lineId} could not be linked; reload the payout and try again`,
+      );
     }
-    await auditSettlementLine(orgId, lineId, "link", { before: { documentId: before }, after: { documentId } }, actorId);
+    await auditSettlementLine(
+      orgId,
+      lineId,
+      "link",
+      { before: { documentId: before }, after: { documentId } },
+      actorId,
+    );
     return { lineId, documentId };
   });
 }
@@ -172,16 +201,27 @@ export async function clearSettlementLineDocument(
 ): Promise<{ lineId: string }> {
   return withOrg(orgId, async () => {
     await requireBankingFeature(orgId);
-    const batch = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    const batch = (
+      await db.execute<{ id: string; subsidiary_id: string | null }>(
+        sql`
       select id, subsidiary_id from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!batch) throw new ScopeNotFoundError();
-    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) throw new ScopeNotFoundError();
-    const line = (await db.execute<SettlementLineLock>(sql`
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id))
+      throw new ScopeNotFoundError();
+    const line = (
+      await db.execute<SettlementLineLock>(
+        sql`
       select id, kind, document_id, amount::text, currency from psp_settlement_lines
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!line) {
       throw new PspSettlementError(
         `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and try again`,
@@ -193,9 +233,17 @@ export async function clearSettlementLineDocument(
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId}
     `);
     if ((updated.rowCount ?? 0) !== 1) {
-      throw new PspSettlementError(`settlement line ${lineId} could not be unlinked; reload the payout and try again`);
+      throw new PspSettlementError(
+        `settlement line ${lineId} could not be unlinked; reload the payout and try again`,
+      );
     }
-    await auditSettlementLine(orgId, lineId, "unlink", { before: { documentId: line.document_id }, after: { documentId: null } }, actorId);
+    await auditSettlementLine(
+      orgId,
+      lineId,
+      "unlink",
+      { before: { documentId: line.document_id }, after: { documentId: null } },
+      actorId,
+    );
     return { lineId };
   });
 }
@@ -225,16 +273,26 @@ export async function markSettlementLineJournal(
   if (scope === undefined) throw new ScopeNotFoundError();
   return withOrg(orgId, async () => {
     await requireBankingFeature(orgId);
-    const batch = (await db.execute<{ id: string; subsidiary_id: string | null; external_ref: string }>(sql`
+    const batch = (
+      await db.execute<{ id: string; subsidiary_id: string | null; external_ref: string }>(
+        sql`
       select id, subsidiary_id, external_ref from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!batch) throw new ScopeNotFoundError();
     if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
-    const line = (await db.execute<SettlementLineLock & { meta: unknown }>(sql`
+    const line = (
+      await db.execute<SettlementLineLock & { meta: unknown }>(
+        sql`
       select id, kind, document_id, amount::text, currency, meta from psp_settlement_lines
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!line) {
       throw new PspSettlementError(
         `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and mark the line again`,
@@ -245,10 +303,20 @@ export async function markSettlementLineJournal(
         `settlement line ${lineId} is a ${line.kind} leg, not order evidence; journal recognition applies to charge, refund and dispute lines`,
       );
     }
-    const entry = (await db.execute<{ id: string; entry_number: string; status: string; subsidiary_id: string | null }>(sql`
+    const entry = (
+      await db.execute<{
+        id: string;
+        entry_number: string;
+        status: string;
+        subsidiary_id: string | null;
+      }>(
+        sql`
       select id, entry_number, status, subsidiary_id from journal_entries
        where id = ${journalEntryId} and org_id = ${orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!entry) {
       throw new PspSettlementError(
         "the journal entry does not belong to this organization; choose a posted journal entry in this organization",
@@ -265,7 +333,8 @@ export async function markSettlementLineJournal(
         `journal entry ${entry.entry_number} is ${entry.status}, not posted; post it first, then mark the settlement line`,
       );
     }
-    const before = (line.meta as Record<string, unknown> | null)?.["recognizedByJournalEntry"] ?? null;
+    const before =
+      (line.meta as Record<string, unknown> | null)?.["recognizedByJournalEntry"] ?? null;
     const after = {
       id: journalEntryId,
       number: entry.entry_number,
@@ -282,9 +351,17 @@ export async function markSettlementLineJournal(
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId}
     `);
     if ((updated.rowCount ?? 0) !== 1) {
-      throw new PspSettlementError(`settlement line ${lineId} could not be marked; reload the payout and try again`);
+      throw new PspSettlementError(
+        `settlement line ${lineId} could not be marked; reload the payout and try again`,
+      );
     }
-    await auditSettlementLine(orgId, lineId, "mark-journal", { before: { recognizedByJournalEntry: before }, after: { recognizedByJournalEntry: after } }, actorId);
+    await auditSettlementLine(
+      orgId,
+      lineId,
+      "mark-journal",
+      { before: { recognizedByJournalEntry: before }, after: { recognizedByJournalEntry: after } },
+      actorId,
+    );
     return { lineId, journalEntryId, journalEntryNumber: entry.entry_number };
   });
 }
@@ -302,22 +379,34 @@ export async function clearSettlementLineJournal(
 ): Promise<{ lineId: string }> {
   return withOrg(orgId, async () => {
     await requireBankingFeature(orgId);
-    const batch = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+    const batch = (
+      await db.execute<{ id: string; subsidiary_id: string | null }>(
+        sql`
       select id, subsidiary_id from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!batch) throw new ScopeNotFoundError();
-    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) throw new ScopeNotFoundError();
-    const line = (await db.execute<SettlementLineLock & { meta: unknown }>(sql`
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id))
+      throw new ScopeNotFoundError();
+    const line = (
+      await db.execute<SettlementLineLock & { meta: unknown }>(
+        sql`
       select id, kind, document_id, amount::text, currency, meta from psp_settlement_lines
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!line) {
       throw new PspSettlementError(
         `settlement line ${lineId} is not part of batch ${batchId} in this organization; reload the payout and try again`,
       );
     }
-    const before = (line.meta as Record<string, unknown> | null)?.["recognizedByJournalEntry"] ?? null;
+    const before =
+      (line.meta as Record<string, unknown> | null)?.["recognizedByJournalEntry"] ?? null;
     if (before === null) return { lineId };
     const updated = await db.execute<never>(sql`
       update psp_settlement_lines
@@ -326,9 +415,17 @@ export async function clearSettlementLineJournal(
        where id = ${lineId} and org_id = ${orgId} and batch_id = ${batchId}
     `);
     if ((updated.rowCount ?? 0) !== 1) {
-      throw new PspSettlementError(`settlement line ${lineId} could not be unmarked; reload the payout and try again`);
+      throw new PspSettlementError(
+        `settlement line ${lineId} could not be unmarked; reload the payout and try again`,
+      );
     }
-    await auditSettlementLine(orgId, lineId, "unmark-journal", { before: { recognizedByJournalEntry: before }, after: { recognizedByJournalEntry: null } }, actorId);
+    await auditSettlementLine(
+      orgId,
+      lineId,
+      "unmark-journal",
+      { before: { recognizedByJournalEntry: before }, after: { recognizedByJournalEntry: null } },
+      actorId,
+    );
     return { lineId };
   });
 }
@@ -367,10 +464,20 @@ export async function markSettlementBatchJournal(
   if (scope === undefined) throw new ScopeNotFoundError();
   return withOrg(orgId, async () => {
     await requireBankingFeature(orgId);
-    const batch = (await db.execute<{ id: string; status: string; subsidiary_id: string | null; external_ref: string }>(sql`
+    const batch = (
+      await db.execute<{
+        id: string;
+        status: string;
+        subsidiary_id: string | null;
+        external_ref: string;
+      }>(
+        sql`
       select id, status, subsidiary_id, external_ref from psp_settlement_batches
        where id = ${batchId} and org_id = ${orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!batch) throw new ScopeNotFoundError();
     if (!subsidiaryScopeAllows(scope, batch.subsidiary_id)) throw new ScopeNotFoundError();
     if (batch.status === "void") {
@@ -378,10 +485,20 @@ export async function markSettlementBatchJournal(
         `payout ${batch.external_ref} is void; voided history is closed — reverse the void instead of recognising it`,
       );
     }
-    const entry = (await db.execute<{ id: string; entry_number: string; status: string; subsidiary_id: string | null }>(sql`
+    const entry = (
+      await db.execute<{
+        id: string;
+        entry_number: string;
+        status: string;
+        subsidiary_id: string | null;
+      }>(
+        sql`
       select id, entry_number, status, subsidiary_id from journal_entries
        where id = ${journalEntryId} and org_id = ${orgId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!entry) {
       throw new PspSettlementError(
         "the journal entry does not belong to this organization; choose a posted journal entry in this organization",
@@ -399,12 +516,15 @@ export async function markSettlementBatchJournal(
       );
     }
     const matchableList = `{"${[...MATCHABLE_SETTLEMENT_LINE_KINDS].join('","')}"}`;
-    const lines = await db.execute<{ id: string; document_id: string | null; meta: unknown }>(sql`
+    const lines = await db.execute<{ id: string; document_id: string | null; meta: unknown }>(
+      sql`
       select id, document_id, meta from psp_settlement_lines
        where org_id = ${orgId} and batch_id = ${batchId}
          and kind = any(${matchableList}::text[])
        order by line_number for update
-    `, "objects");
+    `,
+      "objects",
+    );
     const after = {
       id: journalEntryId,
       number: entry.entry_number,
@@ -431,9 +551,17 @@ export async function markSettlementBatchJournal(
          where id = ${line.id} and org_id = ${orgId} and batch_id = ${batchId}
       `);
       if ((updated.rowCount ?? 0) !== 1) {
-        throw new PspSettlementError(`settlement line ${line.id} could not be marked; reload the payout and try again`);
+        throw new PspSettlementError(
+          `settlement line ${line.id} could not be marked; reload the payout and try again`,
+        );
       }
-      await auditSettlementLine(orgId, line.id, "mark-journal", { before: { recognizedByJournalEntry: null }, after: { recognizedByJournalEntry: after } }, actorId);
+      await auditSettlementLine(
+        orgId,
+        line.id,
+        "mark-journal",
+        { before: { recognizedByJournalEntry: null }, after: { recognizedByJournalEntry: after } },
+        actorId,
+      );
       marked += 1;
     }
     await db.execute(sql`
@@ -447,6 +575,13 @@ export async function markSettlementBatchJournal(
                 skippedMarked,
               })}::jsonb, ${actorId})
     `);
-    return { batchId, journalEntryId, journalEntryNumber: entry.entry_number, marked, skippedLinked, skippedMarked };
+    return {
+      batchId,
+      journalEntryId,
+      journalEntryNumber: entry.entry_number,
+      marked,
+      skippedLinked,
+      skippedMarked,
+    };
   });
 }

@@ -15,13 +15,19 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  * in the given status. The document total is the caller-supplied cash frame;
  * the instruction amount is the run's approved plan.
  */
-async function seedClaimedDraft(org: {
-  orgId: string;
-  subsidiaryId: string;
-  vendorId: string;
-  accounts: { bank: string };
-  date: string;
-}, userId: string, runStatus: string, docTotal: string, instructionAmount: string): Promise<{
+async function seedClaimedDraft(
+  org: {
+    orgId: string;
+    subsidiaryId: string;
+    vendorId: string;
+    accounts: { bank: string };
+    date: string;
+  },
+  userId: string,
+  runStatus: string,
+  docTotal: string,
+  instructionAmount: string,
+): Promise<{
   runId: string;
   runNumber: string;
   paymentId: string;
@@ -61,54 +67,68 @@ async function seedClaimedDraft(org: {
  * run's identity and the release remedy, while a draft whose run has closed
  * edits normally — the guard fences open runs, not the document forever.
  */
-test("editing a payment claimed by an open run refuses; a closed run releases it", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Treasurer", "admin"));
-    const open = await seedClaimedDraft(org, userId, "generated", "25.0000", "25.0000");
-    await assert.rejects(
-      updateDraftPayment(open.paymentId, { memo: "edit under a live run" }, userId, org.orgId, { allowedSubsidiaryIds: null }),
-      (error: unknown) => {
-        assert.ok(error instanceof PaymentError);
-        assert.match(error.message, /claimed by open payment run/);
-        assert.match(error.message, new RegExp(open.runNumber));
-        assert.match(error.message, /generated/);
-        assert.match(error.message, /reject, roll back, or cancel/);
-        return true;
-      },
-    );
-    // Deleting the same claimed draft refuses with the run's
-    // identity and the release remedy instead of surfacing the deferred FK
-    // as a late 500; the draft remains.
-    const { deleteDocument } = await import("../ledger/document-delete.ts");
-    await assert.rejects(
-      deleteDocument(open.paymentId, userId, org.orgId, { allowedSubsidiaryIds: null }),
-      (error: unknown) => {
-        assert.match((error as Error).message, /payment is claimed by open payment run/);
-        assert.match((error as Error).message, new RegExp(open.runNumber));
-        assert.match((error as Error).message, /reject, roll back, or cancel/);
-        return true;
-      },
-    );
-    const untouched = await withBypass(async () => (await db.execute<{ memo: string | null }>(sql`
+test(
+  "editing a payment claimed by an open run refuses; a closed run releases it",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const userId = await withBypass(() => createScratchUser(org.orgId, "Treasurer", "admin"));
+      const open = await seedClaimedDraft(org, userId, "generated", "25.0000", "25.0000");
+      await assert.rejects(
+        updateDraftPayment(open.paymentId, { memo: "edit under a live run" }, userId, org.orgId, {
+          allowedSubsidiaryIds: null,
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof PaymentError);
+          assert.match(error.message, /claimed by open payment run/);
+          assert.match(error.message, new RegExp(open.runNumber));
+          assert.match(error.message, /generated/);
+          assert.match(error.message, /reject, roll back, or cancel/);
+          return true;
+        },
+      );
+      // Deleting the same claimed draft refuses with the run's
+      // identity and the release remedy instead of surfacing the deferred FK
+      // as a late 500; the draft remains.
+      const { deleteDocument } = await import("../ledger/document-delete.ts");
+      await assert.rejects(
+        deleteDocument(open.paymentId, userId, org.orgId, { allowedSubsidiaryIds: null }),
+        (error: unknown) => {
+          assert.match((error as Error).message, /payment is claimed by open payment run/);
+          assert.match((error as Error).message, new RegExp(open.runNumber));
+          assert.match((error as Error).message, /reject, roll back, or cancel/);
+          return true;
+        },
+      );
+      const untouched = await withBypass(
+        async () =>
+          (
+            await db.execute<{ memo: string | null }>(
+              sql`
       select memo from documents where id = ${open.paymentId} and org_id = ${org.orgId}
-    `, "objects"))[0]);
-    assert.equal(untouched?.memo, null);
+    `,
+              "objects",
+            )
+          )[0],
+      );
+      assert.equal(untouched?.memo, null);
 
-    const closed = await seedClaimedDraft(org, userId, "confirmed", "25.0000", "25.0000");
-    const edited = await updateDraftPayment(
-      closed.paymentId,
-      { memo: "edit after the run closed" },
-      userId,
-      org.orgId,
-      { allowedSubsidiaryIds: null },
-    );
-    assert.ok(edited, "expected the released payment to save");
-    assert.equal(edited.doc.memo, "edit after the run closed");
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      const closed = await seedClaimedDraft(org, userId, "confirmed", "25.0000", "25.0000");
+      const edited = await updateDraftPayment(
+        closed.paymentId,
+        { memo: "edit after the run closed" },
+        userId,
+        org.orgId,
+        { allowedSubsidiaryIds: null },
+      );
+      assert.ok(edited, "expected the released payment to save");
+      assert.equal(edited.doc.memo, "edit after the run closed");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 /**
  * A-S31 (posting comparison): the run's amount is the approved plan but the
@@ -117,37 +137,53 @@ test("editing a payment claimed by an open run refuses; a closed run releases it
  * re-plan remedy — instead of sending cash nobody approved. The instruction
  * stays pending, the run goes partially failed, and no journal posts.
  */
-test("posting a run whose document drifted from its instruction fails loudly", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Treasurer", "admin"));
-    const seeded = await seedClaimedDraft(org, userId, "generated", "30.0000", "25.0000");
-    await withBypass(async () => {
-      await db.execute(sql`
+test(
+  "posting a run whose document drifted from its instruction fails loudly",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const userId = await withBypass(() => createScratchUser(org.orgId, "Treasurer", "admin"));
+      const seeded = await seedClaimedDraft(org, userId, "generated", "30.0000", "25.0000");
+      await withBypass(async () => {
+        await db.execute(sql`
         update documents set status = 'approved', updated_at = now()
          where id = ${seeded.paymentId} and org_id = ${org.orgId}`);
-    });
-    const result = await postPaymentRun(seeded.runId, org.orgId, userId);
-    assert.equal(result.posted, 0);
-    assert.equal(result.failures.length, 1);
-    assert.match(result.failures[0]!.error, /no longer matches its run instruction/);
-    assert.match(result.failures[0]!.error, /25\.0000 CAD/);
-    assert.match(result.failures[0]!.error, /30\.0000 CAD/);
-    assert.match(result.failures[0]!.error, /re-plan/);
-    const state = await withBypass(async () => (await db.execute<{
-      instructionStatus: string;
-      runStatus: string;
-      entries: number;
-    }>(sql`
+      });
+      const result = await postPaymentRun(seeded.runId, org.orgId, userId);
+      assert.equal(result.posted, 0);
+      assert.equal(result.failures.length, 1);
+      assert.match(result.failures[0]!.error, /no longer matches its run instruction/);
+      assert.match(result.failures[0]!.error, /25\.0000 CAD/);
+      assert.match(result.failures[0]!.error, /30\.0000 CAD/);
+      assert.match(result.failures[0]!.error, /re-plan/);
+      const state = await withBypass(
+        async () =>
+          (
+            await db.execute<{
+              instructionStatus: string;
+              runStatus: string;
+              entries: number;
+            }>(
+              sql`
       select (select status from payment_instructions where id = ${seeded.instructionId}) as "instructionStatus",
              (select status from payment_runs where id = ${seeded.runId}) as "runStatus",
              (select count(*)::int from journal_entries where source_document_id = ${seeded.paymentId}) as entries
-    `, "objects"))[0]);
-    assert.deepEqual(
-      { instructionStatus: state?.instructionStatus, runStatus: state?.runStatus, entries: state?.entries },
-      { instructionStatus: "pending", runStatus: "partially_failed", entries: 0 },
-    );
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+    `,
+              "objects",
+            )
+          )[0],
+      );
+      assert.deepEqual(
+        {
+          instructionStatus: state?.instructionStatus,
+          runStatus: state?.runStatus,
+          entries: state?.entries,
+        },
+        { instructionStatus: "pending", runStatus: "partially_failed", entries: 0 },
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);

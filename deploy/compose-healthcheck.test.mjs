@@ -39,12 +39,24 @@ const minioBlock = code.slice(code.indexOf("  minio:"), code.indexOf("  minio-in
 assert.ok(minioBlock.includes("test:"), "test fixture: minio service block must exist");
 
 test("the minio healthcheck does not use curl (absent from the image)", () => {
-  assert.doesNotMatch(minioBlock, /\bcurl\b/, "curl is not shipped in recent minio images; the probe could never pass");
-  assert.doesNotMatch(minioBlock, /\bwget\b/, "wget is not shipped in the ubi-micro-based minio image either");
+  assert.doesNotMatch(
+    minioBlock,
+    /\bcurl\b/,
+    "curl is not shipped in recent minio images; the probe could never pass",
+  );
+  assert.doesNotMatch(
+    minioBlock,
+    /\bwget\b/,
+    "wget is not shipped in the ubi-micro-based minio image either",
+  );
 });
 
 test("the minio healthcheck uses the image's own client readiness probe", () => {
-  assert.match(minioBlock, /\bmc\b.*\bready\b/, "the probe must shell out to the mc binary the server image ships");
+  assert.match(
+    minioBlock,
+    /\bmc\b.*\bready\b/,
+    "the probe must shell out to the mc binary the server image ships",
+  );
 });
 
 test("minio-init still waits on a healthy minio before creating the bucket", () => {

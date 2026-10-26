@@ -41,8 +41,7 @@ const routeState: PspRouteState = {
   permissionChecks: [],
   domainCalls: [],
 };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
@@ -415,8 +414,11 @@ test("GET hides batches and provider configs from other subsidiaries", async () 
   const response = await GET(new Request("http://openbooks.test/api/psp/settlements"));
 
   assert.equal(response.status, 200);
-  const payload = await response.json() as { batches: Array<{ id: string }>; configs: unknown[] };
-  assert.deepEqual(payload.batches.map((batch) => batch.id), ["batch-a"]);
+  const payload = (await response.json()) as { batches: Array<{ id: string }>; configs: unknown[] };
+  assert.deepEqual(
+    payload.batches.map((batch) => batch.id),
+    ["batch-a"],
+  );
   assert.deepEqual(payload.configs, []);
 });
 
@@ -433,20 +435,25 @@ test("GET lists in-scope subsidiaries for the import picker", async () => {
   const response = await GET(new Request("http://openbooks.test/api/psp/settlements"));
 
   assert.equal(response.status, 200);
-  const payload = await response.json() as { subsidiaries: Array<{ id: string }> };
-  assert.deepEqual(payload.subsidiaries.map((sub) => sub.id), ["00000000-0000-4000-8000-0000000000a1"]);
+  const payload = (await response.json()) as { subsidiaries: Array<{ id: string }> };
+  assert.deepEqual(
+    payload.subsidiaries.map((sub) => sub.id),
+    ["00000000-0000-4000-8000-0000000000a1"],
+  );
 });
 
 test("GET omits subsidiary options for single-entity orgs", async () => {
   routeState.allowedSubsidiaryIds = null;
   routeState.batchRows = [];
-  routeState.subsidiaryRows = [{ id: "00000000-0000-4000-8000-0000000000a1", name: "Main Co", baseCurrency: "USD" }];
+  routeState.subsidiaryRows = [
+    { id: "00000000-0000-4000-8000-0000000000a1", name: "Main Co", baseCurrency: "USD" },
+  ];
   routeState.multiSubsidiary = false;
 
   const response = await GET(new Request("http://openbooks.test/api/psp/settlements"));
 
   assert.equal(response.status, 200);
-  const payload = await response.json() as { subsidiaries: unknown[] };
+  const payload = (await response.json()) as { subsidiaries: unknown[] };
   assert.deepEqual(payload.subsidiaries, []);
 });
 
@@ -518,24 +525,21 @@ test("saveConfig stores the dispute posting accounts for PayPal", async () => {
 
   assert.equal(response.status, 200);
   assert.equal((routeState.domainCalls[0]?.input as { provider?: string }).provider, "paypal");
-  assert.deepEqual(
-    (routeState.domainCalls[0]?.input as Record<string, unknown>),
-    {
-      provider: "paypal",
-      displayName: "PayPal",
-      isEnabled: true,
-      defaultBankAccountId: null,
-      defaultFeeAccountId: null,
-      defaultDisputeAccountId: null,
-      defaultFxAccountId: null,
-      defaultClearingAccountId: null,
-      defaultDisputedFundsAccountId: "00000000-0000-4000-8000-0000000000c1",
-      defaultChargebackLossAccountId: "00000000-0000-4000-8000-0000000000c2",
-      defaultDisputeFeeAccountId: "00000000-0000-4000-8000-0000000000c3",
-      pullEnabled: undefined,
-      apiKey: null,
-    },
-  );
+  assert.deepEqual(routeState.domainCalls[0]?.input as Record<string, unknown>, {
+    provider: "paypal",
+    displayName: "PayPal",
+    isEnabled: true,
+    defaultBankAccountId: null,
+    defaultFeeAccountId: null,
+    defaultDisputeAccountId: null,
+    defaultFxAccountId: null,
+    defaultClearingAccountId: null,
+    defaultDisputedFundsAccountId: "00000000-0000-4000-8000-0000000000c1",
+    defaultChargebackLossAccountId: "00000000-0000-4000-8000-0000000000c2",
+    defaultDisputeFeeAccountId: "00000000-0000-4000-8000-0000000000c3",
+    pullEnabled: undefined,
+    apiKey: null,
+  });
 });
 
 test("saveConfig rejects truthy text instead of enabling the provider", async () => {
@@ -548,7 +552,7 @@ test("saveConfig rejects truthy text instead of enabling the provider", async ()
   });
 
   assert.equal(response.status, 400);
-  assert.equal((await response.json() as { error: string }).error, "isEnabled must be a boolean");
+  assert.equal(((await response.json()) as { error: string }).error, "isEnabled must be a boolean");
   assert.deepEqual(routeState.domainCalls, []);
 });
 
@@ -653,8 +657,16 @@ test("restricted import dispatches an in-scope subsidiary", async () => {
   });
 
   assert.equal(response.status, 200);
-  assert.deepEqual((routeState.domainCalls[0]?.input as { accounts: { subsidiaryId: string } }).accounts.subsidiaryId, "00000000-0000-4000-8000-0000000000a1");
-  assert.deepEqual((routeState.domainCalls[0]?.input as { allowedSubsidiaryIds: Set<string> }).allowedSubsidiaryIds, new Set(["00000000-0000-4000-8000-0000000000a1"]));
+  assert.deepEqual(
+    (routeState.domainCalls[0]?.input as { accounts: { subsidiaryId: string } }).accounts
+      .subsidiaryId,
+    "00000000-0000-4000-8000-0000000000a1",
+  );
+  assert.deepEqual(
+    (routeState.domainCalls[0]?.input as { allowedSubsidiaryIds: Set<string> })
+      .allowedSubsidiaryIds,
+    new Set(["00000000-0000-4000-8000-0000000000a1"]),
+  );
 });
 
 for (const action of ["post", "reverse"] as const) {
@@ -688,12 +700,24 @@ test("shopify_payments import dispatches the payout and its balance transactions
     settlementDate: "2026-08-24",
     payout: { id: "payout-9", currency: "USD", issuedAt: "2026-08-24" },
     transactions: [
-      { id: "txn-1", type: "charge", amount: "104.50", fee: "3.10", net: "101.40", currency: "USD", sourceOrderId: "1001" },
+      {
+        id: "txn-1",
+        type: "charge",
+        amount: "104.50",
+        fee: "3.10",
+        net: "101.40",
+        currency: "USD",
+        sourceOrderId: "1001",
+      },
     ],
   });
 
   assert.equal(response.status, 200);
-  const parsed = (routeState.domainCalls[0]?.input as { parsed: { provider: string; externalRef: string; raw: { receivedTransactions: number } } }).parsed;
+  const parsed = (
+    routeState.domainCalls[0]?.input as {
+      parsed: { provider: string; externalRef: string; raw: { receivedTransactions: number } };
+    }
+  ).parsed;
   assert.equal(parsed.provider, "shopify_payments");
   assert.equal(parsed.externalRef, "payout-9");
   assert.equal(parsed.raw.receivedTransactions, 1);
@@ -727,7 +751,11 @@ test("square import dispatches the payout and its entries under the payout id", 
   });
 
   assert.equal(response.status, 200);
-  const parsed = (routeState.domainCalls[0]?.input as { parsed: { provider: string; externalRef: string; raw: { receivedEntries: number } } }).parsed;
+  const parsed = (
+    routeState.domainCalls[0]?.input as {
+      parsed: { provider: string; externalRef: string; raw: { receivedEntries: number } };
+    }
+  ).parsed;
   assert.equal(parsed.provider, "square");
   assert.equal(parsed.externalRef, "po_2Y8kq3");
   assert.equal(parsed.raw.receivedEntries, 1);
@@ -794,7 +822,11 @@ test("paypal import dispatches the Transaction Search export under the operator'
   });
 
   assert.equal(response.status, 200);
-  const parsed = (routeState.domainCalls[0]?.input as { parsed: { provider: string; externalRef: string; raw: { receivedTransactions: number } } }).parsed;
+  const parsed = (
+    routeState.domainCalls[0]?.input as {
+      parsed: { provider: string; externalRef: string; raw: { receivedTransactions: number } };
+    }
+  ).parsed;
   assert.equal(parsed.provider, "paypal");
   assert.equal(parsed.externalRef, "week-34");
   assert.equal(parsed.raw.receivedTransactions, 1);
@@ -812,7 +844,11 @@ test("paypal import accepts the settlement report CSV instead of JSON", async ()
   });
 
   assert.equal(response.status, 200);
-  const parsed = (routeState.domainCalls[0]?.input as { parsed: { provider: string; raw: { receivedCsvLength: number } } }).parsed;
+  const parsed = (
+    routeState.domainCalls[0]?.input as {
+      parsed: { provider: string; raw: { receivedCsvLength: number } };
+    }
+  ).parsed;
   assert.equal(parsed.provider, "paypal");
   assert.ok(parsed.raw.receivedCsvLength > 0);
 });
@@ -828,7 +864,7 @@ test("paypal import without evidence names the missing half", async () => {
   });
 
   assert.equal(response.status, 400);
-  assert.match((await response.json() as { error: string }).error, /payload or csv is required/);
+  assert.match(((await response.json()) as { error: string }).error, /payload or csv is required/);
   assert.deepEqual(routeState.domainCalls, []);
 });
 
@@ -841,11 +877,17 @@ test("import attaches cross-currency evidence instead of assuming a rate", async
     externalRef: "payout-fx",
     settlementDate: "2026-08-24",
     transactions: [{ id: "transaction-1", type: "charge", amount: 100, currency: "EUR" }],
-    fx: { sourceCurrency: "EUR", rate: "1.0842", rateSource: "Stripe balance transaction exchange_rate" },
+    fx: {
+      sourceCurrency: "EUR",
+      rate: "1.0842",
+      rateSource: "Stripe balance transaction exchange_rate",
+    },
   });
 
   assert.equal(response.status, 200);
-  const parsed = (routeState.domainCalls[0]?.input as { parsed: { fx: { sourceCurrency: string; rate: string } } }).parsed;
+  const parsed = (
+    routeState.domainCalls[0]?.input as { parsed: { fx: { sourceCurrency: string; rate: string } } }
+  ).parsed;
   assert.deepEqual(parsed.fx, {
     sourceCurrency: "EUR",
     rate: "1.0842",
@@ -858,7 +900,9 @@ test("import attaches cross-currency evidence instead of assuming a rate", async
 test("settlement detail refuses a malformed batch id without reaching storage", async () => {
   reset(["banking.read"]);
 
-  const response = await GET(new Request("http://openbooks.test/api/psp/settlements?batchId=not-a-uuid"));
+  const response = await GET(
+    new Request("http://openbooks.test/api/psp/settlements?batchId=not-a-uuid"),
+  );
 
   assert.equal(response.status, 404);
 });
@@ -867,11 +911,23 @@ test("settlement detail returns the batch with its evidence lines", async () => 
   reset(["banking.read"]);
   routeState.batchRows = [{ id: "00000000-0000-4000-8000-0000000000b1", externalRef: "payout-1" }];
   routeState.lineRows = [
-    { lineNumber: 1, kind: "charge", externalRef: "txn-1", description: "Visa", amount: "100.0000", currency: "USD", documentId: null, documentKind: null, documentNumber: null },
+    {
+      lineNumber: 1,
+      kind: "charge",
+      externalRef: "txn-1",
+      description: "Visa",
+      amount: "100.0000",
+      currency: "USD",
+      documentId: null,
+      documentKind: null,
+      documentNumber: null,
+    },
   ];
 
   const response = await GET(
-    new Request("http://openbooks.test/api/psp/settlements?batchId=00000000-0000-4000-8000-0000000000b1"),
+    new Request(
+      "http://openbooks.test/api/psp/settlements?batchId=00000000-0000-4000-8000-0000000000b1",
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -880,7 +936,10 @@ test("settlement detail returns the batch with its evidence lines", async () => 
     lines: Array<{ lineNumber: number }>;
   };
   assert.equal(payload.batch.id, "00000000-0000-4000-8000-0000000000b1");
-  assert.deepEqual(payload.lines.map((line) => line.lineNumber), [1]);
+  assert.deepEqual(
+    payload.lines.map((line) => line.lineNumber),
+    [1],
+  );
 });
 
 test("settlement detail of another tenant's batch is a 404", async () => {
@@ -888,7 +947,9 @@ test("settlement detail of another tenant's batch is a 404", async () => {
   routeState.batchRows = [];
 
   const response = await GET(
-    new Request("http://openbooks.test/api/psp/settlements?batchId=00000000-0000-4000-8000-0000000000b1"),
+    new Request(
+      "http://openbooks.test/api/psp/settlements?batchId=00000000-0000-4000-8000-0000000000b1",
+    ),
   );
 
   assert.equal(response.status, 404);
@@ -903,7 +964,7 @@ test("match runs line matching on a payout batch", async () => {
   });
 
   assert.equal(response.status, 200);
-  assert.equal((await response.json() as { matched: number }).matched, 1);
+  assert.equal(((await response.json()) as { matched: number }).matched, 1);
   assert.equal(routeState.domainCalls[0]?.action, "match");
 });
 
@@ -954,7 +1015,7 @@ test("markBatchJournal recognises the whole batch with one journal", async () =>
   });
 
   assert.equal(response.status, 200);
-  assert.equal((await response.json() as { marked: number }).marked, 3);
+  assert.equal(((await response.json()) as { marked: number }).marked, 3);
   assert.equal(routeState.domainCalls[0]?.action, "markBatchJournal");
 });
 
@@ -967,7 +1028,7 @@ test("unmarkBatchJournal reverses the batch-level recognition", async () => {
   });
 
   assert.equal(response.status, 200);
-  assert.equal((await response.json() as { cleared: number }).cleared, 3);
+  assert.equal(((await response.json()) as { cleared: number }).cleared, 3);
   assert.equal(routeState.domainCalls[0]?.action, "unmarkBatchJournal");
 });
 
@@ -975,11 +1036,13 @@ test("suggestJournal proposes the exact-total journal for operator confirm", asy
   reset(["banking.read"]);
 
   const response = await GET(
-    new Request("http://openbooks.test/api/psp/settlements?suggestJournal=00000000-0000-4000-8000-0000000000b1"),
+    new Request(
+      "http://openbooks.test/api/psp/settlements?suggestJournal=00000000-0000-4000-8000-0000000000b1",
+    ),
   );
 
   assert.equal(response.status, 200);
-  assert.equal((await response.json() as { chargeTotal: string }).chargeTotal, "300.0000");
+  assert.equal(((await response.json()) as { chargeTotal: string }).chargeTotal, "300.0000");
   assert.equal(routeState.domainCalls[0]?.action, "suggestJournal");
 });
 
@@ -991,15 +1054,31 @@ test("resolveDoc lists posted documents for manual links", async () => {
   );
 
   assert.equal(response.status, 200);
-  assert.deepEqual((await response.json() as { documents: unknown[] }).documents, []);
+  assert.deepEqual(((await response.json()) as { documents: unknown[] }).documents, []);
 });
 
 test("resolveDoc hides another entity's receipts from the picker", async () => {
   reset(["banking.read"]);
   routeState.allowedSubsidiaryIds = new Set(["00000000-0000-4000-8000-0000000000a1"]);
   routeState.documentRows = [
-    { id: "doc-a", kind: "cash_sale", documentNumber: "CS-A1", total: "10.0000", currency: "CAD", documentDate: "2026-07-10", subsidiaryId: "00000000-0000-4000-8000-0000000000a1" },
-    { id: "doc-b", kind: "cash_sale", documentNumber: "CS-B1", total: "20.0000", currency: "CAD", documentDate: "2026-07-10", subsidiaryId: "00000000-0000-4000-8000-0000000000b2" },
+    {
+      id: "doc-a",
+      kind: "cash_sale",
+      documentNumber: "CS-A1",
+      total: "10.0000",
+      currency: "CAD",
+      documentDate: "2026-07-10",
+      subsidiaryId: "00000000-0000-4000-8000-0000000000a1",
+    },
+    {
+      id: "doc-b",
+      kind: "cash_sale",
+      documentNumber: "CS-B1",
+      total: "20.0000",
+      currency: "CAD",
+      documentDate: "2026-07-10",
+      subsidiaryId: "00000000-0000-4000-8000-0000000000b2",
+    },
   ];
 
   const response = await GET(
@@ -1008,7 +1087,9 @@ test("resolveDoc hides another entity's receipts from the picker", async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual(
-    ((await response.json()) as { documents: Array<{ documentNumber: string }> }).documents.map((doc) => doc.documentNumber),
+    ((await response.json()) as { documents: Array<{ documentNumber: string }> }).documents.map(
+      (doc) => doc.documentNumber,
+    ),
     ["CS-A1"],
   );
 });

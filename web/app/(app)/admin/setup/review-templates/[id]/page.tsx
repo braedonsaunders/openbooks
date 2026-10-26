@@ -1,2 +1,5 @@
-import {redirect} from 'next/navigation'
-export default async function ReviewTemplatePage({params}:{params:Promise<{id:string}>}){const {id}=await params;redirect('/hrm/performance/templates?template='+encodeURIComponent(id))}
+import { redirect } from "next/navigation";
+export default async function ReviewTemplatePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  redirect("/hrm/performance/templates?template=" + encodeURIComponent(id));
+}

@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  createJobFamily,
-  listJobFamilies,
-} from "@openbooks/engine/hrm/compensation/architecture";
+import { createJobFamily, listJobFamilies } from "@openbooks/engine/hrm/compensation/architecture";
 
 import { compensationErrorResponse } from "../compensation/_lib";
 import { createFamilyBody } from "../compensation/bodies";
@@ -21,8 +18,7 @@ export const GET = defineRoute({
   permission: "hrm.compensation.read",
   feature: "hrmCompensation",
   handler: async ({ request: req, authz: gate }) => {
-    const includeInactive =
-      new URL(req.url).searchParams.get("includeInactive") === "1";
+    const includeInactive = new URL(req.url).searchParams.get("includeInactive") === "1";
     try {
       const families = await listJobFamilies({
         orgId: gate.user.orgId,

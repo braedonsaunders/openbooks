@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { PagedTable } from '../../../../components/paged-table'
-import { CalibrationEntryEditor } from './continuous-islands'
-import type { ContinuousData } from './continuous-view'
+import { PagedTable } from "../../../../components/paged-table";
+import { CalibrationEntryEditor } from "./continuous-islands";
+import type { ContinuousData } from "./continuous-view";
 
-type Detail = NonNullable<NonNullable<ContinuousData['calibration']>['detail']>
+type Detail = NonNullable<NonNullable<ContinuousData["calibration"]>["detail"]>;
 
 /** A session uses the same registered list as the surrounding HR workspace. */
 export function CalibrationSessionTable({ detail }: { detail: Detail }) {
@@ -17,25 +17,27 @@ export function CalibrationSessionTable({ detail }: { detail: Detail }) {
       empty={detail.gridEmpty}
       columns={[
         {
-          key: 'review',
+          key: "review",
           header: detail.gridCols.review,
           cell: (row) => row.review,
           search: (row) => row.review,
         },
         {
-          key: 'proposed',
+          key: "proposed",
           header: detail.gridCols.proposed,
           cell: (row) => row.proposed,
         },
         {
-          key: 'decision',
+          key: "decision",
           header: detail.gridCols.decide,
           cell: (row) =>
-            detail.status === 'closed' || detail.approvalPending ? (
+            detail.status === "closed" || detail.approvalPending ? (
               <div className="space-y-1">
                 <div>{row.editor.calibratedRating ?? row.proposed}</div>
                 {row.editor.potentialKey ? (
-                  <div>{row.editor.potentialLabel}: {row.editor.potentialKey}</div>
+                  <div>
+                    {row.editor.potentialLabel}: {row.editor.potentialKey}
+                  </div>
                 ) : null}
                 {row.editor.justification ? (
                   <p className="whitespace-pre-wrap text-sm text-muted-foreground">
@@ -49,5 +51,5 @@ export function CalibrationSessionTable({ detail }: { detail: Detail }) {
         },
       ]}
     />
-  )
+  );
 }

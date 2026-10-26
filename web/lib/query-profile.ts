@@ -245,7 +245,11 @@ export function createQueryProfile(options: QueryProfileOptions) {
           .filter(([, entry]) => entry.repeats > 0)
           .sort(([, a], [, b]) => b.repeats - a.repeats || b.totalDbMs - a.totalDbMs)
           .slice(0, TOP_REPEATED_STATEMENTS)
-          .map(([statement, entry]) => ({ statement, ...entry, totalDbMs: round(entry.totalDbMs) })),
+          .map(([statement, entry]) => ({
+            statement,
+            ...entry,
+            totalDbMs: round(entry.totalDbMs),
+          })),
         slowStatements: [...window.statements]
           .sort(([, a], [, b]) => b.totalDbMs - a.totalDbMs)
           .slice(0, TOP_REPEATED_STATEMENTS)
@@ -301,7 +305,10 @@ export function startQueryProfile(env: Record<string, string | undefined>): Span
   let writing: Promise<void> = Promise.resolve();
   const flush = () => {
     const serverRenders = renders.summarize();
-    const database = profile.summarize(false, serverRenders.routes.length > 0 || serverRenders.droppedRenders > 0);
+    const database = profile.summarize(
+      false,
+      serverRenders.routes.length > 0 || serverRenders.droppedRenders > 0,
+    );
     if (!database) return;
     const summary = { ...database, serverRenders };
     writing = writing
@@ -311,6 +318,8 @@ export function startQueryProfile(env: Record<string, string | undefined>): Span
       });
   };
   setInterval(flush, FLUSH_INTERVAL_MS).unref();
-  console.log(`[query-profile] per-route database and completed render profile enabled; appending to ${file} every ${FLUSH_INTERVAL_MS / 1000}s`);
+  console.log(
+    `[query-profile] per-route database and completed render profile enabled; appending to ${file} every ${FLUSH_INTERVAL_MS / 1000}s`,
+  );
   return renders.processor;
 }

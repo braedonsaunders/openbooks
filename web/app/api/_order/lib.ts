@@ -1,25 +1,25 @@
-import 'server-only'
-import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { businessTimeZone } from '@openbooks/engine/platform/business-date'
-import { add, normalizeMoney, sum } from '@openbooks/engine/money/money'
-import { orderLineAmount } from '@openbooks/engine/sales/order-cycle-math'
-import { computeLineTaxes } from '@openbooks/engine/tax/tax'
+import "server-only";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { businessTimeZone } from "@openbooks/engine/platform/business-date";
+import { add, normalizeMoney, sum } from "@openbooks/engine/money/money";
+import { orderLineAmount } from "@openbooks/engine/sales/order-cycle-math";
+import { computeLineTaxes } from "@openbooks/engine/tax/tax";
 import { taxProfileMap, type TaxProfiles } from "../../../lib/bills.ts";
-import { canonicalDecimal } from '../../../lib/exact-decimal'
-import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
-import { enteredAfterOrderDays } from '../../../lib/order-entry-lag'
-import type { OrderKind } from '../../../lib/order-cycle'
+import { canonicalDecimal } from "../../../lib/exact-decimal";
+import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
+import { enteredAfterOrderDays } from "../../../lib/order-entry-lag";
+import type { OrderKind } from "../../../lib/order-cycle";
 
 /** Exact numeric(19,4) money string, or 'invalid'. */
-export function exactOrderMoney(v: unknown): string | 'invalid' {
-  const exact = canonicalDecimal(v, 4)
-  if (exact === null) return 'invalid'
+export function exactOrderMoney(v: unknown): string | "invalid" {
+  const exact = canonicalDecimal(v, 4);
+  if (exact === null) return "invalid";
   try {
-    return normalizeMoney(exact)
+    return normalizeMoney(exact);
   } catch {
-    return 'invalid'
+    return "invalid";
   }
 }
 
@@ -34,41 +34,47 @@ export function exactOrderMoney(v: unknown): string | 'invalid' {
 // Drawer line shape + exact quantity/price parsing live in
 // ./line-selection (kept out of this DB-bound module so the route suites
 // can double this file while the pure line validation always runs real).
-import type { OrderLineInput } from './line-selection'
-export type { OrderLineInput } from './line-selection'
-export { exactOrderQuantity, exactOrderUnitPrice, selectPostableOrderLines } from './line-selection'
+import type { OrderLineInput } from "./line-selection";
+export type { OrderLineInput } from "./line-selection";
+export {
+  exactOrderQuantity,
+  exactOrderUnitPrice,
+  selectPostableOrderLines,
+} from "./line-selection";
 
 /** qty × price per line → per-line amount + tax + document totals. */
 export function computeOrderTotals(lines: OrderLineInput[], profiles: TaxProfiles) {
   const computed = lines.map((l) => {
-    if (l.taxCodeId && l.taxGroupId) throw new Error('select either a tax code or a tax group, not both')
-    const inputAmount = orderLineAmount(l.quantity ?? '0', l.unitPrice ?? '0')
+    if (l.taxCodeId && l.taxGroupId)
+      throw new Error("select either a tax code or a tax group, not both");
+    const inputAmount = orderLineAmount(l.quantity ?? "0", l.unitPrice ?? "0");
     const config = l.taxGroupId
       ? profiles.groups.get(l.taxGroupId)
       : l.taxCodeId
         ? profiles.codes.get(l.taxCodeId)
-        : []
-    if ((l.taxCodeId || l.taxGroupId) && !config) throw new Error('selected tax profile is inactive or has no effective rate')
-    const result = computeLineTaxes(inputAmount, config ?? [])
+        : [];
+    if ((l.taxCodeId || l.taxGroupId) && !config)
+      throw new Error("selected tax profile is inactive or has no effective rate");
+    const result = computeLineTaxes(inputAmount, config ?? []);
     return {
       ...l,
       amount: result.netAmount,
       taxInputAmount: result.inputAmount,
       taxAmount: result.taxTotal,
       taxComponents: result.components,
-    }
-  })
-  const subtotal = sum(computed.map((line) => line.amount))
-  const taxTotal = sum(computed.map((line) => line.taxAmount))
+    };
+  });
+  const subtotal = sum(computed.map((line) => line.amount));
+  const taxTotal = sum(computed.map((line) => line.taxAmount));
   return {
     lines: computed,
     subtotal,
     taxTotal,
     total: add(subtotal, taxTotal),
-  }
+  };
 }
 
-export { taxProfileMap as orderTaxProfileMap }
+export { taxProfileMap as orderTaxProfileMap };
 
 /**
  * Days a purchase order was entered after its order date, or null when it was
@@ -76,14 +82,23 @@ export { taxProfileMap as orderTaxProfileMap }
  * `created_at` in the organization's own zone, so the notice agrees with every
  * other business-date reader.
  */
-async function purchaseOrderEntryLag(id: string, orgId: string, orderDate: string): Promise<number | null> {
-  const timeZone = await businessTimeZone(orgId)
-  const entered = (await db.execute<{ entered_on: string }>(sql`
+async function purchaseOrderEntryLag(
+  id: string,
+  orgId: string,
+  orderDate: string,
+): Promise<number | null> {
+  const timeZone = await businessTimeZone(orgId);
+  const entered = (
+    await db.execute<{ entered_on: string }>(
+      sql`
     select to_char(d.created_at at time zone ${timeZone}, 'YYYY-MM-DD') as entered_on
       from documents d
      where d.id = ${id} and d.org_id = ${orgId}
-  `, 'objects'))[0]
-  return entered ? enteredAfterOrderDays(orderDate, entered.entered_on) : null
+  `,
+      "objects",
+    )
+  )[0];
+  return entered ? enteredAfterOrderDays(orderDate, entered.entered_on) : null;
 }
 
 /**
@@ -98,23 +113,28 @@ export async function loadOrder(
   kind: OrderKind,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ) {
-  const orderScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)
-  const linkScope = subsidiaryVisibleFilter(sql`d2.subsidiary_id`, allowedSubsidiaryIds)
-  const doc = (await db.execute<Record<string, unknown>>(sql`
+  const orderScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds);
+  const linkScope = subsidiaryVisibleFilter(sql`d2.subsidiary_id`, allowedSubsidiaryIds);
+  const doc = await db.execute<Record<string, unknown>>(
+    sql`
     select d.*, ${documentRevisionCounterSql(sql`d.revision_seq`)} as updated_at, p.display_name as party_name
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${kind}
        ${orderScope}
-  `, 'objects'))
-  if (!doc[0]) return null
+  `,
+    "objects",
+  );
+  if (!doc[0]) return null;
 
-  const orderDate = doc[0].document_date
-  const enteredAfterOrder = kind === 'purchase_order' && typeof orderDate === 'string'
-    ? await purchaseOrderEntryLag(id, orgId, orderDate)
-    : null
+  const orderDate = doc[0].document_date;
+  const enteredAfterOrder =
+    kind === "purchase_order" && typeof orderDate === "string"
+      ? await purchaseOrderEntryLag(id, orgId, orderDate)
+      : null;
 
-  const lines = (await db.execute<Record<string, unknown>>(sql`
+  const lines = await db.execute<Record<string, unknown>>(
+    sql`
     select l.id, l.line_number, l.item_id, l.account_id, l.description, l.quantity, l.unit,
            l.unit_price, l.amount, l.tax_code_id, l.tax_group_id, l.tax_input_amount,
            l.tax_amount, l.quantity_billed, l.quantity_fulfilled, l.quantity_cancelled,
@@ -129,10 +149,13 @@ export async function loadOrder(
       left join promotions pr on pr.id = l.promotion_id and pr.org_id = l.org_id
      where l.document_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
-  `, 'objects'))
+  `,
+    "objects",
+  );
 
   // Origin (this doc was created from …) and converted-into (this doc → …) edges.
-  const links = (await db.execute<Record<string, unknown>>(sql`
+  const links = await db.execute<Record<string, unknown>>(
+    sql`
     select 'from' as direction, dl.link_type, d2.id, d2.kind, d2.document_number, d2.status
       from document_links dl
       join documents d2 on d2.id = dl.from_document_id and d2.org_id = dl.org_id
@@ -145,7 +168,9 @@ export async function loadOrder(
      where dl.from_document_id = ${id} and dl.org_id = ${orgId}
        ${linkScope}
     order by 1
-  `, 'objects'))
+  `,
+    "objects",
+  );
 
-  return { doc: doc[0], lines, links, enteredAfterOrderDays: enteredAfterOrder }
+  return { doc: doc[0], lines, links, enteredAfterOrderDays: enteredAfterOrder };
 }

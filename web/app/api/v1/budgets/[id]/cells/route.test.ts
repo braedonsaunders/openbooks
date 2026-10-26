@@ -95,6 +95,9 @@ test("POST /api/v1/budgets/:id/cells takes the scenario id from the path", async
 });
 
 test("POST /api/v1/budgets/:id/cells refuses a missing Idempotency-Key", async () => {
-  const response = await post("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", { expectedRevision: 1, cells: [] });
+  const response = await post("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", {
+    expectedRevision: 1,
+    cells: [],
+  });
   assert.equal(response.status, 400);
 });

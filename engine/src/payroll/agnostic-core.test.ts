@@ -1,9 +1,16 @@
 import { demandingHolidays, recordHolidayAssertion } from "./holiday-attestations.ts";
 import { seedEmployment } from "../testing/hrm-harness.ts";
-import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
-  seedPayrollProfile, seedPayrollWage, createScratchOrg, seedFlowActors,
+  seedPayrollSchedule,
+  seedPayrollEmployeeRole,
+  seedPayrollPerson,
+  seedPayrollTime,
+  seedPostingAccount,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  seedFlowActors,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -76,8 +83,12 @@ const FREEDONIA: PayrollCountryPack = {
   },
   jurisdictions: [
     {
-      key: "ZZ", name: "Freedonia", scope: "employment",
-      citation: "Freedonia Labour Act", holidays: [], holidayPay: null,
+      key: "ZZ",
+      name: "Freedonia",
+      scope: "employment",
+      citation: "Freedonia Labour Act",
+      holidays: [],
+      holidayPay: null,
     },
   ],
   remittanceVendorSettingsKey: "zzRemittancePartyId",
@@ -110,13 +121,15 @@ const FREEDONIA: PayrollCountryPack = {
   // instead of throwing from inside a calculation in January.
   taxYears: {
     country: "ZZ",
-    editions: [{
-      year: 2026,
-      label: "Freedonia PAYG tables (2026)",
-      effectiveFrom: "2026-01-01",
-      citation: "Freedonia Revenue Bulletin 2026-1",
-      status: "published",
-    }],
+    editions: [
+      {
+        year: 2026,
+        label: "Freedonia PAYG tables (2026)",
+        effectiveFrom: "2026-01-01",
+        citation: "Freedonia Revenue Bulletin 2026-1",
+        status: "published",
+      },
+    ],
     regionsWithOwnTables: [],
     ratesModule: "engine/src/payroll/freedonia/rates.ts",
     scaffold: { files: [], barrels: [], steps: [] },
@@ -129,22 +142,31 @@ const FREEDONIA: PayrollCountryPack = {
   // to say so out loud.
   certificates: () => ({
     country: "ZZ",
-    certificates: [{
-      key: "zz_payg_declaration",
-      form: "PAYG-1",
-      label: "Freedonia PAYG declaration",
-      scope: { level: "country" },
-      purpose: "withholding",
-      citation: "Freedonia Revenue Bulletin 2026-1",
-      summary: "Filed on hire; sets the employee's PAYG scale.",
-      storage: "certificate_rows",
-      fields: [{
-        key: "scale", label: "PAYG scale", kind: "choice",
-        choices: [{ value: "A", label: "Scale A" }, { value: "B", label: "Scale B" }],
-        default: "A",
-        help: "Scale A unless the Revenue has written to the employee naming scale B.",
-      }],
-    }],
+    certificates: [
+      {
+        key: "zz_payg_declaration",
+        form: "PAYG-1",
+        label: "Freedonia PAYG declaration",
+        scope: { level: "country" },
+        purpose: "withholding",
+        citation: "Freedonia Revenue Bulletin 2026-1",
+        summary: "Filed on hire; sets the employee's PAYG scale.",
+        storage: "certificate_rows",
+        fields: [
+          {
+            key: "scale",
+            label: "PAYG scale",
+            kind: "choice",
+            choices: [
+              { value: "A", label: "Scale A" },
+              { value: "B", label: "Scale B" },
+            ],
+            default: "A",
+            help: "Scale A unless the Revenue has written to the employee naming scale B.",
+          },
+        ],
+      },
+    ],
   }),
   // No canton levies income tax, and that is a DECLARATION rather than an
   // omission: `residentWithholding: "none"` is what makes the resolver
@@ -177,7 +199,15 @@ const FREEDONIA: PayrollCountryPack = {
     {
       key: "payg",
       components: [
-        { code: "ZTAX", name: "Freedonia PAYG", systemKey: "zz_tax", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        {
+          code: "ZTAX",
+          name: "Freedonia PAYG",
+          systemKey: "zz_tax",
+          kind: "deduction",
+          sequence: 110,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -186,7 +216,15 @@ const FREEDONIA: PayrollCountryPack = {
         // The pack's own internal accrual: banked, paid out to the employee,
         // NEVER remitted. The remittance module must learn that from this
         // declaration, not from recognising the words 'vacation_accrual'.
-        { code: "ZHOL", name: "Holiday accrual", systemKey: "holiday_accrual", kind: "employer_contribution", sequence: 240, assessedOn: "earnings", remittance: "internal_accrual" },
+        {
+          code: "ZHOL",
+          name: "Holiday accrual",
+          systemKey: "holiday_accrual",
+          kind: "employer_contribution",
+          sequence: 240,
+          assessedOn: "earnings",
+          remittance: "internal_accrual",
+        },
       ],
     },
   ],
@@ -224,7 +262,10 @@ test("an unknown country never falls through to anybody's component set", () => 
   assert.throws(() => packStatutoryComponents("XX"), PayrollPackError);
   assert.throws(() => packStatutoryComponents(""), PayrollPackError);
   // And prove the premise itself, so the test cannot rot silently again.
-  assert.ok(!(  "XX" in PAYROLL_COUNTRY_PACKS), "XX must stay unregistered for this test to mean anything");
+  assert.ok(
+    !("XX" in PAYROLL_COUNTRY_PACKS),
+    "XX must stay unregistered for this test to mean anything",
+  );
 });
 
 test("contributory bases are a required, asserted declaration", async () => {
@@ -244,55 +285,82 @@ test("contributory bases are a required, asserted declaration", async () => {
   }
 });
 
-test("seeding a third pack provisions exactly its declaration — no Canadian component leaks", { skip: !DB }, async () => {
-  // The schema keeps its OWN registry of pack identities
-  // (pay_components_system_key / pay_components_country check constraints), so
-  // a real third pack extends the baseline in the same change that declares
-  // it, and an undeclared key is refused at the table too. The dev database is
-  // shared with concurrent sessions, so this test does not touch that registry:
-  // the synthetic pack here declares an EMPTY statutory set, which is exactly
-  // the shape that used to be impossible — the old
-  // `country === "US" ? US_COMPONENTS : CA_COMPONENTS` seeded the CANADIAN set
-  // for any third country, and this proves the declaration now drives the rows
-  // all the way to the table. (That a NON-empty declaration seeds verbatim is
-  // the pure test above: the seeder maps packStatutoryComponents 1:1.)
-  PAYROLL_COUNTRY_PACKS.ZZ = { ...FREEDONIA, statutorySlots: [] };
-  try {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedPayrollComponents(org.orgId, actorId, "ZZ");
-    const rows = (await db.execute<{ code: string; system_key: string | null; country: string | null }>(sql`
+test(
+  "seeding a third pack provisions exactly its declaration — no Canadian component leaks",
+  { skip: !DB },
+  async () => {
+    // The schema keeps its OWN registry of pack identities
+    // (pay_components_system_key / pay_components_country check constraints), so
+    // a real third pack extends the baseline in the same change that declares
+    // it, and an undeclared key is refused at the table too. The dev database is
+    // shared with concurrent sessions, so this test does not touch that registry:
+    // the synthetic pack here declares an EMPTY statutory set, which is exactly
+    // the shape that used to be impossible — the old
+    // `country === "US" ? US_COMPONENTS : CA_COMPONENTS` seeded the CANADIAN set
+    // for any third country, and this proves the declaration now drives the rows
+    // all the way to the table. (That a NON-empty declaration seeds verbatim is
+    // the pure test above: the seeder maps packStatutoryComponents 1:1.)
+    PAYROLL_COUNTRY_PACKS.ZZ = { ...FREEDONIA, statutorySlots: [] };
+    try {
+      const org = await createScratchOrg();
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedPayrollComponents(org.orgId, actorId, "ZZ");
+      const rows = await db.execute<{
+        code: string;
+        system_key: string | null;
+        country: string | null;
+      }>(
+        sql`
       select code, system_key, country from pay_components where org_id = ${org.orgId}
       order by sequence, code
-    `, "objects"));
+    `,
+        "objects",
+      );
 
-    // Exactly the jurisdiction-free baseline, all of it country-less; not one
-    // statutory component of anybody else's.
-    assert.deepEqual(
-      rows.map((r) => r.code),
-      ["BASE", "OT", "STAT", "STATPREM", "ALLOW", "BONUS", "VACPAY"],
-    );
-    assert.ok(rows.every((r) => r.country === null));
-    const systemKeys = new Set(rows.map((r) => r.system_key));
-    for (const caOnly of ["cpp", "cpp2", "ei", "qpip", "income_tax", "vacation_accrual", "wcb", "eht", "fit", "ss"]) {
-      assert.ok(!systemKeys.has(caOnly), `${caOnly} seeded for a ZZ org`);
-    }
-    // No vacation entitlement plan either: ZZ declares no vacation accrual.
-    const plans = (await db.execute(sql`
+      // Exactly the jurisdiction-free baseline, all of it country-less; not one
+      // statutory component of anybody else's.
+      assert.deepEqual(
+        rows.map((r) => r.code),
+        ["BASE", "OT", "STAT", "STATPREM", "ALLOW", "BONUS", "VACPAY"],
+      );
+      assert.ok(rows.every((r) => r.country === null));
+      const systemKeys = new Set(rows.map((r) => r.system_key));
+      for (const caOnly of [
+        "cpp",
+        "cpp2",
+        "ei",
+        "qpip",
+        "income_tax",
+        "vacation_accrual",
+        "wcb",
+        "eht",
+        "fit",
+        "ss",
+      ]) {
+        assert.ok(!systemKeys.has(caOnly), `${caOnly} seeded for a ZZ org`);
+      }
+      // No vacation entitlement plan either: ZZ declares no vacation accrual.
+      const plans = await db.execute(
+        sql`
       select 1 from entitlement_plans where org_id = ${org.orgId} and system_key = 'vacation'
-    `, "objects"));
-    assert.equal(plans.length, 0);
-  } finally {
-    delete PAYROLL_COUNTRY_PACKS.ZZ;
-  }
-});
+    `,
+        "objects",
+      );
+      assert.equal(plans.length, 0);
+    } finally {
+      delete PAYROLL_COUNTRY_PACKS.ZZ;
+    }
+  },
+);
 
 /* ------------------------------------------------------------------ */
 /* GL slot resolution and the remittance declaration                   */
 /* ------------------------------------------------------------------ */
 
 test("'never remitted' is a component declaration, not the spelling of vacation_accrual", async () => {
-  assert.deepEqual(statutoryRemittanceDeclaration("CA").internalAccrualSystemKeys, ["vacation_accrual"]);
+  assert.deepEqual(statutoryRemittanceDeclaration("CA").internalAccrualSystemKeys, [
+    "vacation_accrual",
+  ]);
   assert.deepEqual(statutoryRemittanceDeclaration("US").internalAccrualSystemKeys, []);
   await withFreedonia(() => {
     const declaration = statutoryRemittanceDeclaration("ZZ");
@@ -302,11 +370,26 @@ test("'never remitted' is a component declaration, not the spelling of vacation_
     // and WCB (external) has no fallback at all.
     assert.equal(declaration.vendorSettingsKeyBySystemKey.get("zz_tax"), "zzRemittancePartyId");
     assert.equal(declaration.vendorSettingsKeyBySystemKey.has("income_tax"), false);
-    assert.equal(statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.get("cpp"), "craRemittancePartyId");
-    assert.equal(statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.get("income_tax"), "craRemittancePartyId");
-    assert.equal(statutoryRemittanceDeclaration("US").vendorSettingsKeyBySystemKey.get("fit"), null);
-    assert.equal(statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.has("wcb"), false);
-    assert.equal(statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.has("vacation_accrual"), false);
+    assert.equal(
+      statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.get("cpp"),
+      "craRemittancePartyId",
+    );
+    assert.equal(
+      statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.get("income_tax"),
+      "craRemittancePartyId",
+    );
+    assert.equal(
+      statutoryRemittanceDeclaration("US").vendorSettingsKeyBySystemKey.get("fit"),
+      null,
+    );
+    assert.equal(
+      statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.has("wcb"),
+      false,
+    );
+    assert.equal(
+      statutoryRemittanceDeclaration("CA").vendorSettingsKeyBySystemKey.has("vacation_accrual"),
+      false,
+    );
   });
 });
 
@@ -319,7 +402,15 @@ test("a system key one pack declares both ways is a refusal, never a coin toss",
         key: "levy",
         components: [
           // ZZ declares holiday_accrual internal; this slot claims it remits.
-          { code: "ZVAC", name: "Vacation levy", systemKey: "holiday_accrual", kind: "employer_contribution", sequence: 240, assessedOn: "earnings", remittance: "tax_authority" },
+          {
+            code: "ZVAC",
+            name: "Vacation levy",
+            systemKey: "holiday_accrual",
+            kind: "employer_contribution",
+            sequence: 240,
+            assessedOn: "earnings",
+            remittance: "tax_authority",
+          },
         ],
       },
     ],
@@ -350,7 +441,15 @@ test("two packs sharing a system key resolve country-first — never a cross-pac
       {
         key: "shared",
         components: [
-          { code: "ZSH", name: "Shared levy", systemKey: "shared_levy", kind: "deduction", sequence: 120, assessedOn: "taxable_income", remittance: "tax_authority" },
+          {
+            code: "ZSH",
+            name: "Shared levy",
+            systemKey: "shared_levy",
+            kind: "deduction",
+            sequence: 120,
+            assessedOn: "taxable_income",
+            remittance: "tax_authority",
+          },
         ],
       },
     ],
@@ -364,7 +463,15 @@ test("two packs sharing a system key resolve country-first — never a cross-pac
       {
         key: "shared",
         components: [
-          { code: "YSH", name: "Shared levy", systemKey: "shared_levy", kind: "deduction", sequence: 120, assessedOn: "taxable_income", remittance: "tax_authority" },
+          {
+            code: "YSH",
+            name: "Shared levy",
+            systemKey: "shared_levy",
+            kind: "deduction",
+            sequence: 120,
+            assessedOn: "taxable_income",
+            remittance: "tax_authority",
+          },
         ],
       },
     ],
@@ -396,7 +503,10 @@ test("an undeclared jurisdiction blocks exactly when a holiday is in the period"
   // Canada Day 2026-07-01 falls inside the period, and the run must stop rather
   // than pay a silent zero for the day.
   const conflict = undeclaredJurisdictionHolidayConflict({
-    country: "CA", jurisdiction: "CA-ZZ", from: "2026-06-21", to: "2026-07-04",
+    country: "CA",
+    jurisdiction: "CA-ZZ",
+    from: "2026-06-21",
+    to: "2026-07-04",
   });
   assert.ok(conflict);
   assert.equal(conflict.date, "2026-07-01");
@@ -408,7 +518,10 @@ test("an undeclared jurisdiction blocks exactly when a holiday is in the period"
   // Manitoba, Islander Day in Prince Edward Island and Heritage Day in Nova
   // Scotia — one date, four names, and the message picks the commonest.
   const february = undeclaredJurisdictionHolidayConflict({
-    country: "CA", jurisdiction: "CA-ZZ", from: "2026-02-15", to: "2026-02-21",
+    country: "CA",
+    jurisdiction: "CA-ZZ",
+    from: "2026-02-15",
+    to: "2026-02-21",
   });
   assert.ok(february);
   assert.equal(february.date, "2026-02-16");
@@ -419,7 +532,10 @@ test("an undeclared jurisdiction blocks exactly when a holiday is in the period"
   // constant threshold got wrong once the country was fully transcribed.
   assert.equal(
     undeclaredJurisdictionHolidayConflict({
-      country: "CA", jurisdiction: "CA-ZZ", from: "2026-06-15", to: "2026-06-27",
+      country: "CA",
+      jurisdiction: "CA-ZZ",
+      from: "2026-06-15",
+      to: "2026-06-27",
     }),
     null,
   );
@@ -428,18 +544,33 @@ test("an undeclared jurisdiction blocks exactly when a holiday is in the period"
   // calculates exactly as it always has.
   assert.equal(
     undeclaredJurisdictionHolidayConflict({
-      country: "CA", jurisdiction: "CA-ZZ", from: "2026-07-06", to: "2026-07-18",
+      country: "CA",
+      jurisdiction: "CA-ZZ",
+      from: "2026-07-06",
+      to: "2026-07-18",
     }),
     null,
   );
 
   // And the eight that used to be this gate's case are declared now, so they
   // calculate instead of blocking.
-  for (const jurisdiction of ["CA-MB", "CA-NB", "CA-NL", "CA-NS", "CA-NT", "CA-NU", "CA-PE", "CA-YT"]) {
+  for (const jurisdiction of [
+    "CA-MB",
+    "CA-NB",
+    "CA-NL",
+    "CA-NS",
+    "CA-NT",
+    "CA-NU",
+    "CA-PE",
+    "CA-YT",
+  ]) {
     assert.ok(payrollJurisdictionDeclared(jurisdiction));
     assert.equal(
       undeclaredJurisdictionHolidayConflict({
-        country: "CA", jurisdiction, from: "2026-06-21", to: "2026-07-04",
+        country: "CA",
+        jurisdiction,
+        from: "2026-06-21",
+        to: "2026-07-04",
       }),
       null,
     );
@@ -451,7 +582,10 @@ test("an undeclared jurisdiction blocks exactly when a holiday is in the period"
   assert.ok(payrollJurisdictionDeclared("US-TX"));
   assert.equal(
     undeclaredJurisdictionHolidayConflict({
-      country: "CA", jurisdiction: "CA-ON", from: "2026-06-21", to: "2026-07-04",
+      country: "CA",
+      jurisdiction: "CA-ON",
+      from: "2026-06-21",
+      to: "2026-07-04",
     }),
     null,
   );
@@ -460,7 +594,10 @@ test("an undeclared jurisdiction blocks exactly when a holiday is in the period"
   // pay), so July 4 — observed Friday July 3, 2026 — stops it by name.
   assert.ok(!payrollJurisdictionDeclared("US-MA"));
   const massachusetts = undeclaredJurisdictionHolidayConflict({
-    country: "US", jurisdiction: "US-MA", from: "2026-06-29", to: "2026-07-12",
+    country: "US",
+    jurisdiction: "US-MA",
+    from: "2026-06-29",
+    to: "2026-07-12",
   });
   assert.ok(massachusetts);
   assert.equal(massachusetts.date, "2026-07-03");
@@ -478,13 +615,17 @@ test("the calculated stub's jurisdiction gate refuses before touching the transa
   // a foreign calendar stops at the gate, not partway into the employee's
   // calculation. Both stubs below throw if they are touched at all.
   const untouchedTx = {
-    execute() { throw new Error("transaction used before the gate passed"); },
+    execute() {
+      throw new Error("transaction used before the gate passed");
+    },
   } as unknown as Parameters<typeof statutoryHolidayLinesForStub>[0];
   const need = () => {
     throw new Error("components looked up before the gate passed");
   };
   const emp = (labourJurisdiction: string | null): Record<string, string | null> => ({
-    party_id: "emp-1", display_name: "Ann", labour_jurisdiction: labourJurisdiction,
+    party_id: "emp-1",
+    display_name: "Ann",
+    labour_jurisdiction: labourJurisdiction,
   });
 
   // An explicit labour jurisdiction no pack declares is refused outright —
@@ -492,10 +633,18 @@ test("the calculated stub's jurisdiction gate refuses before touching the transa
   // data-entry fault, not a gap in the packs.
   await assert.rejects(
     statutoryHolidayLinesForStub(untouchedTx, {
-      orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
-      emp: emp("CA-ZZ"), country: "CA", subsidiaryId: null, province: null,
-      periodStart: "2026-07-06", periodEnd: "2026-07-18",
-      payRate: null, need,
+      orgId: "o",
+      documentId: "d",
+      employeePartyId: "emp-1",
+      employeeName: "Ann",
+      emp: emp("CA-ZZ"),
+      country: "CA",
+      subsidiaryId: null,
+      province: null,
+      periodStart: "2026-07-06",
+      periodEnd: "2026-07-18",
+      payRate: null,
+      need,
     }),
     /has a labour jurisdiction this payroll cannot honour/,
   );
@@ -504,10 +653,18 @@ test("the calculated stub's jurisdiction gate refuses before touching the transa
   // Day in the period blocks with the same message readiness raises…
   await assert.rejects(
     statutoryHolidayLinesForStub(untouchedTx, {
-      orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
-      emp: emp(null), country: "CA", subsidiaryId: null, province: "ZZ",
-      periodStart: "2026-06-21", periodEnd: "2026-07-04",
-      payRate: null, need,
+      orgId: "o",
+      documentId: "d",
+      employeePartyId: "emp-1",
+      employeeName: "Ann",
+      emp: emp(null),
+      country: "CA",
+      subsidiaryId: null,
+      province: "ZZ",
+      periodStart: "2026-06-21",
+      periodEnd: "2026-07-04",
+      payRate: null,
+      need,
     }),
     /Canada Day/,
   );
@@ -516,10 +673,18 @@ test("the calculated stub's jurisdiction gate refuses before touching the transa
   // has — no lines, and provably no database work.
   assert.deepEqual(
     await statutoryHolidayLinesForStub(untouchedTx, {
-      orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
-      emp: emp(null), country: "CA", subsidiaryId: null, province: "ZZ",
-      periodStart: "2026-07-06", periodEnd: "2026-07-18",
-      payRate: null, need,
+      orgId: "o",
+      documentId: "d",
+      employeePartyId: "emp-1",
+      employeeName: "Ann",
+      emp: emp(null),
+      country: "CA",
+      subsidiaryId: null,
+      province: "ZZ",
+      periodStart: "2026-07-06",
+      periodEnd: "2026-07-18",
+      payRate: null,
+      need,
     }),
     [],
   );
@@ -529,10 +694,18 @@ test("the calculated stub's jurisdiction gate refuses before touching the transa
   // never pays their cost on a refusal path.
   await assert.rejects(
     statutoryHolidayLinesForStub(untouchedTx, {
-      orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
-      emp: emp(null), country: "CA", subsidiaryId: null, province: "ON",
-      periodStart: "2026-06-21", periodEnd: "2026-07-04",
-      payRate: null, need,
+      orgId: "o",
+      documentId: "d",
+      employeePartyId: "emp-1",
+      employeeName: "Ann",
+      emp: emp(null),
+      country: "CA",
+      subsidiaryId: null,
+      province: "ON",
+      periodStart: "2026-06-21",
+      periodEnd: "2026-07-04",
+      payRate: null,
+      need,
     }),
     /components looked up before the gate passed/,
   );
@@ -545,38 +718,55 @@ test("the holiday calculation honours the caller's subsidiary scope", async () =
   // in-scope employee instead (blocking every scoped run) and waves the
   // out-of-scope one through to a cross-subsidiary stub.
   const scopedTx = {
-    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ subsidiary_id: "sub-1" }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
+    execute: async (_query: unknown, mode?: string) =>
+      Promise.resolve({ rows: [{ subsidiary_id: "sub-1" }] }).then(
+        <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+      ),
   } as unknown as Parameters<typeof statutoryHolidayLinesForStub>[0];
   const emptyTx = {
-    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
+    execute: async (_query: unknown, mode?: string) =>
+      Promise.resolve({ rows: [] }).then(<T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result,
+      ),
   } as unknown as Parameters<typeof statutoryHolidayLinesForStub>[0];
   const need = () => {
     throw new Error("components looked up before the scope gate passed");
   };
   const base = {
-    orgId: "o", documentId: "d", employeePartyId: "emp-1", employeeName: "Ann",
+    orgId: "o",
+    documentId: "d",
+    employeePartyId: "emp-1",
+    employeeName: "Ann",
     emp: { party_id: "emp-1", display_name: "Ann", labour_jurisdiction: null },
-    country: "CA", subsidiaryId: null, province: "ZZ", periodStart: "2026-07-06", periodEnd: "2026-07-18",
-    payRate: null, need,
+    country: "CA",
+    subsidiaryId: null,
+    province: "ZZ",
+    periodStart: "2026-07-06",
+    periodEnd: "2026-07-18",
+    payRate: null,
+    need,
   } as Parameters<typeof statutoryHolidayLinesForStub>[1];
   // In scope (ZZ, no holiday in the period): calculates to no lines.
   assert.deepEqual(
     await statutoryHolidayLinesForStub(scopedTx, {
-      ...base, allowedSubsidiaryIds: new Set(["sub-1"]),
+      ...base,
+      allowedSubsidiaryIds: new Set(["sub-1"]),
     }),
     [],
   );
   // Out of scope: refused as not found.
   await assert.rejects(
     statutoryHolidayLinesForStub(scopedTx, {
-      ...base, allowedSubsidiaryIds: new Set(["sub-9"]),
+      ...base,
+      allowedSubsidiaryIds: new Set(["sub-9"]),
     }),
     /employee not found/,
   );
   // Unknown employee: refused as not found.
   await assert.rejects(
     statutoryHolidayLinesForStub(emptyTx, {
-      ...base, allowedSubsidiaryIds: new Set(["sub-1"]),
+      ...base,
+      allowedSubsidiaryIds: new Set(["sub-1"]),
     }),
     /employee not found/,
   );
@@ -588,27 +778,67 @@ test("captured stubs aggregate every line row under one employee", async () => {
   // of the cheque. A lineless stub still exists (the outer join keeps it).
   const rows = [
     {
-      employee_party_id: "e1", province: "ON", gross: "100.00", net_pay: "80.00",
-      employer_cost: "110.00", component_id: "c1", system_key: "wages", kind: "earning",
-      description: "Wages", hours: "10", rate: "10.00", amount: "100.00",
-      earned_from: "2026-01-05", earned_to: "2026-01-05",
-      project_id: null, department_id: null, time_type_id: null, sequence: 1,
+      employee_party_id: "e1",
+      province: "ON",
+      gross: "100.00",
+      net_pay: "80.00",
+      employer_cost: "110.00",
+      component_id: "c1",
+      system_key: "wages",
+      kind: "earning",
+      description: "Wages",
+      hours: "10",
+      rate: "10.00",
+      amount: "100.00",
+      earned_from: "2026-01-05",
+      earned_to: "2026-01-05",
+      project_id: null,
+      department_id: null,
+      time_type_id: null,
+      sequence: 1,
     },
     {
-      employee_party_id: "e1", province: "ON", gross: "100.00", net_pay: "80.00",
-      employer_cost: "110.00", component_id: "c2", system_key: "income_tax", kind: "deduction",
-      description: "Income tax", hours: null, rate: null, amount: "20.00",
-      project_id: null, department_id: null, time_type_id: null, sequence: 2,
+      employee_party_id: "e1",
+      province: "ON",
+      gross: "100.00",
+      net_pay: "80.00",
+      employer_cost: "110.00",
+      component_id: "c2",
+      system_key: "income_tax",
+      kind: "deduction",
+      description: "Income tax",
+      hours: null,
+      rate: null,
+      amount: "20.00",
+      project_id: null,
+      department_id: null,
+      time_type_id: null,
+      sequence: 2,
     },
     {
-      employee_party_id: "e2", province: "QC", gross: "50.00", net_pay: "40.00",
-      employer_cost: "55.00", component_id: null, system_key: null, kind: null,
-      description: null, hours: null, rate: null, amount: null,
-      project_id: null, department_id: null, time_type_id: null, sequence: null,
+      employee_party_id: "e2",
+      province: "QC",
+      gross: "50.00",
+      net_pay: "40.00",
+      employer_cost: "55.00",
+      component_id: null,
+      system_key: null,
+      kind: null,
+      description: null,
+      hours: null,
+      rate: null,
+      amount: null,
+      project_id: null,
+      department_id: null,
+      time_type_id: null,
+      sequence: null,
     },
   ];
   const tx = {
-    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
+    execute: async (_query: unknown, mode?: string) =>
+      Promise.resolve({ rows }).then(<T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result,
+      ),
   } as unknown as Parameters<typeof captureCalculatedStubs>[0];
   const stubs = await captureCalculatedStubs(tx, "o", "d");
   assert.equal(stubs.length, 2);
@@ -616,8 +846,17 @@ test("captured stubs aggregate every line row under one employee", async () => {
   assert.equal(first.employeePartyId, "e1");
   assert.equal(first.gross, "100.00");
   assert.equal(first.lines.length, 2);
-  assert.deepEqual(first.lines.map((l) => l.systemKey), ["wages", "income_tax"]);
-  assert.deepEqual(first.lines.map(l => [l.earnedFrom, l.earnedTo]), [["2026-01-05", "2026-01-05"], [null, null]]);
+  assert.deepEqual(
+    first.lines.map((l) => l.systemKey),
+    ["wages", "income_tax"],
+  );
+  assert.deepEqual(
+    first.lines.map((l) => [l.earnedFrom, l.earnedTo]),
+    [
+      ["2026-01-05", "2026-01-05"],
+      [null, null],
+    ],
+  );
   const second = stubs[1]!;
   assert.equal(second.employeePartyId, "e2");
   assert.deepEqual(second.lines, [], "a lineless stub exists with no lines");
@@ -627,132 +866,189 @@ test("captured stubs aggregate every line row under one employee", async () => {
 /* Statutory holiday pay wiring: gated, declared, byte-stable when off */
 /* ------------------------------------------------------------------ */
 
-test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared blocks only with a holiday", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const orgId = org.orgId;
-  const actorId = (await seedFlowActors(orgId)).adminId;
+test(
+  "stat pay: OFF is byte-identical, ON pays the declared formula, undeclared blocks only with a holiday",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const orgId = org.orgId;
+    const actorId = (await seedFlowActors(orgId)).adminId;
 
-  const account = seedPostingAccount.bind(null, orgId);
-  const wageExpense = await account("6000", "Wages expense", "expense");
-  const netPayable = await account("2300", "Wages payable", "liability_current");
-  const craPayable = await account("2310", "CRA remittances payable", "liability_current");
-  await seedPayrollAccountingConfiguration(orgId, {
-    slotAccounts: { CA: { vacation: netPayable, cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } },
-        wageExpenseAccountId: wageExpense,
-        netPayAccountId: netPayable,
+    const account = seedPostingAccount.bind(null, orgId);
+    const wageExpense = await account("6000", "Wages expense", "expense");
+    const netPayable = await account("2300", "Wages payable", "liability_current");
+    const craPayable = await account("2310", "CRA remittances payable", "liability_current");
+    await seedPayrollAccountingConfiguration(orgId, {
+      slotAccounts: {
+        CA: {
+          vacation: netPayable,
+          cpp: craPayable,
+          ei: craPayable,
+          qpip: craPayable,
+          income_tax: craPayable,
+        },
+      },
+      wageExpenseAccountId: wageExpense,
+      netPayAccountId: netPayable,
 
-        wagesTo: "expense",
-      });
-  await seedPayrollComponents(orgId, actorId, "CA");
-  await seedOntarioEhtFixture(orgId, actorId);
-  // The MB leg needs its own explicit EHT declaration: ca_eht refuses per
-  // region when unconfigured, and this test pins holiday pay, never EHT.
-  // Values are an explicit zero, asserted nowhere here.
-  await db.execute(sql`
+      wagesTo: "expense",
+    });
+    await seedPayrollComponents(orgId, actorId, "CA");
+    await seedOntarioEhtFixture(orgId, actorId);
+    // The MB leg needs its own explicit EHT declaration: ca_eht refuses per
+    // region when unconfigured, and this test pins holiday pay, never EHT.
+    // Values are an explicit zero, asserted nowhere here.
+    await db.execute(sql`
     insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
                                          rate_values, created_by, updated_by)
     values (${orgId}, 'CA', 'ca_eht', 'MB', 2026, '{"rate": "0", "annualExemption": "0"}',
             ${actorId}, ${actorId})`);
-  // The QC leg needs its CNT exemption class: an unclassified Québec
-  // employer refuses by name. Ordinary-sector, subject to the contribution.
-  await upsertPayrollEmployerFact({ orgId, actorId, subsidiaryId: org.subsidiaryId,
-    country: "CA", factKey: "cnt_exemption", effectiveFrom: "2026-01-01",
-    value: "none", changeReason: "test employer subject to CNT" });
-  // The production Quebec path emits the pack's separate Revenu Québec
-  // income-tax component. Point it at the same fixture payable account so
-  // this regression reaches holiday-line persistence rather than failing in
-  // unrelated GL setup.
-  await db.execute(sql`
+    // The QC leg needs its CNT exemption class: an unclassified Québec
+    // employer refuses by name. Ordinary-sector, subject to the contribution.
+    await upsertPayrollEmployerFact({
+      orgId,
+      actorId,
+      subsidiaryId: org.subsidiaryId,
+      country: "CA",
+      factKey: "cnt_exemption",
+      effectiveFrom: "2026-01-01",
+      value: "none",
+      changeReason: "test employer subject to CNT",
+    });
+    // The production Quebec path emits the pack's separate Revenu Québec
+    // income-tax component. Point it at the same fixture payable account so
+    // this regression reaches holiday-line persistence rather than failing in
+    // unrelated GL setup.
+    await db.execute(sql`
     update pay_components set liability_account_id = ${craPayable}
      where org_id = ${orgId} and system_key = 'qc_income_tax' and kind = 'deduction'`);
-  // A QC employer always owes the HSF at its own rate: an unclassified
-  // employer refuses by name at calculate, so the fixture classifies
-  // ordinary-sector and points the slot at the same payable as
-  // above. This test asserts holiday pay, never HSF.
-  await db.execute(sql`
+    // A QC employer always owes the HSF at its own rate: an unclassified
+    // employer refuses by name at calculate, so the fixture classifies
+    // ordinary-sector and points the slot at the same payable as
+    // above. This test asserts holiday pay, never HSF.
+    await db.execute(sql`
     insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
                                          rate_values, created_by, updated_by)
     values (${orgId}, 'CA', 'ca_hsf', 'QC', 2026, '{"sectorOther": "true"}',
             ${actorId}, ${actorId})`);
-  // The priced CNT line needs its liability account at commit, like every
-  // employer levy above. Same payable; the contribution itself is asserted
-  // nowhere here.
-  await setPackSlotAccount(orgId, actorId, "CA", "cnt", craPayable);
-  await db.execute(sql`
+    // The priced CNT line needs its liability account at commit, like every
+    // employer levy above. Same payable; the contribution itself is asserted
+    // nowhere here.
+    await setPackSlotAccount(orgId, actorId, "CA", "cnt", craPayable);
+    await db.execute(sql`
     update pay_components set liability_account_id = ${craPayable}
      where org_id = ${orgId} and system_key = 'hsf'`);
 
-  const scheduleId = randomUUID();
-  await seedPayrollSchedule(orgId, scheduleId, actorId, {
-    name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-06-20',
-    payDateOffsetDays: 3,
-  });
-
-  const employee = async (name: string, province: string) => {
-    const id = randomUUID();
-    await seedPayrollPerson(orgId, id, name);
-    await seedPayrollEmployeeRole(orgId, id, { hiredOn: '2020-01-01', isActive: true, createdBy: actorId, updatedBy: actorId });
-    await seedPayrollWage(orgId, id, actorId, {
-      currency: 'CAD', rate: '30', basis: 'hour', effectiveFrom: '2026-01-01',
+    const scheduleId = randomUUID();
+    await seedPayrollSchedule(orgId, scheduleId, actorId, {
+      name: "Biweekly",
+      frequency: "biweekly",
+      periodsPerYear: 26,
+      anchorPeriodEnd: "2026-06-20",
+      payDateOffsetDays: 3,
     });
-    // Stub calculation refuses employees without an HRM employment, so the
-    // hire carries one and the profile points at it.
-    const { employmentId } = await seedEmployment(orgId, org.subsidiaryId, { workerPartyId: id, status: "active", from: "2020-01-01" });
-    // Every row is Canadian, including 'ZZ': that is the extra-provincial
-    // withholding code, not another country — the CA pack prices all four.
-    // Coverage is out of scope here (this asserts holiday pay, never WCB):
-    // every hire stands explicitly exempt so the run refuses nothing, with
-    // money identical either way.
-    await seedPayrollProfile(orgId, id, employmentId, scheduleId, actorId, {
-      country: 'CA', province: province, payBasis: 'hourly', federalClaimCode: 1, provincialClaimCode: 1,
-      statutoryOccupationClass: 'general',
-      wcbExempt: true, wcbExemptReason: 'agnostic fixture: workers-compensation coverage out of scope',
-    }, { percentFloor: '4', method: 'accrue' });
 
-    return id;
-  };
-  const ontarioId = await employee("Olive Ontario", "ON");
-  const quebecId = await employee("Quinn Quebec", "QC");
-  const manitobaId = await employee("Morley Manitoba", "MB");
-  // Employed outside any province: withholding knows 'ZZ', no employment
-  // standards act does, so this is the employee the undeclared gate is for.
-  const outsideId = await employee("Zed Offshore", "ZZ");
-
-  const hours = async (employeeId: string, days: string[], perDay = 20) => {
-    for (const workedOn of days) {
-      await seedPayrollTime(orgId, employeeId, actorId, {
-        workedOn: workedOn, hours: perDay, status: 'approved', isBillable: false, billingStatus: 'unbilled',
-        costingBasis: 'actual',
+    const employee = async (name: string, province: string) => {
+      const id = randomUUID();
+      await seedPayrollPerson(orgId, id, name);
+      await seedPayrollEmployeeRole(orgId, id, {
+        hiredOn: "2020-01-01",
+        isActive: true,
+        createdBy: actorId,
+        updatedBy: actorId,
       });
-    }
-  };
+      await seedPayrollWage(orgId, id, actorId, {
+        currency: "CAD",
+        rate: "30",
+        basis: "hour",
+        effectiveFrom: "2026-01-01",
+      });
+      // Stub calculation refuses employees without an HRM employment, so the
+      // hire carries one and the profile points at it.
+      const { employmentId } = await seedEmployment(orgId, org.subsidiaryId, {
+        workerPartyId: id,
+        status: "active",
+        from: "2020-01-01",
+      });
+      // Every row is Canadian, including 'ZZ': that is the extra-provincial
+      // withholding code, not another country — the CA pack prices all four.
+      // Coverage is out of scope here (this asserts holiday pay, never WCB):
+      // every hire stands explicitly exempt so the run refuses nothing, with
+      // money identical either way.
+      await seedPayrollProfile(
+        orgId,
+        id,
+        employmentId,
+        scheduleId,
+        actorId,
+        {
+          country: "CA",
+          province: province,
+          payBasis: "hourly",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+          statutoryOccupationClass: "general",
+          wcbExempt: true,
+          wcbExemptReason: "agnostic fixture: workers-compensation coverage out of scope",
+        },
+        { percentFloor: "4", method: "accrue" },
+      );
 
-  // Lookback fodder: one committed run whose period sits wholly inside the
-  // four work weeks before Canada Day (2026-06-03 .. 2026-06-30).
-  await hours(ontarioId, ["2026-06-08", "2026-06-10", "2026-06-12", "2026-06-16"]);
-  await hours(quebecId, ["2026-06-08", "2026-06-10", "2026-06-12", "2026-06-16"]);
-  await hours(manitobaId, ["2026-06-09", "2026-06-11"]);
-  await hours(outsideId, ["2026-06-09", "2026-06-11"]);
-  const run1 = await createPayRun({
-    orgId, actorId, payScheduleId: scheduleId,
-    periodStart: "2026-06-07", periodEnd: "2026-06-20",
-  });
-  const calc1 = await calculatePayRun({ orgId, documentId: run1.documentId, actorId });
-  assert.deepEqual(calc1.errors, []);
-  await commitPayRun({ orgId, documentId: run1.documentId, actorId });
+      return id;
+    };
+    const ontarioId = await employee("Olive Ontario", "ON");
+    const quebecId = await employee("Quinn Quebec", "QC");
+    const manitobaId = await employee("Morley Manitoba", "MB");
+    // Employed outside any province: withholding knows 'ZZ', no employment
+    // standards act does, so this is the employee the undeclared gate is for.
+    const outsideId = await employee("Zed Offshore", "ZZ");
 
-  // The run under test: its period contains Canada Day (Wednesday 2026-07-01).
-  await hours(ontarioId, ["2026-06-22", "2026-06-24", "2026-06-26", "2026-06-30"]);
-  await hours(quebecId, ["2026-06-22", "2026-06-24", "2026-06-26", "2026-06-30"]);
-  await hours(manitobaId, ["2026-06-23", "2026-06-25"]);
-  await hours(outsideId, ["2026-06-23", "2026-06-25"]);
-  const run2 = await createPayRun({
-    orgId, actorId, payScheduleId: scheduleId,
-    periodStart: "2026-06-21", periodEnd: "2026-07-04",
-  });
+    const hours = async (employeeId: string, days: string[], perDay = 20) => {
+      for (const workedOn of days) {
+        await seedPayrollTime(orgId, employeeId, actorId, {
+          workedOn: workedOn,
+          hours: perDay,
+          status: "approved",
+          isBillable: false,
+          billingStatus: "unbilled",
+          costingBasis: "actual",
+        });
+      }
+    };
 
-  const snapshot = async () => {
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    // Lookback fodder: one committed run whose period sits wholly inside the
+    // four work weeks before Canada Day (2026-06-03 .. 2026-06-30).
+    await hours(ontarioId, ["2026-06-08", "2026-06-10", "2026-06-12", "2026-06-16"]);
+    await hours(quebecId, ["2026-06-08", "2026-06-10", "2026-06-12", "2026-06-16"]);
+    await hours(manitobaId, ["2026-06-09", "2026-06-11"]);
+    await hours(outsideId, ["2026-06-09", "2026-06-11"]);
+    const run1 = await createPayRun({
+      orgId,
+      actorId,
+      payScheduleId: scheduleId,
+      periodStart: "2026-06-07",
+      periodEnd: "2026-06-20",
+    });
+    const calc1 = await calculatePayRun({ orgId, documentId: run1.documentId, actorId });
+    assert.deepEqual(calc1.errors, []);
+    await commitPayRun({ orgId, documentId: run1.documentId, actorId });
+
+    // The run under test: its period contains Canada Day (Wednesday 2026-07-01).
+    await hours(ontarioId, ["2026-06-22", "2026-06-24", "2026-06-26", "2026-06-30"]);
+    await hours(quebecId, ["2026-06-22", "2026-06-24", "2026-06-26", "2026-06-30"]);
+    await hours(manitobaId, ["2026-06-23", "2026-06-25"]);
+    await hours(outsideId, ["2026-06-23", "2026-06-25"]);
+    const run2 = await createPayRun({
+      orgId,
+      actorId,
+      payScheduleId: scheduleId,
+      periodStart: "2026-06-21",
+      periodEnd: "2026-07-04",
+    });
+
+    const snapshot = async () => {
+      const rows = await db.execute<Record<string, unknown>>(
+        sql`
       select s.employee_party_id, s.gross, s.net_pay, s.employer_cost, s.factors,
              l.kind, l.description, l.hours, l.rate, l.amount, l.sequence, c.code
         from pay_stubs s
@@ -760,202 +1056,268 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
         left join pay_components c on c.id = l.component_id
        where s.org_id = ${orgId} and s.pay_run_document_id = ${run2.documentId}
        order by s.employee_party_id, l.sequence, l.amount, l.description
-    `, "objects"));
-    return JSON.stringify(rows);
-  };
+    `,
+        "objects",
+      );
+      return JSON.stringify(rows);
+    };
 
-  // --- Feature OFF (the default): calculates exactly as before the feature.
-  const offResult = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
-  assert.equal(offResult.employees, 4);
-  assert.deepEqual(offResult.errors, []);
-  const offStubs = await snapshot();
-  assert.ok(!offStubs.includes("stat"), "no stat holiday lines while the feature is off");
+    // --- Feature OFF (the default): calculates exactly as before the feature.
+    const offResult = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
+    assert.equal(offResult.employees, 4);
+    assert.deepEqual(offResult.errors, []);
+    const offStubs = await snapshot();
+    assert.ok(!offStubs.includes("stat"), "no stat holiday lines while the feature is off");
 
-  // --- Feature ON.
-  await db.execute(sql`
+    // --- Feature ON.
+    await db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{payroll,statutoryHolidayPay}', 'true'::jsonb)
      where id = ${orgId}`);
 
-  // Readiness names the undeclared jurisdiction and the holiday BEFORE the
-  // run does, with the same message.
-  const readiness = await payRunReadiness(orgId, run2.documentId);
-  const blocker = readiness.items.find((item) => item.code === "holiday.undeclaredJurisdiction");
-  assert.ok(blocker, "readiness blocker for the undeclared jurisdiction");
-  assert.equal(blocker.severity, "blocker");
-  assert.match(blocker.detail ?? "", /CA-ZZ/);
-  assert.match(blocker.detail ?? "", /Canada Day/);
-  assert.deepEqual(blocker.employees.map((e) => e.partyId), [outsideId]);
+    // Readiness names the undeclared jurisdiction and the holiday BEFORE the
+    // run does, with the same message.
+    const readiness = await payRunReadiness(orgId, run2.documentId);
+    const blocker = readiness.items.find((item) => item.code === "holiday.undeclaredJurisdiction");
+    assert.ok(blocker, "readiness blocker for the undeclared jurisdiction");
+    assert.equal(blocker.severity, "blocker");
+    assert.match(blocker.detail ?? "", /CA-ZZ/);
+    assert.match(blocker.detail ?? "", /Canada Day/);
+    assert.deepEqual(
+      blocker.employees.map((e) => e.partyId),
+      [outsideId],
+    );
 
-  // The production path must refuse Ontario/Quebec holiday pay when the
-  // employer has not supplied the two legal eligibility facts. A missing
-  // value is not permission to use the ordinary formula or to assume consent.
-  const missingFacts = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
-  assert.equal(missingFacts.employees, 0);
-  assert.equal(missingFacts.errors.length, 4);
-  const missingByName = new Map(missingFacts.errors.map((e) => [e.employee, e.message]));
-  assert.match(missingByName.get("Olive Ontario") ?? "", /absence assertion/);
-  assert.match(missingByName.get("Quinn Quebec") ?? "", /commission-pay status/);
+    // The production path must refuse Ontario/Quebec holiday pay when the
+    // employer has not supplied the two legal eligibility facts. A missing
+    // value is not permission to use the ordinary formula or to assume consent.
+    const missingFacts = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
+    assert.equal(missingFacts.employees, 0);
+    assert.equal(missingFacts.errors.length, 4);
+    const missingByName = new Map(missingFacts.errors.map((e) => [e.employee, e.message]));
+    assert.match(missingByName.get("Olive Ontario") ?? "", /absence assertion/);
+    assert.match(missingByName.get("Quinn Quebec") ?? "", /commission-pay status/);
 
-  // Supplying the authoritative facts reaches the same resolver used by a
-  // real run. Quebec's commission employee must take the 12-week ÷60 arm,
-  // while Ontario's explicit consent assertion allows its ordinary ÷20 rule.
-  await db.transaction(async tx => {
-    for (const [employeePartyId, province, paidOnCommission] of [
-      [ontarioId, 'ON', false], [quebecId, 'QC', true], [manitobaId, 'MB', false],
-    ] as const) {
-      await tx.execute(sql`update employee_payroll_profiles set paid_on_commission=${paidOnCommission}, updated_at=clock_timestamp()
+    // Supplying the authoritative facts reaches the same resolver used by a
+    // real run. Quebec's commission employee must take the 12-week ÷60 arm,
+    // while Ontario's explicit consent assertion allows its ordinary ÷20 rule.
+    await db.transaction(async (tx) => {
+      for (const [employeePartyId, province, paidOnCommission] of [
+        [ontarioId, "ON", false],
+        [quebecId, "QC", true],
+        [manitobaId, "MB", false],
+      ] as const) {
+        await tx.execute(sql`update employee_payroll_profiles set paid_on_commission=${paidOnCommission}, updated_at=clock_timestamp()
         where org_id=${orgId} and employee_party_id=${employeePartyId}`);
-      const holidays = await demandingHolidays(tx, { orgId, country: 'CA', province, labourJurisdiction: null,
-        employeeName: employeePartyId, periodStart: '2026-06-21', periodEnd: '2026-07-04' });
-      for (const holiday of holidays.filter(holiday => holiday.needsAbsenceAssertion)) {
-        await recordHolidayAssertion(tx, { orgId, documentId: run2.documentId, employeePartyId,
-          holidayKey: holiday.key, holidayDate: holiday.date, absentWithoutConsent: false, actorId });
+        const holidays = await demandingHolidays(tx, {
+          orgId,
+          country: "CA",
+          province,
+          labourJurisdiction: null,
+          employeeName: employeePartyId,
+          periodStart: "2026-06-21",
+          periodEnd: "2026-07-04",
+        });
+        for (const holiday of holidays.filter((holiday) => holiday.needsAbsenceAssertion)) {
+          await recordHolidayAssertion(tx, {
+            orgId,
+            documentId: run2.documentId,
+            employeePartyId,
+            holidayKey: holiday.key,
+            holidayDate: holiday.date,
+            absentWithoutConsent: false,
+            actorId,
+          });
+        }
       }
-    }
-  });
-  const onResult = await calculatePayRun({
-    orgId, documentId: run2.documentId, actorId,
-  });
-  // Ontario calculates with the declared ESA formula. Manitoba is DECLARED now
-  // and its measure is a normal working day, so it refuses for a different and
-  // better reason: nobody has said what hours this employee normally works, and
-  // the run will not invent them. Zed is refused by the undeclared gate with
-  // the readiness blocker's own message.
-  assert.equal(onResult.employees, 2, `holiday calculation refusals: ${JSON.stringify(onResult.errors)}`);
-  assert.equal(onResult.errors.length, 2);
-  const byName = new Map(onResult.errors.map((e) => [e.employee, e.message]));
-  assert.match(byName.get("Morley Manitoba") ?? "", /no work schedule is in force/);
-  assert.match(byName.get("Morley Manitoba") ?? "", /Canada Day/);
-  assert.equal(byName.get("Zed Offshore"), blocker.detail);
+    });
+    const onResult = await calculatePayRun({
+      orgId,
+      documentId: run2.documentId,
+      actorId,
+    });
+    // Ontario calculates with the declared ESA formula. Manitoba is DECLARED now
+    // and its measure is a normal working day, so it refuses for a different and
+    // better reason: nobody has said what hours this employee normally works, and
+    // the run will not invent them. Zed is refused by the undeclared gate with
+    // the readiness blocker's own message.
+    assert.equal(
+      onResult.employees,
+      2,
+      `holiday calculation refusals: ${JSON.stringify(onResult.errors)}`,
+    );
+    assert.equal(onResult.errors.length, 2);
+    const byName = new Map(onResult.errors.map((e) => [e.employee, e.message]));
+    assert.match(byName.get("Morley Manitoba") ?? "", /no work schedule is in force/);
+    assert.match(byName.get("Morley Manitoba") ?? "", /Canada Day/);
+    assert.equal(byName.get("Zed Offshore"), blocker.detail);
 
-  // Record what Morley normally works — 8 hours a day, Monday to Friday,
-  // effective before the period — and Manitoba calculates.
-  const mbSchedule = randomUUID();
-  await db.execute(sql`
+    // Record what Morley normally works — 8 hours a day, Monday to Friday,
+    // effective before the period — and Manitoba calculates.
+    const mbSchedule = randomUUID();
+    await db.execute(sql`
     insert into work_schedules (id, org_id, name, employee_party_id, pattern, cycle_days,
                                 cycle_anchor, effective_from, is_active, created_by, updated_by)
     values (${mbSchedule}, ${orgId}, 'Full time', ${manitobaId}, 'cycle', 7, '2026-01-04',
             '2026-01-01', true, ${actorId}, ${actorId})`);
-  for (const dayIndex of [1, 2, 3, 4, 5]) {
-    await db.execute(sql`
+    for (const dayIndex of [1, 2, 3, 4, 5]) {
+      await db.execute(sql`
       insert into work_schedule_days (org_id, schedule_id, day_index, hours, created_by, updated_by)
       values (${orgId}, ${mbSchedule}, ${dayIndex}, '8', ${actorId}, ${actorId})`);
-  }
-  const withSchedule = await calculatePayRun({
-    orgId, documentId: run2.documentId, actorId,
-  });
-  assert.equal(withSchedule.employees, 3, `holiday calculation refusals after recording the schedule: ${JSON.stringify(withSchedule.errors)}`);
-  assert.equal(withSchedule.errors.length, 1, "only the undeclared jurisdiction is left");
-  assert.equal(withSchedule.errors[0]!.employee, "Zed Offshore");
+    }
+    const withSchedule = await calculatePayRun({
+      orgId,
+      documentId: run2.documentId,
+      actorId,
+    });
+    assert.equal(
+      withSchedule.employees,
+      3,
+      `holiday calculation refusals after recording the schedule: ${JSON.stringify(withSchedule.errors)}`,
+    );
+    assert.equal(withSchedule.errors.length, 1, "only the undeclared jurisdiction is left");
+    assert.equal(withSchedule.errors[0]!.employee, "Zed Offshore");
 
-  // Hand-worked ESA s. 24(1)(a): regular wages in the four work weeks before
-  // the holiday's week = the committed June 7–20 stub, 80h × $30 = 2,400.00
-  // (vacation pay: none). 2,400 ÷ 20 = 120.00 for the day; no hours worked on
-  // July 1, so no premium line.
-  const statLines = (await db.execute<{ system_key: string; amount: string; gross: string; employee_party_id: string; description: string }>(sql`
+    // Hand-worked ESA s. 24(1)(a): regular wages in the four work weeks before
+    // the holiday's week = the committed June 7–20 stub, 80h × $30 = 2,400.00
+    // (vacation pay: none). 2,400 ÷ 20 = 120.00 for the day; no hours worked on
+    // July 1, so no premium line.
+    const statLines = await db.execute<{
+      system_key: string;
+      amount: string;
+      gross: string;
+      employee_party_id: string;
+      description: string;
+    }>(
+      sql`
     select c.system_key, l.amount, s.gross, s.employee_party_id, l.description
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id
       join pay_components c on c.id = l.component_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${run2.documentId}
        and c.system_key in ('stat_holiday', 'stat_holiday_premium')
-  `, "objects"));
-  assert.equal(statLines.length, 4);
-  const ontarioStat = statLines.find((r) => r.employee_party_id === ontarioId);
-  assert.ok(ontarioStat);
-  assert.equal(ontarioStat.system_key, "stat_holiday");
-  assert.equal(cmp(ontarioStat.amount, "120.00"), 0);
-  // The day's pay is IN gross, ahead of the statutory pass (phase 2).
-  assert.equal(cmp(ontarioStat.gross, add("2400.00", "120.00")), 0);
+  `,
+      "objects",
+    );
+    assert.equal(statLines.length, 4);
+    const ontarioStat = statLines.find((r) => r.employee_party_id === ontarioId);
+    assert.ok(ontarioStat);
+    assert.equal(ontarioStat.system_key, "stat_holiday");
+    assert.equal(cmp(ontarioStat.amount, "120.00"), 0);
+    // The day's pay is IN gross, ahead of the statutory pass (phase 2).
+    assert.equal(cmp(ontarioStat.gross, add("2400.00", "120.00")), 0);
 
-  const quebecStat = statLines.find((r) =>
-    r.employee_party_id === quebecId && /Canada Day/.test(r.description));
-  assert.ok(quebecStat);
-  assert.equal(quebecStat.system_key, "stat_holiday");
-  // The production caller supplied paidOnCommission=true, so Quebec uses the
-  // twelve-week commission window and divides by 60: $2,400 ÷ 60 = $40,
-  // rather than silently applying the ordinary $2,400 ÷ 20 = $120 formula.
-  assert.equal(cmp(quebecStat.amount, "40.00"), 0);
+    const quebecStat = statLines.find(
+      (r) => r.employee_party_id === quebecId && /Canada Day/.test(r.description),
+    );
+    assert.ok(quebecStat);
+    assert.equal(quebecStat.system_key, "stat_holiday");
+    // The production caller supplied paidOnCommission=true, so Quebec uses the
+    // twelve-week commission window and divides by 60: $2,400 ÷ 60 = $40,
+    // rather than silently applying the ordinary $2,400 ÷ 20 = $120 formula.
+    assert.equal(cmp(quebecStat.amount, "40.00"), 0);
 
-  // The stored employment class selects construction pay through the same native calculation.
-  await db.execute(sql`update employee_payroll_profiles set statutory_occupation_class='construction', updated_at=clock_timestamp()
+    // The stored employment class selects construction pay through the same native calculation.
+    await db.execute(sql`update employee_payroll_profiles set statutory_occupation_class='construction', updated_at=clock_timestamp()
     where org_id=${orgId} and employee_party_id=${manitobaId}`);
-  const construction = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
-  assert.equal(construction.employees, 3);
-  const constructionPay = await db.execute<{amount:string}>(sql`
+    const construction = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
+    assert.equal(construction.employees, 3);
+    const constructionPay = await db.execute<{ amount: string }>(
+      sql`
     select l.amount::text as amount from pay_stub_lines l
     join pay_stubs s on s.id=l.stub_id and s.org_id=l.org_id
     join pay_components c on c.id=l.component_id and c.org_id=l.org_id
     where s.org_id=${orgId} and s.pay_run_document_id=${run2.documentId}
-      and s.employee_party_id=${manitobaId} and c.system_key='stat_holiday'`, "objects");
-  assert.equal(constructionPay.length, 1);
-  assert.equal(cmp(constructionPay[0]!.amount, '48.00'), 0);
-  await db.execute(sql`update employee_payroll_profiles set statutory_occupation_class='general', updated_at=clock_timestamp()
+      and s.employee_party_id=${manitobaId} and c.system_key='stat_holiday'`,
+      "objects",
+    );
+    assert.equal(constructionPay.length, 1);
+    assert.equal(cmp(constructionPay[0]!.amount, "48.00"), 0);
+    await db.execute(sql`update employee_payroll_profiles set statutory_occupation_class='general', updated_at=clock_timestamp()
     where org_id=${orgId} and employee_party_id=${manitobaId}`);
 
-  // The same production entry point honours an asserted unconsented absence:
-  // Ontario's last-and-first scheduled-shift test disqualifies the holiday,
-  // while the other employees retain their supplied facts.
-  await db.transaction(async tx => {
-    const holidays = await demandingHolidays(tx, { orgId, country: 'CA', province: 'ON', labourJurisdiction: null,
-      employeeName: 'Olive Ontario', periodStart: '2026-06-21', periodEnd: '2026-07-04' });
-    for (const holiday of holidays.filter(holiday => holiday.needsAbsenceAssertion)) {
-      await recordHolidayAssertion(tx, { orgId, documentId: run2.documentId, employeePartyId: ontarioId,
-        holidayKey: holiday.key, holidayDate: holiday.date, absentWithoutConsent: true, actorId });
-    }
-  });
-  const denied = await calculatePayRun({
-    orgId,
-    documentId: run2.documentId,
-    actorId,
-
-  });
-  assert.equal(denied.employees, 3);
-  assert.equal(denied.errors.length, 1);
-  const deniedByName = new Map(denied.errors.map((e) => [e.employee, e.message]));
-  assert.equal(deniedByName.get("Zed Offshore"), blocker.detail);
-  const deniedHoliday = await db.execute<{ count: number }>(sql`
+    // The same production entry point honours an asserted unconsented absence:
+    // Ontario's last-and-first scheduled-shift test disqualifies the holiday,
+    // while the other employees retain their supplied facts.
+    await db.transaction(async (tx) => {
+      const holidays = await demandingHolidays(tx, {
+        orgId,
+        country: "CA",
+        province: "ON",
+        labourJurisdiction: null,
+        employeeName: "Olive Ontario",
+        periodStart: "2026-06-21",
+        periodEnd: "2026-07-04",
+      });
+      for (const holiday of holidays.filter((holiday) => holiday.needsAbsenceAssertion)) {
+        await recordHolidayAssertion(tx, {
+          orgId,
+          documentId: run2.documentId,
+          employeePartyId: ontarioId,
+          holidayKey: holiday.key,
+          holidayDate: holiday.date,
+          absentWithoutConsent: true,
+          actorId,
+        });
+      }
+    });
+    const denied = await calculatePayRun({
+      orgId,
+      documentId: run2.documentId,
+      actorId,
+    });
+    assert.equal(denied.employees, 3);
+    assert.equal(denied.errors.length, 1);
+    const deniedByName = new Map(denied.errors.map((e) => [e.employee, e.message]));
+    assert.equal(deniedByName.get("Zed Offshore"), blocker.detail);
+    const deniedHoliday = await db.execute<{ count: number }>(
+      sql`
     select count(*)::int as count
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and l.org_id = s.org_id
       join pay_components c on c.id = l.component_id and c.org_id = l.org_id
      where s.org_id = ${orgId} and s.pay_run_document_id = ${run2.documentId}
        and s.employee_party_id = ${ontarioId} and c.system_key = 'stat_holiday'
-  `, "objects");
-  assert.equal(Number(deniedHoliday[0]?.count ?? 0), 0);
+  `,
+      "objects",
+    );
+    assert.equal(Number(deniedHoliday[0]?.count ?? 0), 0);
 
-  // Hand-worked Manitoba s. 23(1): the wages for regular hours on a NORMAL
-  // WORKDAY — 8 scheduled hours × $30.00 = $240.00. Note what it is not: the
-  // Ontario answer for the same employee would have been the four weeks'
-  // wages ÷ 20, and the four weeks here are 40 hours (two 20-hour days) ×
-  // $30 = $1,200, which ÷ 20 is $60. The province genuinely changes the
-  // number by four times, which is why neither may stand in for the other.
-  const manitobaStat = statLines.find((r) => r.employee_party_id === manitobaId);
-  assert.ok(manitobaStat);
-  assert.equal(manitobaStat.system_key, "stat_holiday");
-  assert.equal(cmp(manitobaStat.amount, "240.00"), 0);
+    // Hand-worked Manitoba s. 23(1): the wages for regular hours on a NORMAL
+    // WORKDAY — 8 scheduled hours × $30.00 = $240.00. Note what it is not: the
+    // Ontario answer for the same employee would have been the four weeks'
+    // wages ÷ 20, and the four weeks here are 40 hours (two 20-hour days) ×
+    // $30 = $1,200, which ÷ 20 is $60. The province genuinely changes the
+    // number by four times, which is why neither may stand in for the other.
+    const manitobaStat = statLines.find((r) => r.employee_party_id === manitobaId);
+    assert.ok(manitobaStat);
+    assert.equal(manitobaStat.system_key, "stat_holiday");
+    assert.equal(cmp(manitobaStat.amount, "240.00"), 0);
 
-  // --- Feature ON with no holiday in the period: the undeclared jurisdiction
-  // calculates exactly as it always has, and readiness raises nothing.
-  await hours(ontarioId, ["2026-07-06", "2026-07-08"]);
-  await hours(manitobaId, ["2026-07-07"]);
-  await hours(outsideId, ["2026-07-07"]);
-  const run3 = await createPayRun({
-    orgId, actorId, payScheduleId: scheduleId,
-    periodStart: "2026-07-05", periodEnd: "2026-07-18",
-  });
-  const clearReadiness = await payRunReadiness(orgId, run3.documentId);
-  assert.ok(!clearReadiness.items.some((item) => item.code === "holiday.undeclaredJurisdiction"));
-  const run3Result = await calculatePayRun({ orgId, documentId: run3.documentId, actorId });
-  assert.equal(run3Result.employees, 4);
-  assert.deepEqual(run3Result.errors, []);
+    // --- Feature ON with no holiday in the period: the undeclared jurisdiction
+    // calculates exactly as it always has, and readiness raises nothing.
+    await hours(ontarioId, ["2026-07-06", "2026-07-08"]);
+    await hours(manitobaId, ["2026-07-07"]);
+    await hours(outsideId, ["2026-07-07"]);
+    const run3 = await createPayRun({
+      orgId,
+      actorId,
+      payScheduleId: scheduleId,
+      periodStart: "2026-07-05",
+      periodEnd: "2026-07-18",
+    });
+    const clearReadiness = await payRunReadiness(orgId, run3.documentId);
+    assert.ok(!clearReadiness.items.some((item) => item.code === "holiday.undeclaredJurisdiction"));
+    const run3Result = await calculatePayRun({ orgId, documentId: run3.documentId, actorId });
+    assert.equal(run3Result.employees, 4);
+    assert.deepEqual(run3Result.errors, []);
 
-  // --- Feature back OFF: run 2 recalculates byte-identical to the first pass.
-  await db.execute(sql`
+    // --- Feature back OFF: run 2 recalculates byte-identical to the first pass.
+    await db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{payroll,statutoryHolidayPay}', 'false'::jsonb)
      where id = ${orgId}`);
-  const offAgain = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
-  assert.equal(offAgain.employees, 4);
-  assert.deepEqual(offAgain.errors, []);
-  assert.equal(await snapshot(), offStubs);
-});
+    const offAgain = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
+    assert.equal(offAgain.employees, 4);
+    assert.deepEqual(offAgain.errors, []);
+    assert.equal(await snapshot(), offStubs);
+  },
+);

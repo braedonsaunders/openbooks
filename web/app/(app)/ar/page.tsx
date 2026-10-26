@@ -1,12 +1,12 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadArCockpit, arCockpitSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadArCockpit, arCockpitSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('ar')
-  return { title: t('cockpit.title') }
+  const t = await getTranslations("ar");
+  return { title: t("cockpit.title") };
 }
 
 /**
@@ -20,9 +20,9 @@ export async function generateMetadata() {
 export default async function AR({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp0 = (await searchParams) ?? {}
-  const data = await loadArCockpit()
-  return <ModuleView spec={arCockpitSpec(data)} data={data} searchParams={sp0} trusted />
+  const sp0 = (await searchParams) ?? {};
+  const data = await loadArCockpit();
+  return <ModuleView spec={arCockpitSpec(data)} data={data} searchParams={sp0} trusted />;
 }

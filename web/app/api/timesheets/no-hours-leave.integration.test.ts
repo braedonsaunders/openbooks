@@ -23,8 +23,7 @@ registerHooks({
       (specifier.endsWith("/lib/feature-gates") &&
         (context.parentURL?.includes("/api/timesheets/submit/") ||
           context.parentURL?.includes("/web/lib/api/route.ts"))) ||
-      (specifier === "./feature-gates" &&
-        context.parentURL?.endsWith("/web/lib/time-workspace.ts"))
+      (specifier === "./feature-gates" && context.parentURL?.endsWith("/web/lib/time-workspace.ts"))
     ) {
       return {
         shortCircuit: true,
@@ -47,11 +46,11 @@ registerHooks({
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { randomUUID } = await import("node:crypto");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { seedEmployment, setFeatures } = await import("@openbooks/engine/testing/hrm-harness");
-const { createLeavePolicy, fileLeaveRequest, submitLeaveRequest } = await import("@openbooks/engine/hrm/leave");
+const { createLeavePolicy, fileLeaveRequest, submitLeaveRequest } =
+  await import("@openbooks/engine/hrm/leave");
 const { loadWeek } = await import("./_lib.ts");
 const { POST: submitWeek } = await import("./submit/route.ts");
 
@@ -73,7 +72,10 @@ async function seedLeaveCover() {
   const strangerId = randomUUID();
   let strangerEmploymentId = "";
   await withBypassContext(async () => {
-    for (const [party, name] of [[employeeId, "Leave Worker"], [strangerId, "Stranger"]] as const) {
+    for (const [party, name] of [
+      [employeeId, "Leave Worker"],
+      [strangerId, "Stranger"],
+    ] as const) {
       await db.execute(sql`
         insert into parties
           (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
@@ -89,8 +91,12 @@ async function seedLeaveCover() {
     await db.execute(sql`
       update users set party_id = ${employeeId} where id = ${actorId} and org_id = ${org.orgId}
     `);
-    ({ employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: employeeId }));
-    ({ employmentId: strangerEmploymentId } = await seedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: strangerId }));
+    ({ employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, {
+      workerPartyId: employeeId,
+    }));
+    ({ employmentId: strangerEmploymentId } = await seedEmployment(org.orgId, org.subsidiaryId, {
+      workerPartyId: strangerId,
+    }));
     await setFeatures(org.orgId, { hrm: true });
     await db.execute(sql`
       insert into hrm_leave_types (id, org_id, code, name)
@@ -98,14 +104,28 @@ async function seedLeaveCover() {
     `);
   });
   await withOrgContext(org.orgId, async () => {
-    await createLeavePolicy({ orgId: org.orgId, actorId, leaveTypeId,
-      accrualRule: { kind: "unlimited" }, effectiveFrom: "2020-01-01" });
+    await createLeavePolicy({
+      orgId: org.orgId,
+      actorId,
+      leaveTypeId,
+      accrualRule: { kind: "unlimited" },
+      effectiveFrom: "2020-01-01",
+    });
     for (const [employment, startsOn, endsOn, hours] of [
       [employmentId, "2026-07-13", "2026-07-17", "40"],
       [strangerEmploymentId, "2026-07-14", "2026-07-16", "24"],
     ]) {
-      const draft = await fileLeaveRequest({ orgId: org.orgId, actorId, employmentId: employment!,
-        leaveTypeId, startsOn, endsOn, hours, onBehalf: true, reason: "Scheduled vacation" });
+      const draft = await fileLeaveRequest({
+        orgId: org.orgId,
+        actorId,
+        employmentId: employment!,
+        leaveTypeId,
+        startsOn,
+        endsOn,
+        hours,
+        onBehalf: true,
+        reason: "Scheduled vacation",
+      });
       const approved = await submitLeaveRequest({ orgId: org.orgId, actorId, requestId: draft.id });
       assert.equal(approved.status, "approved");
       if (employment === employmentId) requestId = approved.id;
@@ -118,56 +138,72 @@ async function cleanup(orgId: string) {
   await dropScratchOrg(orgId);
 }
 
-test(
-  "the loaded week names the approved leave covering it, and no one else's",
-  async () => {
-    const fixture = await seedLeaveCover();
-    state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
-    try {
-      const week = await withOrgContext(fixture.org.orgId, () =>
-        loadWeek(fixture.org.orgId, fixture.employeeId, WEEK),
-      );
-      assert.deepEqual(week.leaveCover, [
-        { requestId: fixture.requestId, leaveType: "VAC — Vacation", from: "2026-07-13", to: "2026-07-17" },
-      ]);
-    } finally {
-      await cleanup(fixture.org.orgId);
-    }
-  },
-);
+test("the loaded week names the approved leave covering it, and no one else's", async () => {
+  const fixture = await seedLeaveCover();
+  state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
+  try {
+    const week = await withOrgContext(fixture.org.orgId, () =>
+      loadWeek(fixture.org.orgId, fixture.employeeId, WEEK),
+    );
+    assert.deepEqual(week.leaveCover, [
+      {
+        requestId: fixture.requestId,
+        leaveType: "VAC — Vacation",
+        from: "2026-07-13",
+        to: "2026-07-17",
+      },
+    ]);
+  } finally {
+    await cleanup(fixture.org.orgId);
+  }
+});
 
-test(
-  "the no-hours declaration audits the covering leave for the approver",
-  async () => {
-    const fixture = await seedLeaveCover();
-    state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
-    try {
-      const res = await withOrgContext(fixture.org.orgId, () =>
-        submitWeek(
-          new Request("http://audit.local/api/timesheets/submit", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ employee: fixture.employeeId, week: WEEK, noHours: true, reason: "On vacation all week" }),
+test("the no-hours declaration audits the covering leave for the approver", async () => {
+  const fixture = await seedLeaveCover();
+  state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
+  try {
+    const res = await withOrgContext(fixture.org.orgId, () =>
+      submitWeek(
+        new Request("http://audit.local/api/timesheets/submit", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            employee: fixture.employeeId,
+            week: WEEK,
+            noHours: true,
+            reason: "On vacation all week",
           }),
-        ),
-      );
-      assert.equal(res.status, 200, await res.text());
-      const rows = await withOrgContext(fixture.org.orgId, async () => await db.execute<{ changes: unknown }>(sql`
+        }),
+      ),
+    );
+    assert.equal(res.status, 200, await res.text());
+    const rows = await withOrgContext(
+      fixture.org.orgId,
+      async () =>
+        await db.execute<{ changes: unknown }>(
+          sql`
           select changes from audit_log
            where org_id = ${fixture.org.orgId} and table_name = 'timesheet_weeks'
              and changes->>'event' = 'no_hours_declared'
-        `, "objects"));
-      assert.equal(rows.length, 1, "the declaration leaves exactly one audit row");
-      const changes = rows[0]!.changes as {
-        reason: string;
-        leaveRequests: { requestId: string; leaveType: string; from: string; to: string }[];
-      };
-      assert.equal(changes.reason, "On vacation all week");
-      assert.deepEqual(changes.leaveRequests, [
-        { requestId: fixture.requestId, leaveType: "VAC — Vacation", from: "2026-07-13", to: "2026-07-17" },
-      ]);
-    } finally {
-      await cleanup(fixture.org.orgId);
-    }
-  },
-);
+        `,
+          "objects",
+        ),
+    );
+    assert.equal(rows.length, 1, "the declaration leaves exactly one audit row");
+    const changes = rows[0]!.changes as {
+      reason: string;
+      leaveRequests: { requestId: string; leaveType: string; from: string; to: string }[];
+    };
+    assert.equal(changes.reason, "On vacation all week");
+    assert.deepEqual(changes.leaveRequests, [
+      {
+        requestId: fixture.requestId,
+        leaveType: "VAC — Vacation",
+        from: "2026-07-13",
+        to: "2026-07-17",
+      },
+    ]);
+  } finally {
+    await cleanup(fixture.org.orgId);
+  }
+});

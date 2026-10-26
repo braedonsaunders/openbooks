@@ -1,15 +1,15 @@
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { NextResponse } from 'next/server'
-import { defineRoute } from '@/lib/api/route'
-import { schedulingBoardRouteAuthority } from '@/lib/scheduling/board-route-authority'
-import { withOrgTransaction } from '@openbooks/engine/platform/db'
-import { updateSetupRecord } from '@/lib/setup/write'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { NextResponse } from "next/server";
+import { defineRoute } from "@/lib/api/route";
+import { schedulingBoardRouteAuthority } from "@/lib/scheduling/board-route-authority";
+import { withOrgTransaction } from "@openbooks/engine/platform/db";
+import { updateSetupRecord } from "@/lib/setup/write";
 
 export const PATCH = defineRoute({
-  authorize: ({ params }) => schedulingBoardRouteAuthority(params, 'manage'),
+  authorize: ({ params }) => schedulingBoardRouteAuthority(params, "manage"),
   feature: {
-    none: 'The addressed board owns its native feature and legal-entity guards.',
+    none: "The addressed board owns its native feature and legal-entity guards.",
   },
   params: z.object({ boardId: uuidString() }),
   body: z.strictObject({ showHoursColumn: z.boolean() }),
@@ -22,10 +22,10 @@ export const PATCH = defineRoute({
           permissions: authz.permissions,
           allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
         },
-        'schedule-boards',
+        "schedule-boards",
         { id: params.boardId, ...body },
       ),
-    )
-    return NextResponse.json(result.body, { status: result.status })
+    );
+    return NextResponse.json(result.body, { status: result.status });
   },
-})
+});

@@ -1,15 +1,30 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { frame, grid, page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { redirect } from 'next/navigation'
-import { can, getAuthz } from '../../../../lib/authz'
-import { accessDeniedHref } from '../../../../lib/gate-targets'
-import { listApps } from '../../../../lib/apps/store'
-import { defaultNavConfig, type NavAppOption, type OrgNavConfig } from '../../../../lib/nav/registry'
-import { reconcileNavConfig } from '@openbooks/engine/navigation'
-import { readNavigationConfig } from '../../../../lib/nav/config'
-import { navigationEditorCatalog, type NavigationEditorWorkspace } from '../../../../lib/nav/catalog'
+import { getTranslations } from "next-intl/server";
+import {
+  frame,
+  grid,
+  page,
+  pageHeader,
+  ref,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { redirect } from "next/navigation";
+import { can, getAuthz } from "../../../../lib/authz";
+import { accessDeniedHref } from "../../../../lib/gate-targets";
+import { listApps } from "../../../../lib/apps/store";
+import {
+  defaultNavConfig,
+  type NavAppOption,
+  type OrgNavConfig,
+} from "../../../../lib/nav/registry";
+import { reconcileNavConfig } from "@openbooks/engine/navigation";
+import { readNavigationConfig } from "../../../../lib/nav/config";
+import {
+  navigationEditorCatalog,
+  type NavigationEditorWorkspace,
+} from "../../../../lib/nav/catalog";
 
 /**
  * The navigation editor, split into a loader and a spec.
@@ -26,16 +41,16 @@ import { navigationEditorCatalog, type NavigationEditorWorkspace } from '../../.
  */
 
 export interface NavigationAdminData {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
-  initial: OrgNavConfig
-  apps: NavAppOption[]
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  initial: OrgNavConfig;
+  apps: NavAppOption[];
   /** Save fence token: the saved row's updated_at at load, null when no row
    *  exists yet. The editor echoes it back; a mismatch is a stale write. */
-  revision: string | null
-  localCatalog: NavigationEditorWorkspace[]
+  revision: string | null;
+  localCatalog: NavigationEditorWorkspace[];
 }
 
 export async function loadNavigationAdmin(): Promise<NavigationAdminData | null> {
@@ -43,61 +58,79 @@ export async function loadNavigationAdmin(): Promise<NavigationAdminData | null>
   // admin.nav.manage ("Customize navigation") as its key; holders of the
   // historical admin.customization.manage keep their access so existing
   // administrators lose nothing.
-  const authz = await getAuthz()
-  if (!authz) redirect('/login')
+  const authz = await getAuthz();
+  if (!authz) redirect("/login");
   // The house refusal names the primary grant (F1T-10): an editor without
   // either nav grant sees /access-denied, never a silent bounce home.
   // admin.customization.manage is the historical alternative — either admits.
-  if (!can(authz, 'admin.nav.manage') && !can(authz, 'admin.customization.manage')) {
-    redirect(accessDeniedHref({ permission: 'admin.nav.manage' }))
+  if (!can(authz, "admin.nav.manage") && !can(authz, "admin.customization.manage")) {
+    redirect(accessDeniedHref({ permission: "admin.nav.manage" }));
   }
-  const user = authz.user
-  const t = await getTranslations('admin.navigation')
-  const tHub = await getTranslations('admin.hub')
+  const user = authz.user;
+  const t = await getTranslations("admin.navigation");
+  const tHub = await getTranslations("admin.hub");
 
   const [r, apps, localCatalog] = await Promise.all([
     readNavigationConfig(user.orgId),
     listApps(user.orgId),
     navigationEditorCatalog(user.orgId),
-  ])
-  const saved = r?.config
-  const revision = r?.updated_at ? new Date(r.updated_at).toISOString() : null
+  ]);
+  const saved = r?.config;
+  const revision = r?.updated_at ? new Date(r.updated_at).toISOString() : null;
   const navApps = apps
-    .filter((app) => app.status === 'installed' && app.activeVersionId)
+    .filter((app) => app.status === "installed" && app.activeVersionId)
     .map((app) => ({
       key: app.key,
       name: app.manifest?.nav?.label?.trim() || app.name,
       iconKey: app.manifest?.nav?.icon?.trim() || app.iconKey,
-    }))
-  const config = saved?.version === 2 ? reconcileNavConfig(saved) : defaultNavConfig()
+    }));
+  const config = saved?.version === 2 ? reconcileNavConfig(saved) : defaultNavConfig();
 
   return {
-    title: t('title'),
-    description: t('description'),
-    backHref: '/admin',
-    backLabel: tHub('title'),
+    title: t("title"),
+    description: t("description"),
+    backHref: "/admin",
+    backLabel: tHub("title"),
     initial: config,
     apps: navApps,
     revision,
     localCatalog,
-  }
+  };
 }
 
-const f = ref<NavigationAdminData>()
+const f = ref<NavigationAdminData>();
 
 export function navigationAdminSpec(data: NavigationAdminData): PageSpec {
   return page({
-    route: '/admin/navigation',
+    route: "/admin/navigation",
     // The native page sits inside PageContainer (whole-body scroll, max-w-3xl
     // inner) — ListPageLayout's sticky-header chrome would nest a second shell
     // around it, so this is the analytics-hub precedent: `bare` + the exact
     // native shell as a frame.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      frame('page-container', [pageHeader({ title: f('title'), description: f('description'), back: { href: f('backHref'), label: f('backLabel') } }), grid('mt-6', [widgetBlock('nav-editor', { initial: data.initial, apps: data.apps, revision: data.revision, localCatalog: data.localCatalog })])], {
-        className: 'max-w-3xl',
-      }),
+      frame(
+        "page-container",
+        [
+          pageHeader({
+            title: f("title"),
+            description: f("description"),
+            back: { href: f("backHref"), label: f("backLabel") },
+          }),
+          grid("mt-6", [
+            widgetBlock("nav-editor", {
+              initial: data.initial,
+              apps: data.apps,
+              revision: data.revision,
+              localCatalog: data.localCatalog,
+            }),
+          ]),
+        ],
+        {
+          className: "max-w-3xl",
+        },
+      ),
     ],
-  })
+  });
 }

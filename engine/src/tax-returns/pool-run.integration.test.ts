@@ -5,7 +5,12 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { disposeAsset, reverseAssetLifecycleEvent } from "../assets/asset-lifecycle.ts";
 import { runTaxPool, TaxPoolError } from "./pool-run.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -64,7 +69,9 @@ async function seedDisposalEvent(
     values (${org.orgId}, ${assetId}, 'disposed', ${occurredOn}, ${amount}, ${actorId}, ${actorId})`);
   // The run must derive historical ownership from the dated event, not this
   // mutable present-day status (which is what a real disposal workflow sets).
-  await db.execute(sql`update fixed_assets set status = 'disposed', updated_by = ${actorId} where org_id = ${org.orgId} and id = ${assetId}`);
+  await db.execute(
+    sql`update fixed_assets set status = 'disposed', updated_by = ${actorId} where org_id = ${org.orgId} and id = ${assetId}`,
+  );
 }
 
 /** Tenant-defined pool class (e.g. a code the built-in regime doesn't ship). */
@@ -80,12 +87,7 @@ interface RunScope {
   subsidiaryId: string;
 }
 
-const runYear = (
-  scope: RunScope,
-  actorId: string,
-  regime: string,
-  taxYear: number,
-) =>
+const runYear = (scope: RunScope, actorId: string, regime: string, taxYear: number) =>
   runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, regime, taxYear, {
     yearStart: `${taxYear}-01-01`,
     yearEnd: `${taxYear}-12-31`,
@@ -104,12 +106,15 @@ type PeriodRow = {
 };
 
 const periodsFor = async (orgId: string): Promise<PeriodRow[]> =>
-  await db.execute<PeriodRow>(sql`
+  await db.execute<PeriodRow>(
+    sql`
     select pp.pool_id, pp.tax_year, pp.opening_balance::text, pp.additions::text,
            pp.allowance::text, pp.closing_balance::text, pp.recapture::text, pp.terminal_loss::text
       from tax_pool_periods pp
      where pp.org_id = ${orgId}
-     order by pp.pool_id, pp.tax_year`, "objects");
+     order by pp.pool_id, pp.tax_year`,
+    "objects",
+  );
 
 type PoolRow = {
   id: string;
@@ -118,423 +123,591 @@ type PoolRow = {
 };
 
 const poolsFor = async (orgId: string): Promise<PoolRow[]> =>
-  await db.execute<PoolRow>(sql`
+  await db.execute<PoolRow>(
+    sql`
     select id, class_code, opening_balance::text
       from tax_depreciation_pools
      where org_id = ${orgId}
-     order by class_code`, "objects");
+     order by class_code`,
+    "objects",
+  );
 
-test("unknown pool and MACRS class codes fail closed without persisting a partial run", { skip: !DB }, async () => {
-  const { org, actorId } = await seededOrg();
-  try {
-    const categoryId = await seedTaxCategory(org, "Unmapped tax asset", {
-      ca_cca_class: "tenant_typo",
-      us_macrs_class: "tenant_typo",
-    });
-    await seedAsset(org, actorId, categoryId, "10000.00", "2023-05-01");
+test(
+  "unknown pool and MACRS class codes fail closed without persisting a partial run",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await seededOrg();
+    try {
+      const categoryId = await seedTaxCategory(org, "Unmapped tax asset", {
+        ca_cca_class: "tenant_typo",
+        us_macrs_class: "tenant_typo",
+      });
+      await seedAsset(org, actorId, categoryId, "10000.00", "2023-05-01");
 
-    await assert.rejects(
-      runYear(org, actorId, "ca_cca", 2023),
-      (error: unknown) => error instanceof TaxPoolError && /unknown tax class.*tenant_typo/.test(error.message),
-    );
-    assert.equal((await periodsFor(org.orgId)).length, 0, "unknown pool class leaves no period behind");
-    assert.equal((await poolsFor(org.orgId)).length, 0, "unknown pool class leaves no pool behind");
+      await assert.rejects(
+        runYear(org, actorId, "ca_cca", 2023),
+        (error: unknown) =>
+          error instanceof TaxPoolError && /unknown tax class.*tenant_typo/.test(error.message),
+      );
+      assert.equal(
+        (await periodsFor(org.orgId)).length,
+        0,
+        "unknown pool class leaves no period behind",
+      );
+      assert.equal(
+        (await poolsFor(org.orgId)).length,
+        0,
+        "unknown pool class leaves no pool behind",
+      );
 
-    await assert.rejects(
-      runYear(org, actorId, "us_macrs", 2023),
-      (error: unknown) => error instanceof TaxPoolError && /unknown tax class.*tenant_typo/.test(error.message),
-    );
-    assert.equal((await periodsFor(org.orgId)).length, 0, "unknown MACRS class leaves no period behind");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        runYear(org, actorId, "us_macrs", 2023),
+        (error: unknown) =>
+          error instanceof TaxPoolError && /unknown tax class.*tenant_typo/.test(error.message),
+      );
+      assert.equal(
+        (await periodsFor(org.orgId)).length,
+        0,
+        "unknown MACRS class leaves no period behind",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a prior nonzero class pool cannot disappear when its category assignment is removed", { skip: !DB }, async () => {
-  const { org, actorId } = await seededOrg();
-  try {
-    const categoryId = await seedTaxCategory(org, "Open pool assignment", { ca_cca_class: "8" });
-    await seedAsset(org, actorId, categoryId, "10000.00", "2023-05-01");
-    const firstYear = await runYear(org, actorId, "ca_cca", 2023);
-    assert.equal(firstYear.lines[0]?.closingBalance === "0.00", false, "the fixture must leave a live carry-forward");
+test(
+  "a prior nonzero class pool cannot disappear when its category assignment is removed",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await seededOrg();
+    try {
+      const categoryId = await seedTaxCategory(org, "Open pool assignment", { ca_cca_class: "8" });
+      await seedAsset(org, actorId, categoryId, "10000.00", "2023-05-01");
+      const firstYear = await runYear(org, actorId, "ca_cca", 2023);
+      assert.equal(
+        firstYear.lines[0]?.closingBalance === "0.00",
+        false,
+        "the fixture must leave a live carry-forward",
+      );
 
-    await db.execute(sql`update asset_categories set tax_attributes = '{}'::jsonb where org_id = ${org.orgId} and id = ${categoryId}`);
-    await assert.rejects(
-      runYear(org, actorId, "ca_cca", 2024),
-      (error: unknown) => error instanceof TaxPoolError
-        && /class "8" has an open prior balance/.test(error.message)
-        && /restore the matching tax-class assignment/.test(error.message),
-    );
-    assert.deepEqual((await periodsFor(org.orgId)).map(({ tax_year }) => tax_year), [2023]);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await db.execute(
+        sql`update asset_categories set tax_attributes = '{}'::jsonb where org_id = ${org.orgId} and id = ${categoryId}`,
+      );
+      await assert.rejects(
+        runYear(org, actorId, "ca_cca", 2024),
+        (error: unknown) =>
+          error instanceof TaxPoolError &&
+          /class "8" has an open prior balance/.test(error.message) &&
+          /restore the matching tax-class assignment/.test(error.message),
+      );
+      assert.deepEqual(
+        (await periodsFor(org.orgId)).map(({ tax_year }) => tax_year),
+        [2023],
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("Canadian vehicle cost caps apply to additions and disposition capital cost per asset", { skip: !DB }, async () => {
-  const { org, actorId } = await seededOrg();
-  try {
-    const categoryId = await seedTaxCategory(org, "Passenger vehicle", { ca_cca_class: "10.1" });
-    const assetId = await seedAsset(org, actorId, categoryId, "60000.00", "2023-05-01");
+test(
+  "Canadian vehicle cost caps apply to additions and disposition capital cost per asset",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await seededOrg();
+    try {
+      const categoryId = await seedTaxCategory(org, "Passenger vehicle", { ca_cca_class: "10.1" });
+      const assetId = await seedAsset(org, actorId, categoryId, "60000.00", "2023-05-01");
 
-    const first = await runYear(org, actorId, "ca_cca", 2023);
-    assert.deepEqual(first.lines.map((line) => [line.classCode, line.additions, line.allowance, line.closingBalance]), [
-      ["10.1", "36000.00", "5400.00", "30600.00"],
-    ]);
+      const first = await runYear(org, actorId, "ca_cca", 2023);
+      assert.deepEqual(
+        first.lines.map((line) => [
+          line.classCode,
+          line.additions,
+          line.allowance,
+          line.closingBalance,
+        ]),
+        [["10.1", "36000.00", "5400.00", "30600.00"]],
+      );
 
-    await seedDisposalEvent(org, actorId, assetId, "2024-05-01", "60000.00");
-    const second = await runYear(org, actorId, "ca_cca", 2024);
-    assert.deepEqual(second.lines.map((line) => [line.classCode, line.dispositions, line.recapture, line.closingBalance]), [
-      ["10.1", "36000.00", "0.00", "0.00"],
-    ]);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await seedDisposalEvent(org, actorId, assetId, "2024-05-01", "60000.00");
+      const second = await runYear(org, actorId, "ca_cca", 2024);
+      assert.deepEqual(
+        second.lines.map((line) => [
+          line.classCode,
+          line.dispositions,
+          line.recapture,
+          line.closingBalance,
+        ]),
+        [["10.1", "36000.00", "0.00", "0.00"]],
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("pooled depreciation uses the asset's regime-specific class override for additions and dispositions", { skip: !DB }, async () => {
-  const { org, actorId } = await seededOrg();
-  try {
-    const categoryId = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
-    const assetId = await seedAsset(org, actorId, categoryId, "10000.00", "2023-05-01", {
-      taxDepreciation: { ca_cca: { classCode: "10" } },
-    });
+test(
+  "pooled depreciation uses the asset's regime-specific class override for additions and dispositions",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await seededOrg();
+    try {
+      const categoryId = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
+      const assetId = await seedAsset(org, actorId, categoryId, "10000.00", "2023-05-01", {
+        taxDepreciation: { ca_cca: { classCode: "10" } },
+      });
 
-    const first = await runYear(org, actorId, "ca_cca", 2023);
-    assert.deepEqual(first.lines.map((line) => [line.classCode, line.additions, line.allowance]), [
-      ["10", "10000.00", "1500.00"],
-    ]);
+      const first = await runYear(org, actorId, "ca_cca", 2023);
+      assert.deepEqual(
+        first.lines.map((line) => [line.classCode, line.additions, line.allowance]),
+        [["10", "10000.00", "1500.00"]],
+      );
 
-    await seedDisposalEvent(org, actorId, assetId, "2024-05-01", "10000.00");
-    const second = await runYear(org, actorId, "ca_cca", 2024);
-    assert.deepEqual(second.lines.map((line) => [line.classCode, line.dispositions, line.recapture]), [
-      ["10", "10000.00", "1500.00"],
-    ]);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await seedDisposalEvent(org, actorId, assetId, "2024-05-01", "10000.00");
+      const second = await runYear(org, actorId, "ca_cca", 2024);
+      assert.deepEqual(
+        second.lines.map((line) => [line.classCode, line.dispositions, line.recapture]),
+        [["10", "10000.00", "1500.00"]],
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("Canadian vehicle dispositions retain the cap effective on their acquisition date", { skip: !DB }, async () => {
-  const { org, actorId } = await seededOrg();
-  try {
-    const categoryId = await seedTaxCategory(org, "Passenger vehicle", { ca_cca_class: "10.1" });
-    const assetId = await seedAsset(org, actorId, categoryId, "60000.00", "2025-05-01");
-    const first = await runYear(org, actorId, "ca_cca", 2025);
-    assert.deepEqual(first.lines.map((line) => [line.additions, line.allowance]), [
-      ["38000.00", "5700.00"],
-    ]);
+test(
+  "Canadian vehicle dispositions retain the cap effective on their acquisition date",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await seededOrg();
+    try {
+      const categoryId = await seedTaxCategory(org, "Passenger vehicle", { ca_cca_class: "10.1" });
+      const assetId = await seedAsset(org, actorId, categoryId, "60000.00", "2025-05-01");
+      const first = await runYear(org, actorId, "ca_cca", 2025);
+      assert.deepEqual(
+        first.lines.map((line) => [line.additions, line.allowance]),
+        [["38000.00", "5700.00"]],
+      );
 
-    await seedDisposalEvent(org, actorId, assetId, "2026-05-01", "60000.00");
-    const second = await runYear(org, actorId, "ca_cca", 2026);
-    assert.deepEqual(second.lines.map((line) => [line.dispositions, line.recapture]), [
-      ["38000.00", "0.00"],
-    ]);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await seedDisposalEvent(org, actorId, assetId, "2026-05-01", "60000.00");
+      const second = await runYear(org, actorId, "ca_cca", 2026);
+      assert.deepEqual(
+        second.lines.map((line) => [line.dispositions, line.recapture]),
+        [["38000.00", "0.00"]],
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("terminal-loss ownership is evaluated at the requested year-end date", { skip: !DB }, async () => {
-  const { org, actorId } = await seededOrg();
-  try {
-    const categoryId = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
-    const assetId = await seedAsset(org, actorId, categoryId, "10000.00", "2023-05-01");
-    await runYear(org, actorId, "ca_cca", 2023);
+test(
+  "terminal-loss ownership is evaluated at the requested year-end date",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await seededOrg();
+    try {
+      const categoryId = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
+      const assetId = await seedAsset(org, actorId, categoryId, "10000.00", "2023-05-01");
+      await runYear(org, actorId, "ca_cca", 2023);
 
-    // It was still owned at 2024 year-end; only a 2025 disposal changes the
-    // current status.  A rerun of 2024 must not manufacture a terminal loss.
-    await seedDisposalEvent(org, actorId, assetId, "2025-01-01", "10000.00");
-    const result = await runYear(org, actorId, "ca_cca", 2024);
-    assert.deepEqual(result.lines.map((line) => [line.allowance, line.terminalLoss, line.closingBalance]), [
-      ["1800.00", "0.00", "7200.00"],
-    ]);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // It was still owned at 2024 year-end; only a 2025 disposal changes the
+      // current status.  A rerun of 2024 must not manufacture a terminal loss.
+      await seedDisposalEvent(org, actorId, assetId, "2025-01-01", "10000.00");
+      const result = await runYear(org, actorId, "ca_cca", 2024);
+      assert.deepEqual(
+        result.lines.map((line) => [line.allowance, line.terminalLoss, line.closingBalance]),
+        [["1800.00", "0.00", "7200.00"]],
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a failing class persists nothing — the whole year rolls back atomically", { skip: !DB }, async () => {
-  const { org, actorId } = await seededOrg();
-  try {
-    const cat8 = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
-    const cat9 = await seedTaxCategory(org, "Tenant class 9", { ca_cca_class: "9" });
-    await seedPoolClass(org, "9");
-    const scope: RunScope = org;
+test(
+  "a failing class persists nothing — the whole year rolls back atomically",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await seededOrg();
+    try {
+      const cat8 = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
+      const cat9 = await seedTaxCategory(org, "Tenant class 9", { ca_cca_class: "9" });
+      await seedPoolClass(org, "9");
+      const scope: RunScope = org;
 
-    // Baseline year computes cleanly for both classes.
-    await seedAsset(org, actorId, cat8, "10000.00", "2023-05-01");
-    await seedAsset(org, actorId, cat9, "5000.00", "2023-06-01");
-    const baseline = await runYear(scope, actorId, "ca_cca", 2023);
-    assert.deepEqual(baseline.lines.map((l) => [l.classCode, l.allowance, l.closingBalance]), [
-      ["8", "1000.00", "9000.00"],
-      ["9", "500.00", "4500.00"],
-    ]);
-    const poolsAfterBaseline = await poolsFor(org.orgId);
-    assert.equal(poolsAfterBaseline.length, 2);
+      // Baseline year computes cleanly for both classes.
+      await seedAsset(org, actorId, cat8, "10000.00", "2023-05-01");
+      await seedAsset(org, actorId, cat9, "5000.00", "2023-06-01");
+      const baseline = await runYear(scope, actorId, "ca_cca", 2023);
+      assert.deepEqual(
+        baseline.lines.map((l) => [l.classCode, l.allowance, l.closingBalance]),
+        [
+          ["8", "1000.00", "9000.00"],
+          ["9", "500.00", "4500.00"],
+        ],
+      );
+      const poolsAfterBaseline = await poolsFor(org.orgId);
+      assert.equal(poolsAfterBaseline.length, 2);
 
-    // Poison the NEXT year: class 8 stays fine, but class 9's additions sum to
-    // 16 integer digits — beyond numeric(19,4). The failure surfaces mid-persist,
-    // AFTER class 8's period and roll-forward have been staged.
-    const poison1 = await seedAsset(org, actorId, cat9, "500000000000000.0000", "2024-02-01");
-    const poison2 = await seedAsset(org, actorId, cat9, "500000000000000.0000", "2024-03-01");
-    await assert.rejects(
-      runYear(scope, actorId, "ca_cca", 2024),
-      (error: unknown) => {
+      // Poison the NEXT year: class 8 stays fine, but class 9's additions sum to
+      // 16 integer digits — beyond numeric(19,4). The failure surfaces mid-persist,
+      // AFTER class 8's period and roll-forward have been staged.
+      const poison1 = await seedAsset(org, actorId, cat9, "500000000000000.0000", "2024-02-01");
+      const poison2 = await seedAsset(org, actorId, cat9, "500000000000000.0000", "2024-03-01");
+      await assert.rejects(runYear(scope, actorId, "ca_cca", 2024), (error: unknown) => {
         const wrapped = error as { message?: string; cause?: { message?: string } };
         const text = `${wrapped.message ?? ""} ${wrapped.cause?.message ?? ""}`;
         return /numeric field overflow|out of range/i.test(text);
-      },
-    );
+      });
 
-    // Nothing from the poisoned run survived: no 2024 period anywhere, every
-    // pool still carries its 2023 closing as the roll-forward.
-    const periods = await periodsFor(org.orgId);
-    assert.equal(periods.length, 2);
-    assert.ok(periods.every((p) => p.tax_year === 2023));
-    const openings = new Map((await poolsFor(org.orgId)).map((p) => [p.class_code, p.opening_balance]));
-    assert.equal(openings.get("8"), "9000.0000");
-    assert.equal(openings.get("9"), "4500.0000");
+      // Nothing from the poisoned run survived: no 2024 period anywhere, every
+      // pool still carries its 2023 closing as the roll-forward.
+      const periods = await periodsFor(org.orgId);
+      assert.equal(periods.length, 2);
+      assert.ok(periods.every((p) => p.tax_year === 2023));
+      const openings = new Map(
+        (await poolsFor(org.orgId)).map((p) => [p.class_code, p.opening_balance]),
+      );
+      assert.equal(openings.get("8"), "9000.0000");
+      assert.equal(openings.get("9"), "4500.0000");
 
-    // Retry after removing the poison commits ONE complete year: both classes'
-    // periods chained from the untouched 2023 closings, plus their roll-forwards.
-    await db.execute(sql`delete from fixed_assets where id in (${poison1}, ${poison2})`);
-    const retry = await runYear(scope, actorId, "ca_cca", 2024);
-    assert.equal(retry.taxYear, 2024);
-    assert.deepEqual(retry.lines.map((l) => [l.classCode, l.allowance, l.closingBalance]), [
-      ["8", "1800.00", "7200.00"], // 9000 × 20%, nothing new placed in service
-      ["9", "450.00", "4050.00"], // 4500 × 10%
-    ]);
-    const afterRetry = await periodsFor(org.orgId);
-    assert.equal(afterRetry.length, 4, "two classes × two complete years");
-    const byClass = new Map(
-      (await db.execute<{ class_code: string; opening_balance: string; closing_balance: string; tax_year: number }>(sql`
+      // Retry after removing the poison commits ONE complete year: both classes'
+      // periods chained from the untouched 2023 closings, plus their roll-forwards.
+      await db.execute(sql`delete from fixed_assets where id in (${poison1}, ${poison2})`);
+      const retry = await runYear(scope, actorId, "ca_cca", 2024);
+      assert.equal(retry.taxYear, 2024);
+      assert.deepEqual(
+        retry.lines.map((l) => [l.classCode, l.allowance, l.closingBalance]),
+        [
+          ["8", "1800.00", "7200.00"], // 9000 × 20%, nothing new placed in service
+          ["9", "450.00", "4050.00"], // 4500 × 10%
+        ],
+      );
+      const afterRetry = await periodsFor(org.orgId);
+      assert.equal(afterRetry.length, 4, "two classes × two complete years");
+      const byClass = new Map(
+        (
+          await db.execute<{
+            class_code: string;
+            opening_balance: string;
+            closing_balance: string;
+            tax_year: number;
+          }>(
+            sql`
         select tp.class_code, pp.opening_balance::text, pp.closing_balance::text, pp.tax_year
           from tax_pool_periods pp
           join tax_depreciation_pools tp on tp.id = pp.pool_id and tp.org_id = pp.org_id
-         where pp.org_id = ${org.orgId} and pp.tax_year = 2024`, "objects")).map((r) => [r.class_code, r]),
-    );
-    assert.equal(byClass.get("8")!.opening_balance, "9000.0000", "retry opens from the pre-failure close");
-    assert.equal(byClass.get("9")!.opening_balance, "4500.0000");
-    const rolledForward = new Map((await poolsFor(org.orgId)).map((p) => [p.class_code, p.opening_balance]));
-    assert.equal(rolledForward.get("8"), byClass.get("8")!.closing_balance);
-    assert.equal(rolledForward.get("9"), byClass.get("9")!.closing_balance);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("concurrent runs of the same year serialize and land identical idempotent results", { skip: !DB }, async () => {
-  const { org, actorId } = await seededOrg();
-  try {
-    const cat8 = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
-    await seedAsset(org, actorId, cat8, "10000.00", "2023-05-01");
-    const scope: RunScope = org;
-
-    const [first, second] = await Promise.all([
-      runYear(scope, actorId, "ca_cca", 2023),
-      runYear(scope, actorId, "ca_cca", 2023),
-    ]);
-    assert.deepEqual(first, second);
-
-    const rows = await periodsFor(org.orgId);
-    assert.equal(rows.length, 1, "one period row per pool despite two concurrent runs");
-    assert.equal(rows[0]!.opening_balance, "0.0000");
-    assert.equal(rows[0]!.allowance, "1000.0000");
-    assert.equal(rows[0]!.closing_balance, "9000.0000");
-    const pools = await poolsFor(org.orgId);
-    assert.equal(pools.length, 1);
-    assert.equal(pools[0]!.opening_balance, rows[0]!.closing_balance, "pool carry-forward equals the committed closing");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("concurrent adjacent-year runs fence safely: chained in order, or the earlier year refused", { skip: !DB }, async () => {
-  const { org, actorId } = await seededOrg();
-  try {
-    const cat8 = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
-    await seedAsset(org, actorId, cat8, "10000.00", "2023-05-01");
-    const scope: RunScope = org;
-
-    const settled = await Promise.allSettled([
-      runYear(scope, actorId, "ca_cca", 2023),
-      runYear(scope, actorId, "ca_cca", 2024),
-    ]);
-    const fulfilled = settled.filter((s): s is PromiseFulfilledResult<Awaited<ReturnType<typeof runYear>>> => s.status === "fulfilled");
-    const rejected = settled.filter((s): s is PromiseRejectedResult => s.status === "rejected");
-
-    if (fulfilled.length === 2) {
-      // The lock ordered them ascending; the chain must be continuous.
-      const byYear = new Map(fulfilled.map((f) => [f.value.taxYear, f.value]));
-      assert.equal(byYear.get(2023)?.lines[0]?.closingBalance, "9000.00");
-      assert.equal(byYear.get(2024)?.lines[0]?.openingBalance, "9000.00", "2024 opens exactly where 2023 closed");
-      const rows = await periodsFor(org.orgId);
-      assert.deepEqual(rows.map((r) => r.tax_year), [2023, 2024]);
-      const [p23, p24] = rows as [PeriodRow, PeriodRow];
-      assert.equal(p24.opening_balance, p23.closing_balance);
-      const pools = await poolsFor(org.orgId);
-      assert.equal(pools[0]!.opening_balance, p24.closing_balance);
-    } else {
-      // 2024 won the race: 2023 must be REFUSED, never silently mis-opened
-      // from a later year's carry-forward.
-      assert.equal(rejected.length, 1);
-      assert.match(String(rejected[0]!.reason), /already computed|consecutively/);
-      assert.ok(fulfilled.every((f) => f.value.taxYear === 2024));
-      const rows = await periodsFor(org.orgId);
-      assert.deepEqual(rows.map((r) => r.tax_year), [2024], "only the winning later year is on file");
-      const pools = await poolsFor(org.orgId);
-      assert.equal(pools[0]!.opening_balance, rows[0]!.closing_balance);
+         where pp.org_id = ${org.orgId} and pp.tax_year = 2024`,
+            "objects",
+          )
+        ).map((r) => [r.class_code, r]),
+      );
+      assert.equal(
+        byClass.get("8")!.opening_balance,
+        "9000.0000",
+        "retry opens from the pre-failure close",
+      );
+      assert.equal(byClass.get("9")!.opening_balance, "4500.0000");
+      const rolledForward = new Map(
+        (await poolsFor(org.orgId)).map((p) => [p.class_code, p.opening_balance]),
+      );
+      assert.equal(rolledForward.get("8"), byClass.get("8")!.closing_balance);
+      assert.equal(rolledForward.get("9"), byClass.get("9")!.closing_balance);
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
-test("years run consecutively: restating or skipping closed years is refused with the remedy", { skip: !DB }, async () => {
-  const { org, actorId } = await seededOrg();
-  try {
-    const cat8 = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
-    await seedAsset(org, actorId, cat8, "10000.00", "2023-05-01");
-    const scope: RunScope = org;
+test(
+  "concurrent runs of the same year serialize and land identical idempotent results",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await seededOrg();
+    try {
+      const cat8 = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
+      await seedAsset(org, actorId, cat8, "10000.00", "2023-05-01");
+      const scope: RunScope = org;
 
-    await runYear(scope, actorId, "ca_cca", 2023);
+      const [first, second] = await Promise.all([
+        runYear(scope, actorId, "ca_cca", 2023),
+        runYear(scope, actorId, "ca_cca", 2023),
+      ]);
+      assert.deepEqual(first, second);
 
-    // A restated early year would invalidate the closings that build on it…
-    await assert.rejects(
-      runYear(scope, actorId, "ca_cca", 2022),
-      (error: unknown) => error instanceof TaxPoolError && /2022 cannot be run because tax year 2023 is already computed/.test(error.message),
-    );
-    // …and a skipped year would claim no allowance on the carried balance.
-    await assert.rejects(
-      runYear(scope, actorId, "ca_cca", 2026),
-      (error: unknown) => error instanceof TaxPoolError && /before tax year 2024/.test(error.message) && /consecutively/.test(error.message),
-    );
-    let rows = await periodsFor(org.orgId);
-    assert.deepEqual(rows.map((r) => r.tax_year), [2023], "refused runs leave the chain untouched");
+      const rows = await periodsFor(org.orgId);
+      assert.equal(rows.length, 1, "one period row per pool despite two concurrent runs");
+      assert.equal(rows[0]!.opening_balance, "0.0000");
+      assert.equal(rows[0]!.allowance, "1000.0000");
+      assert.equal(rows[0]!.closing_balance, "9000.0000");
+      const pools = await poolsFor(org.orgId);
+      assert.equal(pools.length, 1);
+      assert.equal(
+        pools[0]!.opening_balance,
+        rows[0]!.closing_balance,
+        "pool carry-forward equals the committed closing",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-    // The immediate successor chains from the prior close.
-    await seedAsset(org, actorId, cat8, "4000.00", "2024-02-01");
-    await runYear(scope, actorId, "ca_cca", 2024);
-    rows = await periodsFor(org.orgId);
-    assert.deepEqual(rows.map((r) => r.tax_year), [2023, 2024]);
-    assert.equal(rows[1]!.opening_balance, rows[0]!.closing_balance);
-    assert.equal(rows[1]!.additions, "4000.0000");
-    assert.equal(rows[1]!.allowance, "2200.0000"); // (9000 + 4000/2) × 20%
-    assert.equal(rows[1]!.closing_balance, "10800.0000"); // 13000 − 2200
+test(
+  "concurrent adjacent-year runs fence safely: chained in order, or the earlier year refused",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await seededOrg();
+    try {
+      const cat8 = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
+      await seedAsset(org, actorId, cat8, "10000.00", "2023-05-01");
+      const scope: RunScope = org;
 
-    // Re-running the latest year reuses ITS ORIGINAL opening even though the
-    // pool carry-forward moved on, so the recompute is faithful.
-    await seedAsset(org, actorId, cat8, "6000.00", "2024-09-01");
-    const rerun = await runYear(scope, actorId, "ca_cca", 2024);
-    rows = await periodsFor(org.orgId);
-    assert.equal(rows.length, 2, "re-running upserts rather than duplicating");
-    assert.equal(rows[1]!.opening_balance, rows[0]!.closing_balance, "original opening preserved on re-run");
-    assert.equal(rows[1]!.additions, "10000.0000");
-    assert.equal(rows[1]!.allowance, "2800.0000"); // (9000 + 10000/2) × 20%
-    assert.equal(rows[1]!.closing_balance, "16200.0000"); // 19000 − 2800
-    assert.deepEqual(rerun.lines[0], {
-      classCode: "8",
-      className: "Furniture, equipment, machinery",
-      openingBalance: "9000.00",
-      additions: "10000.00",
-      dispositions: "0.00",
-      allowance: "2800.00",
-      closingBalance: "16200.00",
-      recapture: "0.00",
-      terminalLoss: "0.00",
-    });
-    const pools = await poolsFor(org.orgId);
-    assert.equal(pools[0]!.opening_balance, "16200.0000");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const settled = await Promise.allSettled([
+        runYear(scope, actorId, "ca_cca", 2023),
+        runYear(scope, actorId, "ca_cca", 2024),
+      ]);
+      const fulfilled = settled.filter(
+        (s): s is PromiseFulfilledResult<Awaited<ReturnType<typeof runYear>>> =>
+          s.status === "fulfilled",
+      );
+      const rejected = settled.filter((s): s is PromiseRejectedResult => s.status === "rejected");
 
-test("a MACRS run with a short-year factor is refused before persisting anything", { skip: !DB }, async () => {
-  // Live-Postgres regression: runMacrs accepted shortYearFactor, STORED it on
-  // the period row, but never applied it — a half-year MACRS run claimed the
-  // full-year allowance while its own evidence said 0.5. The stateless
-  // per-year MACRS schedule cannot carry a short-year deferral forward, so a
-  // short MACRS year must fail closed instead of silently over-claiming.
-  const { org, actorId } = await seededOrg();
-  try {
-    const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
-    await seedAsset(org, actorId, cat5, "10000.00", "2023-03-15");
-    const scope: RunScope = org;
+      if (fulfilled.length === 2) {
+        // The lock ordered them ascending; the chain must be continuous.
+        const byYear = new Map(fulfilled.map((f) => [f.value.taxYear, f.value]));
+        assert.equal(byYear.get(2023)?.lines[0]?.closingBalance, "9000.00");
+        assert.equal(
+          byYear.get(2024)?.lines[0]?.openingBalance,
+          "9000.00",
+          "2024 opens exactly where 2023 closed",
+        );
+        const rows = await periodsFor(org.orgId);
+        assert.deepEqual(
+          rows.map((r) => r.tax_year),
+          [2023, 2024],
+        );
+        const [p23, p24] = rows as [PeriodRow, PeriodRow];
+        assert.equal(p24.opening_balance, p23.closing_balance);
+        const pools = await poolsFor(org.orgId);
+        assert.equal(pools[0]!.opening_balance, p24.closing_balance);
+      } else {
+        // 2024 won the race: 2023 must be REFUSED, never silently mis-opened
+        // from a later year's carry-forward.
+        assert.equal(rejected.length, 1);
+        assert.match(String(rejected[0]!.reason), /already computed|consecutively/);
+        assert.ok(fulfilled.every((f) => f.value.taxYear === 2024));
+        const rows = await periodsFor(org.orgId);
+        assert.deepEqual(
+          rows.map((r) => r.tax_year),
+          [2024],
+          "only the winning later year is on file",
+        );
+        const pools = await poolsFor(org.orgId);
+        assert.equal(pools[0]!.opening_balance, rows[0]!.closing_balance);
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-    await assert.rejects(
-      runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, "us_macrs", 2023, {
-        yearStart: "2023-01-01",
-        yearEnd: "2023-06-30",
-        shortYearFactor: "0.5",
-        actorId,
-      }),
-      (error: unknown) => error instanceof TaxPoolError && /short/i.test(error.message),
-    );
-    assert.equal((await periodsFor(org.orgId)).length, 0, "refused short MACRS year persists nothing");
-    assert.equal((await poolsFor(org.orgId)).length, 0, "refused short MACRS year creates no pool");
+test(
+  "years run consecutively: restating or skipping closed years is refused with the remedy",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await seededOrg();
+    try {
+      const cat8 = await seedTaxCategory(org, "Class 8 equipment", { ca_cca_class: "8" });
+      await seedAsset(org, actorId, cat8, "10000.00", "2023-05-01");
+      const scope: RunScope = org;
 
-    // The full-year run on the same scope still computes.
-    const full = await runYear(scope, actorId, "us_macrs", 2023);
-    assert.equal(full.lines[0]!.allowance, "2000.00");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await runYear(scope, actorId, "ca_cca", 2023);
 
-test("the MACRS model runs under the same fence: atomic years, chaining, ordering refusals", { skip: !DB }, async () => {
-  const { org, actorId } = await seededOrg();
-  try {
-    const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
-    await seedAsset(org, actorId, cat5, "10000.00", "2023-03-15");
-    const scope: RunScope = org;
+      // A restated early year would invalidate the closings that build on it…
+      await assert.rejects(
+        runYear(scope, actorId, "ca_cca", 2022),
+        (error: unknown) =>
+          error instanceof TaxPoolError &&
+          /2022 cannot be run because tax year 2023 is already computed/.test(error.message),
+      );
+      // …and a skipped year would claim no allowance on the carried balance.
+      await assert.rejects(
+        runYear(scope, actorId, "ca_cca", 2026),
+        (error: unknown) =>
+          error instanceof TaxPoolError &&
+          /before tax year 2024/.test(error.message) &&
+          /consecutively/.test(error.message),
+      );
+      let rows = await periodsFor(org.orgId);
+      assert.deepEqual(
+        rows.map((r) => r.tax_year),
+        [2023],
+        "refused runs leave the chain untouched",
+      );
 
-    const y1 = await runYear(scope, actorId, "us_macrs", 2023);
-    assert.equal(y1.lines[0]!.classCode, "gds_5");
-    assert.equal(y1.lines[0]!.allowance, "2000.00"); // half-year 200% DB on 5-year
-    assert.equal(y1.lines[0]!.closingBalance, "8000.00");
+      // The immediate successor chains from the prior close.
+      await seedAsset(org, actorId, cat8, "4000.00", "2024-02-01");
+      await runYear(scope, actorId, "ca_cca", 2024);
+      rows = await periodsFor(org.orgId);
+      assert.deepEqual(
+        rows.map((r) => r.tax_year),
+        [2023, 2024],
+      );
+      assert.equal(rows[1]!.opening_balance, rows[0]!.closing_balance);
+      assert.equal(rows[1]!.additions, "4000.0000");
+      assert.equal(rows[1]!.allowance, "2200.0000"); // (9000 + 4000/2) × 20%
+      assert.equal(rows[1]!.closing_balance, "10800.0000"); // 13000 − 2200
 
-    const y2 = await runYear(scope, actorId, "us_macrs", 2024);
-    assert.equal(y2.lines[0]!.openingBalance, "8000.00", "year two opens from the schedule's remaining basis");
-    assert.equal(y2.lines[0]!.allowance, "3200.00");
-    assert.equal(y2.lines[0]!.closingBalance, "4800.00");
+      // Re-running the latest year reuses ITS ORIGINAL opening even though the
+      // pool carry-forward moved on, so the recompute is faithful.
+      await seedAsset(org, actorId, cat8, "6000.00", "2024-09-01");
+      const rerun = await runYear(scope, actorId, "ca_cca", 2024);
+      rows = await periodsFor(org.orgId);
+      assert.equal(rows.length, 2, "re-running upserts rather than duplicating");
+      assert.equal(
+        rows[1]!.opening_balance,
+        rows[0]!.closing_balance,
+        "original opening preserved on re-run",
+      );
+      assert.equal(rows[1]!.additions, "10000.0000");
+      assert.equal(rows[1]!.allowance, "2800.0000"); // (9000 + 10000/2) × 20%
+      assert.equal(rows[1]!.closing_balance, "16200.0000"); // 19000 − 2800
+      assert.deepEqual(rerun.lines[0], {
+        classCode: "8",
+        className: "Furniture, equipment, machinery",
+        openingBalance: "9000.00",
+        additions: "10000.00",
+        dispositions: "0.00",
+        allowance: "2800.00",
+        closingBalance: "16200.00",
+        recapture: "0.00",
+        terminalLoss: "0.00",
+      });
+      const pools = await poolsFor(org.orgId);
+      assert.equal(pools[0]!.opening_balance, "16200.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-    await assert.rejects(
-      runYear(scope, actorId, "us_macrs", 2022),
-      (error: unknown) => error instanceof TaxPoolError && /2022 cannot be run because tax year 2024 is already computed/.test(error.message),
-    );
+test(
+  "a MACRS run with a short-year factor is refused before persisting anything",
+  { skip: !DB },
+  async () => {
+    // Live-Postgres regression: runMacrs accepted shortYearFactor, STORED it on
+    // the period row, but never applied it — a half-year MACRS run claimed the
+    // full-year allowance while its own evidence said 0.5. The stateless
+    // per-year MACRS schedule cannot carry a short-year deferral forward, so a
+    // short MACRS year must fail closed instead of silently over-claiming.
+    const { org, actorId } = await seededOrg();
+    try {
+      const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
+      await seedAsset(org, actorId, cat5, "10000.00", "2023-03-15");
+      const scope: RunScope = org;
 
-    const rows = await periodsFor(org.orgId);
-    assert.deepEqual(rows.map((r) => r.tax_year), [2023, 2024]);
-    assert.equal(rows[1]!.opening_balance, rows[0]!.closing_balance);
-    const pools = await poolsFor(org.orgId);
-    assert.equal(pools[0]!.opening_balance, rows[1]!.closing_balance);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        runTaxPool(scope.orgId, scope.bookId, scope.subsidiaryId, "us_macrs", 2023, {
+          yearStart: "2023-01-01",
+          yearEnd: "2023-06-30",
+          shortYearFactor: "0.5",
+          actorId,
+        }),
+        (error: unknown) => error instanceof TaxPoolError && /short/i.test(error.message),
+      );
+      assert.equal(
+        (await periodsFor(org.orgId)).length,
+        0,
+        "refused short MACRS year persists nothing",
+      );
+      assert.equal(
+        (await poolsFor(org.orgId)).length,
+        0,
+        "refused short MACRS year creates no pool",
+      );
 
-test("MACRS mid-quarter threshold uses post-Section-179 business-use basis", { skip: !DB }, async () => {
-  // IRS Publication 946 applies the 40% test to depreciable basis after
-  // Section 179/business-use limits and before bonus depreciation:
-  // https://www.irs.gov/publications/p946
-  const { org, actorId } = await seededOrg();
-  try {
-    const categoryId = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
-    await seedAsset(org, actorId, categoryId, "6000.00", "2026-10-15", {
-      taxDepreciation: { us_macrs: { section179: "2000", businessUsePercent: "50" } },
-    });
-    await seedAsset(org, actorId, categoryId, "5000.00", "2026-07-01");
+      // The full-year run on the same scope still computes.
+      const full = await runYear(scope, actorId, "us_macrs", 2023);
+      assert.equal(full.lines[0]!.allowance, "2000.00");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-    const result = await runYear(org, actorId, "us_macrs", 2026);
-    // Gross Q4 acquisition cost is 6,000 / 11,000 (>40%), but its eligible
-    // basis is 1,000 / 6,000 (<40%), so the half-year schedule applies.
-    assert.equal(result.lines[0]!.allowance, "3200.00");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "the MACRS model runs under the same fence: atomic years, chaining, ordering refusals",
+  { skip: !DB },
+  async () => {
+    const { org, actorId } = await seededOrg();
+    try {
+      const cat5 = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
+      await seedAsset(org, actorId, cat5, "10000.00", "2023-03-15");
+      const scope: RunScope = org;
+
+      const y1 = await runYear(scope, actorId, "us_macrs", 2023);
+      assert.equal(y1.lines[0]!.classCode, "gds_5");
+      assert.equal(y1.lines[0]!.allowance, "2000.00"); // half-year 200% DB on 5-year
+      assert.equal(y1.lines[0]!.closingBalance, "8000.00");
+
+      const y2 = await runYear(scope, actorId, "us_macrs", 2024);
+      assert.equal(
+        y2.lines[0]!.openingBalance,
+        "8000.00",
+        "year two opens from the schedule's remaining basis",
+      );
+      assert.equal(y2.lines[0]!.allowance, "3200.00");
+      assert.equal(y2.lines[0]!.closingBalance, "4800.00");
+
+      await assert.rejects(
+        runYear(scope, actorId, "us_macrs", 2022),
+        (error: unknown) =>
+          error instanceof TaxPoolError &&
+          /2022 cannot be run because tax year 2024 is already computed/.test(error.message),
+      );
+
+      const rows = await periodsFor(org.orgId);
+      assert.deepEqual(
+        rows.map((r) => r.tax_year),
+        [2023, 2024],
+      );
+      assert.equal(rows[1]!.opening_balance, rows[0]!.closing_balance);
+      const pools = await poolsFor(org.orgId);
+      assert.equal(pools[0]!.opening_balance, rows[1]!.closing_balance);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "MACRS mid-quarter threshold uses post-Section-179 business-use basis",
+  { skip: !DB },
+  async () => {
+    // IRS Publication 946 applies the 40% test to depreciable basis after
+    // Section 179/business-use limits and before bonus depreciation:
+    // https://www.irs.gov/publications/p946
+    const { org, actorId } = await seededOrg();
+    try {
+      const categoryId = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
+      await seedAsset(org, actorId, categoryId, "6000.00", "2026-10-15", {
+        taxDepreciation: { us_macrs: { section179: "2000", businessUsePercent: "50" } },
+      });
+      await seedAsset(org, actorId, categoryId, "5000.00", "2026-07-01");
+
+      const result = await runYear(org, actorId, "us_macrs", 2026);
+      // Gross Q4 acquisition cost is 6,000 / 11,000 (>40%), but its eligible
+      // basis is 1,000 / 6,000 (<40%), so the half-year schedule applies.
+      assert.equal(result.lines[0]!.allowance, "3200.00");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("MACRS depreciation resumes after a disposal is reversed", { skip: !DB }, async () => {
   const { org, actorId } = await seededOrg();
@@ -552,11 +725,16 @@ test("MACRS depreciation resumes after a disposal is reversed", { skip: !DB }, a
       date: org.date,
       actorId,
     });
-    const event = (await db.execute<{ id: string }>(sql`
+    const event = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from asset_events
        where org_id = ${org.orgId} and asset_id = ${assetId}
          and journal_entry_id = ${disposal.entryId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     assert.ok(event, "the lifecycle service recorded the disposal event");
     await reverseAssetLifecycleEvent(org.orgId, event.id, {
       date: org.date,

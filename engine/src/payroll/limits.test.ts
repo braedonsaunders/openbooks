@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { add, cmp, mulDecimal, mulPercent, neg, normalizeMoney, roundMoney, sum } from "../money/money.ts";
+import {
+  add,
+  cmp,
+  mulDecimal,
+  mulPercent,
+  neg,
+  normalizeMoney,
+  roundMoney,
+  sum,
+} from "../money/money.ts";
 import { PAYROLL_COUNTRY_PACKS } from "./packs.ts";
 import { resolveProtectionExemptFloors } from "./protection-classes.ts";
 import {
@@ -95,10 +104,13 @@ test("competing orders draw from one pool in priority order; the rest is a short
     ],
     base,
   );
-  assert.deepEqual(applied.map((entry) => [entry.key, entry.amount]), [
-    ["SUPPORT", "500.0000"],
-    ["CREDITOR", "250.0000"],
-  ]);
+  assert.deepEqual(
+    applied.map((entry) => [entry.key, entry.amount]),
+    [
+      ["SUPPORT", "500.0000"],
+      ["CREDITOR", "250.0000"],
+    ],
+  );
   assert.deepEqual(shortfalls, [
     {
       key: "CREDITOR",
@@ -167,11 +179,14 @@ test("a cap landing on a half-cent rounds to the employee, not the creditor", ()
 });
 
 test("disposable earnings never go negative and ignore employer accruals", () => {
-  assert.equal(disposableEarnings([
-    { kind: "earning", amount: "500.00" },
-    { kind: "deduction", amount: "900.00" },
-    { kind: "employer_contribution", amount: "60.00" },
-  ]), "0.0000");
+  assert.equal(
+    disposableEarnings([
+      { kind: "earning", amount: "500.00" },
+      { kind: "deduction", amount: "900.00" },
+      { kind: "employer_contribution", amount: "60.00" },
+    ]),
+    "0.0000",
+  );
 });
 
 test("a refundable credit grows the pool a garnishment is measured against", () => {
@@ -179,11 +194,14 @@ test("a refundable credit grows the pool a garnishment is measured against", () 
   // plus a 141.96 credit offers a 941.96 pool, not 800. Without the credit
   // arm the protection base would understate take-home wherever a pack pays
   // refundable credits through payroll.
-  assert.equal(disposableEarnings([
-    { kind: "earning", amount: "1000.00" },
-    { kind: "deduction", amount: "200.00" },
-    { kind: "credit", amount: "141.96" },
-  ]), "941.9600");
+  assert.equal(
+    disposableEarnings([
+      { kind: "earning", amount: "1000.00" },
+      { kind: "deduction", amount: "200.00" },
+      { kind: "credit", amount: "141.96" },
+    ]),
+    "941.9600",
+  );
 });
 
 test("a protected deduction is excluded from the base it is measured against", () => {
@@ -244,10 +262,11 @@ test("an hours cap on a per-hour component caps the hours themselves", () => {
 
 test("an hours-capped component without its hours is a configuration error", () => {
   assert.throws(
-    () => applyBasisCaps(
-      { basis: "percent_of_gross", value: "5", basisCapHoursPerPeriod: "40" },
-      "1000.00",
-    ),
+    () =>
+      applyBasisCaps(
+        { basis: "percent_of_gross", value: "5", basisCapHoursPerPeriod: "40" },
+        "1000.00",
+      ),
     /hours behind its basis/,
   );
 });
@@ -293,7 +312,11 @@ test("a fixed-amount component is capped directly by its money caps", () => {
 });
 
 test("a money cap converts to basis room without ever rounding past the cap", () => {
-  const component = { basis: "percent_of_gross" as const, value: "3", basisCapAmountPerPeriod: "100.00" };
+  const component = {
+    basis: "percent_of_gross" as const,
+    value: "3",
+    basisCapAmountPerPeriod: "100.00",
+  };
   const capped = applyBasisCaps(component, "9999.00");
   // 100 / 3% = 3,333.3333… — floored, so the amount lands exactly on the cap.
   assert.equal(capped, "3333.3333");
@@ -301,7 +324,11 @@ test("a money cap converts to basis room without ever rounding past the cap", ()
 
   // A cap with a sub-cent tail is truncated before the conversion, so the
   // amount can never round up through the ceiling.
-  const odd = { basis: "percent_of_gross" as const, value: "3", basisCapAmountPerPeriod: "100.0099" };
+  const odd = {
+    basis: "percent_of_gross" as const,
+    value: "3",
+    basisCapAmountPerPeriod: "100.0099",
+  };
   assert.equal(amountForBasis(odd, applyBasisCaps(odd, "9999.00")), "100.0000");
 });
 
@@ -312,7 +339,10 @@ test("hours and money caps compose on one component", () => {
     basisCapHoursPerPeriod: "40",
     basisCapAmountPerPeriod: "70.00",
   };
-  const lines = [{ hours: "44", amount: "1320.00" }, { hours: "8", amount: "360.00", exemptFromHoursCap: true }];
+  const lines = [
+    { hours: "44", amount: "1320.00" },
+    { hours: "8", amount: "360.00", exemptFromHoursCap: true },
+  ];
   // Hours cap → 1,560 of basis (78.00); the $70 period cap then binds first.
   assert.equal(applyBasisCaps(component, "1680.00", { lines }), "1400.0000");
   assert.equal(amountForBasis(component, "1400.0000"), "70.0000");
@@ -330,12 +360,12 @@ test("hours and money caps compose on one component", () => {
  * pipeline actually uses.
  */
 function runToFixpoint(input: {
-  gross: string
-  requested: string
-  percent: string
+  gross: string;
+  requested: string;
+  percent: string;
   /** Income tax on the pay left after the pre-tax order. */
-  tax: (taxable: string) => string
-  maxPasses?: number
+  tax: (taxable: string) => string;
+  maxPasses?: number;
 }): { amount: string; passes: number; settled: boolean; cap: string } | { failed: true } {
   const maxPasses = input.maxPasses ?? PROTECTION_MAX_PASSES;
   const pass = (amount: string) => {
@@ -377,7 +407,10 @@ const flatTax = (rate: string) => (taxable: string) => mulPercent(taxable, rate,
 
 test("the fast path is only for after-tax orders; a factor-F2 order iterates", () => {
   assert.equal(protectionNeedsIteration([{ taxTreatment: "none" }, {}]), false);
-  assert.equal(protectionNeedsIteration([{ taxTreatment: "none" }, { taxTreatment: "alimony" }]), true);
+  assert.equal(
+    protectionNeedsIteration([{ taxTreatment: "none" }, { taxTreatment: "alimony" }]),
+    true,
+  );
   assert.equal(protectionNeedsIteration([{ taxTreatment: "pension_f" }]), true);
 });
 
@@ -419,7 +452,10 @@ test("a pre-tax support order converges in two passes when the cap is already cl
   // Pass 1: tax on 1,764.69 = 529.41 → net 2,470.59 → cap 1,235.29.
   // Pass 2: the same input reproduces the same cap → fixed point.
   const result = runToFixpoint({
-    gross: "3000.00", requested: "1235.31", percent: "50", tax: flatTax("30"),
+    gross: "3000.00",
+    requested: "1235.31",
+    percent: "50",
+    tax: flatTax("30"),
   });
   assert.ok(!("failed" in result));
   assert.equal(result.passes, 2);
@@ -432,7 +468,10 @@ test("a pre-tax support order converges in two passes when the cap is already cl
 
 test("a pre-tax support order well above the cap still converges inside the bound", () => {
   const result = runToFixpoint({
-    gross: "3000.00", requested: "1500.00", percent: "50", tax: flatTax("30"),
+    gross: "3000.00",
+    requested: "1500.00",
+    percent: "50",
+    tax: flatTax("30"),
   });
   assert.ok(!("failed" in result));
   assert.ok(result.passes > 2, "this one takes several passes to settle");
@@ -450,7 +489,10 @@ test("a one-cent rounding cycle settles on the lower amount, not the higher", ()
   // the cap alternates 1,235.29 ⇄ 1,235.30 and never settles exactly.
   const oscillating = (taxable: string) => (cmp(taxable, "1764.705") > 0 ? "529.40" : "529.42");
   const result = runToFixpoint({
-    gross: "3000.00", requested: "1300.00", percent: "50", tax: oscillating,
+    gross: "3000.00",
+    requested: "1300.00",
+    percent: "50",
+    tax: oscillating,
   });
   assert.ok(!("failed" in result));
   assert.equal(result.settled, true);
@@ -466,7 +508,10 @@ test("a swing wider than a cent is a real failure to converge, never a number", 
   // loop must refuse rather than return whichever pass it stopped on.
   const unstable = (taxable: string) => (cmp(taxable, "1750.00") > 0 ? "500.00" : "600.00");
   const result = runToFixpoint({
-    gross: "3000.00", requested: "1300.00", percent: "50", tax: unstable,
+    gross: "3000.00",
+    requested: "1300.00",
+    percent: "50",
+    tax: unstable,
   });
   assert.deepEqual(result, { failed: true });
 });
@@ -494,10 +539,16 @@ const firstPass = (): PassLine[] => [
 test("a protection pass drops the income-assessed lines and only those", () => {
   const lines = firstPass();
   dropIncomeAssessedLines(lines);
-  assert.deepEqual(lines.map((l) => l.component), ["WCB/WSIB", "WCB/WSIB", "CPP", "EI"]);
+  assert.deepEqual(
+    lines.map((l) => l.component),
+    ["WCB/WSIB", "WCB/WSIB", "CPP", "EI"],
+  );
   // The premium's job split survives intact — re-running the allocation would
   // hand the last job the rounding remainder a second time.
-  assert.deepEqual(lines.slice(0, 2).map((l) => l.amount), ["18.00", "12.01"]);
+  assert.deepEqual(
+    lines.slice(0, 2).map((l) => l.amount),
+    ["18.00", "12.01"],
+  );
 });
 
 test("the invariant accepts earnings-assessed lines that stood still while tax moved", () => {
@@ -507,10 +558,7 @@ test("the invariant accepts earnings-assessed lines that stood still while tax m
   // income-assessed line is dropped and re-derived higher. Nothing else moves.
   dropIncomeAssessedLines(lines);
   lines.push({ component: "Income tax", amount: "347.12", assessedOn: "taxable_income" });
-  assert.equal(
-    lines.find((l) => l.component === "Income tax")!.amount,
-    "347.12",
-  );
+  assert.equal(lines.find((l) => l.component === "Income tax")!.amount, "347.12");
   assertEarningsAssessedStable(
     "Terry Worker",
     first.filter((l) => l.assessedOn === "earnings"),
@@ -596,67 +644,113 @@ test("a creditor garnishment never reaches disposable earnings below the exempt 
   assert.equal(protectionExemptFloor("7.25", "30", 26), "435.0000");
   assert.equal(protectionExemptFloor("7.25", "30", 24), "471.2500");
   assert.equal(protectionExemptFloor("7.25", "30", 12), "942.5000");
-  const take = (disposable: string) => applyDeductionProtection(
-    [{ key: "g", requested: "500", maxPercent: "25", exemptFloor: "217.50" }], disposable,
-  ).applied[0]!.amount;
-  assert.equal(take("250"), "32.5000", "$250 a week yields the $32.50 above the floor, not 25% ($62.50)");
+  const take = (disposable: string) =>
+    applyDeductionProtection(
+      [{ key: "g", requested: "500", maxPercent: "25", exemptFloor: "217.50" }],
+      disposable,
+    ).applied[0]!.amount;
+  assert.equal(
+    take("250"),
+    "32.5000",
+    "$250 a week yields the $32.50 above the floor, not 25% ($62.50)",
+  );
   assert.equal(take("200"), "0.0000", "below the floor nothing is garnished");
   assert.equal(take("1000"), "250.0000", "well above the floor the 25% binds");
 });
 
 test("a protection class the pack does not declare, or a floor wage nobody recorded, refuses by name", async () => {
   const classes = PAYROLL_COUNTRY_PACKS.US!.protectionClasses ?? [];
-  const recorded = (value: string | null) => ({
-    execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: value === null ? [] : [{ fact_value: value }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
-  }) as unknown as Parameters<typeof resolveProtectionExemptFloors>[0]["tx"];
+  const recorded = (value: string | null) =>
+    ({
+      execute: async (_query: unknown, mode?: string) =>
+        Promise.resolve({ rows: value === null ? [] : [{ fact_value: value }] }).then(
+          <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+        ),
+    }) as unknown as Parameters<typeof resolveProtectionExemptFloors>[0]["tx"];
   const input = (tx: ReturnType<typeof recorded>, protectionClass: string) => ({
-    tx, orgId: "org", subsidiaryId: "sub", country: "US", classes, payDate: "2026-07-21",
-    periodsPerYear: 26, employeeLabel: "Dana", lines: [{ description: "Card debt order", protectionClass }],
+    tx,
+    orgId: "org",
+    subsidiaryId: "sub",
+    country: "US",
+    classes,
+    payDate: "2026-07-21",
+    periodsPerYear: 26,
+    employeeLabel: "Dana",
+    lines: [{ description: "Card debt order", protectionClass }],
   });
-  assert.deepEqual(await resolveProtectionExemptFloors(input(recorded("7.25"), "us_creditor_garnishment")),
-    { us_creditor_garnishment: "435.0000" });
-  assert.deepEqual(await resolveProtectionExemptFloors(input(recorded(null), "us_support_order")), {});
-  await assert.rejects(resolveProtectionExemptFloors(input(recorded(null), "us_creditor_garnishment")),
-    /Dana: Card debt order \(Ordinary creditor garnishment\) may not reach the protected base below 30 × the minimum hourly wage for garnishment protection per week, and no minimum hourly wage for garnishment protection is recorded for 2026-07-21\. Record it in Payroll Setup → Employer facts/);
-  await assert.rejects(resolveProtectionExemptFloors(input(recorded("7.25"), "ca_family_support")),
-    /protection class "ca_family_support", which the US payroll pack does not declare \(it declares: Ordinary creditor garnishment, Child or spousal support order\)/);
+  assert.deepEqual(
+    await resolveProtectionExemptFloors(input(recorded("7.25"), "us_creditor_garnishment")),
+    { us_creditor_garnishment: "435.0000" },
+  );
+  assert.deepEqual(
+    await resolveProtectionExemptFloors(input(recorded(null), "us_support_order")),
+    {},
+  );
+  await assert.rejects(
+    resolveProtectionExemptFloors(input(recorded(null), "us_creditor_garnishment")),
+    /Dana: Card debt order \(Ordinary creditor garnishment\) may not reach the protected base below 30 × the minimum hourly wage for garnishment protection per week, and no minimum hourly wage for garnishment protection is recorded for 2026-07-21\. Record it in Payroll Setup → Employer facts/,
+  );
+  await assert.rejects(
+    resolveProtectionExemptFloors(input(recorded("7.25"), "ca_family_support")),
+    /protection class "ca_family_support", which the US payroll pack does not declare \(it declares: Ordinary creditor garnishment, Child or spousal support order\)/,
+  );
 });
 
-test('explicit currency quanta preserve payable cap room while legacy callers retain whole-cent ceilings', () => {
-  const component = { basis: 'fixed_amount' as const, basisCapAmountPerYear: '130.0099' };
-  const expected = ['29.0000', '29.8000', '29.8800', '29.8860', '29.8865'];
+test("explicit currency quanta preserve payable cap room while legacy callers retain whole-cent ceilings", () => {
+  const component = { basis: "fixed_amount" as const, basisCapAmountPerYear: "130.0099" };
+  const expected = ["29.0000", "29.8000", "29.8800", "29.8860", "29.8865"];
   for (let currencyMinorUnits = 0; currencyMinorUnits <= 4; currencyMinorUnits++) {
-    assert.equal(applyBasisCaps(component, '100', { yearToDate: '100.1234', currencyMinorUnits }), expected[currencyMinorUnits]);
+    assert.equal(
+      applyBasisCaps(component, "100", { yearToDate: "100.1234", currencyMinorUnits }),
+      expected[currencyMinorUnits],
+    );
   }
-  assert.equal(applyBasisCaps(component, '100', { yearToDate: '100.1234' }), '29.8800');
+  assert.equal(applyBasisCaps(component, "100", { yearToDate: "100.1234" }), "29.8800");
 });
 
-test('invalid explicit payable precision refuses before zero-rate or unconfigured-cap work', () => {
+test("invalid explicit payable precision refuses before zero-rate or unconfigured-cap work", () => {
   for (const currencyMinorUnits of [null, undefined, -1, 5, NaN, 1.5]) {
-    for (const component of [{ basis: 'fixed_amount' as const }, { basis: 'per_hour' as const, value: '0' }]) {
-      assert.throws(() => applyBasisCaps(component, '100', {
-        currencyMinorUnits: currencyMinorUnits as number,
-      }), /money cap needs supported currency precision.*registered payable quantum/);
+    for (const component of [
+      { basis: "fixed_amount" as const },
+      { basis: "per_hour" as const, value: "0" },
+    ]) {
+      assert.throws(
+        () =>
+          applyBasisCaps(component, "100", {
+            currencyMinorUnits: currencyMinorUnits as number,
+          }),
+        /money cap needs supported currency precision.*registered payable quantum/,
+      );
     }
   }
 });
 
-test('exact rate inversion respects the tighter period or annual room at every supported payable quantum', () => {
+test("exact rate inversion respects the tighter period or annual room at every supported payable quantum", () => {
   for (const currencyMinorUnits of [0, 3, 4]) {
-    for (const basis of ['per_hour', 'percent_of_gross'] as const) {
-      for (const value of ['0.1234567891', '7.3333333333', '987654.3219876543']) {
-        for (const tighter of ['period', 'year'] as const) {
-          const periodRoom = tighter === 'period' ? '29.8865' : '49.8765';
-          const yearRoom = tighter === 'year' ? '29.8865' : '49.8765';
-          const component = { basis, value, basisCapAmountPerPeriod: add('70.1234', periodRoom),
-            basisCapAmountPerYear: add('900.0123', yearRoom) };
-          const capped = applyBasisCaps(component, '99999999', {
-            periodToDate: '70.1234', yearToDate: '900.0123', currencyMinorUnits,
+    for (const basis of ["per_hour", "percent_of_gross"] as const) {
+      for (const value of ["0.1234567891", "7.3333333333", "987654.3219876543"]) {
+        for (const tighter of ["period", "year"] as const) {
+          const periodRoom = tighter === "period" ? "29.8865" : "49.8765";
+          const yearRoom = tighter === "year" ? "29.8865" : "49.8765";
+          const component = {
+            basis,
+            value,
+            basisCapAmountPerPeriod: add("70.1234", periodRoom),
+            basisCapAmountPerYear: add("900.0123", yearRoom),
+          };
+          const capped = applyBasisCaps(component, "99999999", {
+            periodToDate: "70.1234",
+            yearToDate: "900.0123",
+            currencyMinorUnits,
           });
-          const payable = basis === 'per_hour' ? roundMoney(mulDecimal(capped, value), currencyMinorUnits)
-            : mulPercent(capped, value, currencyMinorUnits);
-          assert.ok(cmp(payable, periodRoom) <= 0 && cmp(payable, yearRoom) <= 0,
-            `${basis} at ${value}, precision ${currencyMinorUnits}, and tighter ${tighter} cap paid ${payable} above remaining room`);
+          const payable =
+            basis === "per_hour"
+              ? roundMoney(mulDecimal(capped, value), currencyMinorUnits)
+              : mulPercent(capped, value, currencyMinorUnits);
+          assert.ok(
+            cmp(payable, periodRoom) <= 0 && cmp(payable, yearRoom) <= 0,
+            `${basis} at ${value}, precision ${currencyMinorUnits}, and tighter ${tighter} cap paid ${payable} above remaining room`,
+          );
         }
       }
     }

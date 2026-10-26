@@ -30,8 +30,7 @@ export const REFERENCE_DUPLICATE_KINDS = ["vendor_bill", "vendor_credit"] as con
 export const PARTY_DATE_TOTAL_DUPLICATE_KINDS = ["customer_invoice"] as const;
 
 export type DuplicateProbeKind =
-  | (typeof REFERENCE_DUPLICATE_KINDS)[number]
-  | (typeof PARTY_DATE_TOTAL_DUPLICATE_KINDS)[number];
+  (typeof REFERENCE_DUPLICATE_KINDS)[number] | (typeof PARTY_DATE_TOTAL_DUPLICATE_KINDS)[number];
 
 export type DuplicateReason = "reference" | "party_date_total";
 
@@ -45,7 +44,9 @@ export interface PossibleDuplicate {
   reason: DuplicateReason;
 }
 
-export function isReferenceDuplicateKind(kind: string): kind is (typeof REFERENCE_DUPLICATE_KINDS)[number] {
+export function isReferenceDuplicateKind(
+  kind: string,
+): kind is (typeof REFERENCE_DUPLICATE_KINDS)[number] {
   return (REFERENCE_DUPLICATE_KINDS as readonly string[]).includes(kind);
 }
 
@@ -88,7 +89,8 @@ export async function findPossibleDuplicateDocuments(
     reason = "party_date_total";
     match = sql`and d.document_date = ${input.documentDate}::date and d.total = ${input.total}::numeric`;
   }
-  const rows = await exec.execute<Omit<PossibleDuplicate, "reason">>(sql`
+  const rows = await exec.execute<Omit<PossibleDuplicate, "reason">>(
+    sql`
     select d.id, d.document_number as "documentNumber", d.document_date::text as "documentDate",
            d.total::text as total, d.status, d.reference_number as "referenceNumber"
       from documents d
@@ -99,6 +101,8 @@ export async function findPossibleDuplicateDocuments(
        ${input.excludeId ? sql`and d.id <> ${input.excludeId}::uuid` : sql``}
        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
      order by d.document_date desc, d.created_at desc, d.id
-     limit 5`, 'objects');
+     limit 5`,
+    "objects",
+  );
   return rows.map((row) => ({ ...row, reason }));
 }

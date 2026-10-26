@@ -32,9 +32,14 @@ interface CliArgs {
 
 function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
-    targets: [], sample: 25, timeoutSecs: 240,
-    reportDir: "", unitOnly: false, listTargets: false,
-    writeCheckedIn: false, maxPerOperator: undefined,
+    targets: [],
+    sample: 25,
+    timeoutSecs: 240,
+    reportDir: "",
+    unitOnly: false,
+    listTargets: false,
+    writeCheckedIn: false,
+    maxPerOperator: undefined,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]!;
@@ -54,7 +59,8 @@ function parseArgs(argv: string[]): CliArgs {
     else if (arg === "--max-per-operator") args.maxPerOperator = Number(next());
     else throw new Error(`unknown flag: ${arg}`);
   }
-  if (!Number.isSafeInteger(args.sample) || args.sample < 0) throw new Error("--sample must be a non-negative integer");
+  if (!Number.isSafeInteger(args.sample) || args.sample < 0)
+    throw new Error("--sample must be a non-negative integer");
   if (!Number.isSafeInteger(args.timeoutSecs) || args.timeoutSecs <= 0) {
     throw new Error("--timeout-secs must be a positive integer");
   }
@@ -71,8 +77,12 @@ function renderMarkdown(report: MutationReport): string {
   lines.push("# Mutation report");
   lines.push("");
   lines.push(`- at: ${report.at}`);
-  lines.push(`- git: ${report.gitSha ?? "unknown"}${report.dirtyTargets.length > 0 ? ` (dirty: ${report.dirtyTargets.join(", ")})` : ""}`);
-  lines.push(`- mode: ${report.mode} (sample ${report.sample}/target, timeout ${report.timeoutSecs}s)`);
+  lines.push(
+    `- git: ${report.gitSha ?? "unknown"}${report.dirtyTargets.length > 0 ? ` (dirty: ${report.dirtyTargets.join(", ")})` : ""}`,
+  );
+  lines.push(
+    `- mode: ${report.mode} (sample ${report.sample}/target, timeout ${report.timeoutSecs}s)`,
+  );
   lines.push("");
   lines.push("| target | status | score | killed | survived | timed-out | skipped | error |");
   lines.push("| --- | --- | --- | --- | --- | --- | --- | --- |");
@@ -166,7 +176,12 @@ export function toCheckedInReport(report: MutationReport): CheckedInReport {
       topSurvivors: t.mutants
         .filter((m) => m.status === "survived")
         .slice(0, 5)
-        .map((m) => ({ key: m.key, line: m.line, operator: m.operator, description: m.description })),
+        .map((m) => ({
+          key: m.key,
+          line: m.line,
+          operator: m.operator,
+          description: m.description,
+        })),
     })),
   };
 }
@@ -185,7 +200,9 @@ async function main(): Promise<void> {
   );
   if (selected.length === 0) throw new Error("no targets selected");
   const useDb = !args.unitOnly && Boolean(process.env.OPENBOOKS_DB_URL);
-  console.log(`mutation run: ${selected.length} target(s), sample=${args.sample}, timeout=${args.timeoutSecs}s, mode=${useDb ? "db" : "unit"}`);
+  console.log(
+    `mutation run: ${selected.length} target(s), sample=${args.sample}, timeout=${args.timeoutSecs}s, mode=${useDb ? "db" : "unit"}`,
+  );
   const report = await runMutationTargets({
     repoRoot: REPO_ROOT,
     targets: selected,
@@ -202,9 +219,18 @@ async function main(): Promise<void> {
   console.log(`\nreport written: ${join(dir, "mutation-report.json")}`);
   console.log(renderMarkdown(report).split("\n").slice(0, 8).join("\n"));
   if (args.writeCheckedIn) {
-    const checkedIn = join(REPO_ROOT, "engine", "src", "harness", "mutation", "mutation-report.json");
+    const checkedIn = join(
+      REPO_ROOT,
+      "engine",
+      "src",
+      "harness",
+      "mutation",
+      "mutation-report.json",
+    );
     const fresh = toCheckedInReport(report);
-    const floors = readRatifiedFloors(join(REPO_ROOT, "engine", "src", "harness", "mutation", "mutation-floor.json"));
+    const floors = readRatifiedFloors(
+      join(REPO_ROOT, "engine", "src", "harness", "mutation", "mutation-floor.json"),
+    );
     const refusals = checkedInPublishRefusals(fresh, config.targets, floors.floors);
     if (refusals.length > 0) {
       for (const line of refusals) console.error(`REFUSAL: ${line}`);
@@ -231,7 +257,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export interface RatifiedFloors {
   readonly version: 1;
-  readonly floors: Record<string, { readonly ratio: number; readonly measured: number; readonly mode: string }>;
+  readonly floors: Record<
+    string,
+    { readonly ratio: number; readonly measured: number; readonly mode: string }
+  >;
 }
 
 /**
@@ -244,16 +273,26 @@ export function readRatifiedFloors(path: string): RatifiedFloors {
   try {
     parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
   } catch (error) {
-    throw new Error(`ratified floors at ${path} cannot be read — refusing publish: ${String(error)}`);
+    throw new Error(
+      `ratified floors at ${path} cannot be read — refusing publish: ${String(error)}`,
+    );
   }
   if (!isRecord(parsed) || parsed.version !== 1 || !isRecord(parsed.floors)) {
     throw new Error(`ratified floors at ${path} are malformed — refusing publish`);
   }
   const floors: RatifiedFloors["floors"] = {};
   for (const [key, value] of Object.entries(parsed.floors)) {
-    if (!isRecord(value) || typeof value.ratio !== "number" || !Number.isFinite(value.ratio) || value.ratio < 0 || value.ratio > 1
-      || typeof value.measured !== "number" || !Number.isSafeInteger(value.measured) || value.measured < 0
-      || (value.mode !== "unit" && value.mode !== "db")) {
+    if (
+      !isRecord(value) ||
+      typeof value.ratio !== "number" ||
+      !Number.isFinite(value.ratio) ||
+      value.ratio < 0 ||
+      value.ratio > 1 ||
+      typeof value.measured !== "number" ||
+      !Number.isSafeInteger(value.measured) ||
+      value.measured < 0 ||
+      (value.mode !== "unit" && value.mode !== "db")
+    ) {
       throw new Error(`ratified floor for ${key} is malformed — refusing publish`);
     }
     floors[key] = { ratio: value.ratio, measured: value.measured, mode: value.mode };
@@ -312,11 +351,15 @@ export function checkedInPublishRefusals(
   for (const entry of fresh.targets) {
     const target = configuredByPath.get(entry.target);
     if (entry.status === "baseline-failed") {
-      refusals.push(`${entry.target}: baseline failed — the harness cannot measure it; fix the baseline and re-run`);
+      refusals.push(
+        `${entry.target}: baseline failed — the harness cannot measure it; fix the baseline and re-run`,
+      );
       continue;
     }
     if (entry.status === "no-mutants") {
-      refusals.push(`${entry.target}: zero mutants generated — operators cover nothing; fix generation and re-run`);
+      refusals.push(
+        `${entry.target}: zero mutants generated — operators cover nothing; fix generation and re-run`,
+      );
       continue;
     }
     if (entry.measured <= 0 || entry.ratio === null) {

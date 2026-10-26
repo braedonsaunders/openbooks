@@ -1,23 +1,22 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
-const { stubModules } = await import('../../../testing/stub-modules')
+const { stubModules } = await import("../../../testing/stub-modules");
 stubModules({
-  navigation:
-    `export function usePathname(){return '/reports/pnl'}export function useSearchParams(){return new URLSearchParams()}export function useRouter(){return {}}`,
+  navigation: `export function usePathname(){return '/reports/pnl'}export function useSearchParams(){return new URLSearchParams()}export function useRouter(){return {}}`,
   intl: false,
   authz: false,
   features: false,
-})
+});
 
-const React = await import('react')
+const React = await import("react");
 // Classic-JSX fallback: the shared tsx cache can serve a classic transform,
 // which resolves bare React from the global scope, not the module scope.
-Object.assign(globalThis, { React })
-const { renderToString } = await import('react-dom/server')
-const { NextIntlClientProvider } = await import('next-intl')
-const { MoneyProvider } = await import('../../../components/money-provider')
-const { StatementMatrixTable } = await import('./StatementMatrixTable')
+Object.assign(globalThis, { React });
+const { renderToString } = await import("react-dom/server");
+const { NextIntlClientProvider } = await import("next-intl");
+const { MoneyProvider } = await import("../../../components/money-provider");
+const { StatementMatrixTable } = await import("./StatementMatrixTable");
 
 // at 390px the amount cells clipped mid-number past the viewport
 // with no reachable scroll. The table must render inside a real horizontal
@@ -30,8 +29,8 @@ function matrixHtml(): string {
       messages={{
         reports: {
           filterBar: {
-            expandSection: 'Expand {section}',
-            collapseSection: 'Collapse {section}',
+            expandSection: "Expand {section}",
+            collapseSection: "Collapse {section}",
           },
         },
       }}
@@ -40,28 +39,39 @@ function matrixHtml(): string {
         <StatementMatrixTable
           currency="USD"
           view={{
-            columns: [{ key: 'current', label: '2026', kind: 'amount' }],
+            columns: [{ key: "current", label: "2026", kind: "amount" }],
             lines: [
-              { kind: 'section', label: 'Assets', depth: 0 },
-              { kind: 'account', label: 'Cash', depth: 1, values: ['1234.5600'] },
+              { kind: "section", label: "Assets", depth: 0 },
+              { kind: "account", label: "Cash", depth: 1, values: ["1234.5600"] },
             ],
             truncated: false,
             hasVariance: false,
-            mode: 'balance',
+            mode: "balance",
           }}
         />
       </MoneyProvider>
     </NextIntlClientProvider>,
-  )
+  );
 }
 
-test('statement amounts render inside a reachable horizontal scroll container at phone widths', () => {
-  const html = matrixHtml()
-  const scroller = html.match(/<div class="([^"]*)"><table/)
-  assert.ok(scroller, 'the statement table must render inside a scroll container')
-  assert.match(scroller[1]!, /overflow-x-auto/, 'the container must scroll horizontally instead of spilling past the viewport')
-  assert.match(scroller[1]!, /min-w-0/, 'the container must be shrinkable so flex ancestors cannot stretch it past the viewport')
-  const table = html.slice(html.indexOf('<table'))
-  assert.ok(table.includes('Cash'), 'the account label must render inside the scroll container')
-  assert.ok(table.includes('1,234.56'), 'the exact amount 1234.56 USD must render in full inside the scroll container')
-})
+test("statement amounts render inside a reachable horizontal scroll container at phone widths", () => {
+  const html = matrixHtml();
+  const scroller = html.match(/<div class="([^"]*)"><table/);
+  assert.ok(scroller, "the statement table must render inside a scroll container");
+  assert.match(
+    scroller[1]!,
+    /overflow-x-auto/,
+    "the container must scroll horizontally instead of spilling past the viewport",
+  );
+  assert.match(
+    scroller[1]!,
+    /min-w-0/,
+    "the container must be shrinkable so flex ancestors cannot stretch it past the viewport",
+  );
+  const table = html.slice(html.indexOf("<table"));
+  assert.ok(table.includes("Cash"), "the account label must render inside the scroll container");
+  assert.ok(
+    table.includes("1,234.56"),
+    "the exact amount 1234.56 USD must render in full inside the scroll container",
+  );
+});

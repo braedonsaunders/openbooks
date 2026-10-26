@@ -1,34 +1,34 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Play, Plus, Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { CodeEditor } from '@/components/code-editor'
-import { Badge, Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
-import { dateTime } from '../../../../lib/format'
-import { ApiResponseError, apiJson } from '@/lib/api-error'
-import { confirmDialog } from '@/lib/confirm'
-import { BUILT_IN_SCRIPT_KINDS, customRecordKind } from '../../../../lib/script-kinds'
-import type { ScriptDetailRow, ScriptRunRow } from './view'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Play, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { CodeEditor } from "@/components/code-editor";
+import { Badge, Button, Input, Label, Select, UrlDrawer, cn } from "@openbooks/ui";
+import { dateTime } from "../../../../lib/format";
+import { ApiResponseError, apiJson } from "@/lib/api-error";
+import { confirmDialog } from "@/lib/confirm";
+import { BUILT_IN_SCRIPT_KINDS, customRecordKind } from "../../../../lib/script-kinds";
+import type { ScriptDetailRow, ScriptRunRow } from "./view";
 
 // Enum values with their message keys under admin.scripts, translated at render.
 const TRIGGERS: { value: string; labelKey: string }[] = [
-  { value: 'before_submit', labelKey: 'triggers.beforeSubmit' },
-  { value: 'before_post', labelKey: 'triggers.beforePost' },
-  { value: 'after_post', labelKey: 'triggers.afterPost' },
-  { value: 'before_void', labelKey: 'triggers.beforeVoid' },
-  { value: 'custom_gl_lines', labelKey: 'triggers.customGlLines' },
-  { value: 'scheduled', labelKey: 'triggers.scheduled' },
-  { value: 'endpoint', labelKey: 'triggers.endpoint' },
-  { value: 'bulk', labelKey: 'triggers.bulk' },
-  { value: 'client', labelKey: 'triggers.client' },
-]
+  { value: "before_submit", labelKey: "triggers.beforeSubmit" },
+  { value: "before_post", labelKey: "triggers.beforePost" },
+  { value: "after_post", labelKey: "triggers.afterPost" },
+  { value: "before_void", labelKey: "triggers.beforeVoid" },
+  { value: "custom_gl_lines", labelKey: "triggers.customGlLines" },
+  { value: "scheduled", labelKey: "triggers.scheduled" },
+  { value: "endpoint", labelKey: "triggers.endpoint" },
+  { value: "bulk", labelKey: "triggers.bulk" },
+  { value: "client", labelKey: "triggers.client" },
+];
 
-const RUN_STATUSES = new Set(['ok', 'aborted', 'error', 'timeout'])
-const TABS = ['general', 'code', 'runs', 'log'] as const
-type Tab = (typeof TABS)[number]
+const RUN_STATUSES = new Set(["ok", "aborted", "error", "timeout"]);
+const TABS = ["general", "code", "runs", "log"] as const;
+type Tab = (typeof TABS)[number];
 
 const SCRIPT_MONEY_HELPERS = `// Exact numeric(19,4) helpers for money strings returned by the API/ob.query.
 function _obMoneyUnits(value) {
@@ -52,7 +52,7 @@ function moneyCompare(left, right) {
 function moneyAdd(left, right) {
   return _obMoneyText(_obMoneyUnits(left) + _obMoneyUnits(right))
 }
-`
+`;
 
 const TEMPLATE = `// ctx = { trigger, document?, lines?, org, user? } — deep-frozen.
 // ob.log(...) records to the run log; ob.abort('reason') vetoes.
@@ -68,7 +68,7 @@ function main(ctx) {
     ob.abort('documents over $10,000 need a memo')
   }
 }
-`
+`;
 
 const SCHEDULED_TEMPLATE = `// Scheduled script — runs on a cron schedule, no document context.
 // ctx = { trigger: 'scheduled', org } — deep-frozen.
@@ -83,7 +83,7 @@ function main(ctx) {
     ob.log('large unpaid bill:', b.document_number, b.total)
   })
 }
-`
+`;
 
 const ENDPOINT_TEMPLATE = `// Endpoint script — HTTP-invokable: POST /api/scripts/e/<slug>
 // Not tied to any record. ctx = { trigger: 'endpoint', request: { method, query, body }, org, user }
@@ -92,7 +92,7 @@ function main(ctx) {
   ob.log('called by', ctx.user.name, 'method', ctx.request.method)
   return { echo: ctx.request.body, at: ctx.org.name }
 }
-`
+`;
 
 const BULK_TEMPLATE = `// Bulk script — long-budget background job (30s deadline), run on the worker
 // via the scripts queue ("Run now" enqueues it; inline fallback without Redis).
@@ -106,7 +106,7 @@ function main(ctx) {
   ob.log('processed', rows.length, 'bills; total', total)
   return { processed: rows.length, total: total }
 }
-`
+`;
 
 const CLIENT_TEMPLATE = `// Client script — runs in the user's browser inside a sandboxed iframe
 // (never in the host page) when a form is saved. Works for transactions AND
@@ -121,7 +121,7 @@ function main(ctx) {
   }
   return { warnings: [] }
 }
-`
+`;
 
 const CUSTOM_GL_LINES_TEMPLATE = `// Custom GL lines — extra balanced lines on the document's own journal entry.
 // ctx = { trigger: 'custom_gl_lines', document, lines, kernelLines (frozen), org, user }
@@ -134,7 +134,7 @@ function main(ctx) {
   ob.log('posting', ctx.document.documentNumber, 'total', total)
   return { lines: [] }
 }
-`
+`;
 
 const TEMPLATE_BY_TRIGGER: Record<string, string> = {
   custom_gl_lines: CUSTOM_GL_LINES_TEMPLATE,
@@ -142,17 +142,25 @@ const TEMPLATE_BY_TRIGGER: Record<string, string> = {
   endpoint: ENDPOINT_TEMPLATE,
   bulk: BULK_TEMPLATE,
   client: CLIENT_TEMPLATE,
-}
-const ALL_TEMPLATES = new Set([TEMPLATE, CUSTOM_GL_LINES_TEMPLATE, SCHEDULED_TEMPLATE, ENDPOINT_TEMPLATE, BULK_TEMPLATE, CLIENT_TEMPLATE, ''])
+};
+const ALL_TEMPLATES = new Set([
+  TEMPLATE,
+  CUSTOM_GL_LINES_TEMPLATE,
+  SCHEDULED_TEMPLATE,
+  ENDPOINT_TEMPLATE,
+  BULK_TEMPLATE,
+  CLIENT_TEMPLATE,
+  "",
+]);
 
 export function NewScriptButton() {
-  const t = useTranslations('admin.scripts')
-  const router = useRouter()
+  const t = useTranslations("admin.scripts");
+  const router = useRouter();
   return (
-    <Button onClick={() => router.push('/admin/scripts?script=new')}>
-      <Plus size={15} /> {t('drawer.newScript')}
+    <Button onClick={() => router.push("/admin/scripts?script=new")}>
+      <Plus size={15} /> {t("drawer.newScript")}
     </Button>
-  )
+  );
 }
 
 export function ScriptDrawer({
@@ -160,82 +168,86 @@ export function ScriptDrawer({
   runs,
   customTypes,
 }: {
-  script: ScriptDetailRow | null
-  runs: ScriptRunRow[]
+  script: ScriptDetailRow | null;
+  runs: ScriptRunRow[];
   /** Published custom record types (for kind narrowing): { key, name }. */
-  customTypes: { key: string; name: string }[]
+  customTypes: { key: string; name: string }[];
 }) {
-  const t = useTranslations('admin.scripts')
-  const tCommon = useTranslations('common')
-  const creating = !script
-  const router = useRouter()
-  const [tab, setTab] = useState<Tab>(creating ? 'general' : 'code')
-  const [name, setName] = useState<string>(script?.name ?? '')
-  const [triggerPoint, setTriggerPoint] = useState<string>(script?.trigger_point ?? 'before_post')
-  const [documentKind, setDocumentKind] = useState<string>(script?.document_kind ?? '')
-  const [endpointSlug, setEndpointSlug] = useState<string>(script?.endpoint_slug ?? '')
-  const [source, setSource] = useState<string>(script?.source ?? TEMPLATE)
-  const [cron, setCron] = useState<string>(script?.cron ?? '0 * * * *')
-  const [timeoutMs, setTimeoutMs] = useState<string>(String(script?.timeout_ms ?? 2000))
-  const [sortOrder, setSortOrder] = useState<string>(String(script?.sort_order ?? 100))
-  const [isActive, setIsActive] = useState<boolean>(script?.is_active ?? true)
-  const [busy, setBusy] = useState(false)
-  const [running, setRunning] = useState(false)
-  const [selectedRun, setSelectedRun] = useState<number>(0)
+  const t = useTranslations("admin.scripts");
+  const tCommon = useTranslations("common");
+  const creating = !script;
+  const router = useRouter();
+  const [tab, setTab] = useState<Tab>(creating ? "general" : "code");
+  const [name, setName] = useState<string>(script?.name ?? "");
+  const [triggerPoint, setTriggerPoint] = useState<string>(script?.trigger_point ?? "before_post");
+  const [documentKind, setDocumentKind] = useState<string>(script?.document_kind ?? "");
+  const [endpointSlug, setEndpointSlug] = useState<string>(script?.endpoint_slug ?? "");
+  const [source, setSource] = useState<string>(script?.source ?? TEMPLATE);
+  const [cron, setCron] = useState<string>(script?.cron ?? "0 * * * *");
+  const [timeoutMs, setTimeoutMs] = useState<string>(String(script?.timeout_ms ?? 2000));
+  const [sortOrder, setSortOrder] = useState<string>(String(script?.sort_order ?? 100));
+  const [isActive, setIsActive] = useState<boolean>(script?.is_active ?? true);
+  const [busy, setBusy] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [selectedRun, setSelectedRun] = useState<number>(0);
 
-  const isScheduled = triggerPoint === 'scheduled'
-  const isEndpoint = triggerPoint === 'endpoint'
-  const endpointUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/api/scripts/e/${endpointSlug.trim()}`
-  const isBulk = triggerPoint === 'bulk'
+  const isScheduled = triggerPoint === "scheduled";
+  const isEndpoint = triggerPoint === "endpoint";
+  const endpointUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/api/scripts/e/${endpointSlug.trim()}`;
+  const isBulk = triggerPoint === "bulk";
   // Record narrowing applies to lifecycle triggers and client scripts;
   // endpoint/bulk/scheduled scripts aren't tied to a record at all.
-  const hasDocKind = !isScheduled && !isEndpoint && !isBulk
-  const canRunNow = isScheduled || isBulk
+  const hasDocKind = !isScheduled && !isEndpoint && !isBulk;
+  const canRunNow = isScheduled || isBulk;
 
   async function save() {
-    setBusy(true)
+    setBusy(true);
     try {
       await apiJson<unknown>(
-        '/api/admin/scripts',
+        "/api/admin/scripts",
         {
-          method: creating ? 'POST' : 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: creating ? "POST" : "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id: script?.id,
             name,
             triggerPoint,
-            documentKind: hasDocKind ? (documentKind || null) : null,
+            documentKind: hasDocKind ? documentKind || null : null,
             endpointSlug: isEndpoint ? endpointSlug.trim() : null,
             source,
             cron: isScheduled ? cron : null,
-            timeoutMs: timeoutMs.trim() === '' ? 2000 : Number(timeoutMs),
-            sortOrder: sortOrder.trim() === '' ? 100 : Number(sortOrder),
+            timeoutMs: timeoutMs.trim() === "" ? 2000 : Number(timeoutMs),
+            sortOrder: sortOrder.trim() === "" ? 100 : Number(sortOrder),
             isActive,
           }),
         },
-        t('drawer.saveFailed'),
-      )
-      toast.success(creating ? t('drawer.created') : t('drawer.saved'))
-      router.push('/admin/scripts')
-      router.refresh()
+        t("drawer.saveFailed"),
+      );
+      toast.success(creating ? t("drawer.created") : t("drawer.saved"));
+      router.push("/admin/scripts");
+      router.refresh();
     } catch (error) {
-      toast.error(error instanceof ApiResponseError ? error.message : t('drawer.saveFailed'))
-      setBusy(false)
+      toast.error(error instanceof ApiResponseError ? error.message : t("drawer.saveFailed"));
+      setBusy(false);
     }
   }
 
   async function deleteScript() {
-    if (!script?.id) return
-    if (!(await confirmDialog(t('drawer.deleteConfirm')))) return
-    setBusy(true)
+    if (!script?.id) return;
+    if (!(await confirmDialog(t("drawer.deleteConfirm")))) return;
+    setBusy(true);
     try {
-      await apiJson<unknown>(`/api/admin/scripts/${script.id}`, { method: 'DELETE' }, t('drawer.deleteFailed'))
-      toast.success(t('drawer.deleted'))
-      router.push('/admin/scripts')
-      router.refresh()
+      await apiJson<unknown>(
+        `/api/admin/scripts/${script.id}`,
+        { method: "DELETE" },
+        t("drawer.deleteFailed"),
+      );
+      toast.success(t("drawer.deleted"));
+      router.push("/admin/scripts");
+      router.refresh();
     } catch (error) {
-      toast.error(error instanceof ApiResponseError ? error.message : t('drawer.deleteFailed'))
-      setBusy(false)
+      toast.error(error instanceof ApiResponseError ? error.message : t("drawer.deleteFailed"));
+      setBusy(false);
     }
   }
 
@@ -243,78 +255,94 @@ export function ScriptDrawer({
   // a terminal outcome: a double-click reuses the key and either replays
   // the recorded run or is refused as in-flight, instead of running twice.
   // A 409 keeps the key so the operator can retry the same intent.
-  const [runKey, setRunKey] = useState(() => crypto.randomUUID())
+  const [runKey, setRunKey] = useState(() => crypto.randomUUID());
   async function runNow() {
-    if (!script?.id) return
-    setRunning(true)
+    if (!script?.id) return;
+    setRunning(true);
     try {
-      const data = await apiJson<{ queued?: boolean; status?: string; durationMs?: number; abortReason?: string }>(
+      const data = await apiJson<{
+        queued?: boolean;
+        status?: string;
+        durationMs?: number;
+        abortReason?: string;
+      }>(
         `/api/admin/scripts/${script.id}/run`,
         {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify({ idempotencyKey: runKey }),
         },
-        t('drawer.runFailed'),
-      )
+        t("drawer.runFailed"),
+      );
       if (data.queued) {
-        toast.success(t('drawer.runOk', { ms: 0 }))
-        setRunKey(crypto.randomUUID())
-      } else if (data.status === 'ok') {
-        toast.success(t('drawer.runOk', { ms: data.durationMs ?? 0 }))
-        setRunKey(crypto.randomUUID())
+        toast.success(t("drawer.runOk", { ms: 0 }));
+        setRunKey(crypto.randomUUID());
+      } else if (data.status === "ok") {
+        toast.success(t("drawer.runOk", { ms: data.durationMs ?? 0 }));
+        setRunKey(crypto.randomUUID());
       } else {
-        toast.error(t('drawer.runFailed') + (data.abortReason ? `: ${data.abortReason}` : ''))
-        setRunKey(crypto.randomUUID())
+        toast.error(t("drawer.runFailed") + (data.abortReason ? `: ${data.abortReason}` : ""));
+        setRunKey(crypto.randomUUID());
       }
-      setTab('log')
-      setSelectedRun(0)
-      router.refresh()
+      setTab("log");
+      setSelectedRun(0);
+      router.refresh();
     } catch (error) {
-      toast.error(error instanceof ApiResponseError ? error.message : t('drawer.runFailed'))
+      toast.error(error instanceof ApiResponseError ? error.message : t("drawer.runFailed"));
     } finally {
-      setRunning(false)
+      setRunning(false);
     }
   }
 
   function onTriggerChange(v: string) {
-    setTriggerPoint(v)
+    setTriggerPoint(v);
     // Swap starter templates only while the source is still an untouched template.
     if (ALL_TEMPLATES.has(source)) {
-      setSource(TEMPLATE_BY_TRIGGER[v] ?? TEMPLATE)
+      setSource(TEMPLATE_BY_TRIGGER[v] ?? TEMPLATE);
     }
   }
 
-  const run = runs[selectedRun]
+  const run = runs[selectedRun];
 
   return (
     <UrlDrawer
       open
       closeHref="/admin/scripts"
       size="xl"
-      title={creating ? t('drawer.newTitle') : script!.name}
-      description={t('drawer.description')}
+      title={creating ? t("drawer.newTitle") : script!.name}
+      description={t("drawer.description")}
       headerActions={
         <>
           {script?.id && canRunNow && (
             <Button variant="outline" size="sm" disabled={running || busy} onClick={runNow}>
-              <Play size={14} /> {running ? tCommon('actions.running') : t('drawer.runNow')}
+              <Play size={14} /> {running ? tCommon("actions.running") : t("drawer.runNow")}
             </Button>
           )}
           {!creating && (
-            <Button variant="ghost" size="sm" disabled={busy} onClick={deleteScript} className="text-red-600 hover:text-red-700 dark:text-red-400">
-              <Trash2 size={14} /> {t('drawer.delete')}
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              onClick={deleteScript}
+              className="text-red-600 hover:text-red-700 dark:text-red-400"
+            >
+              <Trash2 size={14} /> {t("drawer.delete")}
             </Button>
           )}
           <Button
-            disabled={busy || !name || !source.includes('function main') || (isEndpoint && !endpointSlug.trim())}
+            disabled={
+              busy ||
+              !name ||
+              !source.includes("function main") ||
+              (isEndpoint && !endpointSlug.trim())
+            }
             onClick={save}
           >
             {busy
-              ? tCommon('actions.saving')
+              ? tCommon("actions.saving")
               : creating
-                ? t('drawer.createScript')
-                : t('drawer.saveScript')}
+                ? t("drawer.createScript")
+                : t("drawer.saveScript")}
           </Button>
         </>
       }
@@ -327,7 +355,7 @@ export function ScriptDrawer({
               onChange={(e) => setIsActive(e.target.checked)}
               className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
             />
-            {tCommon('labels.active')}
+            {tCommon("labels.active")}
           </label>
         </div>
       }
@@ -341,14 +369,14 @@ export function ScriptDrawer({
               type="button"
               onClick={() => setTab(k)}
               className={cn(
-                '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+                "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
                 tab === k
-                  ? 'border-teal-500 text-teal-700 dark:text-teal-300'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200',
+                  ? "border-teal-500 text-teal-700 dark:text-teal-300"
+                  : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200",
               )}
             >
               {t(`tabs.${k}`)}
-              {k === 'runs' && runs.length > 0 ? (
+              {k === "runs" && runs.length > 0 ? (
                 <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 text-[11px] text-slate-500 dark:bg-slate-800">
                   {runs.length}
                 </span>
@@ -358,15 +386,19 @@ export function ScriptDrawer({
         </div>
 
         <div key={tab} className="min-h-0 flex-1 overflow-y-auto p-1 pt-4">
-          {tab === 'general' ? (
+          {tab === "general" ? (
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label>{tCommon('labels.name')}</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('drawer.namePlaceholder')} />
+                  <Label>{tCommon("labels.name")}</Label>
+                  <Input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={t("drawer.namePlaceholder")}
+                  />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>{t('drawer.trigger')}</Label>
+                  <Label>{t("drawer.trigger")}</Label>
                   <Select value={triggerPoint} onChange={(e) => onTriggerChange(e.target.value)}>
                     {TRIGGERS.map((tr) => (
                       <option key={tr.value} value={tr.value}>
@@ -377,10 +409,10 @@ export function ScriptDrawer({
                 </div>
                 {hasDocKind && (
                   <div className="space-y-1.5">
-                    <Label>{t('drawer.documentKind')}</Label>
+                    <Label>{t("drawer.documentKind")}</Label>
                     <Select value={documentKind} onChange={(e) => setDocumentKind(e.target.value)}>
-                      <option value="">{t('drawer.allKindsOption')}</option>
-                      <optgroup label={t('drawer.builtInGroup')}>
+                      <option value="">{t("drawer.allKindsOption")}</option>
+                      <optgroup label={t("drawer.builtInGroup")}>
                         {BUILT_IN_SCRIPT_KINDS.map((k) => (
                           <option key={k.value} value={k.value}>
                             {t(k.labelKey)}
@@ -388,7 +420,7 @@ export function ScriptDrawer({
                         ))}
                       </optgroup>
                       {customTypes.length > 0 && (
-                        <optgroup label={t('drawer.customRecordsGroup')}>
+                        <optgroup label={t("drawer.customRecordsGroup")}>
                           {customTypes.map((ct) => (
                             <option key={ct.key} value={customRecordKind(ct.key)}>
                               {ct.name}
@@ -402,8 +434,8 @@ export function ScriptDrawer({
                 {isScheduled && (
                   <div className="space-y-1.5">
                     <Label>
-                      {t('drawer.cron')}{' '}
-                      <span className="font-normal text-slate-400">{t('drawer.cronHint')}</span>
+                      {t("drawer.cron")}{" "}
+                      <span className="font-normal text-slate-400">{t("drawer.cronHint")}</span>
                     </Label>
                     <Input
                       value={cron}
@@ -416,7 +448,7 @@ export function ScriptDrawer({
                 {isEndpoint && (
                   <div className="space-y-1.5">
                     <Label>
-                      {t('drawer.endpointSlug')}{' '}
+                      {t("drawer.endpointSlug")}{" "}
                       <span className="font-normal text-slate-400">/api/scripts/e/…</span>
                     </Label>
                     <Input
@@ -427,51 +459,67 @@ export function ScriptDrawer({
                     />
                     {endpointSlug.trim() && (
                       <div className="space-y-1 pt-1">
-                        <Label>{t('drawer.endpointUrl')}</Label>
+                        <Label>{t("drawer.endpointUrl")}</Label>
                         <div className="flex items-center gap-2">
-                          <code className="flex-1 truncate rounded bg-slate-100 px-2 py-1.5 font-mono text-xs dark:bg-slate-800" title={endpointUrl}>
+                          <code
+                            className="flex-1 truncate rounded bg-slate-100 px-2 py-1.5 font-mono text-xs dark:bg-slate-800"
+                            title={endpointUrl}
+                          >
                             {endpointUrl}
                           </code>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => { navigator.clipboard?.writeText(endpointUrl); toast.success(t('drawer.urlCopied')) }}
+                            onClick={() => {
+                              navigator.clipboard?.writeText(endpointUrl);
+                              toast.success(t("drawer.urlCopied"));
+                            }}
                           >
-                            {t('drawer.copyUrl')}
+                            {t("drawer.copyUrl")}
                           </Button>
                         </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.endpointUrlHint')}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          {t("drawer.endpointUrlHint")}
+                        </p>
                       </div>
                     )}
                   </div>
                 )}
                 <div className="space-y-1.5">
-                  <Label>{t('drawer.timeoutMs')}</Label>
-                  <Input inputMode="numeric" value={timeoutMs} onChange={(e) => setTimeoutMs(e.target.value)} />
+                  <Label>{t("drawer.timeoutMs")}</Label>
+                  <Input
+                    inputMode="numeric"
+                    value={timeoutMs}
+                    onChange={(e) => setTimeoutMs(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>{t('drawer.runOrder')}</Label>
-                  <Input inputMode="numeric" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} />
+                  <Label>{t("drawer.runOrder")}</Label>
+                  <Input
+                    inputMode="numeric"
+                    value={sortOrder}
+                    onChange={(e) => setSortOrder(e.target.value)}
+                  />
                 </div>
               </div>
             </div>
           ) : null}
 
-          {tab === 'code' ? (
+          {tab === "code" ? (
             <div className="space-y-1.5">
               <Label>
-                {t('drawer.source')}{' '}
-                <span className="font-normal text-slate-400">{t('drawer.sourceHint')}</span>
+                {t("drawer.source")}{" "}
+                <span className="font-normal text-slate-400">{t("drawer.sourceHint")}</span>
               </Label>
               <CodeEditor value={source} onChange={setSource} />
             </div>
           ) : null}
 
-          {tab === 'runs' ? (
+          {tab === "runs" ? (
             runs.length === 0 ? (
               <p className="rounded-lg border border-dashed border-slate-200 p-6 text-sm text-slate-500 dark:border-slate-800">
-                {t('drawer.noRuns')}
+                {t("drawer.noRuns")}
               </p>
             ) : (
               <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
@@ -480,22 +528,32 @@ export function ScriptDrawer({
                     key={i}
                     type="button"
                     onClick={() => {
-                      setSelectedRun(i)
-                      setTab('log')
+                      setSelectedRun(i);
+                      setTab("log");
                     }}
                     className={cn(
-                      'flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-900',
-                      i === selectedRun && 'bg-slate-50 dark:bg-slate-900',
+                      "flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-900",
+                      i === selectedRun && "bg-slate-50 dark:bg-slate-900",
                     )}
                   >
-                    <Badge variant={r.status === 'ok' ? 'success' : r.status === 'aborted' ? 'warning' : 'destructive'}>
+                    <Badge
+                      variant={
+                        r.status === "ok"
+                          ? "success"
+                          : r.status === "aborted"
+                            ? "warning"
+                            : "destructive"
+                      }
+                    >
                       {RUN_STATUSES.has(r.status) ? t(`drawer.runStatus.${r.status}`) : r.status}
                     </Badge>
                     <span className="text-xs text-slate-500 dark:text-slate-400">
                       {dateTime(r.at)} · {r.target_kind} · {r.duration_ms}ms
                     </span>
                     {r.error_message ? (
-                      <span className="min-w-0 flex-1 truncate text-xs text-red-600 dark:text-red-400">{r.error_message}</span>
+                      <span className="min-w-0 flex-1 truncate text-xs text-red-600 dark:text-red-400">
+                        {r.error_message}
+                      </span>
                     ) : null}
                   </button>
                 ))}
@@ -503,16 +561,26 @@ export function ScriptDrawer({
             )
           ) : null}
 
-          {tab === 'log' ? (
+          {tab === "log" ? (
             !run ? (
               <p className="rounded-lg border border-dashed border-slate-200 p-6 text-sm text-slate-500 dark:border-slate-800">
-                {runs.length === 0 ? t('drawer.noRuns') : t('drawer.selectRun')}
+                {runs.length === 0 ? t("drawer.noRuns") : t("drawer.selectRun")}
               </p>
             ) : (
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center gap-3 text-sm">
-                  <Badge variant={run.status === 'ok' ? 'success' : run.status === 'aborted' ? 'warning' : 'destructive'}>
-                    {RUN_STATUSES.has(run.status) ? t(`drawer.runStatus.${run.status}`) : run.status}
+                  <Badge
+                    variant={
+                      run.status === "ok"
+                        ? "success"
+                        : run.status === "aborted"
+                          ? "warning"
+                          : "destructive"
+                    }
+                  >
+                    {RUN_STATUSES.has(run.status)
+                      ? t(`drawer.runStatus.${run.status}`)
+                      : run.status}
                   </Badge>
                   <span className="text-xs text-slate-500 dark:text-slate-400">
                     {dateTime(run.at)} · {run.target_kind} · {run.duration_ms}ms
@@ -526,10 +594,10 @@ export function ScriptDrawer({
                 <div className="rounded-lg bg-slate-950 p-4">
                   {Array.isArray(run.logs) && run.logs.length > 0 ? (
                     <pre className="overflow-x-auto font-mono text-[12px] leading-relaxed text-slate-100">
-                      {run.logs.join('\n')}
+                      {run.logs.join("\n")}
                     </pre>
                   ) : (
-                    <p className="font-mono text-[12px] text-slate-500">{t('drawer.logEmpty')}</p>
+                    <p className="font-mono text-[12px] text-slate-500">{t("drawer.logEmpty")}</p>
                   )}
                 </div>
               </div>
@@ -538,5 +606,5 @@ export function ScriptDrawer({
         </div>
       </div>
     </UrlDrawer>
-  )
+  );
 }

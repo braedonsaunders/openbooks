@@ -1,3 +1,6 @@
-import 'server-only'
+import "server-only";
 
-export { BillingError, generateInvoiceFromBillingRequest } from '@openbooks/engine/documents/billing'
+export {
+  BillingError,
+  generateInvoiceFromBillingRequest,
+} from "@openbooks/engine/documents/billing";

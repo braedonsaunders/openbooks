@@ -66,10 +66,15 @@ export async function resolveDriverVintage(
     return { refusal: `no accounting period covers the posting date for driver lookback` };
   }
   if (driverAsOf === "prior_period") {
-    const prior = (await runner.execute<{ id: string }>(sql`
+    const prior = (
+      await runner.execute<{ id: string }>(
+        sql`
       select id from accounting_periods
        where org_id = ${orgId} and not is_adjustment and ends_on < ${period.startsOn}
-       order by ends_on desc limit 1`, "objects"))[0];
+       order by ends_on desc limit 1`,
+        "objects",
+      )
+    )[0];
     if (!prior) return { refusal: `no prior period exists for driver lookback on ${period.label}` };
     return { asOf: { periodId: prior.id } };
   }

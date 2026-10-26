@@ -13,9 +13,17 @@ import test from "node:test";
 
 // jsdom first: the form reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/hrm/positions", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/hrm/positions",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return { push(url){ globalThis.__positionPushes = [...(globalThis.__positionPushes || []), url] }, refresh(){} }} export function redirect(url){ throw new Error('unexpected redirect: '+url) } export function notFound(){ throw new Error('unexpected notFound') }" });
+stubModules({
+  navigation:
+    "export function useRouter(){return { push(url){ globalThis.__positionPushes = [...(globalThis.__positionPushes || []), url] }, refresh(){} }} export function redirect(url){ throw new Error('unexpected redirect: '+url) } export function notFound(){ throw new Error('unexpected notFound') }",
+});
 
 declare global {
   var __positionPushes: string[] | undefined;
@@ -129,12 +137,17 @@ async function fillAndSubmit(): Promise<void> {
     setInput(document.querySelector("input#position-code") as HTMLInputElement, "ENG-1");
     setInput(document.querySelector("input#position-title") as HTMLInputElement, "Engineer");
     const reason = document.querySelector("textarea#position-reason") as HTMLTextAreaElement;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")!.set!;
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      "value",
+    )!.set!;
     setter.call(reason, "Backfill the dinner shift");
     reason.dispatchEvent(new window.Event("input", { bubbles: true }));
     await tick();
   });
-  const submit = [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Create position");
+  const submit = [...document.querySelectorAll("button")].find(
+    (b) => b.textContent?.trim() === "Create position",
+  );
   assert.ok(submit, "the form offers its submit");
   await act(async () => {
     (submit as HTMLElement).click();
@@ -194,44 +207,105 @@ test("a refused create pins the refusal, never a silent form", async (t) => {
 test("the position table renders a vacancy refusal from each row", () => {
   const refusal = "Funding exceeds the planned FTE; reduce funding before proceeding.";
   const row = {
-    id: "position-1", code: "ENG-1", title: "Engineer", status: "planned",
-    statusLabel: "Planned", statusVariant: "default" as const, department: null,
-    plannedFte: "1.0000", fundedFte: "2.0000", filledFte: "0.0000",
-    vacantFte: "0.0000", holderLabel: "Vacant", refusal, href: "/hrm/positions?position=position-1",
+    id: "position-1",
+    code: "ENG-1",
+    title: "Engineer",
+    status: "planned",
+    statusLabel: "Planned",
+    statusVariant: "default" as const,
+    department: null,
+    plannedFte: "1.0000",
+    fundedFte: "2.0000",
+    filledFte: "0.0000",
+    vacantFte: "0.0000",
+    holderLabel: "Vacant",
+    refusal,
+    href: "/hrm/positions?position=position-1",
   };
   const data = {
-    title: "Positions", description: "Position details", tabs: [],
-    canManage: false, addLabel: "Add position", addHref: "/hrm/positions?position=new",
-    basePath: "/hrm/positions", effectiveDate: "2026-09-22", segments: [],
-    segmentsLabel: "Show", allLabel: "All", asOfLabel: "As of", segmentOptions: [],
-    currentParams: {}, columns: {
-      code: "Code", title: "Title", status: "Status", department: "Department",
-      planned: "Planned", funded: "Funded", filled: "Filled", vacant: "Vacant",
-      refusal: "Vacancy refusal", holder: "Holder",
+    title: "Positions",
+    description: "Position details",
+    tabs: [],
+    canManage: false,
+    addLabel: "Add position",
+    addHref: "/hrm/positions?position=new",
+    basePath: "/hrm/positions",
+    effectiveDate: "2026-09-22",
+    segments: [],
+    segmentsLabel: "Show",
+    allLabel: "All",
+    asOfLabel: "As of",
+    segmentOptions: [],
+    currentParams: {},
+    columns: {
+      code: "Code",
+      title: "Title",
+      status: "Status",
+      department: "Department",
+      planned: "Planned",
+      funded: "Funded",
+      filled: "Filled",
+      vacant: "Vacant",
+      refusal: "Vacancy refusal",
+      holder: "Holder",
     },
-    rows: [row], empty: "No positions", totalLabel: "Total",
+    rows: [row],
+    empty: "No positions",
+    totalLabel: "Total",
     totals: { plannedFte: "1.0000", fundedFte: "2.0000", filledFte: "0.0000", vacantFte: "0.0000" },
-    detail: null, missingDetail: null, create: null, drawerOpen: false, drawer: null,
+    detail: null,
+    missingDetail: null,
+    create: null,
+    drawerOpen: false,
+    drawer: null,
   } satisfies Parameters<typeof positionsSpec>[0];
   const spec = positionsSpec(data);
   const grid = spec.body.find((block) => block.kind === "grid");
   assert.ok(grid && grid.kind === "grid");
-  const list = grid.blocks.find((block) => block.kind === "widget" && block.widget === "registered-record-list");
-  const table = list?.kind === "widget" ? list.props?.table as Extract<(typeof grid.blocks)[number], { kind: "table" }> | undefined : undefined;
-  assert.ok(table && table.kind === "table", "the register renders through the shared registered list");
+  const list = grid.blocks.find(
+    (block) => block.kind === "widget" && block.widget === "registered-record-list",
+  );
+  const table =
+    list?.kind === "widget"
+      ? (list.props?.table as Extract<(typeof grid.blocks)[number], { kind: "table" }> | undefined)
+      : undefined;
+  assert.ok(
+    table && table.kind === "table",
+    "the register renders through the shared registered list",
+  );
   const refusalColumn = table.columns.find((column) => column.header === "Vacancy refusal");
   assert.ok(refusalColumn, "the refusal has a visible table column");
   assert.deepEqual(refusalColumn.cell, { kind: "text", field: { $: "refusal" }, fallback: "—" });
-  assert.equal(row.refusal, refusal, "the refusal value is preserved in row data consumed by the table");
+  assert.equal(
+    row.refusal,
+    refusal,
+    "the refusal value is preserved in row data consumed by the table",
+  );
 });
 
 test("the create copy ships in every locale", () => {
   for (const locale of ["de", "en", "es", "fr", "ja", "pt-BR", "zh"]) {
-    const catalog = JSON.parse(readFileSync(new URL(`../../../../messages/${locale}/hrm.json`, import.meta.url), "utf8")) as {
+    const catalog = JSON.parse(
+      readFileSync(new URL(`../../../../messages/${locale}/hrm.json`, import.meta.url), "utf8"),
+    ) as {
       positions: { add?: string; create?: Record<string, string> };
     };
     assert.ok(catalog.positions.add, `${locale} carries positions.add`);
-    for (const key of ["title", "code", "titleField", "employer", "department", "noDepartment", "plannedFte", "status", "effectiveFrom", "reason", "reasonPlaceholder", "submit", "failed"]) {
+    for (const key of [
+      "title",
+      "code",
+      "titleField",
+      "employer",
+      "department",
+      "noDepartment",
+      "plannedFte",
+      "status",
+      "effectiveFrom",
+      "reason",
+      "reasonPlaceholder",
+      "submit",
+      "failed",
+    ]) {
       assert.ok(catalog.positions.create?.[key], `${locale} carries positions.create.${key}`);
     }
   }

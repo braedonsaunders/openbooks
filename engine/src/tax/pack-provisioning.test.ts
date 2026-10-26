@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyPackInstallation, comparePackVersions, countryPackHash, isTaxProvisionSelection, PACK_DEFAULT_CODES, supportedTaxCountries, TAX_SUBDIVISION_CATALOG } from "./pack-provisioning.ts";
+import {
+  classifyPackInstallation,
+  comparePackVersions,
+  countryPackHash,
+  isTaxProvisionSelection,
+  PACK_DEFAULT_CODES,
+  supportedTaxCountries,
+  TAX_SUBDIVISION_CATALOG,
+} from "./pack-provisioning.ts";
 import { TAX_RETURN_PACKS } from "./seed-tax-forms.ts";
 import {
   assertPackCodeRateSchedule,
@@ -23,7 +31,10 @@ test("every default tax code has an explicit effective-dated rate schedule", () 
     assert.ok(definition.rates, `${packCode} has no rate schedule`);
     for (const [index, rate] of definition.rates.entries()) {
       assert.match(rate.effectiveFrom, /^\d{4}-\d{2}-\d{2}$/);
-      assert.equal(new Date(`${rate.effectiveFrom}T00:00:00Z`).toISOString().slice(0, 10), rate.effectiveFrom);
+      assert.equal(
+        new Date(`${rate.effectiveFrom}T00:00:00Z`).toISOString().slice(0, 10),
+        rate.effectiveFrom,
+      );
       if (rate.effectiveTo) {
         assert.match(rate.effectiveTo, /^\d{4}-\d{2}-\d{2}$/);
         assert.ok(rate.effectiveTo >= rate.effectiveFrom, `${packCode} has an inverted interval`);
@@ -31,7 +42,10 @@ test("every default tax code has an explicit effective-dated rate schedule", () 
       const previous: EffectiveTaxRate | undefined = definition.rates[index - 1];
       if (previous) {
         assert.ok(rate.effectiveFrom > previous.effectiveFrom, `${packCode} rates are not sorted`);
-        assert.ok(previous.effectiveTo, `${packCode} has an open-ended interval before its current rate`);
+        assert.ok(
+          previous.effectiveTo,
+          `${packCode} has an open-ended interval before its current rate`,
+        );
         assert.ok(rate.effectiveFrom > previous.effectiveTo, `${packCode} rates overlap`);
       }
     }
@@ -39,7 +53,9 @@ test("every default tax code has an explicit effective-dated rate schedule", () 
 });
 
 test("every tax return belongs to exactly one versioned country pack", () => {
-  const returnCodes = COUNTRY_TAX_PACKS.flatMap((pack) => pack.returnPacks.map((returnPack) => returnPack.code));
+  const returnCodes = COUNTRY_TAX_PACKS.flatMap((pack) =>
+    pack.returnPacks.map((returnPack) => returnPack.code),
+  );
   assert.equal(new Set(returnCodes).size, returnCodes.length);
   assert.deepEqual(new Set(returnCodes), new Set(TAX_RETURN_PACKS.map((pack) => pack.code)));
   for (const returnPack of TAX_RETURN_PACKS) {
@@ -49,12 +65,19 @@ test("every tax return belongs to exactly one versioned country pack", () => {
 
 test("country packs have unique identities and immutable-version metadata", () => {
   assert.equal(new Set(COUNTRY_TAX_PACKS.map((pack) => pack.code)).size, COUNTRY_TAX_PACKS.length);
-  assert.equal(new Set(COUNTRY_TAX_PACKS.map((pack) => pack.country)).size, COUNTRY_TAX_PACKS.length);
+  assert.equal(
+    new Set(COUNTRY_TAX_PACKS.map((pack) => pack.country)).size,
+    COUNTRY_TAX_PACKS.length,
+  );
   for (const pack of COUNTRY_TAX_PACKS) {
     assert.match(pack.version, /^\d{4}\.\d{2}\.\d{2}$/);
     assert.ok(pack.sources.length > 0, `missing sources for ${pack.code}`);
     const sourceIds = pack.sources.map((source) => source.id);
-    assert.equal(new Set(sourceIds).size, sourceIds.length, `${pack.code} has duplicate source ids`);
+    assert.equal(
+      new Set(sourceIds).size,
+      sourceIds.length,
+      `${pack.code} has duplicate source ids`,
+    );
     for (const source of pack.sources) {
       assert.match(source.id, /^[a-z][a-z0-9_]*$/);
       assert.match(source.url, /^https:\/\//);
@@ -65,7 +88,10 @@ test("country packs have unique identities and immutable-version metadata", () =
     for (const code of packReturnCodesWithTaxCodes(pack)) {
       for (const definition of packTaxCodesForReturn(pack, code)) {
         for (const rate of definition.rates ?? []) {
-          assert.ok(knownSources.has(rate.sourceId), `${pack.code}/${code} references unknown source ${rate.sourceId}`);
+          assert.ok(
+            knownSources.has(rate.sourceId),
+            `${pack.code}/${code} references unknown source ${rate.sourceId}`,
+          );
         }
       }
     }
@@ -143,7 +169,8 @@ test("default tax codes are unique across packs", () => {
     }
   }
   for (const jurisdiction of TAX_SUBDIVISION_CATALOG) {
-    if (jurisdiction.defaultTaxCode) check(`${jurisdiction.country}-${jurisdiction.region}`, jurisdiction.defaultTaxCode);
+    if (jurisdiction.defaultTaxCode)
+      check(`${jurisdiction.country}-${jurisdiction.region}`, jurisdiction.defaultTaxCode);
   }
 });
 
@@ -151,7 +178,10 @@ test("return pack tax code sets are keyed by own returns, non-empty, and code-un
   for (const pack of COUNTRY_TAX_PACKS) {
     const ownReturns = new Set(pack.returnPacks.map((returnPack) => returnPack.code));
     for (const code of packReturnCodesWithTaxCodes(pack)) {
-      assert.ok(ownReturns.has(code), `${pack.code} declares tax codes for ${code}, which is not its own return pack`);
+      assert.ok(
+        ownReturns.has(code),
+        `${pack.code} declares tax codes for ${code}, which is not its own return pack`,
+      );
       const definitions = packTaxCodesForReturn(pack, code);
       assert.ok(definitions.length > 0, `${pack.code}/${code} declares an empty tax code set`);
       assert.equal(
@@ -182,8 +212,18 @@ test("a band in force today with a published end date satisfies the schedule gua
     name: "Demo temporary band",
     ratePercent: "8",
     rates: [
-      { ratePercent: "16", effectiveFrom: "2024-01-01", effectiveTo: "2025-12-31", sourceId: "demo_rate_history" },
-      { ratePercent: "8", effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" },
+      {
+        ratePercent: "16",
+        effectiveFrom: "2024-01-01",
+        effectiveTo: "2025-12-31",
+        sourceId: "demo_rate_history",
+      },
+      {
+        ratePercent: "8",
+        effectiveFrom: "2026-01-01",
+        effectiveTo: "2026-12-31",
+        sourceId: "demo_decree",
+      },
     ],
   };
   assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", definition, "2026-09-17");
@@ -195,8 +235,18 @@ test("a code whose band ended yesterday fails naming the code, the band, and the
     name: "Demo temporary band",
     ratePercent: "8",
     rates: [
-      { ratePercent: "16", effectiveFrom: "2024-01-01", effectiveTo: "2025-12-31", sourceId: "demo_rate_history" },
-      { ratePercent: "8", effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" },
+      {
+        ratePercent: "16",
+        effectiveFrom: "2024-01-01",
+        effectiveTo: "2025-12-31",
+        sourceId: "demo_rate_history",
+      },
+      {
+        ratePercent: "8",
+        effectiveFrom: "2026-01-01",
+        effectiveTo: "2026-12-31",
+        sourceId: "demo_decree",
+      },
     ],
   };
   assert.throws(
@@ -207,45 +257,85 @@ test("a code whose band ended yesterday fails naming the code, the band, and the
 
 test("the schedule guard rejects zero or multiple current bands and a stale headline", () => {
   const history = [
-    { ratePercent: "16", effectiveFrom: "2024-01-01", effectiveTo: "2025-12-31", sourceId: "demo_rate_history" },
-    { ratePercent: "8", effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" },
+    {
+      ratePercent: "16",
+      effectiveFrom: "2024-01-01",
+      effectiveTo: "2025-12-31",
+      sourceId: "demo_rate_history",
+    },
+    {
+      ratePercent: "8",
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-12-31",
+      sourceId: "demo_decree",
+    },
   ];
   // Headline must track the rate current today, not history and not the future.
   assert.throws(
-    () => assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", { code: "DEMO-TEMP", name: "Demo", ratePercent: "16", rates: history }, "2026-09-17"),
+    () =>
+      assertPackCodeRateSchedule(
+        "DEMO/RETURN/DEMO-TEMP",
+        { code: "DEMO-TEMP", name: "Demo", ratePercent: "16", rates: history },
+        "2026-09-17",
+      ),
     /DEMO\/RETURN\/DEMO-TEMP headline rate is stale/,
   );
   // Two bands covering today is ambiguous, never admitted.
   assert.throws(
     () =>
-      assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", {
-        code: "DEMO-TEMP",
-        name: "Demo",
-        ratePercent: "8",
-        rates: [
-          ...history,
-          { ratePercent: "10", effectiveFrom: "2026-06-01", sourceId: "demo_overlap" },
-        ],
-      }, "2026-09-17"),
+      assertPackCodeRateSchedule(
+        "DEMO/RETURN/DEMO-TEMP",
+        {
+          code: "DEMO-TEMP",
+          name: "Demo",
+          ratePercent: "8",
+          rates: [
+            ...history,
+            { ratePercent: "10", effectiveFrom: "2026-06-01", sourceId: "demo_overlap" },
+          ],
+        },
+        "2026-09-17",
+      ),
     /DEMO\/RETURN\/DEMO-TEMP has 2 rates covering 2026-09-17/,
   );
   // No band in force yet is a nameable failure, not a silent pass.
   assert.throws(
     () =>
-      assertPackCodeRateSchedule("DEMO/RETURN/DEMO-TEMP", {
-        code: "DEMO-TEMP",
-        name: "Demo",
-        ratePercent: "8",
-        rates: [{ ratePercent: "8", effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31", sourceId: "demo_decree" }],
-      }, "2025-12-31"),
+      assertPackCodeRateSchedule(
+        "DEMO/RETURN/DEMO-TEMP",
+        {
+          code: "DEMO-TEMP",
+          name: "Demo",
+          ratePercent: "8",
+          rates: [
+            {
+              ratePercent: "8",
+              effectiveFrom: "2026-01-01",
+              effectiveTo: "2026-12-31",
+              sourceId: "demo_decree",
+            },
+          ],
+        },
+        "2025-12-31",
+      ),
     /DEMO\/RETURN\/DEMO-TEMP has no rate covering 2025-12-31/,
   );
 });
 
 test("Canada GST history is effective-dated instead of backdating the current rate", () => {
   assert.deepEqual(PACK_DEFAULT_CODES.CA_GST34?.rates, [
-    { ratePercent: "7", effectiveFrom: "1991-01-01", effectiveTo: "2006-06-30", sourceId: "cra_gst_hst_rates" },
-    { ratePercent: "6", effectiveFrom: "2006-07-01", effectiveTo: "2007-12-31", sourceId: "cra_gst_hst_rates" },
+    {
+      ratePercent: "7",
+      effectiveFrom: "1991-01-01",
+      effectiveTo: "2006-06-30",
+      sourceId: "cra_gst_hst_rates",
+    },
+    {
+      ratePercent: "6",
+      effectiveFrom: "2006-07-01",
+      effectiveTo: "2007-12-31",
+      sourceId: "cra_gst_hst_rates",
+    },
     { ratePercent: "5", effectiveFrom: "2008-01-01", sourceId: "cra_gst_hst_rates" },
   ]);
   assert.equal(PACK_DEFAULT_CODES.CA_BC_PST?.rates?.[0]?.effectiveFrom, "2013-04-01");
@@ -262,16 +352,68 @@ test("US exposes every state plus DC and identifies maintained detailed packs", 
   assert.equal(us.countryStatus, "subdivisions");
   assert.equal(us.subs.length, 51);
   assert.equal(new Set(us.subs.map((s) => s.region)).size, 51);
+  assert.deepEqual(us.subs.map((s) => s.region).sort(), [
+    "AK",
+    "AL",
+    "AR",
+    "AZ",
+    "CA",
+    "CO",
+    "CT",
+    "DC",
+    "DE",
+    "FL",
+    "GA",
+    "HI",
+    "IA",
+    "ID",
+    "IL",
+    "IN",
+    "KS",
+    "KY",
+    "LA",
+    "MA",
+    "MD",
+    "ME",
+    "MI",
+    "MN",
+    "MO",
+    "MS",
+    "MT",
+    "NC",
+    "ND",
+    "NE",
+    "NH",
+    "NJ",
+    "NM",
+    "NV",
+    "NY",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VA",
+    "VT",
+    "WA",
+    "WI",
+    "WV",
+    "WY",
+  ]);
   assert.deepEqual(
-    us.subs.map((s) => s.region).sort(),
-    ["AK", "AL", "AR", "AZ", "CA", "CO", "CT", "DC", "DE", "FL", "GA", "HI", "IA", "ID", "IL", "IN", "KS", "KY", "LA", "MA", "MD", "ME", "MI", "MN", "MO", "MS", "MT", "NC", "ND", "NE", "NH", "NJ", "NM", "NV", "NY", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VA", "VT", "WA", "WI", "WV", "WY"],
-  );
-  assert.deepEqual(
-    us.subs.filter((s) => s.coverage === "detailed_pack").map((s) => s.region).sort(),
+    us.subs
+      .filter((s) => s.coverage === "detailed_pack")
+      .map((s) => s.region)
+      .sort(),
     ["CA", "FL", "NY", "TX", "WA"],
   );
   assert.ok(us.subs.some((s) => s.region === "DC" && s.name === "District of Columbia"));
-})
+});
 
 test("US supplies a sourced effective-dated statewide rate or explicitly has no statewide sales tax", () => {
   const pack = COUNTRY_TAX_PACKS.find((entry) => entry.country === "US")!;
@@ -294,30 +436,53 @@ test("US supplies a sourced effective-dated statewide rate or explicitly has no 
   for (const jurisdiction of pack.jurisdictions) {
     const definition = jurisdiction.defaultTaxCode ?? detailedByRegion.get(jurisdiction.region);
     if (noStatewideSalesTax.has(jurisdiction.region)) {
-      assert.equal(definition, undefined, `${jurisdiction.region} must not fabricate a statewide rate`);
+      assert.equal(
+        definition,
+        undefined,
+        `${jurisdiction.region} must not fabricate a statewide rate`,
+      );
       continue;
     }
     if (unverifiedStatutoryStart.has(jurisdiction.region)) {
-      assert.equal(definition, undefined, `${jurisdiction.region} must not seed an unverified statutory start`);
+      assert.equal(
+        definition,
+        undefined,
+        `${jurisdiction.region} must not seed an unverified statutory start`,
+      );
       continue;
     }
     assert.ok(definition, `${jurisdiction.region} is missing its statewide/base rate`);
-    assert.ok(definition.rates?.length, `${jurisdiction.region} is missing an effective-dated schedule`);
+    assert.ok(
+      definition.rates?.length,
+      `${jurisdiction.region} is missing an effective-dated schedule`,
+    );
     // Same covers-date predicate as the channel guard, pinned to the pack
     // review date instead of today: jurisdiction data goes stale by version,
     // not by calendar.
     const active = packRatesCoveringDate(definition.rates, reviewDate)[0];
     assert.ok(active, `${jurisdiction.region} has no rate effective on the pack review date`);
-    assert.equal(active.ratePercent, definition.ratePercent, `${jurisdiction.region} headline rate is not current`);
+    assert.equal(
+      active.ratePercent,
+      definition.ratePercent,
+      `${jurisdiction.region} headline rate is not current`,
+    );
   }
-  assert.equal(pack.jurisdictions.filter((item) => !noStatewideSalesTax.has(item.region)).length, 46);
+  assert.equal(
+    pack.jurisdictions.filter((item) => !noStatewideSalesTax.has(item.region)).length,
+    46,
+  );
 });
 
 test("US future enacted rate changes are installed without replacing the current headline rate", () => {
   const dc = TAX_SUBDIVISION_CATALOG.find((item) => item.country === "US" && item.region === "DC")!;
   assert.equal(dc.defaultTaxCode?.ratePercent, "7");
   assert.deepEqual(dc.defaultTaxCode?.rates, [
-    { ratePercent: "6", effectiveFrom: "2026-07-31", effectiveTo: "2026-09-30", sourceId: "dc_2025_rate_notice" },
+    {
+      ratePercent: "6",
+      effectiveFrom: "2026-07-31",
+      effectiveTo: "2026-09-30",
+      sourceId: "dc_2025_rate_notice",
+    },
     { ratePercent: "7", effectiveFrom: "2026-10-01", sourceId: "dc_2025_rate_notice" },
   ]);
   const sd = TAX_SUBDIVISION_CATALOG.find((item) => item.country === "US" && item.region === "SD")!;
@@ -332,7 +497,12 @@ test("Washington B&O classifications carry current rates with the enacted 2027 i
   assert.equal(codes.get("US-WA-ST")?.ratePercent, "6.5");
   assert.equal(codes.get("US-WA-BO-RET")?.ratePercent, "0.471");
   assert.deepEqual(codes.get("US-WA-BO-RET")?.rates, [
-    { ratePercent: "0.471", effectiveFrom: "1982-07-01", effectiveTo: "2026-12-31", sourceId: "wa_dor_tax_history_notes" },
+    {
+      ratePercent: "0.471",
+      effectiveFrom: "1982-07-01",
+      effectiveTo: "2026-12-31",
+      sourceId: "wa_dor_tax_history_notes",
+    },
     { ratePercent: "0.5", effectiveFrom: "2027-01-01", sourceId: "wa_eshb_2081_session_law" },
   ]);
   assert.equal(codes.get("US-WA-BO-WHO")?.ratePercent, "0.484");
@@ -351,7 +521,12 @@ test("New Mexico uses the current official statewide GRT base rate", () => {
   assert.equal(nm.defaultTaxCode?.code, "US-NM-GRT");
   assert.equal(nm.defaultTaxCode?.ratePercent, "4.875");
   assert.deepEqual(nm.defaultTaxCode?.rates, [
-    { ratePercent: "5", effectiveFrom: "2022-07-01", effectiveTo: "2023-06-30", sourceId: "nm_grt_2022" },
+    {
+      ratePercent: "5",
+      effectiveFrom: "2022-07-01",
+      effectiveTo: "2023-06-30",
+      sourceId: "nm_grt_2022",
+    },
     { ratePercent: "4.875", effectiveFrom: "2023-07-01", sourceId: "nm_grt_2023" },
   ]);
 });
@@ -363,10 +538,27 @@ test("Canada exposes all ten provinces and three territories", () => {
   assert.equal(ca.countryPack, "CA_GST34"); // federal GST/HST → CRA
   assert.equal(ca.name, "Canada");
   assert.equal(ca.subs.length, 13);
-  assert.deepEqual(ca.subs.map((s) => s.region).sort(), ["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"]);
+  assert.deepEqual(ca.subs.map((s) => s.region).sort(), [
+    "AB",
+    "BC",
+    "MB",
+    "NB",
+    "NL",
+    "NS",
+    "NT",
+    "NU",
+    "ON",
+    "PE",
+    "QC",
+    "SK",
+    "YT",
+  ]);
   // BC/SK/MB provincial sales tax + Quebec QST have maintained detailed packs.
   assert.deepEqual(
-    ca.subs.filter((s) => s.coverage === "detailed_pack").map((s) => s.region).sort(),
+    ca.subs
+      .filter((s) => s.coverage === "detailed_pack")
+      .map((s) => s.region)
+      .sort(),
     ["BC", "MB", "QC", "SK"],
   );
 });
@@ -391,7 +583,9 @@ test("Canadian HST histories are contiguous and current through the latest enact
     ["PE", "15"],
   ]);
   for (const [region, expectedRate] of expectedCurrentRates) {
-    const entry = TAX_SUBDIVISION_CATALOG.find((item) => item.country === "CA" && item.region === region);
+    const entry = TAX_SUBDIVISION_CATALOG.find(
+      (item) => item.country === "CA" && item.region === region,
+    );
     const rates = entry?.defaultTaxCode?.rates;
     assert.ok(rates, `missing HST schedule for ${region}`);
     assert.equal(rates.at(-1)?.ratePercent, expectedRate);
@@ -399,13 +593,20 @@ test("Canadian HST histories are contiguous and current through the latest enact
     for (let i = 1; i < rates.length; i++) {
       const previousEnd: Date = new globalThis.Date(`${rates[i - 1]!.effectiveTo}T00:00:00Z`);
       previousEnd.setUTCDate(previousEnd.getUTCDate() + 1);
-      assert.equal(previousEnd.toISOString().slice(0, 10), rates[i]!.effectiveFrom, `${region} HST history has a gap or overlap`);
+      assert.equal(
+        previousEnd.toISOString().slice(0, 10),
+        rates[i]!.effectiveFrom,
+        `${region} HST history has a gap or overlap`,
+      );
     }
   }
 });
 
 test("the catalog contains no unsourced placeholder country packs", () => {
-  assert.deepEqual(supportedTaxCountries().filter((country) => country.countryStatus === "in_development"), []);
+  assert.deepEqual(
+    supportedTaxCountries().filter((country) => country.countryStatus === "in_development"),
+    [],
+  );
 });
 
 test("pack content checksums are stable sha256 hex over the declared pack", () => {
@@ -451,14 +652,20 @@ test("the registry classifier answers installed-vs-declared with a usable remedy
   assert.equal(missing.status, "not-installed");
   assert.equal(missing.installedVersion, null);
   assert.ok(missing.remedy?.includes(pack.code), "remedy must name the pack it installs");
-  assert.ok(missing.remedy?.includes("POST /api/tax/provision"), "remedy must name the real install action");
+  assert.ok(
+    missing.remedy?.includes("POST /api/tax/provision"),
+    "remedy must name the real install action",
+  );
 
   const upgraded = classifyPackInstallation(
     { version: "2020.01.01", contentHash: "0".repeat(64), installedAt },
     declared,
   );
   assert.equal(upgraded.status, "upgrade-available");
-  assert.ok(upgraded.remedy?.includes(pack.version), "remedy must name the declared version to install");
+  assert.ok(
+    upgraded.remedy?.includes(pack.version),
+    "remedy must name the declared version to install",
+  );
 
   // RED-PROOF: same version but different bytes is drift, never current, and
   // the remedy forbids hand-editing the installed rates.
@@ -470,7 +677,10 @@ test("the registry classifier answers installed-vs-declared with a usable remedy
   assert.equal(drifted.status, "drift-detected");
   assert.ok(drifted.remedy?.includes(pack.code), "remedy must name the drifted pack");
   assert.ok(drifted.remedy?.includes("publish a new pack version"), "remedy must name the way out");
-  assert.ok(drifted.remedy?.includes("do not edit installed rates by hand"), "remedy must forbid hand repair");
+  assert.ok(
+    drifted.remedy?.includes("do not edit installed rates by hand"),
+    "remedy must forbid hand repair",
+  );
 
   const ahead = classifyPackInstallation(
     { version: "2999.01.01", contentHash: "0".repeat(64), installedAt },
@@ -489,7 +699,13 @@ test("drift remedies tell two packs apart", () => {
   const drift = (pack: typeof ca) =>
     classifyPackInstallation(
       { version: pack.version, contentHash: "0".repeat(64), installedAt: null },
-      { code: pack.code, country: pack.country, name: pack.name, version: pack.version, contentHash: countryPackHash(pack) },
+      {
+        code: pack.code,
+        country: pack.country,
+        name: pack.name,
+        version: pack.version,
+        contentHash: countryPackHash(pack),
+      },
     );
   const caRemedy = drift(ca).remedy ?? "";
   const usRemedy = drift(us).remedy ?? "";

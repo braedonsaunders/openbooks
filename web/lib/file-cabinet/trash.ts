@@ -1,19 +1,25 @@
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
-import 'server-only'
-import { type FileViewer } from '@openbooks/engine/records/file-cabinet-access'
-import { resolveReadScope, visibleFolderPredicate, visibleFilePredicate, recordScopeFilePredicate, recordScopeFolderPredicate } from '@openbooks/engine/records/file-cabinet-access'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import "server-only";
+import { type FileViewer } from "@openbooks/engine/records/file-cabinet-access";
+import {
+  resolveReadScope,
+  visibleFolderPredicate,
+  visibleFilePredicate,
+  recordScopeFilePredicate,
+  recordScopeFolderPredicate,
+} from "@openbooks/engine/records/file-cabinet-access";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 
 // --- trash ------------------------------------------------------------------
 
 export interface TrashItem {
-  kind: 'folder' | 'file'
-  id: string
-  name: string
-  fileType: string | null
-  folderName: string | null
-  updatedAt: string
+  kind: "folder" | "file";
+  id: string;
+  name: string;
+  fileType: string | null;
+  folderName: string | null;
+  updatedAt: string;
 }
 
 /**
@@ -22,9 +28,10 @@ export interface TrashItem {
  * shows once). Respects private-folder + grant visibility.
  */
 export async function listTrash(orgId: string, viewer: FileViewer): Promise<TrashItem[]> {
-  const scope = await resolveReadScope(orgId, viewer)
+  const scope = await resolveReadScope(orgId, viewer);
   const [folders, files] = await Promise.all([
-    db.execute(sql`
+    db.execute(
+      sql`
       select f.id, f.name, f.updated_at as "updatedAt"
         from folders f
         left join folders p on p.id = f.parent_folder_id and p.org_id = f.org_id
@@ -32,8 +39,11 @@ export async function listTrash(orgId: string, viewer: FileViewer): Promise<Tras
          and (p.id is null or not p.is_inactive)
          and ${visibleFolderPredicate(scope.hiddenFolderIds, sql`f.id`)}
          and ${recordScopeFolderPredicate(orgId, viewer, sql`f.id`)}
-       order by f.updated_at desc`, 'objects'),
-    db.execute(sql`
+       order by f.updated_at desc`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select fi.id, fi.name, fi.file_type as "fileType", fo.name as "folderName", fi.updated_at as "updatedAt"
         from files fi
         left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
@@ -42,15 +52,21 @@ export async function listTrash(orgId: string, viewer: FileViewer): Promise<Tras
          and ${visibleFilePredicate(scope, sql`fi.folder_id`, sql`fi.id`)}
          and ${recordScopeFolderPredicate(orgId, viewer, sql`fo.id`)}
          and ${recordScopeFilePredicate(orgId, viewer.allowedSubsidiaryIds, sql`fi.id`, sql`fo.record_table`, sql`fo.record_id`)}
-       order by fi.updated_at desc`, 'objects'),
-  ])
-  const folderRows = folders as unknown as Array<{ id: string; name: string; updatedAt: string }>
+       order by fi.updated_at desc`,
+      "objects",
+    ),
+  ]);
+  const folderRows = folders as unknown as Array<{ id: string; name: string; updatedAt: string }>;
   const fileRows = files as unknown as Array<{
-    id: string; name: string; fileType: string | null; folderName: string | null; updatedAt: string
-  }>
+    id: string;
+    name: string;
+    fileType: string | null;
+    folderName: string | null;
+    updatedAt: string;
+  }>;
   return [
     ...folderRows.map((f) => ({
-      kind: 'folder' as const,
+      kind: "folder" as const,
       id: f.id,
       name: f.name,
       fileType: null,
@@ -58,12 +74,12 @@ export async function listTrash(orgId: string, viewer: FileViewer): Promise<Tras
       updatedAt: f.updatedAt,
     })),
     ...fileRows.map((f) => ({
-      kind: 'file' as const,
+      kind: "file" as const,
       id: f.id,
       name: f.name,
       fileType: f.fileType,
       folderName: f.folderName,
       updatedAt: f.updatedAt,
     })),
-  ]
+  ];
 }

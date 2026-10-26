@@ -67,7 +67,8 @@ export const POST = defineRoute({
       });
       return NextResponse.json({ map });
     } catch (error) {
-      if (error instanceof CommerceError && error.code === "channel_not_found") return notFound("channel");
+      if (error instanceof CommerceError && error.code === "channel_not_found")
+        return notFound("channel");
       throw error;
     }
   },

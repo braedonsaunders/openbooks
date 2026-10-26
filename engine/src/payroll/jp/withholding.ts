@@ -40,8 +40,8 @@ const JP_REGIONS: readonly PayrollRegionWithholding[] = JP_PREFECTURES.map(
     // comparison ever runs. Revisit if one is ever declared.
     subRegionConflictRule: "work_only",
     citation:
-      "所得税法第183条（源泉徴収義務）、第185条（給与所得の源泉徴収税額表）; "
-      + "NTA 令和8年分 給与所得の源泉徴収税額表（月額表）",
+      "所得税法第183条（源泉徴収義務）、第185条（給与所得の源泉徴収税額表）; " +
+      "NTA 令和8年分 給与所得の源泉徴収税額表（月額表）",
   }),
 );
 

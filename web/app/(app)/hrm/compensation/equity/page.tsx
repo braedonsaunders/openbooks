@@ -1,10 +1,10 @@
-import { ModuleView } from '../../../../../components/viewspec/module-view'
-import { equitySpec, equityTitle, loadEquityPage } from './view'
+import { ModuleView } from "../../../../../components/viewspec/module-view";
+import { equitySpec, equityTitle, loadEquityPage } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  return { title: await equityTitle() }
+  return { title: await equityTitle() };
 }
 
 /**
@@ -15,9 +15,9 @@ export async function generateMetadata() {
 export default async function EquityPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | undefined>>
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadEquityPage(sp)
-  return <ModuleView spec={equitySpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadEquityPage(sp);
+  return <ModuleView spec={equitySpec(data)} data={data} searchParams={sp} trusted />;
 }

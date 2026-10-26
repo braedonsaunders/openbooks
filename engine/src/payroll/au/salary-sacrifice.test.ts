@@ -51,17 +51,30 @@ async function runAuStatutory(sacrificeTreatment: string): Promise<{
     { kind: "earning", amount: GROSS },
     { kind: "deduction", amount: SACRIFICE, taxTreatment: sacrificeTreatment },
   ];
-  const reducedBases = reduceTaxBases(lines, {
-    income: GROSS,
-    nonPeriodic: "0.0000",
-    pensionable: GROSS,
-    insurable: GROSS,
-  }, AU_PAYROLL_PACK.deductionTreatments);
+  const reducedBases = reduceTaxBases(
+    lines,
+    {
+      income: GROSS,
+      nonPeriodic: "0.0000",
+      pensionable: GROSS,
+      insurable: GROSS,
+    },
+    AU_PAYROLL_PACK.deductionTreatments,
+  );
   const pushed: { systemKey: string; amount: string }[] = [];
   const factors = await computeAuStatutory({
-    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
-    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    tx: { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ qualifying: "0.0000" }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) } as never,
+    programBases: {},
+    pensionableNonPeriodic: "0",
+    insurableNonPeriodic: "0",
+    programNonPeriodicBases: {},
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} },
+    supplementalTaxMethod: "per_run",
+    tx: {
+      execute: async (_query: unknown, mode?: string) =>
+        Promise.resolve({ rows: [{ qualifying: "0.0000" }] }).then(
+          <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result),
+        ),
+    } as never,
     orgId: "org",
     subsidiaryId: "employer",
     documentId: "doc",
@@ -89,9 +102,17 @@ async function runAuStatutory(sacrificeTreatment: string): Promise<{
         ? { answers: TFN_ANSWERS, onFile: true }
         : key === "au_sg_administration"
           ? resolveCertificate({
-            certificate: AU_CERTIFICATES.certificates.find((certificate) => certificate.key === key)!,
-            stored: [{ certificateKey: key, answers: { opening_qualifying_ytd: "0" }, effectiveFrom: null }],
-          })
+              certificate: AU_CERTIFICATES.certificates.find(
+                (certificate) => certificate.key === key,
+              )!,
+              stored: [
+                {
+                  certificateKey: key,
+                  answers: { opening_qualifying_ytd: "0" },
+                  effectiveFrom: null,
+                },
+              ],
+            })
           : null) as never,
     bool: (value) => value === "true",
     assertRegionSupported: () => {},

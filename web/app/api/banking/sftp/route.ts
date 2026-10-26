@@ -1,20 +1,27 @@
-import { z } from 'zod';
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { randomBytes } from 'node:crypto'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { encryptSecret, sftpServerAuditSnapshot, type SftpServerAuditRow } from '@openbooks/engine/sftp/manager'
-import { validateAuthorizedKeys } from '@openbooks/engine/sftp/authorized-keys'
-import { appStorageKind, appBucket, assertTenantRootPrefix } from '@openbooks/engine/sftp/backend'
-import { findRootOverlap, rootOverlapRefusal } from '@openbooks/engine/sftp/roots'
-import { guardUnrestrictedScope } from '../../../../lib/authz'
-import { auditSetupChange } from '../../../../lib/setup/audit'
-const POSTBodySchema1 = z.object({ name: z.string().trim().min(1), rootPrefix: z.string().optional(), authorizedKeys: z.string().optional() });
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { randomBytes } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  encryptSecret,
+  sftpServerAuditSnapshot,
+  type SftpServerAuditRow,
+} from "@openbooks/engine/sftp/manager";
+import { validateAuthorizedKeys } from "@openbooks/engine/sftp/authorized-keys";
+import { appStorageKind, appBucket, assertTenantRootPrefix } from "@openbooks/engine/sftp/backend";
+import { findRootOverlap, rootOverlapRefusal } from "@openbooks/engine/sftp/roots";
+import { guardUnrestrictedScope } from "../../../../lib/authz";
+import { auditSetupChange } from "../../../../lib/setup/audit";
+const POSTBodySchema1 = z.object({
+  name: z.string().trim().min(1),
+  rootPrefix: z.string().optional(),
+  authorizedKeys: z.string().optional(),
+});
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * SFTP setup validation is typed 400 at the engine validators, so the
@@ -24,23 +31,31 @@ export const runtime = 'nodejs'
 
 /** List the org's SFTP servers (never returns secrets). */
 export const GET = defineRoute({
-  permission: 'admin.setup.manage',
-  feature: 'bankFeeds',
+  permission: "admin.setup.manage",
+  feature: "bankFeeds",
   handler: async ({ authz: routeAuthz }) => {
     const gate = routeAuthz;
-    if (gate.allowedSubsidiaryIds !== null) return NextResponse.json({ servers: [] })
-    const r = (await db.execute(sql`
+    if (gate.allowedSubsidiaryIds !== null) return NextResponse.json({ servers: [] });
+    const r = await db.execute(
+      sql`
         select id, name, username, backend, bucket, root_prefix, is_active, last_connected_at, created_at
           from sftp_servers where org_id = ${gate.user.orgId} order by created_at desc
-      `, 'objects'))
-    return NextResponse.json({ servers: r })
+      `,
+      "objects",
+    );
+    return NextResponse.json({ servers: r });
   },
 });
 
-const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'sftp'
+const slug = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24) || "sftp";
 
 /** How many username attempts a create gets before giving up (never reached in practice). */
-const USERNAME_MINT_ATTEMPTS = 8
+const USERNAME_MINT_ATTEMPTS = 8;
 
 /**
  * Create an SFTP server; returns the generated password ONCE (never stored in
@@ -51,122 +66,156 @@ const USERNAME_MINT_ATTEMPTS = 8
  * commit as one unit — a failed audit insert leaves no login behind.
  */
 export const POST = defineRoute({
-  permission: 'admin.setup.manage',
-  feature: 'bankFeeds',
+  permission: "admin.setup.manage",
+  feature: "bankFeeds",
   body: POSTBodySchema1,
   handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
-    const unrestricted = guardUnrestrictedScope(gate)
-    if (unrestricted) return unrestricted
-    const { user } = gate
+    const unrestricted = guardUnrestrictedScope(gate);
+    if (unrestricted) return unrestricted;
+    const { user } = gate;
 
-    const body = (routeBody) as { name?: string; rootPrefix?: string; authorizedKeys?: string }
-    if (!body.name || String(body.name).trim() === '') {
-        return NextResponse.json({ error: 'name is required' }, { status: 400 })
-      }
-    const base = slug(String(body.name).trim())
-    const password = randomBytes(18).toString('base64url')
-    let backend: string
-    let bucket: string | null
+    const body = routeBody as { name?: string; rootPrefix?: string; authorizedKeys?: string };
+    if (!body.name || String(body.name).trim() === "") {
+      return NextResponse.json({ error: "name is required" }, { status: 400 });
+    }
+    const base = slug(String(body.name).trim());
+    const password = randomBytes(18).toString("base64url");
+    let backend: string;
+    let bucket: string | null;
     try {
-        backend = appStorageKind()
-        bucket = backend === 's3' ? appBucket() : null
-      } catch (e) {
-        // Storage misconfiguration refuses by name at 503 with a static remedy:
-        // the thrown detail (which env names are missing) stays server-side.
-        console.error('[banking/sftp] storage selection failed', e)
-        return NextResponse.json(
-          { error: 'SFTP storage is not configured: set all four S3 variables, or unset them all and set an absolute shared OPENBOOKS_DATA_DIR for local storage' },
-          { status: 503 },
-        )
-      }
-    const requestedPrefix = body.rootPrefix?.trim() || ''
+      backend = appStorageKind();
+      bucket = backend === "s3" ? appBucket() : null;
+    } catch (e) {
+      // Storage misconfiguration refuses by name at 503 with a static remedy:
+      // the thrown detail (which env names are missing) stays server-side.
+      console.error("[banking/sftp] storage selection failed", e);
+      return NextResponse.json(
+        {
+          error:
+            "SFTP storage is not configured: set all four S3 variables, or unset them all and set an absolute shared OPENBOOKS_DATA_DIR for local storage",
+        },
+        { status: 503 },
+      );
+    }
+    const requestedPrefix = body.rootPrefix?.trim() || "";
     if (requestedPrefix) {
-        // Refuse before any insert: a requested prefix is validated once, up front —
-        // it never passes through slash-stripping or other laundering.
-        try {
-          const canonical = assertTenantRootPrefix(requestedPrefix, user.orgId)
-          if (canonical.split('/').length < 3) {
-            return NextResponse.json({ error: `sftp root prefix must name a folder under sftp/${user.orgId}/` }, { status: 400 })
-          }
-        } catch (e) {
-          return apiErrorResponse(e)
-        }
-      }
-    let authorizedKeys: string | null = null
-    if (body.authorizedKeys !== undefined && body.authorizedKeys !== null) {
-        let lines: string[]
-        try {
-          lines = validateAuthorizedKeys(String(body.authorizedKeys))
-        } catch (e) {
-          return apiErrorResponse(e)
-        }
-        if (lines.length === 0) {
+      // Refuse before any insert: a requested prefix is validated once, up front —
+      // it never passes through slash-stripping or other laundering.
+      try {
+        const canonical = assertTenantRootPrefix(requestedPrefix, user.orgId);
+        if (canonical.split("/").length < 3) {
           return NextResponse.json(
-            { error: 'authorizedKeys was supplied but contains no public keys — add one key per line or omit the field for a password-only login' },
+            { error: `sftp root prefix must name a folder under sftp/${user.orgId}/` },
             { status: 400 },
-          )
+          );
         }
-        authorizedKeys = lines.join('\n')
+      } catch (e) {
+        return apiErrorResponse(e);
       }
-    type Created = SftpServerAuditRow & { id: string }
-    let created: Created | null = null
-    let username = ''
-    let rootPrefix = ''
-    let overlapRefusal: string | null = null
-    for (let attempt = 0; attempt < USERNAME_MINT_ATTEMPTS && !created && !overlapRefusal; attempt++) {
-        // A longer suffix after repeated losses keeps the mint converging.
-        username = `${base}-${randomBytes(attempt < USERNAME_MINT_ATTEMPTS - 3 ? 3 : 8).toString('hex')}`
-        rootPrefix = requestedPrefix
-          ? assertTenantRootPrefix(requestedPrefix, user.orgId)
-          : assertTenantRootPrefix(`sftp/${user.orgId}/${username}`, user.orgId)
-        created = await db.transaction(async (tx) => {
-          // Overlap gate: refuse a root that is equal to, inside, or containing
-          // an ACTIVE sibling's root — two bank logins must never share a
-          // folder. The per-org advisory lock serializes concurrent creates
-          // (row locks alone cover nothing when the org has no servers yet, so
-          // two simultaneous first creates would both pass and both insert);
-          // the sibling-row lock then holds the serialization against writers
-          // that do not take this gate. Inactive servers do not block: they
-          // serve no login, and reactivating into an overlap refuses on toggle.
-          await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'sftp-roots:' + user.orgId}, 0))`)
-          const siblings = (await tx.execute<{ id: string; name: string; root_prefix: string; is_active: boolean }>(sql`
+    }
+    let authorizedKeys: string | null = null;
+    if (body.authorizedKeys !== undefined && body.authorizedKeys !== null) {
+      let lines: string[];
+      try {
+        lines = validateAuthorizedKeys(String(body.authorizedKeys));
+      } catch (e) {
+        return apiErrorResponse(e);
+      }
+      if (lines.length === 0) {
+        return NextResponse.json(
+          {
+            error:
+              "authorizedKeys was supplied but contains no public keys — add one key per line or omit the field for a password-only login",
+          },
+          { status: 400 },
+        );
+      }
+      authorizedKeys = lines.join("\n");
+    }
+    type Created = SftpServerAuditRow & { id: string };
+    let created: Created | null = null;
+    let username = "";
+    let rootPrefix = "";
+    let overlapRefusal: string | null = null;
+    for (
+      let attempt = 0;
+      attempt < USERNAME_MINT_ATTEMPTS && !created && !overlapRefusal;
+      attempt++
+    ) {
+      // A longer suffix after repeated losses keeps the mint converging.
+      username = `${base}-${randomBytes(attempt < USERNAME_MINT_ATTEMPTS - 3 ? 3 : 8).toString("hex")}`;
+      rootPrefix = requestedPrefix
+        ? assertTenantRootPrefix(requestedPrefix, user.orgId)
+        : assertTenantRootPrefix(`sftp/${user.orgId}/${username}`, user.orgId);
+      created = await db.transaction(async (tx) => {
+        // Overlap gate: refuse a root that is equal to, inside, or containing
+        // an ACTIVE sibling's root — two bank logins must never share a
+        // folder. The per-org advisory lock serializes concurrent creates
+        // (row locks alone cover nothing when the org has no servers yet, so
+        // two simultaneous first creates would both pass and both insert);
+        // the sibling-row lock then holds the serialization against writers
+        // that do not take this gate. Inactive servers do not block: they
+        // serve no login, and reactivating into an overlap refuses on toggle.
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${"sftp-roots:" + user.orgId}, 0))`,
+        );
+        const siblings = await tx.execute<{
+          id: string;
+          name: string;
+          root_prefix: string;
+          is_active: boolean;
+        }>(
+          sql`
             select id, name, root_prefix, is_active from sftp_servers where org_id = ${user.orgId} for update
-          `, 'objects'))
-          const hit = findRootOverlap(
-            rootPrefix,
-            siblings.filter((r) => r.is_active).map((r) => ({ id: r.id, name: r.name, rootPrefix: r.root_prefix })),
-          )
-          if (hit) {
-            overlapRefusal = rootOverlapRefusal(rootPrefix, hit)
-            return null
-          }
-          const row = (await tx.execute<Created>(sql`
+          `,
+          "objects",
+        );
+        const hit = findRootOverlap(
+          rootPrefix,
+          siblings
+            .filter((r) => r.is_active)
+            .map((r) => ({ id: r.id, name: r.name, rootPrefix: r.root_prefix })),
+        );
+        if (hit) {
+          overlapRefusal = rootOverlapRefusal(rootPrefix, hit);
+          return null;
+        }
+        const row = await tx.execute<Created>(
+          sql`
             insert into sftp_servers (org_id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, created_by, updated_by)
             values (${user.orgId}, ${String(body.name).trim()}, ${username}, ${encryptSecret(password, user.orgId)}, ${authorizedKeys},
                     ${backend}, ${bucket}, ${rootPrefix}, ${user.id}, ${user.id})
             -- A concurrent username collision causes the bounded loop to mint another suffix.
             on conflict (username) do nothing
             returning id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, is_active, created_by, updated_by
-          `, 'objects'))
-          if (!row[0]) return null // concurrent creator claimed the suffix — re-mint
-          await auditSetupChange({
+          `,
+          "objects",
+        );
+        if (!row[0]) return null; // concurrent creator claimed the suffix — re-mint
+        await auditSetupChange(
+          {
             orgId: user.orgId,
-            table: 'sftp_servers',
+            table: "sftp_servers",
             rowId: String(row[0]!.id),
-            action: 'insert',
+            action: "insert",
             changes: { after: sftpServerAuditSnapshot(row[0]!) },
             actorId: user.id,
-          }, tx)
-          return row[0]!
-        })
-      }
+          },
+          tx,
+        );
+        return row[0]!;
+      });
+    }
     if (overlapRefusal) {
-        return NextResponse.json({ error: overlapRefusal, code: 'sftp_root_overlap' }, { status: 409 })
-      }
+      return NextResponse.json(
+        { error: overlapRefusal, code: "sftp_root_overlap" },
+        { status: 409 },
+      );
+    }
     if (!created) {
-        return NextResponse.json({ error: 'could not allocate a unique username' }, { status: 503 })
-      }
-    return NextResponse.json({ id: String(created.id), username, password, rootPrefix, backend })
+      return NextResponse.json({ error: "could not allocate a unique username" }, { status: 503 });
+    }
+    return NextResponse.json({ id: String(created.id), username, password, rootPrefix, backend });
   },
 });

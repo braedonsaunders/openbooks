@@ -1,7 +1,4 @@
-import {
-  checklistDocument as document,
-  requiredTextForm,
-} from "../testing/checklist-documents.ts";
+import { checklistDocument as document, requiredTextForm } from "../testing/checklist-documents.ts";
 import {
   checklistActor,
   openChecklist,
@@ -12,10 +9,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import {
-  emptyStepDesign,
-  CHECKLIST_STEP_SUBJECT_KIND,
-} from "@openbooks/forms-core";
+import { emptyStepDesign, CHECKLIST_STEP_SUBJECT_KIND } from "@openbooks/forms-core";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { withHarness, grant } from "../testing/hrm-harness.ts";
@@ -40,10 +34,7 @@ import {
 import { getProcess } from "./processes-read.ts";
 installEngineSeams();
 const harness = () => setupChecklistHarness(true);
-async function published(
-  h: Awaited<ReturnType<typeof harness>>,
-  d = document(),
-) {
+async function published(h: Awaited<ReturnType<typeof harness>>, d = document()) {
   const ctx = {
     orgId: h.org.orgId,
     actorId: h.managerId,
@@ -72,10 +63,7 @@ test("whole draft saves atomically, handles identical retries and refuses a stal
     });
     assert.equal(saved.revision, 1);
     assert.equal((await getChecklistDesigner(ctx)).document.steps.length, 1);
-    assert.equal(
-      (await saveChecklistDraft({ ...ctx, revision: 0, document: d })).revision,
-      1,
-    );
+    assert.equal((await saveChecklistDraft({ ...ctx, revision: 0, document: d })).revision, 1);
     await assert.rejects(
       saveChecklistDraft({
         ...ctx,
@@ -127,9 +115,7 @@ test("publication is versioned and does not detach removed step identities or re
       ),
       (error: unknown) =>
         error instanceof Error &&
-        /immutable/.test(
-          String((error as Error & { cause?: Error }).cause?.message),
-        ),
+        /immutable/.test(String((error as Error & { cause?: Error }).cause?.message)),
     );
     assert.equal(
       (
@@ -233,12 +219,7 @@ test("approval uses native gates, prevents self approval, retries rejection and 
       preventSelfApproval: true,
     });
     const d = document();
-    d.steps[0]!.design.form = requiredTextForm(
-      "Evidence",
-      "proof",
-      "reference",
-      "Reference",
-    );
+    d.steps[0]!.design.form = requiredTextForm("Evidence", "proof", "reference", "Reference");
     const ctx = await published(h, d);
     const opened = await openChecklist(h, {
       effectiveDate: "2026-10-01",
@@ -257,10 +238,12 @@ test("approval uses native gates, prevents self approval, retries rejection and 
       acknowledged: true,
       response: { reference: "DOC-10" },
     };
-    assert.deepEqual(await completeProcessStep(actor), {status:"pending_approval"});
-    const pendingStep=(await getProcess({orgId:h.org.orgId,actorId:h.managerId,processId:opened.id})).steps[0]!;
-    assert.equal(pendingStep.status,"pending");
-    assert.equal(pendingStep.approvalStatus,"pending");
+    assert.deepEqual(await completeProcessStep(actor), { status: "pending_approval" });
+    const pendingStep = (
+      await getProcess({ orgId: h.org.orgId, actorId: h.managerId, processId: opened.id })
+    ).steps[0]!;
+    assert.equal(pendingStep.status, "pending");
+    assert.equal(pendingStep.approvalStatus, "pending");
     let gate = (await checklistRow<{ id: string }>(
       sql`select id from flow_gates where org_id=${h.org.orgId} and subject_id=${step.id} and status='pending'`,
     ))!;
@@ -290,10 +273,7 @@ test("approval uses native gates, prevents self approval, retries rejection and 
       decision: "approved",
       userId: h.approverId,
     });
-    await assert.rejects(
-      completeProcessStep(actor),
-      /differs from the approved submission/,
-    );
+    await assert.rejects(completeProcessStep(actor), /differs from the approved submission/);
     await completeProcessStep({ ...actor, response: { reference: "DOC-11" } });
   }));
 test("reminders are daily and stop after a controlled skip or cancellation", async () =>
@@ -358,10 +338,7 @@ test("retirement preserves history, blocks legacy mutations and requires a new p
       }),
       /publish its whole draft/,
     );
-    await assert.rejects(
-      deleteProcessTemplate(ctx),
-      /published versions.*Retire template/,
-    );
+    await assert.rejects(deleteProcessTemplate(ctx), /published versions.*Retire template/);
     await assert.rejects(
       retireChecklistTemplate({
         ...ctx,
@@ -392,13 +369,13 @@ test("retirement preserves history, blocks legacy mutations and requires a new p
     assert.equal(live.isActive, true);
     assert.equal(live.publishedVersion, 2);
     const audits = await db.execute<{ changes: { event?: string; reason?: string } }>(
-        sql`select changes from audit_log where org_id=${h.org.orgId} and row_id=${ctx.templateId}`, "objects",
-      );
+      sql`select changes from audit_log where org_id=${h.org.orgId} and row_id=${ctx.templateId}`,
+      "objects",
+    );
     assert.ok(
       audits.some(
         (a) =>
-          a.changes.event === "retired" &&
-          a.changes.reason === "Replaced onboarding procedure",
+          a.changes.event === "retired" && a.changes.reason === "Replaced onboarding procedure",
       ),
     );
   }));

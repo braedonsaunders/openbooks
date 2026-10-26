@@ -6,14 +6,27 @@ const LOCALES = ["en", "de", "es", "fr", "ja", "pt-BR", "zh", "ar-EG"];
 
 test("labels match the platform Intl format for every month and locale", () => {
   for (const locale of LOCALES) {
-    const full = new Intl.DateTimeFormat(locale, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
-    const monthYear = new Intl.DateTimeFormat(locale, { year: "numeric", month: "short", timeZone: "UTC" });
+    const full = new Intl.DateTimeFormat(locale, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    });
+    const monthYear = new Intl.DateTimeFormat(locale, {
+      year: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    });
     for (let month = 1; month <= 12; month++) {
       for (const day of ["01", "09", "28"]) {
         const iso = `2026-${String(month).padStart(2, "0")}-${day}`;
         const instant = new Date(`${iso}T12:00:00Z`);
         assert.equal(civilDateLabel(iso, locale), full.format(instant), `${locale} ${iso}`);
-        assert.equal(civilDateLabel(iso, locale, "monthYear"), monthYear.format(instant), `${locale} ${iso} month`);
+        assert.equal(
+          civilDateLabel(iso, locale, "monthYear"),
+          monthYear.format(instant),
+          `${locale} ${iso} month`,
+        );
       }
     }
   }

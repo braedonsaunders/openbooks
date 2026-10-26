@@ -1,8 +1,8 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import type { TrialBalanceData } from './view'
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { TrialBalanceData } from "./view";
 
-const { trialBalanceSpec } = await import('./view')
+const { trialBalanceSpec } = await import("./view");
 
 // enabling Multi-subsidiary crashed the trial balance with React
 // error 441 — the loader converts the typed rates refusal into a banner with
@@ -14,77 +14,82 @@ const { trialBalanceSpec } = await import('./view')
 function blockedData(): TrialBalanceData {
   return {
     ratesBlocked: {
-      code: 'rates-not-derived',
-      title: 'Rates have not been derived',
-      description: 'No consolidated exchange rates for EUR for March 2026.',
-      deriveLabel: 'Derive rates',
-      deriveHref: '/close',
+      code: "rates-not-derived",
+      title: "Rates have not been derived",
+      description: "No consolidated exchange rates for EUR for March 2026.",
+      deriveLabel: "Derive rates",
+      deriveHref: "/close",
     },
     ratesReady: false,
-  } as unknown as TrialBalanceData
+  } as unknown as TrialBalanceData;
 }
 
 function blocksOf(spec: unknown): Record<string, unknown>[] {
-  const found: Record<string, unknown>[] = []
+  const found: Record<string, unknown>[] = [];
   const visit = (node: unknown): void => {
     if (Array.isArray(node)) {
-      for (const item of node) visit(item)
-      return
+      for (const item of node) visit(item);
+      return;
     }
-    if (typeof node === 'object' && node !== null) {
-      found.push(node as Record<string, unknown>)
-      for (const value of Object.values(node)) visit(value)
+    if (typeof node === "object" && node !== null) {
+      found.push(node as Record<string, unknown>);
+      for (const value of Object.values(node)) visit(value);
     }
-  }
-  visit((spec as { body: unknown }).body)
-  return found
+  };
+  visit((spec as { body: unknown }).body);
+  return found;
 }
 
-test('a rates refusal renders as a derive banner gated on the block', () => {
-  const blocks = blocksOf(trialBalanceSpec(blockedData()))
-  const banner = blocks.find((block) => block.widget === 'empty-state')
-  assert.ok(banner, 'the blocked statement must render an empty-state banner')
-  assert.deepEqual(banner.when, { $: 'ratesBlocked' }, 'the banner shows exactly while the notice is set')
-  const props = banner.props as Record<string, unknown>
-  assert.equal(props.title, 'Rates have not been derived')
-  assert.equal(props.description, 'No consolidated exchange rates for EUR for March 2026.')
-  assert.equal(props.action, 'link-button')
-  const actionProps = props.actionProps as Record<string, unknown>
-  assert.equal(actionProps.href, '/close', 'the banner must link to period close to derive rates')
-  assert.equal(actionProps.label, 'Derive rates')
-})
+test("a rates refusal renders as a derive banner gated on the block", () => {
+  const blocks = blocksOf(trialBalanceSpec(blockedData()));
+  const banner = blocks.find((block) => block.widget === "empty-state");
+  assert.ok(banner, "the blocked statement must render an empty-state banner");
+  assert.deepEqual(
+    banner.when,
+    { $: "ratesBlocked" },
+    "the banner shows exactly while the notice is set",
+  );
+  const props = banner.props as Record<string, unknown>;
+  assert.equal(props.title, "Rates have not been derived");
+  assert.equal(props.description, "No consolidated exchange rates for EUR for March 2026.");
+  assert.equal(props.action, "link-button");
+  const actionProps = props.actionProps as Record<string, unknown>;
+  assert.equal(actionProps.href, "/close", "the banner must link to period close to derive rates");
+  assert.equal(actionProps.label, "Derive rates");
+});
 
-test('the paper hides while rates are blocked', () => {
-  const blocks = blocksOf(trialBalanceSpec(blockedData()))
-  const paper = blocks.find((block) => block.widget === 'paper-view')
-  assert.ok(paper, 'the statement paper must still be in the spec')
+test("the paper hides while rates are blocked", () => {
+  const blocks = blocksOf(trialBalanceSpec(blockedData()));
+  const paper = blocks.find((block) => block.widget === "paper-view");
+  assert.ok(paper, "the statement paper must still be in the spec");
   assert.deepEqual(
     paper.when,
-    { $: 'ratesReady' },
-    'the paper shows only when rates are ready — no numbers beside the banner',
-  )
-})
+    { $: "ratesReady" },
+    "the paper shows only when rates are ready — no numbers beside the banner",
+  );
+});
 
-test('historical evidence refusal keeps the native banner and directs the operator to its journal source', () => {
-  const data = blockedData()
+test("historical evidence refusal keeps the native banner and directs the operator to its journal source", () => {
+  const data = blockedData();
   data.ratesBlocked = {
-    code: 'historical-evidence-required',
-    title: 'Historical contribution evidence is required',
-    description: 'The exact source needs retained genuine layers and Accounting event approval before Apply.',
-    actionLabel: 'Review journal source',
-    actionHref: '/journal?journalEntry=10000000-0000-4000-8000-000000000001',
-  }
-  const blocks = blocksOf(trialBalanceSpec(data))
-  const banner = blocks.find(block => block.widget === 'empty-state')
-  assert.ok(banner)
-  assert.deepEqual(banner.when, { $: 'ratesBlocked' })
-  const props = banner.props as Record<string, unknown>
-  assert.equal(props.description, data.ratesBlocked.description)
-  const action = props.actionProps as Record<string, unknown>
-  assert.equal(action.href, data.ratesBlocked.actionHref)
-  assert.equal(action.label, 'Review journal source')
-  assert.equal(data.ratesReady, false)
-  const paper = blocks.find(block => block.kind === 'paper' || block.widget === 'paper-view')
-  assert.ok(paper)
-  assert.deepEqual(paper.when, { $: 'ratesReady' })
-})
+    code: "historical-evidence-required",
+    title: "Historical contribution evidence is required",
+    description:
+      "The exact source needs retained genuine layers and Accounting event approval before Apply.",
+    actionLabel: "Review journal source",
+    actionHref: "/journal?journalEntry=10000000-0000-4000-8000-000000000001",
+  };
+  const blocks = blocksOf(trialBalanceSpec(data));
+  const banner = blocks.find((block) => block.widget === "empty-state");
+  assert.ok(banner);
+  assert.deepEqual(banner.when, { $: "ratesBlocked" });
+  const props = banner.props as Record<string, unknown>;
+  assert.equal(props.description, data.ratesBlocked.description);
+  const action = props.actionProps as Record<string, unknown>;
+  assert.equal(action.href, data.ratesBlocked.actionHref);
+  assert.equal(action.label, "Review journal source");
+  assert.equal(data.ratesReady, false);
+  const paper = blocks.find((block) => block.kind === "paper" || block.widget === "paper-view");
+  assert.ok(paper);
+  assert.deepEqual(paper.when, { $: "ratesReady" });
+});

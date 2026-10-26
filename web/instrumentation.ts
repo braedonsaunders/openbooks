@@ -8,8 +8,8 @@
  * Only runs in the nodejs server runtime, not during builds.
  */
 export async function register() {
-  if (process.env.NEXT_RUNTIME === 'nodejs') {
-    const { registerNodeInstrumentation } = await import('./instrumentation.node')
-    await registerNodeInstrumentation()
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { registerNodeInstrumentation } = await import("./instrumentation.node");
+    await registerNodeInstrumentation();
   }
 }

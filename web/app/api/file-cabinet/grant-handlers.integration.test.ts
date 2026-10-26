@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import test from "node:test";
 
 /**
  * Live-Postgres coverage for grant isolation and audit atomicity.  The route
@@ -8,7 +8,7 @@ import test from 'node:test'
  * checked, and the shared grant verbs must roll their writes back when the
  * required activity row cannot be appended.
  */
-test('grant changes are resource-scoped and audit-atomic', () => {
+test("grant changes are resource-scoped and audit-atomic", () => {
   const source = `
     import assert from 'node:assert/strict';
     import { randomUUID } from 'node:crypto';
@@ -99,8 +99,17 @@ test('grant changes are resource-scoped and audit-atomic', () => {
   `;
   const result = spawnSync(
     process.execPath,
-    ['--conditions=react-server', '--import', 'tsx', '--import', './engine/src/testing/database-bypass.ts', '--input-type=module', '-e', source],
-    { cwd: process.cwd(), env: process.env, encoding: 'utf8' },
+    [
+      "--conditions=react-server",
+      "--import",
+      "tsx",
+      "--import",
+      "./engine/src/testing/database-bypass.ts",
+      "--input-type=module",
+      "-e",
+      source,
+    ],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
@@ -112,7 +121,7 @@ test('grant changes are resource-scoped and audit-atomic', () => {
  * every grant endpoint must 404 before any grant row or share audit event is
  * written.
  */
-test('grants and tiers refuse absent resources instead of using the baseline', () => {
+test("grants and tiers refuse absent resources instead of using the baseline", () => {
   const source = `
     import assert from 'node:assert/strict';
     import { randomUUID } from 'node:crypto';
@@ -190,8 +199,17 @@ test('grants and tiers refuse absent resources instead of using the baseline', (
   `;
   const result = spawnSync(
     process.execPath,
-    ['--conditions=react-server', '--import', 'tsx', '--import', './engine/src/testing/database-bypass.ts', '--input-type=module', '-e', source],
-    { cwd: process.cwd(), env: process.env, encoding: 'utf8' },
+    [
+      "--conditions=react-server",
+      "--import",
+      "tsx",
+      "--import",
+      "./engine/src/testing/database-bypass.ts",
+      "--input-type=module",
+      "-e",
+      source,
+    ],
+    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });

@@ -52,7 +52,7 @@ const routeState: RouteState = {
   nextVersion: 1,
   txCalls: 0,
 };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 function sqlText(query: unknown): string {
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
@@ -87,8 +87,8 @@ function sqlParams(query: unknown): string[] {
   return out;
 }
 
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlText = sqlText;
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlParams = sqlParams;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlParams = sqlParams;
 
 const mockSources = new Map<string, string>([
   [
@@ -214,10 +214,7 @@ const mockSources = new Map<string, string>([
       export async function businessToday(_orgId) { return state.today }
     `,
   ],
-  [
-    "mock:project-types-gate",
-    "export async function guardProjectsFeature(_orgId) { return null }",
-  ],
+  ["mock:project-types-gate", "export async function guardProjectsFeature(_orgId) { return null }"],
   [
     "mock:project-types-features",
     "export async function isFeatureEnabled(_orgId, _key) { return true }",
@@ -232,7 +229,8 @@ registerHooks({
     ) {
       const modules: Record<string, string> = {
         "@openbooks/engine/platform/db": "mock:project-types-db",
-        "@openbooks/engine/projects/financial-profile-versions": "mock:project-types-financial-profile",
+        "@openbooks/engine/projects/financial-profile-versions":
+          "mock:project-types-financial-profile",
         "@openbooks/engine/platform/business-date/module": "mock:project-types-business-date",
         "../../../../../lib/authz": "mock:project-types-authz",
         "@/lib/authz": "mock:project-types-authz",
@@ -255,18 +253,23 @@ const routeUrl = "./route.ts?project-types-boundary-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 function resetState(): void {
   routeState.authz = {
-    user: { orgId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+    user: {
+      orgId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    },
     permissions: new Set(["admin.setup.manage"]),
     allowedSubsidiaryIds: null,
   };
   routeState.currentProfile = { marker: "old" };
-  routeState.versions = [{
-    id: "initial",
-    effectiveFrom: "2026-08-01",
-    effectiveTo: null,
-    financialProfile: { marker: "old" },
-    reason: "Initial project policy",
-  }];
+  routeState.versions = [
+    {
+      id: "initial",
+      effectiveFrom: "2026-08-01",
+      effectiveTo: null,
+      financialProfile: { marker: "old" },
+      reason: "Initial project policy",
+    },
+  ];
   routeState.audits = [{ action: "insert", changes: { after: { effectiveFrom: "2026-08-01" } } }];
   routeState.stagedVersions = null;
   routeState.stagedAudits = [];
@@ -302,13 +305,23 @@ test("PATCH defaults an omitted financial date to businessToday and records hist
     effectiveFrom: routeState.today,
     reason: "Update project policy",
   });
-  assert.deepEqual(routeState.versions.map(({ id, effectiveFrom, effectiveTo }) => ({ id, effectiveFrom, effectiveTo })), [
-    { id: "initial", effectiveFrom: "2026-08-01", effectiveTo: "2026-08-30" },
-    { id: "version-1", effectiveFrom: "2026-08-31", effectiveTo: null },
-  ]);
+  assert.deepEqual(
+    routeState.versions.map(({ id, effectiveFrom, effectiveTo }) => ({
+      id,
+      effectiveFrom,
+      effectiveTo,
+    })),
+    [
+      { id: "initial", effectiveFrom: "2026-08-01", effectiveTo: "2026-08-30" },
+      { id: "version-1", effectiveFrom: "2026-08-31", effectiveTo: null },
+    ],
+  );
   const projectAudit = routeState.audits.at(-1)!;
   assert.equal(projectAudit.action, "update");
-  assert.equal((projectAudit.changes.financialProfileVersion as { effectiveFrom: string }).effectiveFrom, routeState.today);
+  assert.equal(
+    (projectAudit.changes.financialProfileVersion as { effectiveFrom: string }).effectiveFrom,
+    routeState.today,
+  );
 });
 
 test("PATCH preserves an explicit future financial date and append-only history", async () => {
@@ -321,7 +334,8 @@ test("PATCH preserves an explicit future financial date and append-only history"
   assert.equal(routeState.versions[1]!.effectiveFrom, "2026-09-15");
   assert.equal(routeState.audits.length, 3);
   assert.equal(
-    (routeState.audits.at(-1)!.changes.financialProfileVersion as { effectiveFrom: string }).effectiveFrom,
+    (routeState.audits.at(-1)!.changes.financialProfileVersion as { effectiveFrom: string })
+      .effectiveFrom,
     "2026-09-15",
   );
 });
@@ -333,8 +347,15 @@ test("PATCH rejects an invalid financial date without publishing or auditing par
     const auditsBefore = structuredClone(routeState.audits);
     const response = await PATCH(patchRequest(patchBody({ financialEffectiveFrom: invalidDate })));
 
-    assert.equal(response.status, 422, `expected invalid date ${JSON.stringify(invalidDate)} to fail at the request boundary`);
-    assert.match(((await response.json()) as { error: string }).error, /financialEffectiveFrom.*YYYY-MM-DD/);
+    assert.equal(
+      response.status,
+      422,
+      `expected invalid date ${JSON.stringify(invalidDate)} to fail at the request boundary`,
+    );
+    assert.match(
+      ((await response.json()) as { error: string }).error,
+      /financialEffectiveFrom.*YYYY-MM-DD/,
+    );
     assert.deepEqual(routeState.versions, versionsBefore);
     assert.deepEqual(routeState.audits, auditsBefore);
     // A shape-valid but impossible date must be rejected before SQL date casts.

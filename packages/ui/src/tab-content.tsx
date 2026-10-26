@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import * as React from 'react'
-import { cn } from './utils'
+import * as React from "react";
+import { cn } from "./utils";
 
 /**
  * Wraps tab-panel content so each tab's panel is its own subtree: changing
@@ -28,13 +28,13 @@ export function TabContent({
   children,
   className,
 }: {
-  tabKey: string
-  children: React.ReactNode
-  className?: string
+  tabKey: string;
+  children: React.ReactNode;
+  className?: string;
 }) {
   return (
     <div key={tabKey} className={cn(className)}>
       {children}
     </div>
-  )
+  );
 }

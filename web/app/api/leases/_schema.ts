@@ -3,9 +3,7 @@ import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { exactMoney } from "@/lib/api/json";
 import { compareDecimal } from "@/lib/exact-decimal";
-const date = z
-  .string()
-  .refine(isIsoCalendarDate, "enter a calendar date (YYYY-MM-DD)");
+const date = z.string().refine(isIsoCalendarDate, "enter a calendar date (YYYY-MM-DD)");
 const rate = z.string().max(25);
 const classificationPercent = exactMoney().refine(
   (value) => compareDecimal(value, "0") >= 0 && compareDecimal(value, "100") <= 0,
@@ -55,12 +53,7 @@ export const leaseSchema = z.object({
   locationId: uuidString().nullable().optional(),
 });
 export const leaseChangeSchema = z.object({
-  operation: z.enum([
-    "modification",
-    "remeasurement",
-    "termination",
-    "separate_lease",
-  ]),
+  operation: z.enum(["modification", "remeasurement", "termination", "separate_lease"]),
   effectiveOn: date,
   reason: z.string().trim().min(8).max(1000),
   idempotencyKey: z.string().min(1).max(120),

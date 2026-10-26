@@ -21,7 +21,9 @@ Object.assign(globalThis, {
   __roleBaselineRouter: {
     push() {},
     replace() {},
-    refresh() { script.refreshed++; },
+    refresh() {
+      script.refreshed++;
+    },
   },
 });
 
@@ -35,8 +37,7 @@ stubModules({
   extra: {
     sonner:
       "export const toast={success(m){(globalThis.__roleBaselineScript.toasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__roleBaselineScript.toasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
-    "@/lib/confirm":
-      "export async function confirmDialog(){return true}",
+    "@/lib/confirm": "export async function confirmDialog(){return true}",
   },
 });
 
@@ -56,7 +57,13 @@ globalThis.fetch = (async (url: unknown, init?: { method?: string; body?: string
   script.bodies.push(JSON.parse(String(init?.body ?? "{}")));
   if (method === "PATCH") {
     const sent = JSON.parse(String(init?.body ?? "{}")) as { permissions: string[] };
-    return { ok: true, json: async () => ({ ok: true, role: { id: "role-1", permissions: sent.permissions, updatedAt: "t2" } }) };
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        role: { id: "role-1", permissions: sent.permissions, updatedAt: "t2" },
+      }),
+    };
   }
   return { ok: true, json: async () => ({ ok: true, id: "role-1" }) };
 }) as typeof fetch;
@@ -92,7 +99,9 @@ function clickText(text: string): void {
 
 /** The self-service toggle checkbox, found through its visible label. */
 function baselineToggle(): HTMLInputElement {
-  const label = [...document.querySelectorAll("label")].find((l) => l.textContent?.includes("Employee self-service"));
+  const label = [...document.querySelectorAll("label")].find((l) =>
+    l.textContent?.includes("Employee self-service"),
+  );
   assert.ok(label, "the Employee self-service toggle renders");
   const input = label.querySelector('input[type="checkbox"]');
   assert.ok(input, "the toggle is a checkbox");
@@ -124,7 +133,10 @@ test("a new role opens with self-service on; switching it off warns and unticks 
     for (const key of ["hrm.self.read", "hrm.self.request", "hrm.leave.request"]) {
       assert.equal(permissionBox(key).checked, true, `${key} starts ticked`);
     }
-    assert.ok(!document.body.textContent?.includes("cannot request leave"), "no warning while the baseline is on");
+    assert.ok(
+      !document.body.textContent?.includes("cannot request leave"),
+      "no warning while the baseline is on",
+    );
     await act(async () => {
       baselineToggle().click();
       await tick();
@@ -160,7 +172,10 @@ test("editing a role without the baseline opens with the toggle off and its warn
       await tick();
     });
     assert.equal(baselineToggle().checked, false, "a role without the trio opens toggled off");
-    assert.ok(document.body.textContent?.includes("cannot request leave"), "the off warning shows on open");
+    assert.ok(
+      document.body.textContent?.includes("cannot request leave"),
+      "the off warning shows on open",
+    );
     await act(async () => {
       baselineToggle().click();
       await tick();
@@ -169,7 +184,10 @@ test("editing a role without the baseline opens with the toggle off and its warn
     for (const key of ["hrm.self.read", "hrm.self.request", "hrm.leave.request"]) {
       assert.equal(permissionBox(key).checked, true, `${key} ticks with the toggle`);
     }
-    assert.ok(!document.body.textContent?.includes("cannot request leave"), "the warning clears once the baseline is on");
+    assert.ok(
+      !document.body.textContent?.includes("cannot request leave"),
+      "the warning clears once the baseline is on",
+    );
   } finally {
     await unmount();
   }

@@ -69,20 +69,22 @@ class VendorBillSource implements MigrationSource {
       memo: null,
       referenceNumber: bill.number,
       controlAccountId: null,
-      lines: [{
-        accountId: this.o.accounts.cogs,
-        itemId: null,
-        quantity: "1",
-        unitPrice: bill.amount,
-        amount: bill.amount,
-        taxAmount: "0",
-        taxOverridden: false,
-        taxCodeId: null,
-        departmentId: null,
-        projectId: null,
-        description: "vendor number probe",
-        lineNumber: 1,
-      }],
+      lines: [
+        {
+          accountId: this.o.accounts.cogs,
+          itemId: null,
+          quantity: "1",
+          unitPrice: bill.amount,
+          amount: bill.amount,
+          taxAmount: "0",
+          taxOverridden: false,
+          taxCodeId: null,
+          departmentId: null,
+          projectId: null,
+          description: "vendor number probe",
+          lineNumber: 1,
+        },
+      ],
     };
   }
 
@@ -118,10 +120,13 @@ const fullRun = (o: ScratchOrg, connectionId: string) => ({
 });
 
 async function numbersByRef(orgId: string): Promise<Record<string, string>> {
-  const rows = await db.execute<{ ref: string; number: string }>(sql`
+  const rows = await db.execute<{ ref: string; number: string }>(
+    sql`
     select custom->>'qboId' as ref, document_number as number
       from documents
-     where org_id = ${orgId} and custom ? 'qboId'`, "objects");
+     where org_id = ${orgId} and custom ? 'qboId'`,
+    "objects",
+  );
   return Object.fromEntries(rows.map((row) => [row.ref, row.number]));
 }
 
@@ -166,23 +171,32 @@ test(
 
     // An install that imported under organization-wide numbering holds the
     // other vendor's bill under the collision-safe form.
-    const [b2] = await db.execute<{ id: string; posted_entry_id: string }>(sql`
+    const [b2] = await db.execute<{ id: string; posted_entry_id: string }>(
+      sql`
       select id, posted_entry_id from documents
-       where org_id = ${o.orgId} and custom->>'qboId' = 'B2'`, "objects");
+       where org_id = ${o.orgId} and custom->>'qboId' = 'B2'`,
+      "objects",
+    );
     assert.ok(b2?.posted_entry_id, "the other vendor's bill is posted");
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local openbooks.amend = on`);
       await tx.execute(sql`set local openbooks.migration = on`);
-      const updated = await tx.execute(sql`
+      const updated = await tx.execute(
+        sql`
         update documents set document_number = '764 [qbo:B2]'
-         where id = ${b2.id} and org_id = ${o.orgId} returning id`, "objects");
+         where id = ${b2.id} and org_id = ${o.orgId} returning id`,
+        "objects",
+      );
       assert.equal(updated.length, 1);
     });
-    const journalBefore = await db.execute(sql`
+    const journalBefore = await db.execute(
+      sql`
       select account_id, amount::text, party_id, is_open_item
         from journal_lines
        where org_id = ${o.orgId} and entry_id = ${b2.posted_entry_id}
-       order by id`, "objects");
+       order by id`,
+      "objects",
+    );
 
     const second = await runSync(source, "vendor-numbers-test", fullRun(o, connectionId));
     assert.equal(second.docsFailed, 0, JSON.stringify(second.skipped));
@@ -194,30 +208,41 @@ test(
       B3: "764 [qbo:B3]",
     });
 
-    const [after] = await db.execute<{ posted_entry_id: string; status: string }>(sql`
+    const [after] = await db.execute<{ posted_entry_id: string; status: string }>(
+      sql`
       select posted_entry_id, status from documents
-       where id = ${b2.id} and org_id = ${o.orgId}`, "objects");
+       where id = ${b2.id} and org_id = ${o.orgId}`,
+      "objects",
+    );
     assert.equal(after?.posted_entry_id, b2.posted_entry_id, "the posted entry is the same entry");
     assert.equal(after?.status, "posted");
-    const journalAfter = await db.execute(sql`
+    const journalAfter = await db.execute(
+      sql`
       select account_id, amount::text, party_id, is_open_item
         from journal_lines
        where org_id = ${o.orgId} and entry_id = ${b2.posted_entry_id}
-       order by id`, "objects");
+       order by id`,
+      "objects",
+    );
     assert.deepEqual(journalAfter, journalBefore, "the posted journal lines are unchanged");
 
-    const audits = await db.execute<{ reason: string; before: string; after: string }>(sql`
+    const audits = await db.execute<{ reason: string; before: string; after: string }>(
+      sql`
       select changes->>'reason' as reason,
              changes->'before'->'document'->>'document_number' as before,
              changes->'after'->'document'->>'document_number' as after
         from audit_log
        where org_id = ${o.orgId} and table_name = 'documents' and row_id = ${b2.id}
-         and changes->>'reason' = 'source_transaction_number_changed'`, "objects");
-    assert.deepEqual(audits, [{
-      reason: "source_transaction_number_changed",
-      before: "764 [qbo:B2]",
-      after: "764",
-    }]);
+         and changes->>'reason' = 'source_transaction_number_changed'`,
+      "objects",
+    );
+    assert.deepEqual(audits, [
+      {
+        reason: "source_transaction_number_changed",
+        before: "764 [qbo:B2]",
+        after: "764",
+      },
+    ]);
 
     const third = await runSync(source, "vendor-numbers-test", fullRun(o, connectionId));
     assert.equal(third.docsAmended, 0, "a restored number is stable on the next run");

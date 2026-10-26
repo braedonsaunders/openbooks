@@ -21,23 +21,44 @@ import { db } from "@openbooks/engine/platform/db";
 const KERNEL_TABLES = ["allocation_rule_targets", "allocation_lineage", "allocation_runs"];
 
 const COMPOSITE_EDGES = [
-  { table: "allocation_rule_targets", name: "allocation_rule_targets_class_id_fkey", columns: "org_id,class_id" },
-  { table: "allocation_lineage", name: "allocation_lineage_journal_line_id_fkey", columns: "org_id,journal_line_id" },
-  { table: "allocation_lineage", name: "allocation_lineage_source_journal_line_id_fkey", columns: "org_id,source_journal_line_id" },
+  {
+    table: "allocation_rule_targets",
+    name: "allocation_rule_targets_class_id_fkey",
+    columns: "org_id,class_id",
+  },
+  {
+    table: "allocation_lineage",
+    name: "allocation_lineage_journal_line_id_fkey",
+    columns: "org_id,journal_line_id",
+  },
+  {
+    table: "allocation_lineage",
+    name: "allocation_lineage_source_journal_line_id_fkey",
+    columns: "org_id,source_journal_line_id",
+  },
   { table: "allocation_runs", name: "allocation_runs_book_id_fkey", columns: "org_id,book_id" },
-  { table: "inventory_provisional_costs", name: "inv_provisional_org_subsidiary_fk", columns: "org_id,subsidiary_id" },
+  {
+    table: "inventory_provisional_costs",
+    name: "inv_provisional_org_subsidiary_fk",
+    columns: "org_id,subsidiary_id",
+  },
   {
     table: "inventory_provisional_costs",
     name: "inv_provisional_issue_movement_entity_fk",
     columns: "org_id,subsidiary_id,issue_movement_id",
   },
-  { table: "item_price_schedules", name: "item_price_schedule_supersedes_fk", columns: "org_id,supersedes_id" },
+  {
+    table: "item_price_schedules",
+    name: "item_price_schedule_supersedes_fk",
+    columns: "org_id,supersedes_id",
+  },
 ] as const;
 
 type Edge = { table: string; name: string; columns: string; validated: boolean };
 
 async function foreignKeys(tables: readonly string[]): Promise<Edge[]> {
-  return await db.execute<Edge>(sql`
+  return await db.execute<Edge>(
+    sql`
     select child.relname as "table",
            con.conname as name,
            con.convalidated as validated,
@@ -50,8 +71,13 @@ async function foreignKeys(tables: readonly string[]): Promise<Edge[]> {
       join pg_namespace nsp on nsp.oid = child.relnamespace
      where con.contype = 'f'
        and nsp.nspname = 'public'
-       and child.relname in (${sql.join(tables.map((table) => sql`${table}`), sql`, `)})
-     order by 1, 2`, 'objects');
+       and child.relname in (${sql.join(
+         tables.map((table) => sql`${table}`),
+         sql`, `,
+       )})
+     order by 1, 2`,
+    "objects",
+  );
 }
 
 function withoutOrganization(edges: readonly Edge[]): string[] {
@@ -76,7 +102,11 @@ test("every allocation kernel foreign key carries its organization", async () =>
   const edges = await foreignKeys(KERNEL_TABLES);
   assert.ok(edges.length > 0, "the kernel tables must have foreign keys");
   const single = withoutOrganization(edges);
-  assert.deepEqual(single, [], `single-column kernel edges would cross organizations: ${single.join(", ")}`);
+  assert.deepEqual(
+    single,
+    [],
+    `single-column kernel edges would cross organizations: ${single.join(", ")}`,
+  );
 });
 
 test("the edge detector fires on a planted single-column edge", async () => {
@@ -84,7 +114,9 @@ test("the edge detector fires on a planted single-column edge", async () => {
   await db.execute(sql.raw(`DROP TABLE IF EXISTS ${table}`));
   try {
     await db.execute(
-      sql.raw(`CREATE TABLE ${table} (id uuid primary key, org_id uuid, class_id uuid references classes(id))`),
+      sql.raw(
+        `CREATE TABLE ${table} (id uuid primary key, org_id uuid, class_id uuid references classes(id))`,
+      ),
     );
     const single = withoutOrganization(await foreignKeys([...KERNEL_TABLES, table]));
     assert.ok(

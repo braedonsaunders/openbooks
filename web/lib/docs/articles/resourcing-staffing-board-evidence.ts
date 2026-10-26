@@ -1,15 +1,22 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const staffingBoardEvidence: DocArticle = {
-  slug: 'staffing-board-evidence',
-  title: 'Staffing Board Evidence',
-  category: 'projects',
+  slug: "staffing-board-evidence",
+  title: "Staffing Board Evidence",
+  category: "projects",
   order: 4,
   summary:
-    'Read the staffing board week by week: hard and soft bookings against net capacity, and the evidence behind every cell.',
-  updated: '2026-09-28',
-  keywords: ['staffing board', 'capacity evidence', 'bookings', 'availability', 'overallocation', 'bench'],
-  related: ['busy-season-capacity', 'project-types', 'labor-costing'],
+    "Read the staffing board week by week: hard and soft bookings against net capacity, and the evidence behind every cell.",
+  updated: "2026-09-28",
+  keywords: [
+    "staffing board",
+    "capacity evidence",
+    "bookings",
+    "availability",
+    "overallocation",
+    "bench",
+  ],
+  related: ["busy-season-capacity", "project-types", "labor-costing"],
   body: `# Staffing Board Evidence
 
 The staffing board answers one question per person per week: who is booked,
@@ -65,4 +72,4 @@ assignment imports through the assignment plan resource, and capacity is rebuilt
 schedules in OpenBooks — the evidence chain starts clean on day one rather
 than inheriting numbers nobody can audit.
 `,
-}
+};

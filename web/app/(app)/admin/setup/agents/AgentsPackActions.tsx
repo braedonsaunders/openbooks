@@ -1,15 +1,15 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Loader2, Play } from 'lucide-react'
-import { toast } from 'sonner'
-import { Button } from '@openbooks/ui'
-import { Switch } from '@/components/switch'
-import { readApiErrorMessage } from '@/lib/api-error'
-import { postAgentScan } from './run-agent-scan'
+import Link from "next/link";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Loader2, Play } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@openbooks/ui";
+import { Switch } from "@/components/switch";
+import { readApiErrorMessage } from "@/lib/api-error";
+import { postAgentScan } from "./run-agent-scan";
 
 /**
  * One pack's trailing actions for the Agents overview spec table — switch,
@@ -29,77 +29,86 @@ export function AgentsPackActions({
   configureHref,
   configureLabel,
 }: {
-  agentKey: string
-  policy: Record<string, unknown>
-  packTitle: string
-  enabled: boolean
-  featureEnabled: boolean
-  configureHref: string
-  configureLabel: string
+  agentKey: string;
+  policy: Record<string, unknown>;
+  packTitle: string;
+  enabled: boolean;
+  featureEnabled: boolean;
+  configureHref: string;
+  configureLabel: string;
 }) {
-  const t = useTranslations('admin')
-  const router = useRouter()
-  const [on, setOn] = useState(enabled)
-  const [pending, setPending] = useState(false)
-  const [running, setRunning] = useState(false)
+  const t = useTranslations("admin");
+  const router = useRouter();
+  const [on, setOn] = useState(enabled);
+  const [pending, setPending] = useState(false);
+  const [running, setRunning] = useState(false);
 
   async function toggle() {
-    if (pending || running) return
-    const next = !on
+    if (pending || running) return;
+    const next = !on;
     // The fence mirrors the server: enabling while the module is off is
     // refused with a link to the switch that unblocks it.
-    if (next && !featureEnabled) return
-    setOn(next)
-    setPending(true)
+    if (next && !featureEnabled) return;
+    setOn(next);
+    setPending(true);
     try {
       const res = await fetch(`/api/admin/setup/agents/${agentKey}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...policy, enabled: next }),
-      })
+      });
       if (!res.ok) {
         // The body parses from a clone so the feature_disabled code keeps
         // its mapped copy while every other refusal reads through the
         // shared helper with message, remedy and code.
-        const payload = (await res.clone().json().catch(() => ({}))) as { error?: string }
-        if (payload.error === 'feature_disabled') {
-          throw new Error(t('setup.agents.overview.featureOffError'))
+        const payload = (await res
+          .clone()
+          .json()
+          .catch(() => ({}))) as { error?: string };
+        if (payload.error === "feature_disabled") {
+          throw new Error(t("setup.agents.overview.featureOffError"));
         }
-        throw new Error(await readApiErrorMessage(res, t('setup.agents.overview.toggleFailed')))
+        throw new Error(await readApiErrorMessage(res, t("setup.agents.overview.toggleFailed")));
       }
-      toast.success(t(next ? 'setup.agents.overview.enabled' : 'setup.agents.overview.disabled', { name: packTitle }))
-      router.refresh()
+      toast.success(
+        t(next ? "setup.agents.overview.enabled" : "setup.agents.overview.disabled", {
+          name: packTitle,
+        }),
+      );
+      router.refresh();
     } catch (e) {
-      setOn(!next)
-      toast.error((e as Error).message)
+      setOn(!next);
+      toast.error((e as Error).message);
     } finally {
-      setPending(false)
+      setPending(false);
     }
   }
 
   async function runNow() {
-    if (pending || running) return
-    setRunning(true)
+    if (pending || running) return;
+    setRunning(true);
     try {
-      const outcome = await postAgentScan(agentKey, t('setup.agents.overview.scanFailed'))
+      const outcome = await postAgentScan(agentKey, t("setup.agents.overview.scanFailed"));
       if (!outcome.ok) {
         if (outcome.alreadyRunning) {
           // Another run owns the scan: say so and converge the row onto
           // its progress instead of reporting a generic failure.
-          toast.error(t('setup.agents.overview.scanAlreadyRunning'))
-          router.refresh()
-          return
+          toast.error(t("setup.agents.overview.scanAlreadyRunning"));
+          router.refresh();
+          return;
         }
-        throw new Error(outcome.code === 'feature_disabled'
-          ? t('setup.agents.overview.featureOffError')
-          : outcome.error ?? t('setup.agents.overview.scanFailed'))
+        throw new Error(
+          outcome.code === "feature_disabled"
+            ? t("setup.agents.overview.featureOffError")
+            : (outcome.error ?? t("setup.agents.overview.scanFailed")),
+        );
       }
-      toast.success(t('setup.agents.overview.scanComplete', { count: outcome.detected }))
-      router.refresh()
+      toast.success(t("setup.agents.overview.scanComplete", { count: outcome.detected }));
+      router.refresh();
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error((e as Error).message);
     } finally {
-      setRunning(false)
+      setRunning(false);
     }
   }
 
@@ -119,11 +128,14 @@ export function AgentsPackActions({
         onClick={() => void runNow()}
       >
         {running ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-        {t('setup.agents.overview.runNow')}
+        {t("setup.agents.overview.runNow")}
       </Button>
-      <Link href={configureHref} className="shrink-0 text-xs font-medium text-teal-700 underline dark:text-teal-300">
+      <Link
+        href={configureHref}
+        className="shrink-0 text-xs font-medium text-teal-700 underline dark:text-teal-300"
+      >
         {configureLabel}
       </Link>
     </span>
-  )
+  );
 }

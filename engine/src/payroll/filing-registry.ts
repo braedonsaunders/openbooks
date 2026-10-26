@@ -280,55 +280,58 @@ export interface PayrollFilingCorrectionDownload {
  */
 export type PayrollFilingAmendment =
   | {
-    supported: false;
-    /** Why this filing cannot be corrected here — named, never implied. */
-    refusal: string;
-  }
+      supported: false;
+      /** Why this filing cannot be corrected here — named, never implied. */
+      refusal: string;
+    }
   | {
-    supported: true;
-    /**
-     * Which corrections the agency accepts for THIS filing. A Form 941 can
-     * be amended (941-X) but never cancelled — you cannot un-file a quarter.
-     */
-    revisions: readonly PayrollFilingCorrectionKind[];
-    /**
-     * How the agency carries the correction:
-     *   - `same_form`       — the original form re-filed under a report-type
-     *     code (the CRA's T4 XML `RPT_TCD` A/C);
-     *   - `correction_form` — a distinct form carrying BOTH previously
-     *     reported and corrected amounts (the IRS's W-2c/W-3c, 941-X).
-     */
-    vehicle: "same_form" | "correction_form";
-    /** The correction form's printed name; required for `correction_form`. */
-    formLabel?: string;
-    /** Render one correction as its statutory form. */
-    slip?: {
-      build(row: PayrollFilingCorrectionRow, orgId: string, taxYear: number):
-      Promise<PayrollFilingSlipData>;
+      supported: true;
+      /**
+       * Which corrections the agency accepts for THIS filing. A Form 941 can
+       * be amended (941-X) but never cancelled — you cannot un-file a quarter.
+       */
+      revisions: readonly PayrollFilingCorrectionKind[];
+      /**
+       * How the agency carries the correction:
+       *   - `same_form`       — the original form re-filed under a report-type
+       *     code (the CRA's T4 XML `RPT_TCD` A/C);
+       *   - `correction_form` — a distinct form carrying BOTH previously
+       *     reported and corrected amounts (the IRS's W-2c/W-3c, 941-X).
+       */
+      vehicle: "same_form" | "correction_form";
+      /** The correction form's printed name; required for `correction_form`. */
+      formLabel?: string;
+      /** Render one correction as its statutory form. */
+      slip?: {
+        build(
+          row: PayrollFilingCorrectionRow,
+          orgId: string,
+          taxYear: number,
+        ): Promise<PayrollFilingSlipData>;
+      };
+      download?: PayrollFilingCorrectionDownload;
+      /** Why there is no correction FILE, when there is none. */
+      downloadRefusal?: string;
+      /**
+       * Confidential identity facts to compare by fingerprint (the SIN on a T4,
+       * the SSN on a W-2). Server-side only: the fingerprints are stored in the
+       * snapshot and never returned to a browser — only "changed" is.
+       *
+       * `previous` carries the row's last-issued fingerprints by label. The
+       * pack recomputes the CURRENT value under each stored fingerprint's key
+       * id (see `keyedFingerprintForComparison`), so a data-key rotation never
+       * reads an unchanged identifier as changed. Absent for a first issue,
+       * which fingerprints under the active key.
+       */
+      confidential?(
+        orgId: string,
+        taxYear: number,
+        rowId: string,
+        previous?: readonly { label: string; fingerprint: string }[],
+      ): Promise<{ label: string; fingerprint: string }[]>;
+      /** Immutable, nonprinted values needed to reproduce a corrected artifact. */
+      privateFacts?(orgId: string, taxYear: number, rowId: string): Promise<Record<string, string>>;
     };
-    download?: PayrollFilingCorrectionDownload;
-    /** Why there is no correction FILE, when there is none. */
-    downloadRefusal?: string;
-    /**
-     * Confidential identity facts to compare by fingerprint (the SIN on a T4,
-     * the SSN on a W-2). Server-side only: the fingerprints are stored in the
-     * snapshot and never returned to a browser — only "changed" is.
-     *
-     * `previous` carries the row's last-issued fingerprints by label. The
-     * pack recomputes the CURRENT value under each stored fingerprint's key
-     * id (see `keyedFingerprintForComparison`), so a data-key rotation never
-     * reads an unchanged identifier as changed. Absent for a first issue,
-     * which fingerprints under the active key.
-     */
-    confidential?(
-      orgId: string,
-      taxYear: number,
-      rowId: string,
-      previous?: readonly { label: string; fingerprint: string }[],
-    ): Promise<{ label: string; fingerprint: string }[]>;
-    /** Immutable, nonprinted values needed to reproduce a corrected artifact. */
-    privateFacts?(orgId: string, taxYear: number, rowId: string): Promise<Record<string, string>>;
-  };
 
 /** Native agency transport binds its response to the exact approved artifact. */
 export interface PayrollFilingDeliveryContext {
@@ -348,8 +351,12 @@ export interface PayrollFilingDelivery {
     submittedAt: string;
     evidence: Readonly<Record<string, unknown>>;
   }>;
-  verifyReceipt?(context: PayrollFilingDeliveryContext, reference: string, receipt: string): Promise<{
-    status: 'accepted' | 'rejected' | 'pending';
+  verifyReceipt?(
+    context: PayrollFilingDeliveryContext,
+    reference: string,
+    receipt: string,
+  ): Promise<{
+    status: "accepted" | "rejected" | "pending";
     reference: string;
     artifactDigest: string;
     receivedAt: string;
@@ -362,12 +369,18 @@ export interface PayrollFilingDelivery {
 /** Artifact builders never establish agency transport or receipt verification. */
 export function payrollFilingDeliveryScope(filing: PayrollYearEndFiling) {
   return {
-    submission: typeof filing.delivery?.submit === 'function',
-    submissionRefusal: typeof filing.delivery?.submit === 'function' ? null : filing.delivery?.submissionRefusal
-      ?? `${filing.label} has no agency submission adapter — use the agency's filing channel; generating an artifact does not submit it.`,
-    acceptance: typeof filing.delivery?.verifyReceipt === 'function',
-    acceptanceRefusal: typeof filing.delivery?.verifyReceipt === 'function' ? null : filing.delivery?.acceptanceRefusal
-      ?? `${filing.label} has no agency receipt verifier — retain the agency's acknowledgement; artifact generation never establishes acceptance.`,
+    submission: typeof filing.delivery?.submit === "function",
+    submissionRefusal:
+      typeof filing.delivery?.submit === "function"
+        ? null
+        : (filing.delivery?.submissionRefusal ??
+          `${filing.label} has no agency submission adapter — use the agency's filing channel; generating an artifact does not submit it.`),
+    acceptance: typeof filing.delivery?.verifyReceipt === "function",
+    acceptanceRefusal:
+      typeof filing.delivery?.verifyReceipt === "function"
+        ? null
+        : (filing.delivery?.acceptanceRefusal ??
+          `${filing.label} has no agency receipt verifier — retain the agency's acknowledgement; artifact generation never establishes acceptance.`),
   };
 }
 
@@ -446,11 +459,19 @@ export interface PayrollYearEndFiling {
   /** Exact original-artifact selection, when the pack issues only selected population rows. */
   /** Each selected source is an independent original, frozen by native source hooks. */
   additionalSelectedOriginals?: boolean;
-  originalIssueRowIds?: (params: Readonly<Record<string, string>>, orgId: string) => readonly string[] | Promise<readonly string[]>;
+  originalIssueRowIds?: (
+    params: Readonly<Record<string, string>>,
+    orgId: string,
+  ) => readonly string[] | Promise<readonly string[]>;
   /** Native source locks held while an explicit issued artifact is snapshotted. */
   lockIssueSources?: (orgId: string, actorId: string, rowIds: readonly string[]) => Promise<void>;
   /** Source lifecycle recorded in the same transaction as the issued artifact. */
-  recordIssueSources?: (orgId: string, actorId: string, rowIds: readonly string[], submissionId: string) => Promise<void>;
+  recordIssueSources?: (
+    orgId: string,
+    actorId: string,
+    rowIds: readonly string[],
+    submissionId: string,
+  ) => Promise<void>;
   /**
    * How this filing is CORRECTED once issued. Required — every employer
    * eventually files a wrong slip, and a pack that says nothing would
@@ -515,7 +536,8 @@ export function declaredPayrollFilings(): PayrollPackFilings[] {
  * duplicate filing/program keys within the declaration.
  */
 export function registerPayrollFilings(declaration: PayrollPackFilings): void {
-  if (!declaration.country) throw new PayrollPackError("a payroll filing declaration must name its country");
+  if (!declaration.country)
+    throw new PayrollPackError("a payroll filing declaration must name its country");
   if (declaredPayrollFilings().some((pack) => pack.country === declaration.country)) {
     throw new PayrollPackError(
       `payroll filings for ${declaration.country} are already declared — a country has exactly one filing declaration`,
@@ -528,11 +550,15 @@ export function registerPayrollFilings(declaration: PayrollPackFilings): void {
   }
   const filingKeys = declaration.yearEnd.map((filing) => filing.key);
   if (new Set(filingKeys).size !== filingKeys.length) {
-    throw new PayrollPackError(`the ${declaration.country} filing declaration repeats a filing key`);
+    throw new PayrollPackError(
+      `the ${declaration.country} filing declaration repeats a filing key`,
+    );
   }
   const programKeys = declaration.programTypes.map((programType) => programType.key);
   if (new Set(programKeys).size !== programKeys.length) {
-    throw new PayrollPackError(`the ${declaration.country} filing declaration repeats a program type`);
+    throw new PayrollPackError(
+      `the ${declaration.country} filing declaration repeats a program type`,
+    );
   }
   EXTRA.set(declaration.country, declaration);
 }
@@ -571,10 +597,10 @@ export function registerYearEndFiling(country: string, filing: PayrollYearEndFil
 function assertRowShape(country: string, filing: PayrollYearEndFiling): void {
   if (typeof filing.parseRowId !== "function") {
     throw new PayrollPackError(
-      `the ${country} "${filing.key}" filing declares no row-key grammar — declare `
-      + "parseRowId(rowId) so the subsidiary-scope guard can resolve every row to the "
-      + "entities that own it (a filing whose grammar lives only in its builder cannot "
-      + "be guarded)",
+      `the ${country} "${filing.key}" filing declares no row-key grammar — declare ` +
+        "parseRowId(rowId) so the subsidiary-scope guard can resolve every row to the " +
+        "entities that own it (a filing whose grammar lives only in its builder cannot " +
+        "be guarded)",
     );
   }
 }
@@ -583,9 +609,9 @@ function assertRowShape(country: string, filing: PayrollYearEndFiling): void {
 function assertCadence(country: string, filing: PayrollYearEndFiling): void {
   if (!PAYROLL_FILING_CADENCES.includes(filing.cadence)) {
     throw new PayrollPackError(
-      `the ${country} "${filing.key}" filing declares no cadence — declare `
-      + `${PAYROLL_FILING_CADENCES.join(", ")} so the filing lands on the right surface `
-      + "(a separation document must never masquerade as a year-end return)",
+      `the ${country} "${filing.key}" filing declares no cadence — declare ` +
+        `${PAYROLL_FILING_CADENCES.join(", ")} so the filing lands on the right surface ` +
+        "(a separation document must never masquerade as a year-end return)",
     );
   }
 }
@@ -600,17 +626,17 @@ function assertAmendment(country: string, filing: PayrollYearEndFiling): void {
   const amendment = filing.amendment as PayrollFilingAmendment | undefined;
   if (!amendment || typeof amendment.supported !== "boolean") {
     throw new PayrollPackError(
-      `the ${country} "${filing.key}" filing declares no amendment support — declare `
-      + "{ supported: false, refusal } or { supported: true, revisions, vehicle } so a "
-      + "correction is either produced to the agency's own rules or refused by name "
-      + "(no filing may silently inherit another agency's correction mechanics)",
+      `the ${country} "${filing.key}" filing declares no amendment support — declare ` +
+        "{ supported: false, refusal } or { supported: true, revisions, vehicle } so a " +
+        "correction is either produced to the agency's own rules or refused by name " +
+        "(no filing may silently inherit another agency's correction mechanics)",
     );
   }
   if (!amendment.supported) {
     if (!amendment.refusal || !amendment.refusal.trim()) {
       throw new PayrollPackError(
-        `the ${country} "${filing.key}" filing declares no amendment support and no reason — `
-        + "a refusal must say why, by name",
+        `the ${country} "${filing.key}" filing declares no amendment support and no reason — ` +
+          "a refusal must say why, by name",
       );
     }
     return;
@@ -618,35 +644,35 @@ function assertAmendment(country: string, filing: PayrollYearEndFiling): void {
   const revisions = amendment.revisions ?? [];
   if (revisions.length === 0) {
     throw new PayrollPackError(
-      `the ${country} "${filing.key}" filing supports amendment but names no revisions — `
-      + "declare which of amended, cancelled the agency accepts",
+      `the ${country} "${filing.key}" filing supports amendment but names no revisions — ` +
+        "declare which of amended, cancelled the agency accepts",
     );
   }
   for (const revision of revisions) {
     if (revision !== "amended" && revision !== "cancelled") {
       throw new PayrollPackError(
-        `the ${country} "${filing.key}" filing declares an unknown revision "${revision}" — `
-        + "corrections are amended or cancelled",
+        `the ${country} "${filing.key}" filing declares an unknown revision "${revision}" — ` +
+          "corrections are amended or cancelled",
       );
     }
   }
   if (amendment.vehicle !== "same_form" && amendment.vehicle !== "correction_form") {
     throw new PayrollPackError(
-      `the ${country} "${filing.key}" filing declares no correction vehicle — `
-      + "same_form (a report-type code on the original form) or correction_form "
-      + "(a distinct form carrying previously reported and corrected amounts)",
+      `the ${country} "${filing.key}" filing declares no correction vehicle — ` +
+        "same_form (a report-type code on the original form) or correction_form " +
+        "(a distinct form carrying previously reported and corrected amounts)",
     );
   }
   if (amendment.vehicle === "correction_form" && !amendment.formLabel?.trim()) {
     throw new PayrollPackError(
-      `the ${country} "${filing.key}" filing corrects on a separate form but does not name it — `
-      + "declare formLabel (\"Form W-2c\", \"Form 941-X\")",
+      `the ${country} "${filing.key}" filing corrects on a separate form but does not name it — ` +
+        'declare formLabel ("Form W-2c", "Form 941-X")',
     );
   }
   if (!amendment.download && !amendment.downloadRefusal?.trim()) {
     throw new PayrollPackError(
-      `the ${country} "${filing.key}" filing declares neither a correction file nor a reason `
-      + "there is none — an absent electronic correction must be named, never implied",
+      `the ${country} "${filing.key}" filing declares neither a correction file nor a reason ` +
+        "there is none — an absent electronic correction must be named, never implied",
     );
   }
 }
@@ -662,8 +688,10 @@ export function payrollPackFilings(country: string): PayrollPackFilings {
   const pack = declaredPayrollFilings().find((declared) => declared.country === country);
   if (!pack) {
     throw new PayrollPackError(
-      `no payroll pack declares filings for ${country || "(unset)"} — filings are declared for `
-      + declaredPayrollFilings().map((declared) => declared.country).join(", "),
+      `no payroll pack declares filings for ${country || "(unset)"} — filings are declared for ` +
+        declaredPayrollFilings()
+          .map((declared) => declared.country)
+          .join(", "),
     );
   }
   return pack;
@@ -675,8 +703,8 @@ export function yearEndFiling(country: string, key: string): PayrollYearEndFilin
   const filing = pack.yearEnd.find((declared) => declared.key === key);
   if (!filing) {
     throw new PayrollPackError(
-      `the ${country} payroll pack declares no "${key}" filing — it declares `
-      + (pack.yearEnd.map((declared) => declared.key).join(", ") || "none"),
+      `the ${country} payroll pack declares no "${key}" filing — it declares ` +
+        (pack.yearEnd.map((declared) => declared.key).join(", ") || "none"),
     );
   }
   return filing;
@@ -693,9 +721,9 @@ export function separationPaymentKeys(country: string): PayrollSeparationPayment
   const pack = payrollPackFilings(country);
   if (!pack.separationPayments) {
     throw new PayrollPackError(
-      `the ${country} payroll pack declares no separation-payment component mapping — `
-      + "declare which component system_keys are vacation pay vs other monies on separation "
-      + "before its separation filing can be built",
+      `the ${country} payroll pack declares no separation-payment component mapping — ` +
+        "declare which component system_keys are vacation pay vs other monies on separation " +
+        "before its separation filing can be built",
     );
   }
   return pack.separationPayments;
@@ -722,14 +750,21 @@ export function filingAccountProblem(input: {
   const country = input.country || "";
   const pack = declaredPayrollFilings().find((declared) => declared.country === country);
   if (!pack) {
-    return `no payroll pack declares filing program types for ${country || "(unset)"} — `
-      + `filing accounts exist for ${declaredPayrollFilings().map((declared) => declared.country).join(", ")}`;
+    return (
+      `no payroll pack declares filing program types for ${country || "(unset)"} — ` +
+      `filing accounts exist for ${declaredPayrollFilings()
+        .map((declared) => declared.country)
+        .join(", ")}`
+    );
   }
   const programType = pack.programTypes.find((declared) => declared.key === input.programType);
   if (!programType) {
-    return `the ${country} payroll pack does not file under program type `
-      + `"${input.programType || "(unset)"}" — it declares `
-      + (pack.programTypes.map((declared) => `${declared.key} (${declared.label})`).join(", ") || "none");
+    return (
+      `the ${country} payroll pack does not file under program type ` +
+      `"${input.programType || "(unset)"}" — it declares ` +
+      (pack.programTypes.map((declared) => `${declared.key} (${declared.label})`).join(", ") ||
+        "none")
+    );
   }
   const hasRegion = input.stateCode != null && input.stateCode !== "";
   if (programType.requiresRegion && !hasRegion) {

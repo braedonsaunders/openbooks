@@ -21,10 +21,7 @@
  * Loonheffingen 2026, hoofdstuk 24 Heffingskortingen and hoofdstuk 15
  * Jaaropgaaf).
  */
-import type {
-  PayrollCertificate,
-  PayrollPackCertificates,
-} from "../certificates.ts";
+import type { PayrollCertificate, PayrollPackCertificates } from "../certificates.ts";
 import { NL_AOK_2026 } from "./rates.ts";
 
 /**
@@ -48,12 +45,12 @@ const OPGAAF_LOONHEFFINGEN: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "Belastingdienst, Model opgaaf gegevens voor de loonheffingen; "
-    + "Handboek Loonheffingen 2026, hoofdstuk 24 (Heffingskortingen)",
+    "Belastingdienst, Model opgaaf gegevens voor de loonheffingen; " +
+    "Handboek Loonheffingen 2026, hoofdstuk 24 (Heffingskortingen)",
   summary:
-    "Filed on hire and whenever the employee's circumstances change. It identifies the employee "
-    + "for the loonstaat and records whether the employer must apply the loonheffingskorting "
-    + "when looking up the witte loonbelastingtabellen.",
+    "Filed on hire and whenever the employee's circumstances change. It identifies the employee " +
+    "for the loonstaat and records whether the employer must apply the loonheffingskorting " +
+    "when looking up the witte loonbelastingtabellen.",
   storage: "certificate_rows",
   fields: [
     {
@@ -63,11 +60,12 @@ const OPGAAF_LOONHEFFINGEN: PayrollCertificate = {
       // No form on file is withheld WITHOUT the korting: applying it needs
       // the employee's dated and signed request (Handboek, hoofdstuk 20).
       default: "false",
-      help: "Whether the employer applies the loonheffingskorting — the arbeidskorting (labour tax "
-        + "credit) together with the algemene heffingskorting (general tax credit) — when looking up "
-        + "the employee's withholding in the witte loonbelastingtabellen. Only with the employee's "
-        + "dated and signed opgaaf on file, and at no more than one employer or benefits agency at "
-        + "a time. Without the form on file the tables are applied without the korting.",
+      help:
+        "Whether the employer applies the loonheffingskorting — the arbeidskorting (labour tax " +
+        "credit) together with the algemene heffingskorting (general tax credit) — when looking up " +
+        "the employee's withholding in the witte loonbelastingtabellen. Only with the employee's " +
+        "dated and signed opgaaf on file, and at no more than one employer or benefits agency at " +
+        "a time. Without the form on file the tables are applied without the korting.",
     },
     {
       key: "age_class",
@@ -81,30 +79,33 @@ const OPGAAF_LOONHEFFINGEN: PayrollCertificate = {
       // The table and volksverzekeringen liability differ by age class; the
       // pack has no birth-date input from which this can be derived safely.
       required: true,
-      help: "Which loonheffing age column the employee falls in, read off the birth date on the "
-        + "opgaaf. This must be recorded; an absent answer cannot default to under-AOW. "
-        + "The schijventarief and the heffingskortingen differ per column "
-        + "(Rekenvoorschriften 2026, Tabellen 1–5).",
+      help:
+        "Which loonheffing age column the employee falls in, read off the birth date on the " +
+        "opgaaf. This must be recorded; an absent answer cannot default to under-AOW. " +
+        "The schijventarief and the heffingskortingen differ per column " +
+        "(Rekenvoorschriften 2026, Tabellen 1–5).",
     },
     {
       key: "aok_apply",
       label: "Alleenstaande-ouderenkorting toepassen",
       kind: "flag",
       default: "false",
-      help: `Whether the alleenstaande-ouderenkorting (€ ${NL_AOK_2026} in 2026) is applied. Only for `
-        + "employees at or above the AOW age who meet the Handboek conditions (Rekenvoorschriften "
-        + "2026, Tabel 5: \"niet van toepassing\" below the AOW age — the engine refuses that "
-        + "combination by name).",
+      help:
+        `Whether the alleenstaande-ouderenkorting (€ ${NL_AOK_2026} in 2026) is applied. Only for ` +
+        "employees at or above the AOW age who meet the Handboek conditions (Rekenvoorschriften " +
+        '2026, Tabel 5: "niet van toepassing" below the AOW age — the engine refuses that ' +
+        "combination by name).",
     },
     {
       key: "jgk_apply",
       label: "Jonggehandicaptenkorting toepassen",
       kind: "flag",
       default: "false",
-      help: "Whether the jonggehandicaptenkorting (€ 923 in 2026, € 462 above the AOW age) is set "
-        + "against the period withholding (Rekenvoorschriften 2026, §5). Only with the employee's "
-        + "election on file AND a declared jgk_basis below — the engine refuses the reduction "
-        + "without an established Wajong entitlement (Handboek Loonheffingen 2026, §24.1.5).",
+      help:
+        "Whether the jonggehandicaptenkorting (€ 923 in 2026, € 462 above the AOW age) is set " +
+        "against the period withholding (Rekenvoorschriften 2026, §5). Only with the employee's " +
+        "election on file AND a declared jgk_basis below — the engine refuses the reduction " +
+        "without an established Wajong entitlement (Handboek Loonheffingen 2026, §24.1.5).",
     },
     {
       key: "jgk_basis",
@@ -119,23 +120,26 @@ const OPGAAF_LOONHEFFINGEN: PayrollCertificate = {
         {
           value: "uwv_entitlement",
           label: "Wajong-gerechtigd zonder uitkering (UWV-brief aanwezig)",
-          help: "The employee is eligible for a Wajong benefit but does not receive one — the "
-            + "employer retains the UWV entitlement letter and records its reference in "
-            + "jgk_evidence.",
+          help:
+            "The employee is eligible for a Wajong benefit but does not receive one — the " +
+            "employer retains the UWV entitlement letter and records its reference in " +
+            "jgk_evidence.",
         },
       ],
-      help: "The Wajong entitlement grounding the jonggehandicaptenkorting (Handboek "
-        + "Loonheffingen 2026, §24.1.5: only people receiving a Wajong benefit, or eligible "
-        + "for one but not receiving it). Absent until declared — without it the korting "
-        + "is refused.",
+      help:
+        "The Wajong entitlement grounding the jonggehandicaptenkorting (Handboek " +
+        "Loonheffingen 2026, §24.1.5: only people receiving a Wajong benefit, or eligible " +
+        "for one but not receiving it). Absent until declared — without it the korting " +
+        "is refused.",
     },
     {
       key: "jgk_evidence",
       label: "Jonggehandicaptenkorting bewijsstuk",
       kind: "code",
-      help: "Reference to the retained UWV entitlement letter (beschikking), required when "
-        + "jgk_basis is Wajong-eligible-without-benefit. The employer must keep the letter; "
-        + "this reference is the audit link to it.",
+      help:
+        "Reference to the retained UWV entitlement letter (beschikking), required when " +
+        "jgk_basis is Wajong-eligible-without-benefit. The employer must keep the letter; " +
+        "this reference is the audit link to it.",
     },
   ],
 };
@@ -163,42 +167,45 @@ const PREMIES_WERKNEMERSVERZEKERINGEN: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "Belastingdienst, Handboek Loonheffingen 2026 (premies werknemersverzekeringen); "
-    + "Tarieven, bedragen en percentages loonheffingen vanaf 1 januari 2026, Tabel 9 "
-    + "(AWf/Aof percentages); Whk: \"Zie mededeling of beschikking\"",
+    "Belastingdienst, Handboek Loonheffingen 2026 (premies werknemersverzekeringen); " +
+    "Tarieven, bedragen en percentages loonheffingen vanaf 1 januari 2026, Tabel 9 " +
+    '(AWf/Aof percentages); Whk: "Zie mededeling of beschikking"',
   summary:
-    "The employer's per-employee SV facts for the loonaangifte: which AWf premium the contract "
-    + "attracts (or the Ufo classification for covered government employees, who owe no AWf), "
-    + "which Aof premium the employer's size attracts, the Whk beschikking percentage, "
-    + "and the declared SV wage year-to-date for the € 79.409 annual maximum.",
+    "The employer's per-employee SV facts for the loonaangifte: which AWf premium the contract " +
+    "attracts (or the Ufo classification for covered government employees, who owe no AWf), " +
+    "which Aof premium the employer's size attracts, the Whk beschikking percentage, " +
+    "and the declared SV wage year-to-date for the € 79.409 annual maximum.",
   storage: "certificate_rows",
   fields: [
     {
       key: "awf_laag",
       label: "AWf lage premie (vast contract)",
       kind: "flag",
-      help: "Whether the employee's contract attracts the lage AWf premie (2,74% in 2026): a "
-        + "qualifying vast (permanent) contract. Unset prices the hoge premie (7,74%). Required "
-        + "whenever SV premiums price — the engine refuses to guess the contract type. Leave unset "
-        + "for Ufo-covered government employees (see ufo): AWf plus Ufo refuses as contradictory.",
+      help:
+        "Whether the employee's contract attracts the lage AWf premie (2,74% in 2026): a " +
+        "qualifying vast (permanent) contract. Unset prices the hoge premie (7,74%). Required " +
+        "whenever SV premiums price — the engine refuses to guess the contract type. Leave unset " +
+        "for Ufo-covered government employees (see ufo): AWf plus Ufo refuses as contradictory.",
     },
     {
       key: "ufo",
       label: "Ufo-covered government employee (overheid)",
       kind: "flag",
       default: "false",
-      help: "Whether the employee is a covered government employee (Wet privatisering ABP scope): "
-        + "government employers owe no AWf for them and instead owe the Ufo premie (0,68% in 2026, "
-        + "Handboek Loonheffingen §7.4), priced on the WW leg. Leave awf_laag unset for them. "
-        + "Defaults to false (private-sector AWf treatment).",
+      help:
+        "Whether the employee is a covered government employee (Wet privatisering ABP scope): " +
+        "government employers owe no AWf for them and instead owe the Ufo premie (0,68% in 2026, " +
+        "Handboek Loonheffingen §7.4), priced on the WW leg. Leave awf_laag unset for them. " +
+        "Defaults to false (private-sector AWf treatment).",
     },
     {
       key: "aof_hoog",
       label: "Aof hoge premie (grote werkgever)",
       kind: "flag",
-      help: "Whether the employer pays the hoge Aof premie (7,63% in 2026): a large employer "
-        + "(premieplichtig loon above 25x the average). Unset prices the lage premie (6,27%). "
-        + "Required whenever SV premiums price — the engine refuses to guess the employer size.",
+      help:
+        "Whether the employer pays the hoge Aof premie (7,63% in 2026): a large employer " +
+        "(premieplichtig loon above 25x the average). Unset prices the lage premie (6,27%). " +
+        "Required whenever SV premiums price — the engine refuses to guess the employer size.",
     },
     {
       key: "whk_percent",
@@ -207,9 +214,10 @@ const PREMIES_WERKNEMERSVERZEKERINGEN: PayrollCertificate = {
       decimals: 2,
       min: "0",
       max: "100",
-      help: "The gedifferentieerde Whk premium percentage from the employer's own Belastingdienst "
-        + "mededeling or beschikking (for example 1.25 means 1,25%). No default exists — the "
-        + "percentage differs per employer — so the engine refuses to price without it.",
+      help:
+        "The gedifferentieerde Whk premium percentage from the employer's own Belastingdienst " +
+        "mededeling or beschikking (for example 1.25 means 1,25%). No default exists — the " +
+        "percentage differs per employer — so the engine refuses to price without it.",
     },
     {
       key: "sv_loon_ytd",
@@ -217,12 +225,13 @@ const PREMIES_WERKNEMERSVERZEKERINGEN: PayrollCertificate = {
       kind: "amount",
       decimals: 2,
       min: "0",
-      help: "Verified premieloon (SV wage) already paid this year BEFORE this employer — the "
-        + "opening balance for the € 79.409 annual maximumpremieloon. Enter an explicit 0 for "
-        + "an employee employed all year by this employer; copied from the prior provider's "
-        + "report for a mid-year hire. No default exists: the engine adds this employer's own "
-        + "committed current-year SV base on top, and refuses without a recorded opening "
-        + "rather than assuming zero.",
+      help:
+        "Verified premieloon (SV wage) already paid this year BEFORE this employer — the " +
+        "opening balance for the € 79.409 annual maximumpremieloon. Enter an explicit 0 for " +
+        "an employee employed all year by this employer; copied from the prior provider's " +
+        "report for a mid-year hire. No default exists: the engine adds this employer's own " +
+        "committed current-year SV base on top, and refuses without a recorded opening " +
+        "rather than assuming zero.",
     },
   ],
 };
@@ -247,11 +256,11 @@ const BELASTING_PREMIEPLICHT: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "Belastingdienst, Rekenvoorschriften 2026 v2 (standard versus "
-    + "herleidingssituaties, woonland-specific tables, chapters 7–8)",
+    "Belastingdienst, Rekenvoorschriften 2026 v2 (standard versus " +
+    "herleidingssituaties, woonland-specific tables, chapters 7–8)",
   summary:
-    "The employer's per-employee liability classification for table selection: "
-    + "only the standard resident situation prices from the witte tabellen.",
+    "The employer's per-employee liability classification for table selection: " +
+    "only the standard resident situation prices from the witte tabellen.",
   storage: "certificate_rows",
   fields: [
     {
@@ -276,8 +285,9 @@ const BELASTING_PREMIEPLICHT: PayrollCertificate = {
         },
       ],
       required: true,
-      help: "Which liability situation selects the table. Only the standard resident "
-        + "situation is implemented; any other situation refuses by name.",
+      help:
+        "Which liability situation selects the table. Only the standard resident " +
+        "situation is implemented; any other situation refuses by name.",
     },
   ],
 };
@@ -302,45 +312,53 @@ const ARBEIDSOVEREENKOMST: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "Handboek Loonheffingen 2026 §4.7.1 (lage premie); Rekenvoorschriften "
-    + "2026 chapter 12 (herziening lage premie: uitdiensttreding binnen twee "
-    + "maanden; >30% meer verloonde uren, tenzij >30 uur per week)",
+    "Handboek Loonheffingen 2026 §4.7.1 (lage premie); Rekenvoorschriften " +
+    "2026 chapter 12 (herziening lage premie: uitdiensttreding binnen twee " +
+    "maanden; >30% meer verloonde uren, tenzij >30 uur per week)",
   summary:
-    "The employer's per-employee contract record for the low-AWf revision "
-    + "rules: dated start, weekly contract hours, and termination date when "
-    + "terminated.",
+    "The employer's per-employee contract record for the low-AWf revision " +
+    "rules: dated start, weekly contract hours, and termination date when " +
+    "terminated.",
   storage: "certificate_rows",
   fields: [
     {
       key: "contract_start",
       label: "Contract start date (ISO)",
       kind: "code",
-      help: "First day of the permanent contract (YYYY-MM-DD). Required whenever the low "
-        + "AWf rate is claimed: without a dated start the two-month revision rule cannot "
-        + "be policed.",
+      help:
+        "First day of the permanent contract (YYYY-MM-DD). Required whenever the low " +
+        "AWf rate is claimed: without a dated start the two-month revision rule cannot " +
+        "be policed.",
     },
     {
       key: "contract_hours_per_week",
       label: "Contract hours per week",
       kind: "code",
-      help: "Agreed weekly hours as a decimal (\"40\", \"32\"). Recorded for the year-end "
-        + ">30% hours test and its >30-hour exception; the annual paid-hours history the "
-        + "test also needs has no reliable channel yet.",
+      help:
+        'Agreed weekly hours as a decimal ("40", "32"). Recorded for the year-end ' +
+        ">30% hours test and its >30-hour exception; the annual paid-hours history the " +
+        "test also needs has no reliable channel yet.",
     },
     {
       key: "terminated_on",
       label: "Termination date (ISO)",
       kind: "code",
-      help: "Last day of employment (YYYY-MM-DD) when the contract ended. Leaving within "
-        + "two months of the contract start revises the low rate to high retroactively — "
-        + "the engine refuses the low rate instead, until a correction path exists.",
+      help:
+        "Last day of employment (YYYY-MM-DD) when the contract ended. Leaving within " +
+        "two months of the contract start revises the low rate to high retroactively — " +
+        "the engine refuses the low rate instead, until a correction path exists.",
     },
   ],
 };
 
 const NL_CERTIFICATES: PayrollPackCertificates = {
   country: "NL",
-  certificates: [OPGAAF_LOONHEFFINGEN, PREMIES_WERKNEMERSVERZEKERINGEN, BELASTING_PREMIEPLICHT, ARBEIDSOVEREENKOMST],
+  certificates: [
+    OPGAAF_LOONHEFFINGEN,
+    PREMIES_WERKNEMERSVERZEKERINGEN,
+    BELASTING_PREMIEPLICHT,
+    ARBEIDSOVEREENKOMST,
+  ],
 };
 
 export { NL_CERTIFICATES };

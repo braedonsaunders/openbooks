@@ -6,13 +6,23 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { normalizeMoney } from "../money/money.ts";
 import { moneyRefusal } from "../money/decimal-refusal.ts";
 import { normalizeSubdivisionCode } from "../compliance/lien-jurisdictions.ts";
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "../records/custom-fields.ts";
+import {
+  findUnownedCustomReferences,
+  loadFieldDefs,
+  validateCustomValues,
+} from "../records/custom-fields.ts";
 import { resolveIdempotentReplay } from "../records/idempotent-replay.ts";
 import { acquireOrgFeatureGateLock } from "../organization/org-feature-lock.ts";
 import { isFeatureEnabled } from "../organization/feature-state.ts";
-import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
+import {
+  subsidiaryScopeAllows,
+  subsidiaryVisibleFilter,
+} from "../organization/subsidiary-scope.ts";
 import { pinInternalPerson } from "../organization/internal-person.ts";
-import { checkPinnedOperatingProfileCommand, resolveOperatingProfileForCreate } from "../organization/operating-profiles.ts";
+import {
+  checkPinnedOperatingProfileCommand,
+  resolveOperatingProfileForCreate,
+} from "../organization/operating-profiles.ts";
 
 /**
  * Project creation — the one write path for new projects.
@@ -32,7 +42,14 @@ import { checkPinnedOperatingProfileCommand, resolveOperatingProfileForCreate } 
  * reference, scope and custom-field rule applies to both.
  */
 
-export const PROJECT_STATUSES = ["quoted", "awarded", "active", "substantially_complete", "closed", "cancelled"] as const;
+export const PROJECT_STATUSES = [
+  "quoted",
+  "awarded",
+  "active",
+  "substantially_complete",
+  "closed",
+  "cancelled",
+] as const;
 export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
 
 /** The request-controlled create fields, as received at the API boundary. */
@@ -128,7 +145,9 @@ function moneyOrNull(v: unknown): string | null | "invalid" {
 }
 
 function asRecord(v: unknown): Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+  return typeof v === "object" && v !== null && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : {};
 }
 
 function bad(message: string, field?: string, status: 400 | 422 = 422): ProjectCreateError {
@@ -136,7 +155,10 @@ function bad(message: string, field?: string, status: 400 | 422 = 422): ProjectC
 }
 
 async function partyExists(runner: SqlExecutor, id: string, orgId: string): Promise<boolean> {
-  const r = await runner.execute(sql`select 1 from parties where id = ${id} and org_id = ${orgId}`, "objects");
+  const r = await runner.execute(
+    sql`select 1 from parties where id = ${id} and org_id = ${orgId}`,
+    "objects",
+  );
   return !!r[0];
 }
 
@@ -147,13 +169,16 @@ async function visibleActiveParties(
   ids: string[],
   scope: ReadonlySet<string> | null,
 ): Promise<Set<string>> {
-  const rows = await runner.execute<{ id: string }>(sql`
+  const rows = await runner.execute<{ id: string }>(
+    sql`
     select p.id from parties p
      where p.org_id = ${orgId}
        and p.id = any(${`{${ids.join(",")}}`}::uuid[])
        and p.is_active
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, scope, { orgWideNull: true })}
-  `, "objects");
+  `,
+    "objects",
+  );
   return new Set(rows.map((row) => row.id));
 }
 
@@ -175,7 +200,10 @@ async function resolveProjectRow(
   if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
     throw bad("isActive must be a boolean", "isActive", 400);
   }
-  if (body.subsidiaryIncludeChildren !== undefined && typeof body.subsidiaryIncludeChildren !== "boolean") {
+  if (
+    body.subsidiaryIncludeChildren !== undefined &&
+    typeof body.subsidiaryIncludeChildren !== "boolean"
+  ) {
     throw bad("subsidiaryIncludeChildren must be a boolean", "subsidiaryIncludeChildren", 400);
   }
   if (body.isInternal !== undefined && typeof body.isInternal !== "boolean") {
@@ -229,13 +257,22 @@ async function resolveProjectRow(
   if (linked.length > 0) {
     const visible = await visibleActiveParties(runner, orgId, linked, ctx.allowedSubsidiaryIds);
     if (customerId !== null && !visible.has(customerId)) {
-      throw bad(`project customer "${customerId}" is not visible in your subsidiary scope`, "customerId");
+      throw bad(
+        `project customer "${customerId}" is not visible in your subsidiary scope`,
+        "customerId",
+      );
     }
     if (foremanId !== null && !visible.has(foremanId)) {
-      throw bad(`project foreman "${foremanId}" is not visible in your subsidiary scope`, "foremanId");
+      throw bad(
+        `project foreman "${foremanId}" is not visible in your subsidiary scope`,
+        "foremanId",
+      );
     }
     if (managerId !== null && !visible.has(managerId)) {
-      throw bad(`project manager "${managerId}" is not visible in your subsidiary scope`, "managerId");
+      throw bad(
+        `project manager "${managerId}" is not visible in your subsidiary scope`,
+        "managerId",
+      );
     }
   }
 
@@ -244,11 +281,15 @@ async function resolveProjectRow(
     const value = uuidOrNull(body.subsidiaryId);
     if (value === "invalid") throw bad("Invalid subsidiary", "subsidiaryId");
     const scope = ctx.allowedSubsidiaryIds;
-    if (scope !== null && (value === null || !scope.has(value))) throw bad("Subsidiary not found", "subsidiaryId");
+    if (scope !== null && (value === null || !scope.has(value)))
+      throw bad("Subsidiary not found", "subsidiaryId");
     if (value) {
-      const subsidiary = await runner.execute(sql`
+      const subsidiary = await runner.execute(
+        sql`
         select 1 from subsidiaries
-         where id = ${value} and org_id = ${orgId} and is_active and not is_elimination`, "objects");
+         where id = ${value} and org_id = ${orgId} and is_active and not is_elimination`,
+        "objects",
+      );
       if (!subsidiary.length) throw bad("Subsidiary not found", "subsidiaryId");
     }
     subsidiaryId = value;
@@ -272,7 +313,8 @@ async function resolveProjectRow(
   // Native project-level invoicing override (a real column, not custom jsonb).
   const invoicingRaw = body.invoicingPreference;
   const invoicingPreference =
-    invoicingRaw == null || (typeof invoicingRaw === "object" && Object.values(invoicingRaw).every((v) => v == null))
+    invoicingRaw == null ||
+    (typeof invoicingRaw === "object" && Object.values(invoicingRaw).every((v) => v == null))
       ? null
       : (invoicingRaw as Record<string, unknown>);
   // Internal projects bill nothing and invoice no one: a customer or any
@@ -289,7 +331,8 @@ async function resolveProjectRow(
   const customResult = validateCustomValues(defs, asRecord(body.custom));
   // The validator names the field in each error ("Label is required"): echo
   // the first one so a required custom field names itself.
-  if (!customResult.ok) throw bad(Object.values(customResult.errors)[0] ?? "invalid_custom_fields", "custom");
+  if (!customResult.ok)
+    throw bad(Object.values(customResult.errors)[0] ?? "invalid_custom_fields", "custom");
   // Reference custom values are uuid-shaped here, but nothing yet proves the
   // referenced row belongs to the caller: refuse foreign or dangling ids.
   const unowned = await findUnownedCustomReferences(orgId, defs, customResult.cleaned);
@@ -297,12 +340,17 @@ async function resolveProjectRow(
   const custom = customResult.cleaned;
 
   const contractValue = body.contractValue === undefined ? null : moneyOrNull(body.contractValue);
-  if (contractValue === "invalid") throw bad(moneyRefusal("Contract value", body.contractValue), "contractValue");
+  if (contractValue === "invalid")
+    throw bad(moneyRefusal("Contract value", body.contractValue), "contractValue");
 
   // Where the improved property sits, as an ISO 3166-2 subdivision code:
   // lien waivers release payment only when their jurisdiction matches it.
   let siteJurisdiction: string | null = null;
-  if (body.siteJurisdiction !== undefined && body.siteJurisdiction !== null && body.siteJurisdiction !== "") {
+  if (
+    body.siteJurisdiction !== undefined &&
+    body.siteJurisdiction !== null &&
+    body.siteJurisdiction !== ""
+  ) {
     const canonical = normalizeSubdivisionCode(body.siteJurisdiction);
     if (!canonical) {
       throw bad(
@@ -321,7 +369,10 @@ async function resolveProjectRow(
     if (v === "invalid") throw bad("Invalid project type", "projectTypeId");
     projectTypeId = v;
     if (v) {
-      const pt = await runner.execute(sql`select 1 from project_types where id = ${v} and org_id = ${orgId} and is_active`, "objects");
+      const pt = await runner.execute(
+        sql`select 1 from project_types where id = ${v} and org_id = ${orgId} and is_active`,
+        "objects",
+      );
       if (pt.length === 0) throw bad("Unknown project type", "projectTypeId");
     }
   }
@@ -350,7 +401,9 @@ async function resolveProjectRow(
     custom,
     // Present only for awarded projects, so replays of projects created
     // before award provenance existed keep comparing against their image.
-    ...(options.awardedFromDocumentId ? { awarded_from_document_id: options.awardedFromDocumentId } : {}),
+    ...(options.awardedFromDocumentId
+      ? { awarded_from_document_id: options.awardedFromDocumentId }
+      : {}),
   };
 }
 
@@ -374,27 +427,56 @@ export async function createProjectInTransaction(
   // made outside this transaction may be stale by the time this write lands.
   await acquireOrgFeatureGateLock(runner, ctx.orgId);
   if (!(await isFeatureEnabled(ctx.orgId, "projects", runner))) {
-    throw new ProjectCreateError("Projects are turned off for this organization", 404, undefined, "feature_disabled");
+    throw new ProjectCreateError(
+      "Projects are turned off for this organization",
+      404,
+      undefined,
+      "feature_disabled",
+    );
   }
   const subsidiaryId = snapshot.subsidiary_id as string | null;
   if (!subsidiaryScopeAllows(ctx.allowedSubsidiaryIds, subsidiaryId)) {
     throw new ProjectCreateError("Project not found", 404, undefined, "scope");
   }
 
-  const prior = (await runner.execute<{ versionId: string | null; after: Record<string, unknown> | null }>(sql`
+  const prior = (
+    await runner.execute<{ versionId: string | null; after: Record<string, unknown> | null }>(
+      sql`
     select p.operating_profile_version_id as "versionId", a.changes->'after' as after from projects p
     left join lateral (select changes from audit_log where org_id=p.org_id and table_name='projects' and row_id=p.id and action='insert' order by created_at limit 1) a on true
-    where p.org_id=${ctx.orgId} and p.id=${id} for share of p`, "objects"))[0];
+    where p.org_id=${ctx.orgId} and p.id=${id} for share of p`,
+      "objects",
+    )
+  )[0];
   if (prior) {
-    if (prior.versionId) await checkPinnedOperatingProfileCommand(runner, ctx.orgId, ctx.actorId, { versionId: prior.versionId, family: 'project', subsidiaryId });
-    if (prior.after && ('operating_profile_version_id' in prior.after || body.operatingProfile !== undefined || body.operatingDepartmentId !== undefined)) {
+    if (prior.versionId)
+      await checkPinnedOperatingProfileCommand(runner, ctx.orgId, ctx.actorId, {
+        versionId: prior.versionId,
+        family: "project",
+        subsidiaryId,
+      });
+    if (
+      prior.after &&
+      ("operating_profile_version_id" in prior.after ||
+        body.operatingProfile !== undefined ||
+        body.operatingDepartmentId !== undefined)
+    ) {
       snapshot.operating_profile_version_id = prior.versionId;
       snapshot.operating_department_id = body.operatingDepartmentId ?? null;
       snapshot.operating_profile_selection = body.operatingProfile ?? null;
     }
   } else {
-    const profile = await resolveOperatingProfileForCreate(runner, ctx.orgId, ctx.actorId, { family: 'project', subsidiaryId, selection: body.operatingProfile, departmentId: body.operatingDepartmentId });
-    if (profile.versionId || body.operatingProfile !== undefined || body.operatingDepartmentId !== undefined) {
+    const profile = await resolveOperatingProfileForCreate(runner, ctx.orgId, ctx.actorId, {
+      family: "project",
+      subsidiaryId,
+      selection: body.operatingProfile,
+      departmentId: body.operatingDepartmentId,
+    });
+    if (
+      profile.versionId ||
+      body.operatingProfile !== undefined ||
+      body.operatingDepartmentId !== undefined
+    ) {
       snapshot.operating_profile_version_id = profile.versionId;
       snapshot.operating_department_id = profile.departmentId;
       snapshot.operating_profile_selection = body.operatingProfile ?? null;
@@ -404,7 +486,8 @@ export async function createProjectInTransaction(
   const s = snapshot;
   const invoicingPreference = s.invoicing_preference as Record<string, unknown> | null;
   const awardedFrom = options.awardedFromDocumentId ?? null;
-  const inserted = await runner.execute<{ id: string }>(sql`
+  const inserted = await runner.execute<{ id: string }>(
+    sql`
     insert into projects
       (id, org_id, name, code, customer_id, foreman_id, manager_id,
        subsidiary_id, subsidiary_include_children, status, project_type_id,
@@ -426,11 +509,16 @@ export async function createProjectInTransaction(
     -- A retry is accepted only after the existing audited create image is verified below.
     on conflict (id) do nothing
     returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   if (!inserted[0]) {
-    const prior = await runner.execute<{ id: string }>(sql`
+    const prior = await runner.execute<{ id: string }>(
+      sql`
       select id from projects where id = ${id} and org_id = ${ctx.orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!prior[0]) throw new ProjectCreateError("Project not found", 404, undefined, "scope");
     // Compare replays with the immutable create image in the insert audit
     // event, rather than today's row, so an unchanged retry still succeeds

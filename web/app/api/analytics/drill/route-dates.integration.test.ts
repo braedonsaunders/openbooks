@@ -1,32 +1,56 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { registerHooks } from 'node:module';
-import { resolveAppModule } from '../../../../lib/test-module-hooks';
-import { pathToFileURL } from 'node:url';
-import test from 'node:test';
-import * as React from 'react';
-import type { SessionUser } from '../../../../lib/auth';
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import { resolveAppModule } from "../../../../lib/test-module-hooks";
+import { pathToFileURL } from "node:url";
+import test from "node:test";
+import * as React from "react";
+import type { SessionUser } from "../../../../lib/auth";
 
-const root = pathToFileURL(process.cwd() + '/').href;
+const root = pathToFileURL(process.cwd() + "/").href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __analyticsDrillDates: state, React });
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__analyticsDrillDates.user}' };
-  const app = resolveAppModule(specifier, context, next, root)
-  if (app) return app
-  return next(specifier, context);
-} });
-const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
-const { GET } = await import('./route.ts');
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function currentUser(){return globalThis.__analyticsDrillDates.user}",
+      };
+    const app = resolveAppModule(specifier, context, next, root);
+    if (app) return app;
+    return next(specifier, context);
+  },
+});
+const { sql } = await import("drizzle-orm");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { GET } = await import("./route.ts");
 
-test('analytics drill validates calendar dates before querying', async () => {
+test("analytics drill validates calendar dates before querying", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Drill reviewer', 'drill_reviewer'));
-    await withBypassContext(() => db.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb,subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and key='drill_reviewer'`));
-    state.user = { id: actor, orgId: org.orgId, name: 'Drill reviewer', email: 'drill@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
+    const actor = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Drill reviewer", "drill_reviewer"),
+    );
+    await withBypassContext(() =>
+      db.execute(
+        sql`update app_roles set permissions='["reports.read"]'::jsonb,subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and key='drill_reviewer'`,
+      ),
+    );
+    state.user = {
+      id: actor,
+      orgId: org.orgId,
+      name: "Drill reviewer",
+      email: "drill@scratch.test",
+      roles: [],
+      isSuperAdmin: false,
+      envKind: "production",
+      productionOrgId: org.orgId,
+      homeOrgId: org.orgId,
+      homeUserId: actor,
+    };
     const account = randomUUID();
     await withOrgContext(org.orgId, async () => {
       for (const query of [
@@ -36,10 +60,17 @@ test('analytics drill validates calendar dates before querying', async () => {
       ]) {
         const response = await GET(new Request(`http://dates.local/api/analytics/drill?${query}`));
         assert.equal(response.status, 400, `must refuse ${query}`);
-        const body = await response.json() as { error: string };
-        assert.ok(body.error.includes('from/to'), `refusal must name the dates, got: ${body.error}`);
+        const body = (await response.json()) as { error: string };
+        assert.ok(
+          body.error.includes("from/to"),
+          `refusal must name the dates, got: ${body.error}`,
+        );
       }
-      const ok = await GET(new Request(`http://dates.local/api/analytics/drill?account=${account}&from=2026-07-01&to=2026-07-31`));
+      const ok = await GET(
+        new Request(
+          `http://dates.local/api/analytics/drill?account=${account}&from=2026-07-01&to=2026-07-31`,
+        ),
+      );
       assert.equal(ok.status, 200);
     });
   } finally {

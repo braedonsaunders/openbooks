@@ -7,16 +7,23 @@ declare global {
 }
 
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/close", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/close",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
 stubModules({ navigation: "export function useRouter(){return globalThis.__startCloseRouter}" });
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "sonner") {
-      return { shortCircuit: true, url: "data:text/javascript,export const toast={error(m){(globalThis.__startCloseToasts??=[]).push(String(m))}}" };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export const toast={error(m){(globalThis.__startCloseToasts??=[]).push(String(m))}}",
+      };
     }
     return next(specifier, context);
   },
@@ -35,8 +42,14 @@ test("a non-JSON start refusal shows the action fallback and releases busy state
   globalThis.__startCloseRouter = { push: (href) => pushes.push(href) };
   globalThis.__startCloseToasts = [];
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (async () => new Response("upstream gateway unavailable", { status: 503, headers: { "content-type": "text/plain" } })) as typeof fetch;
-  t.after(() => { globalThis.fetch = originalFetch; });
+  globalThis.fetch = (async () =>
+    new Response("upstream gateway unavailable", {
+      status: 503,
+      headers: { "content-type": "text/plain" },
+    })) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
 
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -61,6 +74,9 @@ test("a non-JSON start refusal shows the action fallback and releases busy state
   });
 
   assert.deepEqual(pushes, [], "a refused start does not navigate to a run");
-  assert.match(globalThis.__startCloseToasts?.[0] ?? "", /The close action could not be completed \(status 503\)/);
+  assert.match(
+    globalThis.__startCloseToasts?.[0] ?? "",
+    /The close action could not be completed \(status 503\)/,
+  );
   assert.equal(button.disabled, false, "the failed request releases the start button");
 });

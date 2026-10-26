@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  deleteKit,
-  setKitActive,
-} from "@openbooks/engine/hrm/recruiting/kits";
+import { deleteKit, setKitActive } from "@openbooks/engine/hrm/recruiting/kits";
 
 import { recruitingErrorResponse } from "../../_lib";
 import { setKitActiveBody } from "../bodies";
@@ -21,11 +18,7 @@ export const PATCH = defineRoute({
   feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: setKitActiveBody,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
 
     try {

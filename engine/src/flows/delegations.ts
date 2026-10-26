@@ -19,10 +19,7 @@ export class DelegationError extends Error {}
 type DelegationRow = typeof schema.approvalDelegations.$inferSelect;
 
 const ACTIVE = (t: typeof schema.approvalDelegations) =>
-  and(
-    sql`${t.revokedAt} is null`,
-    sql`now() between ${t.startsAt} and ${t.endsAt}`,
-  );
+  and(sql`${t.revokedAt} is null`, sql`now() between ${t.startsAt} and ${t.endsAt}`);
 
 /**
  * The principal, when `delegateUserId` currently holds an active delegation
@@ -60,13 +57,16 @@ export async function activeDelegationPrincipals(
   orgId: string,
   delegateUserId: string,
 ): Promise<ResolvedUser[]> {
-  const r = (await db.execute<ResolvedUser>(sql`
+  const r = await db.execute<ResolvedUser>(
+    sql`
     select distinct u.id, u.name, u.email
       from approval_delegations d
       join users u on u.id = d.from_user_id and u.org_id = d.org_id and u.is_active
      where d.org_id = ${orgId} and d.to_user_id = ${delegateUserId}
        and d.revoked_at is null and now() between d.starts_at and d.ends_at
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r;
 }
 
@@ -85,8 +85,12 @@ export interface DelegationView {
 }
 
 /** My active + upcoming (not revoked, not ended) delegations, both directions. */
-export async function listUserDelegations(orgId: string, userId: string): Promise<DelegationView[]> {
-  const r = (await db.execute<Record<string, unknown>>(sql`
+export async function listUserDelegations(
+  orgId: string,
+  userId: string,
+): Promise<DelegationView[]> {
+  const r = await db.execute<Record<string, unknown>>(
+    sql`
     select d.id, d.from_user_id as "fromUserId", fu.name as "fromUserName",
            d.to_user_id as "toUserId", tu.name as "toUserName",
            d.starts_at as "startsAt", d.ends_at as "endsAt", d.reason,
@@ -98,7 +102,9 @@ export async function listUserDelegations(orgId: string, userId: string): Promis
        and (d.from_user_id = ${userId} or d.to_user_id = ${userId})
        and d.revoked_at is null and d.ends_at >= now()
      order by d.starts_at
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r.map((row) => ({
     id: String(row.id),
     fromUserId: String(row.fromUserId),
@@ -160,18 +166,20 @@ export async function createDelegation(args: {
     .limit(1);
 
   const delegation = await db.transaction(async (tx) => {
-    const row = (await tx
-      .insert(t)
-      .values({
-        orgId,
-        fromUserId,
-        toUserId,
-        startsAt,
-        endsAt,
-        reason: args.reason?.trim() || null,
-        createdBy: fromUserId,
-      })
-      .returning())[0]!;
+    const row = (
+      await tx
+        .insert(t)
+        .values({
+          orgId,
+          fromUserId,
+          toUserId,
+          startsAt,
+          endsAt,
+          reason: args.reason?.trim() || null,
+          createdBy: fromUserId,
+        })
+        .returning()
+    )[0]!;
     // Append-only audit trail for the grant of approval authority: who
     // delegated to whom, over which window (the row carries no amount limit —
     // delegation never raises authority, so there is none to record).

@@ -94,7 +94,7 @@ type ScheduleRow = {
   memo: string | null;
   hold_reason: string | null;
   revision: number;
-}
+};
 
 function fromRow(row: ScheduleRow): StoredSchedule {
   return {
@@ -148,10 +148,15 @@ export async function loadSchedule(
   scheduleId: string,
   options: { lock?: boolean } = {},
 ): Promise<StoredSchedule> {
-  const row = (await runner.execute<ScheduleRow>(sql`
+  const row = (
+    await runner.execute<ScheduleRow>(
+      sql`
     select ${SCHEDULE_COLUMNS} from expense_amortization_schedules
      where org_id = ${orgId} and id = ${scheduleId}
-     ${options.lock ? sql`for update` : sql``}`, "objects"))[0];
+     ${options.lock ? sql`for update` : sql``}`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new AmortizationError("The amortization schedule does not exist in this organization.", {
       status: 404,
@@ -168,16 +173,23 @@ export async function lockSchedulesForDocument(
   orgId: string,
   documentId: string,
 ): Promise<StoredSchedule[]> {
-  const rows = await runner.execute<ScheduleRow>(sql`
+  const rows = await runner.execute<ScheduleRow>(
+    sql`
     select ${SCHEDULE_COLUMNS} from expense_amortization_schedules
      where org_id = ${orgId} and source_document_id = ${documentId}
      order by id
-     for update`, "objects");
+     for update`,
+    "objects",
+  );
   return rows.map(fromRow);
 }
 
 /** The live plan (planned and posted lines) in period order. */
-export async function livePlanLines(runner: SqlExecutor, orgId: string, scheduleId: string): Promise<PlanLine[]> {
+export async function livePlanLines(
+  runner: SqlExecutor,
+  orgId: string,
+  scheduleId: string,
+): Promise<PlanLine[]> {
   const rows = await runner.execute<{
     id: string;
     plan_revision: number;
@@ -188,13 +200,16 @@ export async function livePlanLines(runner: SqlExecutor, orgId: string, schedule
     destination_account_id: string;
     status: "planned" | "posted";
     journal_entry_id: string | null;
-  }>(sql`
+  }>(
+    sql`
     select id, plan_revision, period_start::text as period_start, period_end::text as period_end,
            weight::text as weight, planned_amount::text as planned_amount, destination_account_id,
            status, journal_entry_id
       from expense_amortization_schedule_lines
      where org_id = ${orgId} and schedule_id = ${scheduleId} and status in ('planned', 'posted')
-     order by period_start`, "objects");
+     order by period_start`,
+    "objects",
+  );
   return rows.map((row) => ({
     id: row.id,
     planRevision: row.plan_revision,
@@ -219,9 +234,16 @@ export interface ScheduleBalance {
   planned: bigint;
 }
 
-export function scheduleBalance(schedule: StoredSchedule, lines: readonly PlanLine[]): ScheduleBalance {
-  const posted = lines.filter((line) => line.status === "posted").reduce((acc, line) => acc + line.plannedAmount, 0n);
-  const planned = lines.filter((line) => line.status === "planned").reduce((acc, line) => acc + line.plannedAmount, 0n);
+export function scheduleBalance(
+  schedule: StoredSchedule,
+  lines: readonly PlanLine[],
+): ScheduleBalance {
+  const posted = lines
+    .filter((line) => line.status === "posted")
+    .reduce((acc, line) => acc + line.plannedAmount, 0n);
+  const planned = lines
+    .filter((line) => line.status === "planned")
+    .reduce((acc, line) => acc + line.plannedAmount, 0n);
   const amortized = schedule.openingAmortized + posted - schedule.reversed;
   const remaining = schedule.status === "cancelled" ? 0n : schedule.totalAmount - amortized;
   return { posted, amortized, remaining, planned };
@@ -249,37 +271,58 @@ export async function updateSchedule(
     cancelled?: boolean;
   },
 ): Promise<StoredSchedule> {
-  const sets = [sql`revision = revision + 1`, sql`updated_at = now()`, sql`updated_by = ${actorId}`];
+  const sets = [
+    sql`revision = revision + 1`,
+    sql`updated_at = now()`,
+    sql`updated_by = ${actorId}`,
+  ];
   if (changes.status !== undefined) sets.push(sql`status = ${changes.status}`);
-  if (changes.totalAmount !== undefined) sets.push(sql`total_amount = ${fromUnits(changes.totalAmount)}::numeric`);
-  if (changes.reversed !== undefined) sets.push(sql`reversed_amount = ${fromUnits(changes.reversed)}::numeric`);
-  if (changes.destinationAccountId !== undefined) sets.push(sql`destination_account_id = ${changes.destinationAccountId}`);
+  if (changes.totalAmount !== undefined)
+    sets.push(sql`total_amount = ${fromUnits(changes.totalAmount)}::numeric`);
+  if (changes.reversed !== undefined)
+    sets.push(sql`reversed_amount = ${fromUnits(changes.reversed)}::numeric`);
+  if (changes.destinationAccountId !== undefined)
+    sets.push(sql`destination_account_id = ${changes.destinationAccountId}`);
   if (changes.holdReason !== undefined) sets.push(sql`hold_reason = ${changes.holdReason}`);
   if (changes.completed) sets.push(sql`completed_at = now()`);
   if (changes.cancelled) sets.push(sql`cancelled_at = now()`);
-  const row = (await runner.execute<ScheduleRow>(sql`
+  const row = (
+    await runner.execute<ScheduleRow>(
+      sql`
     update expense_amortization_schedules
        set ${sql.join(sets, sql`, `)}
      where org_id = ${schedule.orgId} and id = ${schedule.id} and revision = ${schedule.revision}
-    returning ${SCHEDULE_COLUMNS}`, "objects"))[0];
+    returning ${SCHEDULE_COLUMNS}`,
+      "objects",
+    )
+  )[0];
   if (!row) {
-    throw new AmortizationError(`Schedule ${schedule.scheduleNumber} changed while this action ran.`, {
-      status: 409,
-      code: "amortization_schedule_conflict",
-      remedy: "Reload the schedule and apply the change again.",
-    });
+    throw new AmortizationError(
+      `Schedule ${schedule.scheduleNumber} changed while this action ran.`,
+      {
+        status: 409,
+        code: "amortization_schedule_conflict",
+        remedy: "Reload the schedule and apply the change again.",
+      },
+    );
   }
   return fromRow(row);
 }
 
 /** Refuse a stale caller: the revision it read must still be current. */
-export function assertExpectedRevision(schedule: StoredSchedule, expectedRevision: number | undefined): void {
+export function assertExpectedRevision(
+  schedule: StoredSchedule,
+  expectedRevision: number | undefined,
+): void {
   if (expectedRevision !== undefined && expectedRevision !== schedule.revision) {
-    throw new AmortizationError(`Schedule ${schedule.scheduleNumber} changed since it was opened.`, {
-      status: 409,
-      code: "amortization_schedule_conflict",
-      remedy: "Reload the schedule, review the change, and apply it again.",
-    });
+    throw new AmortizationError(
+      `Schedule ${schedule.scheduleNumber} changed since it was opened.`,
+      {
+        status: 409,
+        code: "amortization_schedule_conflict",
+        remedy: "Reload the schedule, review the change, and apply it again.",
+      },
+    );
   }
 }
 
@@ -291,12 +334,15 @@ export async function closePlannedLines(
   status: "superseded" | "cancelled",
 ): Promise<void> {
   if (lineIds.length === 0) return;
-  const updated = await runner.execute<{ id: string }>(sql`
+  const updated = await runner.execute<{ id: string }>(
+    sql`
     update expense_amortization_schedule_lines
        set status = ${status}, closed_at = now()
      where org_id = ${orgId} and status = 'planned'
        and id = any(${`{${lineIds.join(",")}}`}::uuid[])
-    returning id`, "objects");
+    returning id`,
+    "objects",
+  );
   if (updated.length !== lineIds.length) {
     throw new AmortizationError("A planned amortization line changed while this action ran.", {
       status: 409,
@@ -332,7 +378,12 @@ export async function postScheduleEntry(
   },
 ): Promise<string> {
   const { schedule } = input;
-  const period = await resolveCoveringPeriod(runner, schedule.orgId, input.postingDate, schedule.subsidiaryId);
+  const period = await resolveCoveringPeriod(
+    runner,
+    schedule.orgId,
+    input.postingDate,
+    schedule.subsidiaryId,
+  );
   if (!period) {
     throw new AmortizationError(`No accounting period covers ${input.postingDate}.`, {
       code: "amortization_period_missing",
@@ -345,7 +396,11 @@ export async function postScheduleEntry(
       orgId: schedule.orgId,
       bookId: schedule.bookId,
       subsidiaryId: schedule.subsidiaryId,
-      entryNumber: await nextFreeEntryNumber(runner as Parameters<typeof nextFreeEntryNumber>[0], schedule.orgId, `${schedule.scheduleNumber}-${input.entrySuffix}`),
+      entryNumber: await nextFreeEntryNumber(
+        runner as Parameters<typeof nextFreeEntryNumber>[0],
+        schedule.orgId,
+        `${schedule.scheduleNumber}-${input.entrySuffix}`,
+      ),
       postingDate: input.postingDate,
       periodId: period.id,
       memo: input.memo,
@@ -374,10 +429,14 @@ export async function postScheduleEntry(
     return posted.entryId;
   } catch (error) {
     if (error instanceof PostingError) {
-      throw new AmortizationError(`The amortization entry for ${schedule.scheduleNumber} was refused: ${error.message}`, {
-        code: "amortization_posting_refused",
-        remedy: "Resolve the ledger refusal (for example, reopen the period through Period Close or correct the account), then try again.",
-      });
+      throw new AmortizationError(
+        `The amortization entry for ${schedule.scheduleNumber} was refused: ${error.message}`,
+        {
+          code: "amortization_posting_refused",
+          remedy:
+            "Resolve the ledger refusal (for example, reopen the period through Period Close or correct the account), then try again.",
+        },
+      );
     }
     throw error;
   }

@@ -26,20 +26,34 @@ async function recurlyGet(
   transport: ConnectorTransport = guardedFetch,
 ): Promise<{ records: Array<Record<string, unknown>>; next: string | null }> {
   const query = new URLSearchParams(params);
-  const res = await fetchWithConnectorRetry(`${API_BASE}${path}?${query.toString()}`, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${site.apiKey}`, Accept: API_VERSION },
-    redirect: "error",
-  }, { describe: "Recurly", transport });
+  const res = await fetchWithConnectorRetry(
+    `${API_BASE}${path}?${query.toString()}`,
+    {
+      method: "GET",
+      headers: { Authorization: `Bearer ${site.apiKey}`, Accept: API_VERSION },
+      redirect: "error",
+    },
+    { describe: "Recurly", transport },
+  );
   if (!res.ok) {
-    throw new Error(`Recurly ${path} refused HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    throw new Error(
+      `Recurly ${path} refused HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`,
+    );
   }
-  const payload = (await res.json()) as { object?: string; data?: Array<Record<string, unknown>>; has_more?: boolean; next?: string };
+  const payload = (await res.json()) as {
+    object?: string;
+    data?: Array<Record<string, unknown>>;
+    has_more?: boolean;
+    next?: string;
+  };
   if (payload.object === "error" || payload.object === "validation_error") {
     throw new Error(`Recurly ${path} refused: ${JSON.stringify(payload).slice(0, 300)}`);
   }
   const records = Array.isArray(payload.data) ? payload.data : [];
-  return { records, next: payload.has_more && typeof payload.next === "string" ? payload.next : null };
+  return {
+    records,
+    next: payload.has_more && typeof payload.next === "string" ? payload.next : null,
+  };
 }
 
 /** One Recurly list page. `resource` is plural (`accounts`, `subscriptions`, …). */
@@ -63,12 +77,19 @@ export async function listAllRecurly(
   const out: Array<Record<string, unknown>> = [];
   let cursor: string | undefined;
   for (let page = 0; page < maxPages; page++) {
-    const result = await listRecurly(site, resource, cursor ? { ...params, cursor } : params, transport);
+    const result = await listRecurly(
+      site,
+      resource,
+      cursor ? { ...params, cursor } : params,
+      transport,
+    );
     out.push(...result.records);
     if (!result.next) return out;
     cursor = result.next;
   }
-  throw new Error(`Recurly ${resource} exceeded ${maxPages} pages — narrow the window and import incrementally.`);
+  throw new Error(
+    `Recurly ${resource} exceeded ${maxPages} pages — narrow the window and import incrementally.`,
+  );
 }
 
 /** A single Recurly resource by id (accounts, plans, subscriptions, invoices…). */
@@ -79,13 +100,19 @@ export async function getRecurly(
   transport: ConnectorTransport = guardedFetch,
 ): Promise<Record<string, unknown>> {
   const query = "";
-  const res = await fetchWithConnectorRetry(`${API_BASE}/${resource}/${encodeURIComponent(id)}${query}`, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${site.apiKey}`, Accept: API_VERSION },
-    redirect: "error",
-  }, { describe: "Recurly", transport });
+  const res = await fetchWithConnectorRetry(
+    `${API_BASE}/${resource}/${encodeURIComponent(id)}${query}`,
+    {
+      method: "GET",
+      headers: { Authorization: `Bearer ${site.apiKey}`, Accept: API_VERSION },
+      redirect: "error",
+    },
+    { describe: "Recurly", transport },
+  );
   if (!res.ok) {
-    throw new Error(`Recurly ${resource}/${id} refused HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    throw new Error(
+      `Recurly ${resource}/${id} refused HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`,
+    );
   }
   return (await res.json()) as Record<string, unknown>;
 }

@@ -12,8 +12,22 @@ import { DE_PACK_RATES, DE_TAX_YEARS } from "./rates.ts";
 import { statutoryHolidayPayRule } from "../holidays.ts";
 
 const LAENDER = [
-  "BW", "BY", "BE", "BB", "HB", "HH", "HE", "MV",
-  "NI", "NW", "RP", "SL", "SN", "ST", "SH", "TH",
+  "BW",
+  "BY",
+  "BE",
+  "BB",
+  "HB",
+  "HH",
+  "HE",
+  "MV",
+  "NI",
+  "NW",
+  "RP",
+  "SL",
+  "SN",
+  "ST",
+  "SH",
+  "TH",
 ];
 
 test("DE pack exists, is installable for 2026, runs a calendar year in EUR", () => {
@@ -21,7 +35,10 @@ test("DE pack exists, is installable for 2026, runs a calendar year in EUR", () 
   assert.equal(DE_PAYROLL_PACK.installable, true);
   assert.equal(DE_PAYROLL_PACK.statutoryCurrency, "EUR");
   assert.deepEqual(DE_PAYROLL_PACK.taxYear, {
-    basis: "calendar", startMonth: 1, startDay: 1, namedBy: "opening_year",
+    basis: "calendar",
+    startMonth: 1,
+    startDay: 1,
+    namedBy: "opening_year",
   });
   assert.equal(DE_PAYROLL_PACK.statutoryEngineLabel, "Programmablaufplan (EStG §39b)");
 });
@@ -29,7 +46,15 @@ test("DE pack exists, is installable for 2026, runs a calendar year in EUR", () 
 test("statutory slots name Lohnsteuer, Soli, KiSt, and employee+employer SV", () => {
   const slots = DE_PAYROLL_PACK.statutorySlots;
   const keys = slots.map((slot) => slot.key);
-  for (const key of ["lohnsteuer", "solidaritaetszuschlag", "kirchenlohnsteuer", "kv", "rv", "av", "pv"]) {
+  for (const key of [
+    "lohnsteuer",
+    "solidaritaetszuschlag",
+    "kirchenlohnsteuer",
+    "kv",
+    "rv",
+    "av",
+    "pv",
+  ]) {
     assert.ok(keys.includes(key), `missing slot ${key}`);
   }
   // Each SV branch is withheld from the employee AND matched by the employer.
@@ -89,14 +114,26 @@ test("certificates declare ELStAM (not a W-4/TD1 clone) plus the PV Kindernachwe
   // carries no PV child data.
   const pv = byKey.get("de_pv_nachweis");
   assert.ok(pv, "PV Kindernachweis declared");
-  assert.deepEqual(resolveCertificate({ certificate: pv, stored: [{ certificateKey: pv.key, answers: {}, effectiveFrom: "2026-01-01" }] }).missing, ["kinderlosenzuschlag", "abschlag_kinder"]);
+  assert.deepEqual(
+    resolveCertificate({
+      certificate: pv,
+      stored: [{ certificateKey: pv.key, answers: {}, effectiveFrom: "2026-01-01" }],
+    }).missing,
+    ["kinderlosenzuschlag", "abschlag_kinder"],
+  );
   // The §42b attestations live on their own employer-settled record — no
   // profile surface collects them, so the settlement requires this filing.
   const ausgleich = byKey.get("de_ausgleich");
   assert.ok(ausgleich, "§42b attestation record declared");
   assert.equal(ausgleich.scope.level, "country");
   assert.equal(ausgleich.purpose, "withholding");
-  assert.deepEqual(resolveCertificate({ certificate: ausgleich, stored: [{ certificateKey: ausgleich.key, answers: {}, effectiveFrom: "2026-01-01" }] }).missing, ["ganzjaehrig", "unveraendert", "kein_ausschluss"]);
+  assert.deepEqual(
+    resolveCertificate({
+      certificate: ausgleich,
+      stored: [{ certificateKey: ausgleich.key, answers: {}, effectiveFrom: "2026-01-01" }],
+    }).missing,
+    ["ganzjaehrig", "unveraendert", "kein_ausschluss"],
+  );
 });
 
 test("de_kvz tenant slot declared (org-wide); no national average transcribed", () => {
@@ -147,10 +184,7 @@ test("computeStatutory refuses any year but 2026 by name", async () => {
 test("withholding covers all Länder as implemented, ELStAM-keyed", () => {
   const declaration = DE_PAYROLL_PACK.withholding();
   assert.equal(declaration.country, "DE");
-  assert.deepEqual(
-    declaration.regions.map((region) => region.region).sort(),
-    [...LAENDER].sort(),
-  );
+  assert.deepEqual(declaration.regions.map((region) => region.region).sort(), [...LAENDER].sort());
   for (const region of declaration.regions) {
     assert.equal(region.implemented, true, region.region);
     assert.equal(region.certificateKey, "de_elstam", region.region);
@@ -189,6 +223,9 @@ test("jurisdictions list all Länder with untranscribed calendars", () => {
     assert.ok(jurisdiction.key.startsWith("DE-"), jurisdiction.key);
     assert.equal(jurisdiction.scope, "employment");
     assert.deepEqual(jurisdiction.holidays, []);
-    assert.throws(() => statutoryHolidayPayRule(jurisdiction.key, "2026-12-25"), /public-holiday calendar.*not transcribed/);
+    assert.throws(
+      () => statutoryHolidayPayRule(jurisdiction.key, "2026-12-25"),
+      /public-holiday calendar.*not transcribed/,
+    );
   }
 });

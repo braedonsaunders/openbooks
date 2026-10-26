@@ -1,8 +1,8 @@
-import { redirect } from 'next/navigation'
-import { getAuthz } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { redirect } from "next/navigation";
+import { getAuthz } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Feature-gate boundary for the Banking module.
@@ -13,8 +13,8 @@ export const dynamic = 'force-dynamic'
  * refusal. Gating in the layout covers every route in this segment at once.
  */
 export default async function BankingLayout({ children }: { children: React.ReactNode }) {
-  const authz = await getAuthz()
-  if (!authz) redirect('/login')
-  await requireFeatureEnabled(authz.user.orgId, 'banking')
-  return children
+  const authz = await getAuthz();
+  if (!authz) redirect("/login");
+  await requireFeatureEnabled(authz.user.orgId, "banking");
+  return children;
 }

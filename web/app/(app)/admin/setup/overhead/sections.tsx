@@ -1,41 +1,41 @@
-import { ModuleHomeTabs } from '@/components/module-home/tabs'
-import 'server-only'
+import { ModuleHomeTabs } from "@/components/module-home/tabs";
+import "server-only";
 
-import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { BookOpen } from 'lucide-react'
-import { TrueCostSetupView } from './TrueCostSetupView'
-import { OverheadActions, type DeptRate, type TypeOpt } from './OverheadActions'
-import { OverheadApplication, type ApplicationRow } from './OverheadApplication'
-import { OverheadLifecycle, type DriftRow } from './OverheadLifecycle'
-import { RatesTab } from './RatesTab'
-import type { TrueCostSetupData } from '../../../../../lib/analytics/true-cost-setup-data'
-import { can, getAuthz, guardRootSubsidiaryScope } from '../../../../../lib/authz'
-import { FeatureUnavailable } from '@/components/feature-unavailable'
-import { currentPublishedRates } from '../../../../../lib/overhead-publish'
-import { businessToday, parseIsoDate } from '@openbooks/engine/platform/business-date/module'
-import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
-import { isFeatureEnabled } from '../../../../../lib/features'
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { BookOpen } from "lucide-react";
+import { TrueCostSetupView } from "./TrueCostSetupView";
+import { OverheadActions, type DeptRate, type TypeOpt } from "./OverheadActions";
+import { OverheadApplication, type ApplicationRow } from "./OverheadApplication";
+import { OverheadLifecycle, type DriftRow } from "./OverheadLifecycle";
+import { RatesTab } from "./RatesTab";
+import type { TrueCostSetupData } from "../../../../../lib/analytics/true-cost-setup-data";
+import { can, getAuthz, guardRootSubsidiaryScope } from "../../../../../lib/authz";
+import { FeatureUnavailable } from "@/components/feature-unavailable";
+import { currentPublishedRates } from "../../../../../lib/overhead-publish";
+import { businessToday, parseIsoDate } from "@openbooks/engine/platform/business-date/module";
+import { trueCostData } from "../../../../../lib/analytics/true-cost-data";
+import { isFeatureEnabled } from "../../../../../lib/features";
 import {
   countUnappliedOverheadTime,
   listOverheadApplications,
-} from '@openbooks/engine/allocations/overhead-post'
+} from "@openbooks/engine/allocations/overhead-post";
 import {
   getOverheadSystemRuleEvidence,
   overheadApplicationSettings,
   type OverheadSystemRuleEvidence,
-} from '@openbooks/engine/allocations/overhead-sync'
-import { db } from '@openbooks/engine/platform/db'
-import { cmp } from '@openbooks/engine/money/money'
-import { formatOverheadPublishRate } from '@openbooks/engine/projects/overhead-rates'
-import { sql } from 'drizzle-orm'
-import type { OverheadPolicy, OverheadStep } from './view'
+} from "@openbooks/engine/allocations/overhead-sync";
+import { db } from "@openbooks/engine/platform/db";
+import { cmp } from "@openbooks/engine/money/money";
+import { formatOverheadPublishRate } from "@openbooks/engine/projects/overhead-rates";
+import { sql } from "drizzle-orm";
+import type { OverheadPolicy, OverheadStep } from "./view";
 
 async function getRootScopeAuthz() {
-  const authz = await getAuthz()
-  if (!authz) return null
-  if (await guardRootSubsidiaryScope(authz)) notFound()
-  return authz
+  const authz = await getAuthz();
+  if (!authz) return null;
+  if (await guardRootSubsidiaryScope(authz)) notFound();
+  return authz;
 }
 
 /**
@@ -66,27 +66,23 @@ export function OverheadModelHeader({
   actions,
   tabs,
 }: {
-  title: string
-  description: string
-  docsHref: string
-  docsLabel: string
-  analyticsHref: string
-  analyticsLabel: string
-  laborHref: string
-  laborLabel: string
-  actions: { departments: DeptRate[]; projectTypes: TypeOpt[]; autoOpen: boolean }
-  tabs: { href: string; label: string; active: boolean }[]
+  title: string;
+  description: string;
+  docsHref: string;
+  docsLabel: string;
+  analyticsHref: string;
+  analyticsLabel: string;
+  laborHref: string;
+  laborLabel: string;
+  actions: { departments: DeptRate[]; projectTypes: TypeOpt[]; autoOpen: boolean };
+  tabs: { href: string; label: string; active: boolean }[];
 }) {
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            {title}
-          </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {description}
-          </p>
+          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{description}</p>
         </div>
         <div className="flex items-center gap-3">
           <Link
@@ -117,7 +113,7 @@ export function OverheadModelHeader({
 
       <ModuleHomeTabs tabs={tabs} />
     </>
-  )
+  );
 }
 
 export function OverheadModelBody({
@@ -125,9 +121,9 @@ export function OverheadModelBody({
   policies,
   trueCost,
 }: {
-  steps: OverheadStep[]
-  policies: OverheadPolicy[]
-  trueCost: TrueCostSetupData
+  steps: OverheadStep[];
+  policies: OverheadPolicy[];
+  trueCost: TrueCostSetupData;
 }) {
   return (
     <>
@@ -135,19 +131,24 @@ export function OverheadModelBody({
           live state so it is always clear where you are and what is next. */}
       <div className="grid gap-3 sm:grid-cols-3">
         {steps.map((s) => (
-          <div key={s.n} className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+          <div
+            key={s.n}
+            className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900"
+          >
             <div className="mb-1 flex items-center gap-2">
               <span
                 className={
-                  'grid h-5 w-5 place-items-center rounded-full text-[11px] font-semibold ' +
+                  "grid h-5 w-5 place-items-center rounded-full text-[11px] font-semibold " +
                   (s.badgeDone
-                    ? 'bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-950'
-                    : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200')
+                    ? "bg-teal-600 text-white dark:bg-teal-500 dark:text-slate-950"
+                    : "bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-200")
                 }
               >
                 {s.badge}
               </span>
-              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{s.title}</span>
+              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {s.title}
+              </span>
             </div>
             <p className="text-xs leading-5 text-slate-500 dark:text-slate-400">{s.desc}</p>
           </div>
@@ -169,88 +170,111 @@ export function OverheadModelBody({
       </div>
       <TrueCostSetupView data={trueCost} />
     </>
-  )
+  );
 }
 
 /** Rates tab slot: the published rate card plus its `?row=` drawer. */
 export async function OverheadRatesTabSlot({
   sp,
 }: {
-  sp: Record<string, string | string[] | undefined>
+  sp: Record<string, string | string[] | undefined>;
 }) {
-  const authz = await getRootScopeAuthz()
-  if (!authz) return null
-  const orgId = authz.user.orgId
-  return <RatesTab orgId={orgId} searchParams={sp} />
+  const authz = await getRootScopeAuthz();
+  if (!authz) return null;
+  const orgId = authz.user.orgId;
+  return <RatesTab orgId={orgId} searchParams={sp} />;
 }
 
 /** Lifecycle tab slot: mode/cadence switch plus the drift table. */
 export async function OverheadLifecycleTabSlot({ departments }: { departments?: DeptRate[] } = {}) {
-  const authz = await getRootScopeAuthz()
-  if (!authz) return null
-  const orgId = authz.user.orgId
+  const authz = await getRootScopeAuthz();
+  if (!authz) return null;
+  const orgId = authz.user.orgId;
   // Supplied presentation rows keep the slot's Projects gate: with Projects
   // off the panel explains the switch instead of rendering stale rates.
-  if (departments && !(await isFeatureEnabled(orgId, 'projects'))) {
+  if (departments && !(await isFeatureEnabled(orgId, "projects"))) {
     return FeatureUnavailable({
-      featureKey: 'projects',
-      placement: 'inline',
-      canManageFeatures: can(authz, 'admin.setup.manage'),
-    })
+      featureKey: "projects",
+      placement: "inline",
+      canManageFeatures: can(authz, "admin.setup.manage"),
+    });
   }
   const liveDepartments = async () => {
-    if (departments) return departments
+    if (departments) return departments;
     // Stored layouts may still place this widget without department props.
     // Resolve the same native calculation for that composition.
-    const today = await businessToday(orgId)
-    const fromDate = parseIsoDate(today)
-    fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
-    const from = fromDate.toISOString().slice(0, 10)
-    return (await trueCostData(orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds, undefined, { includePriorComparison: false })).departments
-      .map((d): DeptRate => ({ id: d.id, name: d.name, composite: d.compositeValue }))
-  }
+    const today = await businessToday(orgId);
+    const fromDate = parseIsoDate(today);
+    fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1);
+    const from = fromDate.toISOString().slice(0, 10);
+    return (
+      await trueCostData(
+        orgId,
+        { from, to: today, label: "TTM" },
+        authz.allowedSubsidiaryIds,
+        undefined,
+        { includePriorComparison: false },
+      )
+    ).departments.map((d): DeptRate => ({ id: d.id, name: d.name, composite: d.compositeValue }));
+  };
   const [live, lifecycleRes, publishedRates] = await Promise.all([
     liveDepartments(),
-    db.execute<{ c: { mode?: string; cadence?: string } | null }>(sql`
-      select settings->'overheadRateLifecycle' as c from orgs where id = ${orgId}`, 'objects'),
+    db.execute<{ c: { mode?: string; cadence?: string } | null }>(
+      sql`
+      select settings->'overheadRateLifecycle' as c from orgs where id = ${orgId}`,
+      "objects",
+    ),
     currentPublishedRates(orgId),
-  ])
-  const lifecycleCfg = lifecycleRes[0]?.c ?? {}
+  ]);
+  const lifecycleCfg = lifecycleRes[0]?.c ?? {};
   const lifecycle = {
-    mode: (['manual', 'scheduled', 'live'].includes(lifecycleCfg.mode ?? '') ? lifecycleCfg.mode : 'manual') as 'manual' | 'scheduled' | 'live',
-    cadence: (lifecycleCfg.cadence === 'quarterly' ? 'quarterly' : 'monthly') as 'monthly' | 'quarterly',
-  }
+    mode: (["manual", "scheduled", "live"].includes(lifecycleCfg.mode ?? "")
+      ? lifecycleCfg.mode
+      : "manual") as "manual" | "scheduled" | "live",
+    cadence: (lifecycleCfg.cadence === "quarterly" ? "quarterly" : "monthly") as
+      "monthly" | "quarterly",
+  };
   const drift: DriftRow[] = live
-    .filter((d) => (d.composite !== null && cmp(d.composite, '0') > 0) || publishedRates.has(d.id))
+    .filter((d) => (d.composite !== null && cmp(d.composite, "0") > 0) || publishedRates.has(d.id))
     // Live rates compare at the precision a published card carries.
-    .map((d) => ({ id: d.id, name: d.name, live: d.composite === null ? null : formatOverheadPublishRate(d.composite), published: publishedRates.get(d.id) ?? null }))
-  return <OverheadLifecycle mode={lifecycle.mode} cadence={lifecycle.cadence} drift={drift} />
+    .map((d) => ({
+      id: d.id,
+      name: d.name,
+      live: d.composite === null ? null : formatOverheadPublishRate(d.composite),
+      published: publishedRates.get(d.id) ?? null,
+    }));
+  return <OverheadLifecycle mode={lifecycle.mode} cadence={lifecycle.cadence} drift={drift} />;
 }
 
 /** Application tab slot: mode switch, ledger postings, unapplied prompt. */
 export async function OverheadApplicationTabSlot() {
-  const authz = await getRootScopeAuthz()
-  if (!authz) return null
-  const orgId = authz.user.orgId
+  const authz = await getRootScopeAuthz();
+  if (!authz) return null;
+  const orgId = authz.user.orgId;
   const [application, applications, unapplied, accountsRes, systemRule] = await Promise.all([
     overheadApplicationSettings(orgId),
     listOverheadApplications(orgId),
     countUnappliedOverheadTime(orgId),
-    db.execute<Record<string, unknown>>(sql`select id, number, name from accounts where org_id = ${orgId} and is_active order by number nulls last, name`, 'objects'),
+    db.execute<Record<string, unknown>>(
+      sql`select id, number, name from accounts where org_id = ${orgId} and is_active order by number nulls last, name`,
+      "objects",
+    ),
     getOverheadSystemRuleEvidence(orgId),
-  ])
-  const systemRuleEvidence: OverheadSystemRuleEvidence | null = systemRule.ruleId ? systemRule : null
+  ]);
+  const systemRuleEvidence: OverheadSystemRuleEvidence | null = systemRule.ruleId
+    ? systemRule
+    : null;
   return (
     <OverheadApplication
       mode={application.mode}
       accountId={application.accountId}
       accounts={accountsRes.map((r) => ({
         id: String(r.id),
-        label: r.number ? `${r.number} · ${r.name}` : String(r.name ?? ''),
+        label: r.number ? `${r.number} · ${r.name}` : String(r.name ?? ""),
       }))}
       applications={applications as ApplicationRow[]}
       unapplied={unapplied}
       systemRule={systemRuleEvidence}
     />
-  )
+  );
 }

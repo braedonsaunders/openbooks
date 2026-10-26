@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 declare global {
-  var __arRouter: { push(url: string): void; refresh(): void; replace(url: string): void } | undefined;
+  var __arRouter:
+    { push(url: string): void; refresh(): void; replace(url: string): void } | undefined;
   var __arSearch: string | undefined;
 }
 
@@ -12,14 +13,20 @@ declare global {
 // which states as fact that nothing is owed.
 
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/ar", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/ar",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__arRouter}export function usePathname(){return '/ar'}export function useSearchParams(){return new URLSearchParams(globalThis.__arSearch ?? '')}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__arRouter}export function usePathname(){return '/ar'}export function useSearchParams(){return new URLSearchParams(globalThis.__arSearch ?? '')}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -41,7 +48,16 @@ const { ArCockpit } = await import("./ArCockpit");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-function position(byCustomer: { partyId: string; partyName: string; amount: string; count: number; overdue: string; oldestDue: string | null }[]) {
+function position(
+  byCustomer: {
+    partyId: string;
+    partyName: string;
+    amount: string;
+    count: number;
+    overdue: string;
+    oldestDue: string | null;
+  }[],
+) {
   return {
     asOf: "2026-09-17",
     horizonWeeks: 12,
@@ -52,7 +68,14 @@ function position(byCustomer: { partyId: string; partyName: string; amount: stri
     expectedThisWeek: "5000.0000",
     expectedNext30: "20000.0000",
     dso: 30,
-    summary: { count: 5, openCount: 5, lastDate: null, currencies: [], pctCurrent: '100.0000', buckets: [] },
+    summary: {
+      count: 5,
+      openCount: 5,
+      lastDate: null,
+      currencies: [],
+      pctCurrent: "100.0000",
+      buckets: [],
+    },
     weeks: [],
     byCustomer,
     worklist: [],

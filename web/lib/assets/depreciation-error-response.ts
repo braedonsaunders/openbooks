@@ -1,12 +1,12 @@
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
 import {
   ClosedBatchError,
   DepreciationRefusalError,
   StalePreviewError,
-} from '@openbooks/engine/assets/depreciation'
-import { DepreciationFormulaError } from '@openbooks/engine/assets/depreciation-formula'
-import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
-import { unexpectedServerError } from '../api/unexpected'
+} from "@openbooks/engine/assets/depreciation";
+import { DepreciationFormulaError } from "@openbooks/engine/assets/depreciation-formula";
+import { periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
+import { unexpectedServerError } from "../api/unexpected";
 
 /**
  * Map a thrown depreciation error to its real HTTP status.
@@ -24,19 +24,23 @@ import { unexpectedServerError } from '../api/unexpected'
  */
 export function depreciationFailure(e: unknown, locale: string): NextResponse {
   if (e instanceof StalePreviewError) {
-    return NextResponse.json({ error: 'stale_preview' }, { status: 409 })
+    return NextResponse.json({ error: "stale_preview" }, { status: 409 });
   }
   if (e instanceof ClosedBatchError) {
     return NextResponse.json(
-      { error: 'period_closed', asset: e.assetNumber, period: periodDisplayLabel(e.periodRef, locale) },
+      {
+        error: "period_closed",
+        asset: e.assetNumber,
+        period: periodDisplayLabel(e.periodRef, locale),
+      },
       { status: 409 },
-    )
+    );
   }
   if (e instanceof DepreciationRefusalError) {
-    return NextResponse.json({ error: e.message }, { status: 409 })
+    return NextResponse.json({ error: e.message }, { status: 409 });
   }
   if (e instanceof DepreciationFormulaError) {
-    return NextResponse.json({ error: e.message }, { status: 422 })
+    return NextResponse.json({ error: e.message }, { status: 422 });
   }
-  return unexpectedServerError('assets/run-depreciation', e)
+  return unexpectedServerError("assets/run-depreciation", e);
 }

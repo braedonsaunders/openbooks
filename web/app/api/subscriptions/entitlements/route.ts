@@ -1,7 +1,7 @@
-import { z } from 'zod';
-import { uuidString } from '@openbooks/engine/platform/identifiers';
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import {
   EntitlementError,
@@ -20,30 +20,30 @@ const entitlementRowSchema = z.object({
   enabled: z.boolean().nullable().optional(),
   limit: z.unknown().nullable().optional(),
   customValue: z.string().nullable().optional(),
-  overagePolicy: z.enum(['block', 'allow_and_bill', 'alert']).nullable().optional(),
+  overagePolicy: z.enum(["block", "allow_and_bill", "alert"]).nullable().optional(),
   meterKey: z.string().nullable().optional(),
 });
-const POSTBodySchema = z.discriminatedUnion('action', [
+const POSTBodySchema = z.discriminatedUnion("action", [
   z.object({
-    action: z.literal('saveVersionEntitlements'),
+    action: z.literal("saveVersionEntitlements"),
     planVersionId: uuidString(),
     effectiveFrom: DATE.nullable().optional(),
     rows: z.array(entitlementRowSchema).min(1),
   }),
   z.object({
-    action: z.literal('saveOverride'),
+    action: z.literal("saveOverride"),
     subscriptionId: uuidString(),
     featureKey: z.string().min(1),
     enabled: z.boolean().nullable().optional(),
     limit: z.unknown().nullable().optional(),
     customValue: z.string().nullable().optional(),
-    overagePolicy: z.enum(['block', 'allow_and_bill', 'alert']).nullable().optional(),
+    overagePolicy: z.enum(["block", "allow_and_bill", "alert"]).nullable().optional(),
     reason: z.string().min(1),
     effectiveFrom: DATE.nullable().optional(),
     effectiveTo: DATE.nullable().optional(),
   }),
   z.object({
-    action: z.literal('expireOverride'),
+    action: z.literal("expireOverride"),
     subscriptionId: uuidString(),
     featureKey: z.string().min(1),
     effectiveTo: DATE.nullable().optional(),
@@ -53,14 +53,14 @@ const POSTBodySchema = z.discriminatedUnion('action', [
 export const runtime = "nodejs";
 
 export const GET = defineRoute({
-  permission: 'ar.read',
-  feature: 'advancedSubscriptions',
+  permission: "ar.read",
+  feature: "advancedSubscriptions",
   handler: async ({ authz, request }) => {
     const url = new URL(request.url);
-    const subscriptionId = url.searchParams.get('subscriptionId');
-    const planVersionId = url.searchParams.get('planVersionId');
-    const features = url.searchParams.get('features');
-    const at = url.searchParams.get('at');
+    const subscriptionId = url.searchParams.get("subscriptionId");
+    const planVersionId = url.searchParams.get("planVersionId");
+    const features = url.searchParams.get("features");
+    const at = url.searchParams.get("at");
     const provided = [subscriptionId, planVersionId, features].filter((value) => value !== null);
     if (provided.length !== 1) {
       return NextResponse.json(
@@ -84,11 +84,10 @@ export const GET = defineRoute({
         );
         return NextResponse.json({ ok: true, entitlements });
       }
-      const snapshot = await getEntitlementSnapshot(
-        authz.user.orgId,
-        subscriptionId as string,
-        { at: at ?? undefined, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
-      );
+      const snapshot = await getEntitlementSnapshot(authz.user.orgId, subscriptionId as string, {
+        at: at ?? undefined,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      });
       return NextResponse.json({ ok: true, snapshot });
     } catch (error) {
       if (error instanceof EntitlementError) return apiErrorResponse(error);
@@ -98,8 +97,8 @@ export const GET = defineRoute({
 });
 
 export const POST = defineRoute({
-  permission: 'ar.create',
-  feature: 'advancedSubscriptions',
+  permission: "ar.create",
+  feature: "advancedSubscriptions",
   body: POSTBodySchema,
   opaque: {
     limit: "limits are parsed to exact decimals in the handler with a named 422",

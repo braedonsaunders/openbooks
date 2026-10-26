@@ -25,9 +25,12 @@ async function accountCount(
   viewFilters: Filter[] = [],
   adhocFilters: Record<string, string> = {},
 ): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from parties p
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from parties p
       ${customerBaseJoins(true)}
-      where ${customerWhere({ ...defaultListView("customer"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`, "objects");
+      where ${customerWhere({ ...defaultListView("customer"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
@@ -36,8 +39,11 @@ async function activityCount(
   viewFilters: Filter[] = [],
   adhocFilters: Record<string, string> = {},
 ): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from crm_activities a
-      where ${activityWhere({ ...defaultListView("activity"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`, "objects");
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from crm_activities a
+      where ${activityWhere({ ...defaultListView("activity"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
@@ -57,7 +63,9 @@ test("malformed CRM filters match nothing instead of throwing", { skip: !DB }, a
       "malformed account owner quick filter matches nothing",
     );
     assert.equal(
-      await activityCount(org.orgId, [{ key: "assigned_user_id", operator: "eq", value: "not-a-uuid" }]),
+      await activityCount(org.orgId, [
+        { key: "assigned_user_id", operator: "eq", value: "not-a-uuid" },
+      ]),
       0,
       "malformed assignee filter matches nothing",
     );

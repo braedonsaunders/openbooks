@@ -5,7 +5,8 @@ import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __payToasts: { kind: string; message: string }[] | undefined;
-  var __payRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
+  var __payRouter:
+    { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
 }
 
 // A same-currency partial apply must stay valid: editing the Apply cell to
@@ -198,14 +199,22 @@ test("a same-currency partial apply stays valid and posts the partial amount", a
   const { unmount } = await mountNewPayment(posts);
   t.after(unmount);
   await click(applyCheckbox());
-  assert.match(document.body.textContent ?? "", /Applying 1 item/, "checking the bill applies it in full");
+  assert.match(
+    document.body.textContent ?? "",
+    /Applying 1 item/,
+    "checking the bill applies it in full",
+  );
   await typeAmount(applyInput(), "3500");
   assert.doesNotMatch(
     document.body.textContent ?? "",
     /cross-foot/,
     "a partial same-currency apply is not an invalid allocation",
   );
-  assert.match(document.body.textContent ?? "", /Applying 1 item/, "the partial apply still counts");
+  assert.match(
+    document.body.textContent ?? "",
+    /Applying 1 item/,
+    "the partial apply still counts",
+  );
   assert.match(document.body.textContent ?? "", /3,500/, "the footer totals the partial amount");
   await click(saves()[0]!);
   assert.equal(posts.length, 1, "one explicit save posts once");
@@ -230,6 +239,10 @@ test("applying more than the open balance stays refused", async (t) => {
     /cross-foot/,
     "an over-apply still refuses with the allocation note",
   );
-  assert.match(document.body.textContent ?? "", /Applying 0 items/, "the over-apply drops out of the total");
+  assert.match(
+    document.body.textContent ?? "",
+    /Applying 0 items/,
+    "the over-apply drops out of the total",
+  );
   assert.equal(posts.length, 0, "nothing posts on its own");
 });

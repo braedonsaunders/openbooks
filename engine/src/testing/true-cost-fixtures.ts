@@ -40,16 +40,31 @@ export interface TrueCostOrgSpec {
   burdenAccounts?: { number: string; name: string; match?: unknown }[];
   journals?: { entry: string; origin?: string; lines: TrueCostJournalLine[] }[];
   cards?: { dept: number; category: string; rate: string }[];
-  wageRates?: { emp: number; currency?: string; rate?: number; basis?: string; annualHours?: number | null }[];
+  wageRates?: {
+    emp: number;
+    currency?: string;
+    rate?: number;
+    basis?: string;
+    annualHours?: number | null;
+  }[];
   schedules?: { emp: number; cycleDays?: number; dailyHours?: number[] }[];
   profile?: {
     name?: string;
     compositeMethod?: string;
     baseLaborRate?: string;
     /** Group settings by burden-account index (ids are generated at seed time). */
-    categoryGroups?: { group: number; allocationBase?: string; allocationMethod?: string; rateFormat?: string }[];
+    categoryGroups?: {
+      group: number;
+      allocationBase?: string;
+      allocationMethod?: string;
+      rateFormat?: string;
+    }[];
     /** Base overrides by department index (ids are generated at seed time). */
-    baseOverridesByDept?: { squareFeet?: Record<number, number>; units?: Record<number, number>; custom?: Record<number, number> };
+    baseOverridesByDept?: {
+      squareFeet?: Record<number, number>;
+      units?: Record<number, number>;
+      custom?: Record<number, number>;
+    };
   };
   overheadApplication?: { mode: string; account: number };
 }
@@ -125,7 +140,9 @@ export async function seedTrueCostOrg(spec: TrueCostOrgSpec): Promise<TrueCostSe
         await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, department_id, project_id, amount, currency, txn_amount, fx_rate)
           values (${org.orgId}, ${entry}, ${l.n}, ${l.account}, ${org.subsidiaryId}, ${l.dept}, ${l.project}, ${l.amount}, 'CAD', ${l.amount}, '1')`);
       }
-      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`);
+      await db.execute(
+        sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`,
+      );
     }
     for (const c of spec.cards ?? []) {
       await db.execute(sql`insert into overhead_rates (id, org_id, department_id, category, method, rate_kind, rate_percent, effective_from)
@@ -150,11 +167,15 @@ export async function seedTrueCostOrg(spec: TrueCostOrgSpec): Promise<TrueCostSe
     }
     const p = spec.profile ?? {};
     const categorySettings: Record<string, unknown> = {};
-    for (const g of p.categoryGroups ?? []) categorySettings[groupIds[g.group]!] = { ...g, group: undefined };
+    for (const g of p.categoryGroups ?? [])
+      categorySettings[groupIds[g.group]!] = { ...g, group: undefined };
     const baseOverrides: Record<string, Record<string, number>> = {};
     for (const [kind, values] of Object.entries(p.baseOverridesByDept ?? {})) {
       baseOverrides[kind] = Object.fromEntries(
-        Object.entries(values as Record<string, number>).map(([index, value]) => [deptIds[Number(index)]!, value]),
+        Object.entries(values as Record<string, number>).map(([index, value]) => [
+          deptIds[Number(index)]!,
+          value,
+        ]),
       );
     }
     await db.execute(sql`update orgs set settings = settings || ${JSON.stringify({ analytics: { trueCost: { activeProfileId: "p1", profiles: [{ id: "p1", name: p.name ?? "Seed", color: null, compositeMethod: p.compositeMethod ?? "sum", baseLaborRate: "", categorySettings, customCategories: [], baseOverrides }] } } })}::jsonb
@@ -164,7 +185,10 @@ export async function seedTrueCostOrg(spec: TrueCostOrgSpec): Promise<TrueCostSe
 }
 
 /** Seed an org, run the assertions inside its org context, then drop the org. */
-export async function withTrueCostOrg(spec: TrueCostOrgSpec, fn: (seed: TrueCostSeed) => Promise<void>): Promise<void> {
+export async function withTrueCostOrg(
+  spec: TrueCostOrgSpec,
+  fn: (seed: TrueCostSeed) => Promise<void>,
+): Promise<void> {
   const seed = await seedTrueCostOrg(spec);
   try {
     await withOrgContext(seed.org.orgId, () => fn(seed));

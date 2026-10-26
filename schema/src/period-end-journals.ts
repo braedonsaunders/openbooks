@@ -32,7 +32,9 @@ export const periodEndJournalPolicies = pgTable(
     id: id(),
     orgId: orgRef(),
     effectiveFrom: date("effective_from").notNull(),
-    closingMethod: text("closing_method", { enum: ["retained_earnings", "income_summary"] }).notNull(),
+    closingMethod: text("closing_method", {
+      enum: ["retained_earnings", "income_summary"],
+    }).notNull(),
     retainedEarningsAccountId: uuid("retained_earnings_account_id").notNull(),
     incomeSummaryAccountId: uuid("income_summary_account_id"),
     balanceSheetJournals: boolean("balance_sheet_journals").notNull().default(false),
@@ -50,7 +52,10 @@ export const periodEndJournalPolicies = pgTable(
   (t): PgTableExtraConfigValue[] => [
     unique("period_end_journal_policies_org_id_id_unique").on(t.orgId, t.id),
     unique("period_end_journal_policies_effective_unique").on(t.orgId, t.effectiveFrom),
-    check("period_end_journal_policies_income_summary", sql`(${t.closingMethod} = 'income_summary') = (${t.incomeSummaryAccountId} is not null)`),
+    check(
+      "period_end_journal_policies_income_summary",
+      sql`(${t.closingMethod} = 'income_summary') = (${t.incomeSummaryAccountId} is not null)`,
+    ),
     foreignKey({
       name: "period_end_journal_policies_retained_earnings_fk",
       columns: [t.orgId, t.retainedEarningsAccountId],
@@ -89,7 +94,9 @@ export const periodEndJournalSets = pgTable(
     currency: text("currency").notNull(),
     fiscalYearEarnings: money("fiscal_year_earnings").notNull(),
     priorUnclosedEarnings: money("prior_unclosed_earnings").notNull(),
-    status: text("status", { enum: ["posted", "reversed"] }).notNull().default("posted"),
+    status: text("status", { enum: ["posted", "reversed"] })
+      .notNull()
+      .default("posted"),
     reason: text("reason").notNull(),
     generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
     generatedBy: uuid("generated_by"),
@@ -102,12 +109,19 @@ export const periodEndJournalSets = pgTable(
   (t): PgTableExtraConfigValue[] => [
     unique("period_end_journal_sets_org_id_id_unique").on(t.orgId, t.id),
     unique("period_end_journal_sets_generation_unique").on(
-      t.orgId, t.bookId, t.subsidiaryId, t.fiscalCalendarId, t.fiscalYear, t.generation,
+      t.orgId,
+      t.bookId,
+      t.subsidiaryId,
+      t.fiscalCalendarId,
+      t.fiscalYear,
+      t.generation,
     ),
     uniqueIndex("period_end_journal_sets_live")
       .on(t.orgId, t.bookId, t.subsidiaryId, t.fiscalCalendarId, t.fiscalYear)
       .where(sql`status = 'posted'`),
-    index("period_end_journal_sets_seal").on(t.orgId, t.bookId, t.yearEndsOn).where(sql`status = 'posted'`),
+    index("period_end_journal_sets_seal")
+      .on(t.orgId, t.bookId, t.yearEndsOn)
+      .where(sql`status = 'posted'`),
     index("period_end_journal_sets_history").on(t.orgId, t.fiscalYear, t.generatedAt),
     foreignKey({
       name: "period_end_journal_sets_subsidiary_fk",
@@ -139,7 +153,9 @@ export const periodEndJournalEntries = pgTable(
     id: id(),
     orgId: orgRef(),
     setId: uuid("set_id").notNull(),
-    kind: text("kind", { enum: ["income_statement", "income_summary", "balance_sheet", "opening"] }).notNull(),
+    kind: text("kind", {
+      enum: ["income_statement", "income_summary", "balance_sheet", "opening"],
+    }).notNull(),
     entryId: uuid("entry_id").notNull(),
     reversalEntryId: uuid("reversal_entry_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

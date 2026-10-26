@@ -29,12 +29,21 @@ import {
 import { resolveObservedHolidays, undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 import { buildResolution } from "../statutory-rates.ts";
 
-const RATES: BrEmployerRates = { ratPct: "2", fap: "1", terceirosPct: "5.8", regimeTributario: "geral" };
+const RATES: BrEmployerRates = {
+  ratPct: "2",
+  fap: "1",
+  terceirosPct: "5.8",
+  regimeTributario: "geral",
+};
 
 function brContext(overrides: Record<string, unknown> = {}): PayrollStatutoryComputeContext {
   return {
-    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} },
+    supplementalTaxMethod: "per_run",
+    programBases: {},
+    pensionableNonPeriodic: "0",
+    insurableNonPeriodic: "0",
+    programNonPeriodicBases: {},
     taxYear: 2026,
     region: "BR",
     run: { pay_date: "2026-03-15" },
@@ -72,7 +81,8 @@ test("BR slots name IRRF, INSS, FGTS and salário-família; every pushed key dec
   const keys = BR_PAYROLL_PACK.statutorySlots.map((slot) => slot.key);
   assert.deepEqual(keys, ["irrf", "inss", "fgts", "salario_familia"]);
   const systems = BR_PAYROLL_PACK.statutorySlots.flatMap((slot) =>
-    slot.components.map((component) => component.systemKey));
+    slot.components.map((component) => component.systemKey),
+  );
   // Exactly the eight keys compute-statutory.ts pushes. The engine pushes
   // inss_patronal, never employer-side inss, hence the distinct key — and
   // FGTS rides its own slot because it settles at the Caixa, not with tax.
@@ -80,9 +90,13 @@ test("BR slots name IRRF, INSS, FGTS and salário-família; every pushed key dec
   // employer compensation, both on the tax rail.
   assert.deepEqual(systems, [
     "irrf",
-    "inss", "inss_patronal", "inss_rat", "inss_terceiros",
+    "inss",
+    "inss_patronal",
+    "inss_rat",
+    "inss_terceiros",
     "fgts",
-    "salario_familia", "salario_familia_comp",
+    "salario_familia",
+    "salario_familia_comp",
   ]);
   const bySystem = new Map(
     BR_PAYROLL_PACK.statutorySlots.flatMap((slot) => slot.components.map((c) => [c.systemKey, c])),
@@ -113,15 +127,18 @@ test("BR declares no withholding certificate and one eSocial program type", () =
   // fileable — fails this test.
   assert.equal(BR_CERTIFICATES.country, "BR");
   assert.deepEqual(
-    BR_CERTIFICATES.certificates.map((certificate) => [
-      certificate.key,
-      certificate.storage,
-    ]),
+    BR_CERTIFICATES.certificates.map((certificate) => [certificate.key, certificate.storage]),
     [["br_cadastro", "profile_columns"]],
   );
   const filings = brPackFilings();
-  assert.deepEqual(filings.programTypes.map((program) => program.key), ["br_cnpj_esocial"]);
-  assert.deepEqual(filings.yearEnd.map((filing) => filing.key), ["informe"]);
+  assert.deepEqual(
+    filings.programTypes.map((program) => program.key),
+    ["br_cnpj_esocial"],
+  );
+  assert.deepEqual(
+    filings.yearEnd.map((filing) => filing.key),
+    ["informe"],
+  );
 });
 
 test("BR publishes 2024–2026; both sides refuse outside them", async () => {
@@ -148,10 +165,22 @@ test("BR publishes 2024–2026; both sides refuse outside them", async () => {
     if (registered) unregisterPayrollTaxYears("BR");
   }
   // Prior years compute through their own transcribed tables now.
-  await computeBrStatutoryWithRates(brContext({ taxYear: 2025, run: { pay_date: "2025-06-15" } }), RATES);
-  await computeBrStatutoryWithRates(brContext({ taxYear: 2024, run: { pay_date: "2024-06-15" } }), RATES);
-  await assert.rejects(computeBrStatutoryWithRates(brContext({ taxYear: 2023 }), RATES), /2023.*has not been transcribed/);
-  await assert.rejects(computeBrStatutoryWithRates(brContext({ taxYear: 2027 }), RATES), /2027.*has not been transcribed/);
+  await computeBrStatutoryWithRates(
+    brContext({ taxYear: 2025, run: { pay_date: "2025-06-15" } }),
+    RATES,
+  );
+  await computeBrStatutoryWithRates(
+    brContext({ taxYear: 2024, run: { pay_date: "2024-06-15" } }),
+    RATES,
+  );
+  await assert.rejects(
+    computeBrStatutoryWithRates(brContext({ taxYear: 2023 }), RATES),
+    /2023.*has not been transcribed/,
+  );
+  await assert.rejects(
+    computeBrStatutoryWithRates(brContext({ taxYear: 2027 }), RATES),
+    /2027.*has not been transcribed/,
+  );
 });
 
 test("BR refuses non-monthly periods, missing dependents and non-CLT regimes", async () => {
@@ -168,15 +197,24 @@ test("BR refuses non-monthly periods, missing dependents and non-CLT regimes", a
     /not a non-negative integer/,
   );
   await assert.rejects(
-    computeBrStatutoryWithRates(brContext({ emp: { br_dependentes: "0", br_regime: "aprendiz" } }), RATES),
+    computeBrStatutoryWithRates(
+      brContext({ emp: { br_dependentes: "0", br_regime: "aprendiz" } }),
+      RATES,
+    ),
     /not standard monthly CLT/,
   );
   // Absent regime means standard CLT; an explicit clt agrees.
-  await computeBrStatutoryWithRates(brContext({ emp: { br_dependentes: "0", br_regime: "clt" } }), RATES);
+  await computeBrStatutoryWithRates(
+    brContext({ emp: { br_dependentes: "0", br_regime: "clt" } }),
+    RATES,
+  );
 });
 
 test("BR tenant slots cover RAT, FAP and terceiros on the eSocial account", () => {
-  assert.deepEqual(BR_PACK_RATES.slots.map((slot) => slot.key), ["br_rat", "br_fap", "br_terceiros"]);
+  assert.deepEqual(
+    BR_PACK_RATES.slots.map((slot) => slot.key),
+    ["br_rat", "br_fap", "br_terceiros"],
+  );
   for (const slot of BR_PACK_RATES.slots) {
     assert.equal(slot.scope, "filing_account");
     assert.equal(slot.programType, "br_cnpj_esocial");
@@ -205,9 +243,21 @@ test("BR profile jurisdiction resolves to a declared employment calendar", () =>
 test("BR 20 November is a national holiday from 2024 (Lei 14.759/2023)", () => {
   // Effective on publication (21 December 2023): 2026-11-20 observes Dia
   // Nacional de Zumbi e da Consciência Negra, while 2023-11-20 predates it.
-  const observed2026 = resolveObservedHolidays({ jurisdiction: "BR-BR", from: "2026-11-20", to: "2026-11-20" });
-  assert.ok(observed2026.some((holiday) => holiday.key === "consciencia_negra" && holiday.date === "2026-11-20"));
-  const observed2023 = resolveObservedHolidays({ jurisdiction: "BR-BR", from: "2023-11-20", to: "2023-11-20" });
+  const observed2026 = resolveObservedHolidays({
+    jurisdiction: "BR-BR",
+    from: "2026-11-20",
+    to: "2026-11-20",
+  });
+  assert.ok(
+    observed2026.some(
+      (holiday) => holiday.key === "consciencia_negra" && holiday.date === "2026-11-20",
+    ),
+  );
+  const observed2023 = resolveObservedHolidays({
+    jurisdiction: "BR-BR",
+    from: "2023-11-20",
+    to: "2023-11-20",
+  });
   assert.ok(!observed2023.some((holiday) => holiday.key === "consciencia_negra"));
 });
 
@@ -215,20 +265,42 @@ test("BR Good Friday is optional until a municipality elects it (Lei 9.093/1995)
   // Federal law delegates religious holidays to municipal law, so the
   // countrywide calendar must not observe Paixão de Cristo by default —
   // a municipality that declares it elects the declared day via override.
-  const plain = resolveObservedHolidays({ jurisdiction: "BR-BR", from: "2026-04-01", to: "2026-04-30" });
+  const plain = resolveObservedHolidays({
+    jurisdiction: "BR-BR",
+    from: "2026-04-01",
+    to: "2026-04-30",
+  });
   assert.ok(!plain.some((holiday) => holiday.key === "paixao"));
   const elected = resolveObservedHolidays({
     jurisdiction: "BR-BR",
     from: "2026-04-01",
     to: "2026-04-30",
-    overrides: [{
-      id: "o1", jurisdiction: "BR-BR", packKey: "paixao", name: null, ruleKind: null,
-      ruleMonth: null, ruleDay: null, ruleWeekday: null, ruleNth: null, ruleOffset: null,
-      observedOn: null, observance: "none", isObserved: true, isPaid: true,
-      effectiveFrom: "2026-01-01", effectiveTo: null,
-    }],
+    overrides: [
+      {
+        id: "o1",
+        jurisdiction: "BR-BR",
+        packKey: "paixao",
+        name: null,
+        ruleKind: null,
+        ruleMonth: null,
+        ruleDay: null,
+        ruleWeekday: null,
+        ruleNth: null,
+        ruleOffset: null,
+        observedOn: null,
+        observance: "none",
+        isObserved: true,
+        isPaid: true,
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+      },
+    ],
   });
-  assert.ok(elected.some((holiday) => holiday.key === "paixao" && holiday.date === "2026-04-03" && holiday.elected));
+  assert.ok(
+    elected.some(
+      (holiday) => holiday.key === "paixao" && holiday.date === "2026-04-03" && holiday.elected,
+    ),
+  );
 });
 
 test("BR salário-família pays the 2026 quota per qualifying child under the ceiling", async () => {
@@ -269,8 +341,30 @@ test("BR rate lookup carries the region, or no saved rate resolves", () => {
   // whole pack refuses with rates on file. That was the shipped shape.
   const account = "11111111-1111-1111-1111-111111111111";
   const rows = [
-    { id: "r1", country: "BR", rateKey: "br_rat", region: "BR", filingAccountId: null, taxYear: 2026, values: { aliquota: "2.00" }, sourceCitation: null, reason: null, supersededOn: null },
-    { id: "r2", country: "BR", rateKey: "br_rat", region: "BR", filingAccountId: account, taxYear: 2026, values: { aliquota: "3.00" }, sourceCitation: null, reason: null, supersededOn: null },
+    {
+      id: "r1",
+      country: "BR",
+      rateKey: "br_rat",
+      region: "BR",
+      filingAccountId: null,
+      taxYear: 2026,
+      values: { aliquota: "2.00" },
+      sourceCitation: null,
+      reason: null,
+      supersededOn: null,
+    },
+    {
+      id: "r2",
+      country: "BR",
+      rateKey: "br_rat",
+      region: "BR",
+      filingAccountId: account,
+      taxYear: 2026,
+      values: { aliquota: "3.00" },
+      sourceCitation: null,
+      reason: null,
+      supersededOn: null,
+    },
   ];
   const resolution = buildResolution({ country: "BR", taxYear: 2026, pack: BR_PACK_RATES, rows });
   const scope = brRateLookupScope({ region: "BR", filingAccountId: account });
@@ -279,7 +373,9 @@ test("BR rate lookup carries the region, or no saved rate resolves", () => {
   // employees on no named account.
   assert.equal(resolution.values("br_rat", scope)?.["aliquota"], "3.00");
   assert.equal(
-    resolution.values("br_rat", brRateLookupScope({ region: "BR", filingAccountId: null }))?.["aliquota"],
+    resolution.values("br_rat", brRateLookupScope({ region: "BR", filingAccountId: null }))?.[
+      "aliquota"
+    ],
     "2.00",
   );
   // The pre-fix shape — account but no region — resolves nothing, which is

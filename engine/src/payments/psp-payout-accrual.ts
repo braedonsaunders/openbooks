@@ -7,7 +7,11 @@ import { isZero, neg } from "../money/money.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
-import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  SubsidiaryError,
+  validateSubsidiaryRestrictions,
+} from "../organization/subsidiaries.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { reversePayoutAccrual } from "./psp-payout-accrual-reversal.ts";
 import {
@@ -88,7 +92,13 @@ export async function accruePayoutsInTransit(
     await requireBankingFeature(orgId);
     const bookId = await primaryBookId(orgId);
     const ctx = await loadSubsidiaryContext(db, orgId);
-    const result: PayoutAccrualRunResult = { accrualDate, reversalDate, accrued: [], reversed: [], skipped: [] };
+    const result: PayoutAccrualRunResult = {
+      accrualDate,
+      reversalDate,
+      accrued: [],
+      reversed: [],
+      skipped: [],
+    };
 
     // Reverse what came due first: last period's presentation clears before
     // this period's is taken, so the clearing account never double-holds.
@@ -96,14 +106,18 @@ export async function accruePayoutsInTransit(
       id: string;
       batch_id: string;
       subsidiary_id: string | null;
-    }>(sql`
+    }>(
+      sql`
       select id, batch_id, subsidiary_id
         from psp_payout_accruals
        where org_id = ${orgId} and status = 'accrued' and reversal_date <= ${accrualDate}
        order by reversal_date, batch_id, id
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of due) {
-      if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)) throw new ScopeNotFoundError();
+      if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id))
+        throw new ScopeNotFoundError();
       const subsidiaryId: string = row.subsidiary_id ?? ctx.rootId;
       const reversed = await reversePayoutAccrual(db, {
         orgId,
@@ -112,10 +126,12 @@ export async function accruePayoutsInTransit(
         allowedSubsidiaryIds,
         subsidiaryId,
       });
-      if (reversed.changed) result.reversed.push({ accrualId: reversed.accrualId, entryId: reversed.entryId });
+      if (reversed.changed)
+        result.reversed.push({ accrualId: reversed.accrualId, entryId: reversed.entryId });
     }
 
-    const batches = await db.execute<AccrualBatchRow>(sql`
+    const batches = await db.execute<AccrualBatchRow>(
+      sql`
       select b.id, b.provider, b.external_ref, b.currency, b.net_amount::text,
              b.bank_account_id, b.clearing_account_id, b.subsidiary_id
         from psp_settlement_batches b
@@ -125,29 +141,39 @@ export async function accruePayoutsInTransit(
          and b.settlement_date <= ${accrualDate}::date
          and a.id is null
        order by b.settlement_date, b.id
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const batch of batches) {
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, batch.subsidiary_id)) continue;
       if (!batch.bank_account_id || !batch.clearing_account_id) {
         result.skipped.push({
           batchId: batch.id,
-          reason: "settlement is missing its bank or clearing account; re-import the provider reference with posting accounts",
+          reason:
+            "settlement is missing its bank or clearing account; re-import the provider reference with posting accounts",
         });
         continue;
       }
       if (isZero(batch.net_amount)) {
-        result.skipped.push({ batchId: batch.id, reason: "zero-net payout needs no in-transit reclass" });
+        result.skipped.push({
+          batchId: batch.id,
+          reason: "zero-net payout needs no in-transit reclass",
+        });
         continue;
       }
       const tieout = await batchDepositTieout(orgId, batch.id, allowedSubsidiaryIds);
       if (tieout.status === "tied") {
-        result.skipped.push({ batchId: batch.id, reason: "payout already tied to its bank deposit" });
+        result.skipped.push({
+          batchId: batch.id,
+          reason: "payout already tied to its bank deposit",
+        });
         continue;
       }
       if (!batch.subsidiary_id && ctx.multi) {
         result.skipped.push({
           batchId: batch.id,
-          reason: "settlement names no subsidiary in a multi-entity organization; re-import the provider reference with a subsidiary",
+          reason:
+            "settlement names no subsidiary in a multi-entity organization; re-import the provider reference with a subsidiary",
         });
         continue;
       }
@@ -221,11 +247,20 @@ export async function accruePayoutsInTransit(
         currency: batch.currency,
         idempotencyKey: `psp-in-transit|${orgId}|${batch.id}|${accrualDate}`,
         lines: [
-          { accountId: batch.clearing_account_id, amount: batch.net_amount, memo: "Payout in transit" },
-          { accountId: batch.bank_account_id, amount: neg(batch.net_amount), memo: "Payout not yet deposited" },
+          {
+            accountId: batch.clearing_account_id,
+            amount: batch.net_amount,
+            memo: "Payout in transit",
+          },
+          {
+            accountId: batch.bank_account_id,
+            amount: neg(batch.net_amount),
+            memo: "Payout not yet deposited",
+          },
         ],
       });
-      const inserted = (await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
         insert into psp_payout_accruals
           (org_id, batch_id, accrual_date, reversal_date, amount, currency,
            bank_account_id, transit_account_id, subsidiary_id,
@@ -237,19 +272,36 @@ export async function accruePayoutsInTransit(
         -- Concurrent accrual of the same batch and date reuses the accrual selected below.
         on conflict (org_id, batch_id, accrual_date) do nothing
         returning id
-      `, "objects"));
-      const accrualId = inserted[0]?.id ?? (await db.execute<{ id: string }>(sql`
+      `,
+        "objects",
+      );
+      const accrualId =
+        inserted[0]?.id ??
+        (
+          await db.execute<{ id: string }>(
+            sql`
         select id from psp_payout_accruals
          where org_id = ${orgId} and batch_id = ${batch.id} and accrual_date = ${accrualDate}::date
-      `, "objects"))[0]?.id;
+      `,
+            "objects",
+          )
+        )[0]?.id;
       if (!accrualId) {
         throw new PspSettlementError(
           `in-transit accrual for batch ${batch.id} could not be recorded; run the accrual again`,
         );
       }
       await auditAccrual(
-        orgId, accrualId, "accrue",
-        { batchId: batch.id, accrualDate, reversalDate, amount: batch.net_amount, accrualEntryId: posted.entryId },
+        orgId,
+        accrualId,
+        "accrue",
+        {
+          batchId: batch.id,
+          accrualDate,
+          reversalDate,
+          amount: batch.net_amount,
+          accrualEntryId: posted.entryId,
+        },
         actorId,
       );
       result.accrued.push({ batchId: batch.id, entryId: posted.entryId });
@@ -285,14 +337,17 @@ export async function listOutstandingInTransit(
       amount: string;
       currency: string;
       subsidiary_id: string | null;
-    }>(sql`
+    }>(
+      sql`
       select a.id, a.batch_id, b.provider, b.external_ref,
              a.accrual_date::text, a.reversal_date::text, a.amount::text, a.currency, a.subsidiary_id
         from psp_payout_accruals a
         join psp_settlement_batches b on b.id = a.batch_id and b.org_id = a.org_id
        where a.org_id = ${orgId} and a.status = 'accrued'
        order by a.accrual_date, a.batch_id
-    `, "objects");
+    `,
+      "objects",
+    );
     return {
       accruals: rows
         .filter((row) => subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id))

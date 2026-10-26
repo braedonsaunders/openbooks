@@ -42,11 +42,20 @@ function reportScope(allowed: ReadonlySet<string> | null): ReturnType<typeof sql
 const listExpenseReportsSchema = z.object({
   query: z.string().max(100).optional().describe("Substring over report number or employee name"),
   employeePartyId: uuidInput.optional().describe("Employee party id; omit for every employee"),
-  status: z.enum(["draft", "pending_approval", "approved", "posted"]).optional().describe("Report status; omit for every status"),
+  status: z
+    .enum(["draft", "pending_approval", "approved", "posted"])
+    .optional()
+    .describe("Report status; omit for every status"),
   dateFrom: dateInput.optional().describe("Report date on/after; omit for no lower bound"),
   dateTo: dateInput.optional().describe("Report date on/before; omit for no upper bound"),
   includeVoided: z.boolean().optional().describe("True = include voided reports (default false)"),
-  limit: z.number().int().min(1).max(200).optional().describe("Page size (default 50); aggregates always cover ALL matches"),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Page size (default 50); aggregates always cover ALL matches"),
 });
 
 const listExpenseReports: AssistantToolDef = {
@@ -75,7 +84,8 @@ const listExpenseReports: AssistantToolDef = {
     );
     const scope = reportScope(authz.allowedSubsidiaryIds);
     const [page, byStatus] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select d.id, d.document_number, d.document_date::text as document_date, d.status,
                d.currency, d.total, d.open_balance as open_balance,
                d.posting_date::text as posting_date, d.voided_at,
@@ -85,8 +95,11 @@ const listExpenseReports: AssistantToolDef = {
          where d.org_id = ${authz.user.orgId} and d.kind = 'expense_report'${filters}${scope}
          order by d.document_date desc, d.created_at desc
          limit ${limit}
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         select d.status, d.currency, count(*)::int as count,
                coalesce(sum(d.total), 0)::text as total,
                coalesce(sum(d.open_balance), 0)::text as open_balance
@@ -94,7 +107,9 @@ const listExpenseReports: AssistantToolDef = {
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
          where d.org_id = ${authz.user.orgId} and d.kind = 'expense_report'${filters}${scope}
          group by d.status, d.currency order by d.status, d.currency
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const capped = capList(
       page.map((r) => ({
@@ -146,10 +161,17 @@ const getExpenseReport: AssistantToolDef = {
     // loadExpenseReport is the drawer/route loader; the route's strict
     // subsidiary guard is applied here so an out-of-scope report reads as
     // missing, exactly like the route.
-    const loaded = await loadExpenseReport(a.reportId, authz.user.orgId, authz.allowedSubsidiaryIds);
+    const loaded = await loadExpenseReport(
+      a.reportId,
+      authz.user.orgId,
+      authz.allowedSubsidiaryIds,
+    );
     const doc = loaded?.doc as Record<string, unknown> | undefined;
-    if (!doc || (authz.allowedSubsidiaryIds !== null
-      && (doc.subsidiary_id == null || !authz.allowedSubsidiaryIds.has(String(doc.subsidiary_id))))) {
+    if (
+      !doc ||
+      (authz.allowedSubsidiaryIds !== null &&
+        (doc.subsidiary_id == null || !authz.allowedSubsidiaryIds.has(String(doc.subsidiary_id))))
+    ) {
       return { ok: false, error: "expense_report_not_found" };
     }
     const lines = capList(
@@ -244,7 +266,6 @@ const expenseApprovals: AssistantToolDef = {
           assigneeRole: item.assigneeRole,
           signatureRequired: item.signatureRequired,
         });
-
       }
     }
     const capped = capList(approvals, 50);

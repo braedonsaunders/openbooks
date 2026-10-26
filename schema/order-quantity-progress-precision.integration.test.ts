@@ -12,7 +12,11 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { runUserSql } from "@openbooks/engine/platform/sqlapi";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  type ScratchOrg,
+} from "@openbooks/engine/testing/fixtures";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -46,55 +50,100 @@ async function insertOrderLine(
   return { documentId, lineId };
 }
 
-test("order-line progress quantities keep eight decimals in storage and the governed view", { skip: !DB, timeout: 60_000 }, async () => {
-  const org = await createScratchOrg();
-  const otherOrg = await createScratchOrg();
-  try {
-    const columns = await db.execute<{ name: string; precision: number; scale: number; nullable: string; fallback: string | null }>(sql`
+test(
+  "order-line progress quantities keep eight decimals in storage and the governed view",
+  { skip: !DB, timeout: 60_000 },
+  async () => {
+    const org = await createScratchOrg();
+    const otherOrg = await createScratchOrg();
+    try {
+      const columns = await db.execute<{
+        name: string;
+        precision: number;
+        scale: number;
+        nullable: string;
+        fallback: string | null;
+      }>(
+        sql`
       select column_name as name, numeric_precision as precision, numeric_scale as scale,
              is_nullable as nullable, column_default as fallback
         from information_schema.columns
        where table_schema = 'public' and table_name = 'document_lines'
          and column_name in ('quantity_fulfilled', 'quantity_billed')
-       order by column_name`, 'objects');
-    assert.deepEqual(
-      columns.map(({ name, precision, scale, nullable }) => ({ name, precision, scale, nullable })),
-      [
-        { name: "quantity_billed", precision: 28, scale: 8, nullable: "NO" },
-        { name: "quantity_fulfilled", precision: 28, scale: 8, nullable: "NO" },
-      ],
-    );
-    for (const column of columns) assert.match(column.fallback ?? "", /^'?0'?(::numeric)?$/, `${column.name} defaults to zero`);
+       order by column_name`,
+        "objects",
+      );
+      assert.deepEqual(
+        columns.map(({ name, precision, scale, nullable }) => ({
+          name,
+          precision,
+          scale,
+          nullable,
+        })),
+        [
+          { name: "quantity_billed", precision: 28, scale: 8, nullable: "NO" },
+          { name: "quantity_fulfilled", precision: 28, scale: 8, nullable: "NO" },
+        ],
+      );
+      for (const column of columns)
+        assert.match(
+          column.fallback ?? "",
+          /^'?0'?(::numeric)?$/,
+          `${column.name} defaults to zero`,
+        );
 
-    const exact = await insertOrderLine(org, 1, { fulfilled: "1.23456789", billed: "0.00000001" });
-    const defaulted = await insertOrderLine(org, 2, null, exact.documentId);
-    await insertOrderLine(otherOrg, 1, { fulfilled: "0.5", billed: "0.5" });
+      const exact = await insertOrderLine(org, 1, {
+        fulfilled: "1.23456789",
+        billed: "0.00000001",
+      });
+      const defaulted = await insertOrderLine(org, 2, null, exact.documentId);
+      await insertOrderLine(otherOrg, 1, { fulfilled: "0.5", billed: "0.5" });
 
-    const stored = await db.execute<{ id: string; fulfilled: string; billed: string }>(sql`
+      const stored = await db.execute<{ id: string; fulfilled: string; billed: string }>(
+        sql`
       select id, quantity_fulfilled::text as fulfilled, quantity_billed::text as billed
-        from document_lines where org_id = ${org.orgId} order by line_number`, 'objects');
-    assert.deepEqual(stored, [
-      { id: exact.lineId, fulfilled: "1.23456789", billed: "0.00000001" },
-      { id: defaulted.lineId, fulfilled: "0.00000000", billed: "0.00000000" },
-    ]);
+        from document_lines where org_id = ${org.orgId} order by line_number`,
+        "objects",
+      );
+      assert.deepEqual(stored, [
+        { id: exact.lineId, fulfilled: "1.23456789", billed: "0.00000001" },
+        { id: defaulted.lineId, fulfilled: "0.00000000", billed: "0.00000000" },
+      ]);
 
-    const view = await db.execute<{ definition: string }>(sql`
-      select pg_get_viewdef('openbooks_query.document_lines'::regclass, true) as definition`, 'objects');
-    assert.match(view[0]!.definition, /openbooks_query_org_id\(\)/, "the governed view filters by the query tenant");
+      const view = await db.execute<{ definition: string }>(
+        sql`
+      select pg_get_viewdef('openbooks_query.document_lines'::regclass, true) as definition`,
+        "objects",
+      );
+      assert.match(
+        view[0]!.definition,
+        /openbooks_query_org_id\(\)/,
+        "the governed view filters by the query tenant",
+      );
 
-    const query = `select id::text as id, quantity_fulfilled::text as fulfilled, quantity_billed::text as billed
+      const query = `select id::text as id, quantity_fulfilled::text as fulfilled, quantity_billed::text as billed
          from document_lines order by line_number`;
-    await assert.rejects(runUserSql(query, { orgId: org.orgId }), /payroll\.read/,
-      "raw document lines retain their payroll permission requirement");
-    const governed = await runUserSql(query, {
-      orgId: org.orgId, payrollRead: true, expenseRead: true,
-    });
-    assert.deepEqual(governed.rows, [
-      { id: exact.lineId, fulfilled: "1.23456789", billed: "0.00000001" },
-      { id: defaulted.lineId, fulfilled: "0.00000000", billed: "0.00000000" },
-    ], "the governed view returns only the tenant's lines at full precision");
-  } finally {
-    await dropScratchOrg(otherOrg.orgId);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        runUserSql(query, { orgId: org.orgId }),
+        /payroll\.read/,
+        "raw document lines retain their payroll permission requirement",
+      );
+      const governed = await runUserSql(query, {
+        orgId: org.orgId,
+        payrollRead: true,
+        expenseRead: true,
+      });
+      assert.deepEqual(
+        governed.rows,
+        [
+          { id: exact.lineId, fulfilled: "1.23456789", billed: "0.00000001" },
+          { id: defaulted.lineId, fulfilled: "0.00000000", billed: "0.00000000" },
+        ],
+        "the governed view returns only the tenant's lines at full precision",
+      );
+    } finally {
+      await dropScratchOrg(otherOrg.orgId);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

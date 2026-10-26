@@ -48,7 +48,9 @@ export interface AssetBankHygieneWarning {
  * else null. Pure (no I/O) so the API routes, the master-data importer,
  * and unit tests all share it.
  */
-export function assetBankHygieneWarning(input: AssetBankHygieneInput): AssetBankHygieneWarning | null {
+export function assetBankHygieneWarning(
+  input: AssetBankHygieneInput,
+): AssetBankHygieneWarning | null {
   if (input.type !== "asset_bank") return null;
   // Summary accounts never post and the cash queries exclude them.
   if (input.isSummary) return null;

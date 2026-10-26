@@ -23,17 +23,19 @@ export { isIsoCalendarDate } from "./iso-date.ts";
 // client components import it directly; business-date.ts re-exports it for
 // server code that also needs the org's business day.
 
-
 /** Parse YYYY-MM-DD as a UTC calendar date — no local-timezone shift. */
 export function parseIsoDate(iso: string): Date {
   if (!isIsoCalendarDate(iso)) {
-    throw new RangeError("business date must be a valid YYYY-MM-DD calendar date in years 0001 through 9999");
+    throw new RangeError(
+      "business date must be a valid YYYY-MM-DD calendar date in years 0001 through 9999",
+    );
   }
   return new Date(`${iso}T00:00:00.000Z`);
 }
 
 function civilPart(value: number, field: string): number {
-  if (!Number.isSafeInteger(value)) throw new RangeError(`civil date ${field} must be a safe whole number`);
+  if (!Number.isSafeInteger(value))
+    throw new RangeError(`civil date ${field} must be a safe whole number`);
   return value;
 }
 
@@ -76,9 +78,11 @@ export function utcDateFromParts(
  * shifts the day.
  */
 export function isoDateOf(date: Date): string {
-  return `${String(date.getUTCFullYear()).padStart(4, "0")}-`
-    + `${String(date.getUTCMonth() + 1).padStart(2, "0")}-`
-    + `${String(date.getUTCDate()).padStart(2, "0")}`;
+  return (
+    `${String(date.getUTCFullYear()).padStart(4, "0")}-` +
+    `${String(date.getUTCMonth() + 1).padStart(2, "0")}-` +
+    `${String(date.getUTCDate()).padStart(2, "0")}`
+  );
 }
 
 /**
@@ -99,7 +103,8 @@ export function civilDayIndex(iso: string): number {
   const era = Math.floor(y / 400);
   const yearOfEra = y - era * 400;
   const dayOfYear = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1;
-  const dayOfEra = yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
+  const dayOfEra =
+    yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
   return era * 146097 + dayOfEra - 719468;
 }
 
@@ -150,7 +155,8 @@ function isoDay(date: Date): string {
 }
 
 function calendarOffset(value: number): void {
-  if (!Number.isSafeInteger(value)) throw new RangeError("calendar offset must be a safe whole number");
+  if (!Number.isSafeInteger(value))
+    throw new RangeError("calendar offset must be a safe whole number");
 }
 
 /** First day of the calendar month that contains `iso`. */

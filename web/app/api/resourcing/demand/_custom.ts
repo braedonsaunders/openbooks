@@ -18,17 +18,22 @@ export async function validateDemandCustomValues(
   }
   const validated = validateCustomValues(definitions, { ...existing, ...provided });
   if (!validated.ok) {
-    return Response.json({
-      error: "invalid_custom_fields",
-      errors: validated.errors,
-    }, { status: 422 });
+    return Response.json(
+      {
+        error: "invalid_custom_fields",
+        errors: validated.errors,
+      },
+      { status: 422 },
+    );
   }
   const unowned = await findUnownedCustomReferences(orgId, definitions, provided);
   if (unowned.length > 0) {
-    const errors = Object.fromEntries(unowned.map((definition) => [
-      definition.key,
-      `${definition.label} must reference a record in this organization`,
-    ]));
+    const errors = Object.fromEntries(
+      unowned.map((definition) => [
+        definition.key,
+        `${definition.label} must reference a record in this organization`,
+      ]),
+    );
     return Response.json({ error: "unknown_custom_reference", errors }, { status: 422 });
   }
   const declaredKeys = new Set(definitions.map((definition) => definition.key));

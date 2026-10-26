@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { can, requirePermission } from '../../lib/authz'
-import { PaymentsSection } from '../../app/(app)/payments/PaymentsSection'
-import { RunsSection } from '../../app/(app)/payments/RunsSection'
+import { can, requirePermission } from "../../lib/authz";
+import { PaymentsSection } from "../../app/(app)/payments/PaymentsSection";
+import { RunsSection } from "../../app/(app)/payments/RunsSection";
 
 /**
  * Slots for the two money-movement sections.
@@ -19,11 +19,11 @@ export async function PaymentsSectionSlot({
   basePath,
   kind,
 }: {
-  sp: Record<string, string | string[] | undefined>
-  basePath: string
-  kind: 'vendor_payment' | 'customer_payment'
+  sp: Record<string, string | string[] | undefined>;
+  basePath: string;
+  kind: "vendor_payment" | "customer_payment";
 }) {
-  const authz = await requirePermission(kind === 'vendor_payment' ? 'ap.pay' : 'ar.pay')
+  const authz = await requirePermission(kind === "vendor_payment" ? "ap.pay" : "ar.pay");
   return (
     <PaymentsSection
       sp={sp}
@@ -32,11 +32,11 @@ export async function PaymentsSectionSlot({
       kind={kind}
       orgId={authz.user.orgId}
       userId={authz.user.id}
-      canManage={can(authz, 'admin.customization.manage')}
-      canCreate={can(authz, kind === 'vendor_payment' ? 'ap.pay' : 'ar.pay')}
+      canManage={can(authz, "admin.customization.manage")}
+      canCreate={can(authz, kind === "vendor_payment" ? "ap.pay" : "ar.pay")}
       userRoles={authz.user.roles.map(({ key }) => key)}
     />
-  )
+  );
 }
 
 export async function RunsSectionSlot({
@@ -44,20 +44,20 @@ export async function RunsSectionSlot({
   basePath,
   direction,
 }: {
-  sp: Record<string, string | string[] | undefined>
+  sp: Record<string, string | string[] | undefined>;
   /** The runs section serves both money-out and money-in, and its own type
    *  keeps that list closed rather than accepting any string. */
-  basePath: '/payments' | '/receipts'
-  direction: 'outbound' | 'inbound'
+  basePath: "/payments" | "/receipts";
+  direction: "outbound" | "inbound";
 }) {
-  const authz = await requirePermission(direction === 'outbound' ? 'ap.pay' : 'ar.pay')
+  const authz = await requirePermission(direction === "outbound" ? "ap.pay" : "ar.pay");
   return (
     <RunsSection
       sp={sp}
       authz={authz}
-      canApprove={can(authz, direction === 'outbound' ? 'ap.approve' : 'ar.approve')}
+      canApprove={can(authz, direction === "outbound" ? "ap.approve" : "ar.approve")}
       direction={direction}
       basePath={basePath}
     />
-  )
+  );
 }

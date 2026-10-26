@@ -161,16 +161,36 @@ export function parseCuRowId(rowId: string): PayrollFilingRowScope | null {
 export function cuSlipBoxes(slip: CuSlip): PayrollSlipBox[] {
   const boxes: PayrollSlipBox[] = [
     slip.isFixedTerm
-      ? { code: "2", label: "Redditi di lavoro dipendente — tempo determinato", value: slip.redditi }
-      : { code: "1", label: "Redditi di lavoro dipendente — tempo indeterminato", value: slip.redditi },
+      ? {
+          code: "2",
+          label: "Redditi di lavoro dipendente — tempo determinato",
+          value: slip.redditi,
+        }
+      : {
+          code: "1",
+          label: "Redditi di lavoro dipendente — tempo indeterminato",
+          value: slip.redditi,
+        },
     { code: "21", label: "Ritenute IRPEF", value: slip.ritenuteIrpef, emphasis: true },
-    { code: "22", label: "Addizionale regionale all'IRPEF dovuta", value: slip.addizionaleRegionale },
+    {
+      code: "22",
+      label: "Addizionale regionale all'IRPEF dovuta",
+      value: slip.addizionaleRegionale,
+    },
   ];
   if (cmp(slip.trattamentoIntegrativo, "0") !== 0) {
-    boxes.push({ code: "391", label: "Trattamento integrativo erogato", value: slip.trattamentoIntegrativo });
+    boxes.push({
+      code: "391",
+      label: "Trattamento integrativo erogato",
+      value: slip.trattamentoIntegrativo,
+    });
   }
   if (cmp(slip.imponibileInps, "0") !== 0) {
-    boxes.push({ code: "INPS-4", label: "INPS Sezione 1 — Imponibile previdenziale", value: slip.imponibileInps });
+    boxes.push({
+      code: "INPS-4",
+      label: "INPS Sezione 1 — Imponibile previdenziale",
+      value: slip.imponibileInps,
+    });
   }
   if (cmp(slip.contributiInpsWorker, "0") !== 0) {
     boxes.push({
@@ -216,22 +236,23 @@ function cuSlipNotes(slip: CuSlip): string[] {
 export async function cuSlips(orgId: string, taxYear: number): Promise<CuSlip[]> {
   if (taxYear !== 2025 && taxYear !== 2026) {
     throw new ItFilingRefusal(
-      `the IT payroll pack has no transcribed tables for tax year ${taxYear}: 2025 and 2026 are the transcribed `
-      + "editions. This year is not yet supported by the IT pack; contact support before "
-      + `certifying ${taxYear}.`,
+      `the IT payroll pack has no transcribed tables for tax year ${taxYear}: 2025 and 2026 are the transcribed ` +
+        "editions. This year is not yet supported by the IT pack; contact support before " +
+        `certifying ${taxYear}.`,
     );
   }
   if (taxYear !== CU_SUPPORTED_TAX_YEAR) {
     throw new ItFilingRefusal(
-      `the IT payroll pack transcribes the CU box layout only for tax year 2025 (CU 2026 istruzioni, `
-      + `AdE Provvedimento n. 15707 del 15 gennaio 2026): the CU ${taxYear + 1} istruzioni (redditi ${taxYear}) `
-      + `are not yet published in this pack version — this layout is not yet supported by the IT pack; `
-      + `contact support, so no CU can be certified for ${taxYear} until then.`,
+      `the IT payroll pack transcribes the CU box layout only for tax year 2025 (CU 2026 istruzioni, ` +
+        `AdE Provvedimento n. 15707 del 15 gennaio 2026): the CU ${taxYear + 1} istruzioni (redditi ${taxYear}) ` +
+        `are not yet published in this pack version — this layout is not yet supported by the IT pack; ` +
+        `contact support, so no CU can be certified for ${taxYear} until then.`,
     );
   }
   await assertPayrollCountryKnown(db, orgId, taxYear);
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     with committed as (
       select s.*
         from pay_stubs s
@@ -267,11 +288,13 @@ export async function cuSlips(orgId: string, taxYear: number): Promise<CuSlip[]>
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
      group by c.employee_party_id, p.display_name
      order by p.display_name
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new ItFilingRefusal(
-      `no committed IT pay stubs for tax year ${taxYear}: the Certificazione Unica reports committed pay runs, `
-      + "so an empty slip would be a wrong slip. Calculate and commit the year's IT pay runs first.",
+      `no committed IT pay stubs for tax year ${taxYear}: the Certificazione Unica reports committed pay runs, ` +
+        "so an empty slip would be a wrong slip. Calculate and commit the year's IT pay runs first.",
     );
   }
   // December-assessed regionale per employee: the dovuta punto 22 certifies.
@@ -279,7 +302,8 @@ export async function cuSlips(orgId: string, taxYear: number): Promise<CuSlip[]>
   // settlement's existence proof; the latest December stub wins when several
   // committed Decembers exist. Employees without one fall back to the
   // withheld sum below, disclosed on the slip.
-  const assessedRows = (await db.execute<{ employee_party_id: string; assessed: string }>(sql`
+  const assessedRows = await db.execute<{ employee_party_id: string; assessed: string }>(
+    sql`
     select distinct on (s.employee_party_id) s.employee_party_id,
            (s.factors->>'CONG_ADDREG_ANNUAL')::numeric::text as assessed
       from pay_stubs s
@@ -291,21 +315,32 @@ export async function cuSlips(orgId: string, taxYear: number): Promise<CuSlip[]>
        and s.country = 'IT'
        and s.factors ? 'CONG_ADDREG_ANNUAL'
      order by s.employee_party_id, s.pay_date desc, s.created_at desc
-  `, "objects"));
+  `,
+    "objects",
+  );
   const assessedByEmployee = new Map(
     assessedRows.map((row) => [String(row.employee_party_id), String(row.assessed)]),
   );
   const declaration = itDetrazioniDeclaration();
-  const certRows = (await db.execute<{ employee_party_id: string; answers: Record<string, string | null> }>(sql`
+  const certRows = await db.execute<{
+    employee_party_id: string;
+    answers: Record<string, string | null>;
+  }>(
+    sql`
     select distinct on (c.employee_party_id) c.employee_party_id, c.answers
       from employee_tax_certificates c
      where c.org_id = ${orgId} and c.country = 'IT' and c.certificate_key = 'it_detrazioni'
        and c.superseded_on is null
        and (c.effective_from is null or c.effective_from <= ${`${taxYear}-12-31`}::date)
      order by c.employee_party_id, c.effective_from desc nulls last
-  `, "objects"));
+  `,
+    "objects",
+  );
   const certByEmployee = new Map(
-    certRows.map((row) => [String(row.employee_party_id), row.answers as Record<string, string | null>]),
+    certRows.map((row) => [
+      String(row.employee_party_id),
+      row.answers as Record<string, string | null>,
+    ]),
   );
   const regionName = (code: string | null): string | null =>
     IT_REGIONS.find((region) => region.code === code)?.name ?? null;
@@ -351,7 +386,12 @@ export async function cuPopulation(orgId: string, taxYear: number): Promise<Payr
       { key: "addRegionale", label: "Addizionale regionale (22)", align: "right", money: true },
       { key: "imponibileInps", label: "Imponibile INPS", align: "right", money: true },
       { key: "inpsWorker", label: "Contributi INPS (INPS-6)", align: "right", money: true },
-      { key: "trattamentoIntegrativo", label: "Tratt. integrativo (391)", align: "right", money: true },
+      {
+        key: "trattamentoIntegrativo",
+        label: "Tratt. integrativo (391)",
+        align: "right",
+        money: true,
+      },
     ],
     rows: slips.map((slip) => ({
       rowId: slip.employeePartyId,
@@ -368,15 +408,18 @@ export async function cuPopulation(orgId: string, taxYear: number): Promise<Payr
 }
 
 /** One employee's CU slip, box for box — the CU 2026 punto numbers. */
-export async function cuSlip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+export async function cuSlip(
+  orgId: string,
+  taxYear: number,
+  rowId: string,
+): Promise<PayrollFilingSlipData> {
   const slips = await cuSlips(orgId, taxYear);
   const slip = slips.find((entry) => entry.employeePartyId === rowId);
   if (!slip) {
-    throw new PayrollError(
-      `no ${taxYear} Certificazione Unica matches the requested employee`,
-    );
+    throw new PayrollError(`no ${taxYear} Certificazione Unica matches the requested employee`);
   }
-  const domicilio = [slip.domicilioComune, slip.domicilioRegione].filter(Boolean).join(" — ") || "non dichiarato";
+  const domicilio =
+    [slip.domicilioComune, slip.domicilioRegione].filter(Boolean).join(" — ") || "non dichiarato";
   return {
     formCode: "IT_CU",
     formName: "Certificazione Unica — Redditi di lavoro dipendente",
@@ -390,4 +433,3 @@ export async function cuSlip(orgId: string, taxYear: number, rowId: string): Pro
     notes: cuSlipNotes(slip),
   };
 }
-

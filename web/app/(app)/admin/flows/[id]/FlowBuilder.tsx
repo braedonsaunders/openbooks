@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import {
   ArrowLeft,
   GitBranch,
@@ -15,7 +15,7 @@ import {
   TriangleAlert,
   Workflow,
   Zap,
-} from 'lucide-react'
+} from "lucide-react";
 import {
   addEdge,
   Background,
@@ -29,17 +29,17 @@ import {
   type Edge,
   type EdgeChange,
   type NodeChange,
-} from '@xyflow/react'
-import '@xyflow/react/dist/style.css'
-import './_flow-canvas.css'
-import { Alert, AlertDescription, AlertTitle, Button, EmptyState, cn } from '@openbooks/ui'
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import "./_flow-canvas.css";
+import { Alert, AlertDescription, AlertTitle, Button, EmptyState, cn } from "@openbooks/ui";
 import {
   flowReadiness,
   lintAutomationGraph,
   profileFieldIds,
   type AutomationGraph,
   type FlowSubjectProfile,
-} from '@openbooks/forms-core'
+} from "@openbooks/forms-core";
 import {
   CANVAS_CONNECTION_MODE,
   autoWireEdge,
@@ -56,13 +56,13 @@ import {
   type NodeKind,
   type OrgRole,
   type OrgUser,
-} from '../_builder/graph'
-import { nodeAccessibleName } from '../_builder/nodes'
-import { nameFlowWarnings } from '../_builder/warnings'
-import { NODE_TYPES } from '../_builder/nodes'
-import { Inspector } from '../_builder/Inspector'
-import { RunsPanel, type FlowRunRow } from '../_builder/RunsPanel'
-import { readApiErrorMessage } from '../../../../../lib/api-error'
+} from "../_builder/graph";
+import { nodeAccessibleName } from "../_builder/nodes";
+import { nameFlowWarnings } from "../_builder/warnings";
+import { NODE_TYPES } from "../_builder/nodes";
+import { Inspector } from "../_builder/Inspector";
+import { RunsPanel, type FlowRunRow } from "../_builder/RunsPanel";
+import { readApiErrorMessage } from "../../../../../lib/api-error";
 
 /**
  * The flow builder: canvas left (React Flow), inspector right (360px).
@@ -71,11 +71,11 @@ import { readApiErrorMessage } from '../../../../../lib/api-error'
  */
 
 const PALETTE: { kind: NodeKind; icon: typeof Zap; labelKey: string }[] = [
-  { kind: 'trigger', icon: Zap, labelKey: 'builder.palette.trigger' },
-  { kind: 'condition', icon: GitBranch, labelKey: 'builder.palette.condition' },
-  { kind: 'action', icon: Play, labelKey: 'builder.palette.action' },
-  { kind: 'gate', icon: ShieldCheck, labelKey: 'builder.palette.gate' },
-]
+  { kind: "trigger", icon: Zap, labelKey: "builder.palette.trigger" },
+  { kind: "condition", icon: GitBranch, labelKey: "builder.palette.condition" },
+  { kind: "action", icon: Play, labelKey: "builder.palette.action" },
+  { kind: "gate", icon: ShieldCheck, labelKey: "builder.palette.gate" },
+];
 
 export default function FlowBuilder({
   flow,
@@ -87,84 +87,79 @@ export default function FlowBuilder({
   subsidiaries = [],
 }: {
   flow: {
-    id: string
-    name: string
-    enabled: boolean
-    updatedAt: string
-    graph: AutomationGraph
-  }
-  runs: FlowRunRow[]
-  profile: FlowSubjectProfile
-  users: OrgUser[]
-  roles: OrgRole[]
-  permissions: string[]
-  subsidiaries?: { id: string; name: string }[]
+    id: string;
+    name: string;
+    enabled: boolean;
+    updatedAt: string;
+    graph: AutomationGraph;
+  };
+  runs: FlowRunRow[];
+  profile: FlowSubjectProfile;
+  users: OrgUser[];
+  roles: OrgRole[];
+  permissions: string[];
+  subsidiaries?: { id: string; name: string }[];
 }) {
-  const t = useTranslations('admin.flows')
+  const t = useTranslations("admin.flows");
   // Existing catalog labels, reused so every locale renders them: the
   // legal-entity name and the organization-wide option.
-  const tLegalEntity = useTranslations('accounting.provisions')
-  const tAllEntities = useTranslations('crm.sales')
-  const router = useRouter()
+  const tLegalEntity = useTranslations("accounting.provisions");
+  const tAllEntities = useTranslations("crm.sales");
+  const router = useRouter();
 
   const edgeLabels = useMemo(
     () => ({
-      then: t('edge.then'),
-      else: t('edge.else'),
-      approve: t('edge.approve'),
-      reject: t('edge.reject'),
+      then: t("edge.then"),
+      else: t("edge.else"),
+      approve: t("edge.approve"),
+      reject: t("edge.reject"),
     }),
     [t],
-  )
-  const initial = useMemo(
-    () => toFlow(flow.graph, edgeLabels),
-    [flow.graph, edgeLabels],
-  )
+  );
+  const initial = useMemo(() => toFlow(flow.graph, edgeLabels), [flow.graph, edgeLabels]);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(
-    initial.nodes,
-  )
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initial.edges)
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
-  const [name, setName] = useState(flow.name)
-  const [enabled, setEnabled] = useState(flow.enabled)
+  const [nodes, setNodes, onNodesChange] = useNodesState<FlowNode>(initial.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initial.edges);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [name, setName] = useState(flow.name);
+  const [enabled, setEnabled] = useState(flow.enabled);
   const [subjectScopeIds, setSubjectScopeIds] = useState<string[]>(
     flow.graph.subjectScope?.subsidiaryIds ?? [],
-  )
-  const [tab, setTab] = useState<'canvas' | 'runs'>('canvas')
-  const [dirty, setDirty] = useState(false)
-  const [revision, setRevision] = useState(flow.updatedAt)
-  const [busy, setBusy] = useState(false)
-  const [saveErrors, setSaveErrors] = useState<string[]>([])
+  );
+  const [tab, setTab] = useState<"canvas" | "runs">("canvas");
+  const [dirty, setDirty] = useState(false);
+  const [revision, setRevision] = useState(flow.updatedAt);
+  const [busy, setBusy] = useState(false);
+  const [saveErrors, setSaveErrors] = useState<string[]>([]);
   // The server is the single source for enablement: when a toggle response
   // or a refresh delivers a new persisted flag, the switch follows it
   // instead of the stale local copy. Tracked across renders (never synced
   // in an effect) so the adjustment cannot cascade.
-  const [lastServerEnabled, setLastServerEnabled] = useState(flow.enabled)
+  const [lastServerEnabled, setLastServerEnabled] = useState(flow.enabled);
   if (flow.enabled !== lastServerEnabled) {
-    setLastServerEnabled(flow.enabled)
-    setEnabled(flow.enabled)
+    setLastServerEnabled(flow.enabled);
+    setEnabled(flow.enabled);
   }
-  const editVersion = useRef(0)
-  const saving = useRef(false)
+  const editVersion = useRef(0);
+  const saving = useRef(false);
   // A canvas edit supersedes the last save response: its errors name the
   // graph as submitted, so they clear and the live lint — recomputed from
   // the current nodes below — takes over. Stale node ids can never linger.
   const markDirty = useCallback(() => {
-    editVersion.current += 1
-    setDirty(true)
-    setSaveErrors([])
-  }, [])
+    editVersion.current += 1;
+    setDirty(true);
+    setSaveErrors([]);
+  }, []);
   // Follow the app's dark theme so the canvas / minimap / controls match.
-  const [isDark, setIsDark] = useState(false)
+  const [isDark, setIsDark] = useState(false);
   useEffect(() => {
-    const el = document.documentElement
-    const sync = () => setIsDark(el.classList.contains('dark'))
-    sync()
-    const obs = new MutationObserver(sync)
-    obs.observe(el, { attributes: true, attributeFilter: ['class'] })
-    return () => obs.disconnect()
-  }, [])
+    const el = document.documentElement;
+    const sync = () => setIsDark(el.classList.contains("dark"));
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(el, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
 
   // Live author-time lint — same rules the server reports on save.
   const warnings = useMemo(
@@ -175,23 +170,22 @@ export default function FlowBuilder({
         profile,
       ),
     [nodes, edges, profile, subjectScopeIds],
-  )
+  );
 
   const markDirtyOnNodesChange = useCallback(
     (changes: NodeChange<FlowNode>[]) => {
-      if (changes.some((c) => c.type !== 'select' && c.type !== 'dimensions'))
-        markDirty()
-      onNodesChange(changes)
+      if (changes.some((c) => c.type !== "select" && c.type !== "dimensions")) markDirty();
+      onNodesChange(changes);
     },
     [onNodesChange, markDirty],
-  )
+  );
   const markDirtyOnEdgesChange = useCallback(
     (changes: EdgeChange<Edge>[]) => {
-      if (changes.some((c) => c.type !== 'select')) markDirty()
-      onEdgesChange(changes)
+      if (changes.some((c) => c.type !== "select")) markDirty();
+      onEdgesChange(changes);
     },
     [onEdgesChange, markDirty],
-  )
+  );
 
   /**
    * The single edge path: pointer drops and the inspector's keyboard
@@ -201,113 +195,103 @@ export default function FlowBuilder({
    */
   const connect = useCallback(
     (req: ConnectRequest) => {
-      const edge = buildConnectEdge(req, nodes, edgeLabels)
-      if (!edge) return false
-      setEdges((eds) => addEdge(edge, eds))
-      markDirty()
-      return true
+      const edge = buildConnectEdge(req, nodes, edgeLabels);
+      if (!edge) return false;
+      setEdges((eds) => addEdge(edge, eds));
+      markDirty();
+      return true;
     },
     [nodes, edgeLabels, setEdges, markDirty],
-  )
+  );
 
   const onConnect = useCallback(
     (c: Connection) => {
-      if (!c.source || !c.target) return
+      if (!c.source || !c.target) return;
       connect({
         source: c.source,
-        sourceHandle: c.sourceHandle ?? 'next',
+        sourceHandle: c.sourceHandle ?? "next",
         target: c.target,
-      })
+      });
     },
     [connect],
-  )
+  );
 
   const addNode = (kind: NodeKind) => {
     // One flow, one entry point: the validator refuses a second trigger, so
     // the palette refuses to add one (with the remedy, not a silent no-op).
-    if (kind === 'trigger' && !canAddTrigger(nodes)) {
-      toast.error(t('builder.singleTrigger'))
-      return
+    if (kind === "trigger" && !canAddTrigger(nodes)) {
+      toast.error(t("builder.singleTrigger"));
+      return;
     }
     // A palette-added step arrives wired after the selected node (or the
     // tail of a linear graph) through the single edge path — the canvas no
     // longer needs a manual drag before the step can run.
-    const id = newId(kind)
+    const id = newId(kind);
     const node: FlowNode = {
       id,
       type: kind,
       position: nextPosition(kind, nodes),
       data: defaultNodeData(kind, profile),
       selected: true,
-    }
-    const edge = autoWireEdge(
-      id,
-      [...nodes, node],
-      edges,
-      selectedNodeId ?? undefined,
-      edgeLabels,
-    )
-    setNodes([...nodes.map((n) => ({ ...n, selected: false })), node])
-    if (edge) setEdges((eds) => addEdge(edge, eds))
-    setSelectedNodeId(id)
-    markDirty()
-  }
+    };
+    const edge = autoWireEdge(id, [...nodes, node], edges, selectedNodeId ?? undefined, edgeLabels);
+    setNodes([...nodes.map((n) => ({ ...n, selected: false })), node]);
+    if (edge) setEdges((eds) => addEdge(edge, eds));
+    setSelectedNodeId(id);
+    markDirty();
+  };
 
   const patchNodeData = (id: string, data: NodeData) => {
-    setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data } : n)))
-    markDirty()
-  }
+    setNodes((ns) => ns.map((n) => (n.id === id ? { ...n, data } : n)));
+    markDirty();
+  };
 
   const removeNode = (id: string) => {
-    setNodes((ns) => ns.filter((n) => n.id !== id))
-    setEdges((es) => es.filter((e) => e.source !== id && e.target !== id))
-    setSelectedNodeId(null)
-    markDirty()
-  }
+    setNodes((ns) => ns.filter((n) => n.id !== id));
+    setEdges((es) => es.filter((e) => e.source !== id && e.target !== id));
+    setSelectedNodeId(null);
+    markDirty();
+  };
 
   async function save() {
-    if (saving.current) return
-    saving.current = true
-    const submittedVersion = editVersion.current
-    setBusy(true)
+    if (saving.current) return;
+    saving.current = true;
+    const submittedVersion = editVersion.current;
+    setBusy(true);
     try {
       const res = await fetch(`/api/admin/flows/${flow.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           expectedUpdatedAt: revision,
           name: name.trim() || flow.name,
           graph: fromFlow(nodes, edges, subjectScopeIds),
         }),
-      })
+      });
       if (!res.ok) {
         const failure = (await res.json().catch(() => null)) as {
-          error?: unknown
-          errors?: unknown
-        } | null
+          error?: unknown;
+          errors?: unknown;
+        } | null;
         setSaveErrors(
           Array.isArray(failure?.errors)
             ? (failure.errors as unknown[]).map(String)
-            : [
-                String(
-                  (failure as { error?: unknown } | null)?.error ?? res.status,
-                ),
-              ],
-        )
-        toast.error(t('builder.saveFailed'))
-        return
+            : [String((failure as { error?: unknown } | null)?.error ?? res.status)],
+        );
+        toast.error(t("builder.saveFailed"));
+        return;
       }
-      const data = (await res.json()) as { updatedAt: string }
-      setSaveErrors([])
-      setRevision(data.updatedAt)
-      if (editVersion.current === submittedVersion) setDirty(false)
-      toast.success(t('builder.saved'))
-      router.refresh()
+      const data = (await res.json()) as { updatedAt: string };
+      setSaveErrors([]);
+      setRevision(data.updatedAt);
+      if (editVersion.current === submittedVersion) setDirty(false);
+      toast.success(t("builder.saved"));
+      router.refresh();
     } catch {
-      toast.error(t('builder.saveFailed'))
+      toast.error(t("builder.saveFailed"));
     } finally {
-      saving.current = false
-      setBusy(false)
+      saving.current = false;
+      setBusy(false);
     }
   }
 
@@ -322,16 +306,16 @@ export default function FlowBuilder({
    * revision advances so the next save cannot conflict with this write.
    */
   async function toggleEnabled() {
-    if (saving.current) return
-    saving.current = true
-    const next = !enabled
-    setBusy(true)
+    if (saving.current) return;
+    saving.current = true;
+    const next = !enabled;
+    setBusy(true);
     try {
       const res = await fetch(`/api/admin/flows/${flow.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ expectedUpdatedAt: revision, enabled: next }),
-      })
+      });
       // The body parses from a clone so the refusal can read through the
       // shared helper: message, remedy and code render in the pin and the
       // toast instead of a bare fallback.
@@ -339,77 +323,69 @@ export default function FlowBuilder({
         .clone()
         .json()
         .catch(() => ({}))) as {
-        updatedAt?: string
-        enabled?: unknown
-        errors?: unknown
-      }
+        updatedAt?: string;
+        enabled?: unknown;
+        errors?: unknown;
+      };
       if (!res.ok) {
         const refusal =
           Array.isArray(data.errors) && data.errors.length > 0
             ? data.errors.map(String)
-            : [await readApiErrorMessage(res, t('actions.updateFailed'))]
-        setSaveErrors(refusal)
-        toast.error(refusal[0] ?? t('actions.updateFailed'))
-        return
+            : [await readApiErrorMessage(res, t("actions.updateFailed"))];
+        setSaveErrors(refusal);
+        toast.error(refusal[0] ?? t("actions.updateFailed"));
+        return;
       }
       // Render the persisted flag the server returns — the switch shows the
       // stored state even if it differs from the optimistic next.
-      setEnabled(typeof data.enabled === 'boolean' ? data.enabled : next)
-      setSaveErrors([])
-      if (typeof data.updatedAt === 'string') setRevision(data.updatedAt)
-      router.refresh()
+      setEnabled(typeof data.enabled === "boolean" ? data.enabled : next);
+      setSaveErrors([]);
+      if (typeof data.updatedAt === "string") setRevision(data.updatedAt);
+      router.refresh();
     } catch {
-      toast.error(t('actions.updateFailed'))
+      toast.error(t("actions.updateFailed"));
     } finally {
-      saving.current = false
-      setBusy(false)
+      saving.current = false;
+      setBusy(false);
     }
   }
 
-  const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null;
 
   // Accessible names for the focusable canvas nodes (kind + label), derived
   // at render so a label edit renames the node immediately — the state
   // itself never carries a second, staler copy of the name.
   const labeledNodes = useMemo(
-    () =>
-      nodes.map((n) => ({ ...n, ariaLabel: nodeAccessibleName(t, n.data) })),
+    () => nodes.map((n) => ({ ...n, ariaLabel: nodeAccessibleName(t, n.data) })),
     [nodes, t],
-  )
+  );
 
   // Lint warnings name storage ids; authors read canvas names. The same
   // enrichment covers author-time warnings and server-side enable/save
   // errors, which share the linter's vocabulary.
   const nodeNames = useMemo(
-    () =>
-      new Map(nodes.map((n) => [n.id, nodeAccessibleName(t, n.data)] as const)),
+    () => new Map(nodes.map((n) => [n.id, nodeAccessibleName(t, n.data)] as const)),
     [nodes, t],
-  )
-  const namedWarnings = useMemo(
-    () => nameFlowWarnings(warnings, nodeNames),
-    [warnings, nodeNames],
-  )
+  );
+  const namedWarnings = useMemo(() => nameFlowWarnings(warnings, nodeNames), [warnings, nodeNames]);
   const namedSaveErrors = useMemo(
     () => nameFlowWarnings(saveErrors, nodeNames),
     [saveErrors, nodeNames],
-  )
+  );
 
   // Whether this flow can fire, in the one shared vocabulary the flows list
   // uses for its status column: disabled never runs, an enabled flow with
   // lint errors cannot be trusted to run. Rendered as a banner so a flow
   // that reads "enabled, no warnings" while unable to fire is impossible.
-  const readiness = useMemo(
-    () => flowReadiness(enabled, warnings),
-    [enabled, warnings],
-  )
+  const readiness = useMemo(() => flowReadiness(enabled, warnings), [enabled, warnings]);
   const readinessDetail = useMemo(
     () =>
-      readiness.state === 'incomplete'
-        ? nameFlowWarnings([readiness.reasons[0] ?? ''], nodeNames)[0]
+      readiness.state === "incomplete"
+        ? nameFlowWarnings([readiness.reasons[0] ?? ""], nodeNames)[0]
         : null,
     [readiness, nodeNames],
-  )
-  const triggerExists = useMemo(() => !canAddTrigger(nodes), [nodes])
+  );
+  const triggerExists = useMemo(() => !canAddTrigger(nodes), [nodes]);
 
   return (
     <div className="flex h-[calc(100vh-6.5rem)] min-h-[560px] flex-col gap-3">
@@ -419,23 +395,21 @@ export default function FlowBuilder({
           href="/admin/flows"
           className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300"
         >
-          <ArrowLeft size={15} /> {t('title')}
+          <ArrowLeft size={15} /> {t("title")}
         </Link>
         <input
           value={name}
           onChange={(e) => {
-            setName(e.target.value)
-            markDirty()
+            setName(e.target.value);
+            markDirty();
           }}
-          placeholder={t('builder.namePlaceholder')}
+          placeholder={t("builder.namePlaceholder")}
           className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-lg font-semibold text-slate-900 outline-none hover:border-slate-200 focus:border-teal-500 dark:text-slate-100 dark:hover:border-slate-700"
         />
-        <span className="text-xs text-slate-400 dark:text-slate-500">
-          {profile.label}
-        </span>
+        <span className="text-xs text-slate-400 dark:text-slate-500">{profile.label}</span>
         {dirty ? (
           <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
-            {t('builder.unsaved')}
+            {t("builder.unsaved")}
           </span>
         ) : null}
         {/* The state is text, not color alone: a static "Enabled" caption
@@ -446,25 +420,25 @@ export default function FlowBuilder({
             type="button"
             role="switch"
             aria-checked={enabled}
-            aria-label={enabled ? t('statusEnabled') : t('statusDisabled')}
+            aria-label={enabled ? t("statusEnabled") : t("statusDisabled")}
             disabled={busy}
             onClick={toggleEnabled}
             className={cn(
-              'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition',
-              enabled ? 'bg-teal-500' : 'bg-slate-300 dark:bg-slate-600',
+              "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition",
+              enabled ? "bg-teal-500" : "bg-slate-300 dark:bg-slate-600",
             )}
           >
             <span
               className={cn(
-                'inline-block h-4 w-4 transform rounded-full bg-white shadow transition',
-                enabled ? 'translate-x-4' : 'translate-x-0.5',
+                "inline-block h-4 w-4 transform rounded-full bg-white shadow transition",
+                enabled ? "translate-x-4" : "translate-x-0.5",
               )}
             />
           </button>
-          {enabled ? t('statusEnabled') : t('statusDisabled')}
+          {enabled ? t("statusEnabled") : t("statusDisabled")}
         </label>
         <Button onClick={save} disabled={busy || !dirty}>
-          <Save size={15} /> {t('builder.save')}
+          <Save size={15} /> {t("builder.save")}
         </Button>
       </div>
 
@@ -474,11 +448,11 @@ export default function FlowBuilder({
       {subsidiaries.length > 0 ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
           <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-            {tLegalEntity('subsidiary')}
+            {tLegalEntity("subsidiary")}
           </span>
           {subjectScopeIds.length === 0 ? (
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {tAllEntities('allEntities')}
+              {tAllEntities("allEntities")}
             </span>
           ) : null}
           {subsidiaries.map((subsidiary) => (
@@ -494,8 +468,8 @@ export default function FlowBuilder({
                     event.target.checked
                       ? [...current, subsidiary.id]
                       : current.filter((id) => id !== subsidiary.id),
-                  )
-                  markDirty()
+                  );
+                  markDirty();
                 }}
                 className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
               />
@@ -507,20 +481,20 @@ export default function FlowBuilder({
 
       {/* Fire-readiness: a flow that cannot run says so up front, in the same
           words as the flows list status column. */}
-      {readiness.state === 'disabled' ? (
+      {readiness.state === "disabled" ? (
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-          {t('builder.disabledNotice')}
+          {t("builder.disabledNotice")}
         </div>
-      ) : readiness.state === 'incomplete' ? (
+      ) : readiness.state === "incomplete" ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50/70 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-          {t('statusIncomplete', { reason: readinessDetail ?? '' })}
+          {t("statusIncomplete", { reason: readinessDetail ?? "" })}
         </div>
       ) : null}
 
       {/* Blocking save errors / non-blocking lint warnings */}
       {namedSaveErrors.length > 0 ? (
         <Alert variant="destructive">
-          <AlertTitle>{t('builder.errorsTitle')}</AlertTitle>
+          <AlertTitle>{t("builder.errorsTitle")}</AlertTitle>
           <AlertDescription>
             <ul className="list-disc space-y-0.5 pl-4">
               {namedSaveErrors.map((e, i) => (
@@ -534,10 +508,10 @@ export default function FlowBuilder({
           <summary className="flex cursor-pointer select-none items-center gap-2">
             <TriangleAlert size={14} className="shrink-0" />
             <span className="font-medium">
-              {t('builder.warningsBadge', { count: namedWarnings.length })}
+              {t("builder.warningsBadge", { count: namedWarnings.length })}
             </span>
             <span className="hidden text-xs font-normal text-amber-700/80 sm:inline dark:text-amber-400/80">
-              {t('builder.warningsTitle')}
+              {t("builder.warningsTitle")}
             </span>
           </summary>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-6 text-xs">
@@ -550,20 +524,20 @@ export default function FlowBuilder({
 
       {/* Subtabs */}
       <div className="flex shrink-0 gap-1 border-b border-slate-200 dark:border-slate-800">
-        {(['canvas', 'runs'] as const).map((k) => (
+        {(["canvas", "runs"] as const).map((k) => (
           <button
             key={k}
             type="button"
             onClick={() => setTab(k)}
             className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+              "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
               tab === k
-                ? 'border-teal-500 text-teal-700 dark:text-teal-300'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200',
+                ? "border-teal-500 text-teal-700 dark:text-teal-300"
+                : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200",
             )}
           >
             {t(`builder.tabs.${k}`)}
-            {k === 'runs' && runs.length > 0 ? (
+            {k === "runs" && runs.length > 0 ? (
               <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 text-[11px] text-slate-500 dark:bg-slate-800">
                 {runs.length}
               </span>
@@ -572,7 +546,7 @@ export default function FlowBuilder({
         ))}
       </div>
 
-      {tab === 'runs' ? (
+      {tab === "runs" ? (
         <div className="min-h-0 flex-1 overflow-y-auto">
           <RunsPanel runs={runs} />
         </div>
@@ -582,24 +556,24 @@ export default function FlowBuilder({
           <div className="relative min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
             <div className="absolute left-3 top-3 z-10 flex flex-col gap-1 rounded-lg border border-slate-200 bg-white/95 p-1.5 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
               <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                {t('builder.palette.title')}
+                {t("builder.palette.title")}
               </span>
               {PALETTE.map(({ kind, icon: Icon, labelKey }) => {
-                const blocked = kind === 'trigger' && triggerExists
+                const blocked = kind === "trigger" && triggerExists;
                 return (
                   <button
                     key={kind}
                     type="button"
                     onClick={() => addNode(kind)}
                     disabled={blocked}
-                    title={blocked ? t('builder.singleTrigger') : undefined}
+                    title={blocked ? t("builder.singleTrigger") : undefined}
                     className="flex items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
                   >
                     <Plus size={11} className="text-slate-400" />
                     <Icon size={13} />
                     {t(labelKey)}
                   </button>
-                )
+                );
               })}
             </div>
 
@@ -609,12 +583,10 @@ export default function FlowBuilder({
               onNodesChange={markDirtyOnNodesChange}
               onEdgesChange={markDirtyOnEdgesChange}
               onConnect={onConnect}
-              onSelectionChange={({ nodes: sel }) =>
-                setSelectedNodeId(sel[0]?.id ?? null)
-              }
+              onSelectionChange={({ nodes: sel }) => setSelectedNodeId(sel[0]?.id ?? null)}
               nodeTypes={NODE_TYPES}
-              colorMode={isDark ? 'dark' : 'light'}
-              deleteKeyCode={['Backspace', 'Delete']}
+              colorMode={isDark ? "dark" : "light"}
+              deleteKeyCode={["Backspace", "Delete"]}
               connectionMode={CANVAS_CONNECTION_MODE}
               isValidConnection={(c) => c.source !== c.target}
               defaultEdgeOptions={{
@@ -633,8 +605,8 @@ export default function FlowBuilder({
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <EmptyState
                   icon={<Workflow />}
-                  title={t('builder.canvasEmpty.title')}
-                  description={t('builder.canvasEmpty.description')}
+                  title={t("builder.canvasEmpty.title")}
+                  description={t("builder.canvasEmpty.description")}
                   className="max-w-md border-none bg-none"
                 />
               </div>
@@ -658,5 +630,5 @@ export default function FlowBuilder({
         </div>
       )}
     </div>
-  )
+  );
 }

@@ -1,10 +1,13 @@
-import { settingContributionSchema } from '@openbooks/engine/extensions/contribution-schemas'
+import { settingContributionSchema } from "@openbooks/engine/extensions/contribution-schemas";
 /** Values and effective-dated history are owned by the engine projection service. */
-export { settingContributionSchema }
+export { settingContributionSchema };
 
 export function parseSettingContribution(raw: unknown) {
-  const result = settingContributionSchema.safeParse(raw)
+  const result = settingContributionSchema.safeParse(raw);
   return result.success
     ? { ok: true as const, contribution: result.data }
-    : { ok: false as const, errors: result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`) }
+    : {
+        ok: false as const,
+        errors: result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+      };
 }

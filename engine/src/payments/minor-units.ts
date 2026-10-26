@@ -9,11 +9,34 @@ import { fromUnits } from "../money/money.ts";
  * supports three-decimal minor units through its own table), so neither may
  * reuse this list.
  */
-export const ZERO_DECIMAL_CURRENCIES: ReadonlySet<string> = new Set(["BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"]);
+export const ZERO_DECIMAL_CURRENCIES: ReadonlySet<string> = new Set([
+  "BIF",
+  "CLP",
+  "DJF",
+  "GNF",
+  "JPY",
+  "KMF",
+  "KRW",
+  "MGA",
+  "PYG",
+  "RWF",
+  "UGX",
+  "VND",
+  "VUV",
+  "XAF",
+  "XOF",
+  "XPF",
+]);
 /** ISO 4217 three-decimal set: millis scale on Stripe boundaries (Stripe
  * supports them), fail-closed rejection on Chargebee (contract unverified). */
 export const THREE_DECIMAL_CURRENCIES: ReadonlySet<string> = new Set([
-  "BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND",
+  "BHD",
+  "IQD",
+  "JOD",
+  "KWD",
+  "LYD",
+  "OMR",
+  "TND",
 ]);
 
 /**

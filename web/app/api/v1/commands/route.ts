@@ -21,17 +21,17 @@ function inputJsonSchema(schema: z.ZodType): unknown {
 async function handleV1GET(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/commands", async (auth, context) => {
     const features = await resolvedFeatureState(auth.user.orgId);
-    const commands = APPLICATION_TOOLS
-      .filter((definition) => applicationToolVisible(definition, context.authz, features))
-      .map((definition) => ({
-        name: definition.name,
-        title: definition.title,
-        description: definition.description,
-        readOnly: definition.readOnly,
-        destructive: definition.destructive,
-        href: `/api/v1/commands/${definition.name}`,
-        inputSchema: inputJsonSchema(definition.inputSchema),
-      }));
+    const commands = APPLICATION_TOOLS.filter((definition) =>
+      applicationToolVisible(definition, context.authz, features),
+    ).map((definition) => ({
+      name: definition.name,
+      title: definition.title,
+      description: definition.description,
+      readOnly: definition.readOnly,
+      destructive: definition.destructive,
+      href: `/api/v1/commands/${definition.name}`,
+      inputSchema: inputJsonSchema(definition.inputSchema),
+    }));
     return { status: 200, body: { commands } };
   });
 }

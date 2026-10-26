@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { registerHooks } from 'node:module'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { registerHooks } from "node:module";
 
 // resolveFormLayout is server-only and database-backed. Stub the database
 // (never validation). Callers pass production role KEYS (authz.user.roles[].key);
@@ -10,64 +10,65 @@ import { registerHooks } from 'node:module'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/platform/db') {
+    if (specifier === "@openbooks/engine/platform/db") {
       return {
         shortCircuit: true,
-        format: 'module',
-        url: 'data:text/javascript,export const db = globalThis.__resolveFormRolesDb',
-      }
+        format: "module",
+        url: "data:text/javascript,export const db = globalThis.__resolveFormRolesDb",
+      };
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
-})
+});
 
-type Row = Record<string, unknown>
-;(globalThis as Record<string, unknown>).__resolveFormRolesDb = {
+type Row = Record<string, unknown>;
+(globalThis as Record<string, unknown>).__resolveFormRolesDb = {
   formRows: [] as Row[],
   heldRoleIds: [] as string[],
   prefLayoutId: null as string | null,
   async execute(query: unknown, mode?: string) {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === 'objects' ? result.rows : result)
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     const state = (globalThis as Record<string, unknown>).__resolveFormRolesDb as {
-      formRows: Row[]
-      heldRoleIds: string[]
-      prefLayoutId: string | null
-    }
-    let text = ''
+      formRows: Row[];
+      heldRoleIds: string[];
+      prefLayoutId: string | null;
+    };
+    let text = "";
     try {
-      text = JSON.stringify(query)
+      text = JSON.stringify(query);
     } catch {
-      text = String(query)
+      text = String(query);
     }
-    if (text.includes('role_assignments') || text.includes('app_roles')) {
-      return inMode({ rows: state.heldRoleIds.map((id) => ({ id })) })
+    if (text.includes("role_assignments") || text.includes("app_roles")) {
+      return inMode({ rows: state.heldRoleIds.map((id) => ({ id })) });
     }
-    if (text.includes('user_form_preferences')) {
-      return inMode({ rows: state.prefLayoutId ? [{ layoutId: state.prefLayoutId }] : [] })
+    if (text.includes("user_form_preferences")) {
+      return inMode({ rows: state.prefLayoutId ? [{ layoutId: state.prefLayoutId }] : [] });
     }
-    if (text.includes('workspaceProfile')) return inMode({ rows: [{ complexity: 'essentials' }] })
-    return inMode({ rows: state.formRows })
+    if (text.includes("workspaceProfile")) return inMode({ rows: [{ complexity: "essentials" }] });
+    return inMode({ rows: state.formRows });
   },
-}
+};
 
-const { resolveFormLayout } = await import('./resolve.ts')
-const { defaultFormLayout } = await import('@openbooks/customization')
+const { resolveFormLayout } = await import("./resolve.ts");
+const { defaultFormLayout } = await import("@openbooks/customization");
 
-const ROLE_ID = '11111111-1111-4111-8111-111111111111'
-const OTHER_ROLE_ID = '22222222-2222-4222-8222-222222222222'
-const LAYOUT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const ROLE_ID = "11111111-1111-4111-8111-111111111111";
+const OTHER_ROLE_ID = "22222222-2222-4222-8222-222222222222";
+const LAYOUT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 function formRow(overrides: Row = {}): Row {
   return {
     id: LAYOUT_ID,
-    name: 'Restricted',
-    recordType: 'vendor_bill',
+    name: "Restricted",
+    recordType: "vendor_bill",
     isDefault: true,
     isActive: true,
-    allowedRoles: 'admin',
-    layout: defaultFormLayout('vendor_bill'),
+    allowedRoles: "admin",
+    layout: defaultFormLayout("vendor_bill"),
     ...overrides,
-  }
+  };
 }
 
 async function resolve(
@@ -77,81 +78,100 @@ async function resolve(
   heldRoleIds: string[] = [],
 ) {
   const state = (globalThis as Record<string, unknown>).__resolveFormRolesDb as {
-    formRows: Row[]
-    heldRoleIds: string[]
-    prefLayoutId: string | null
-  }
-  state.formRows = formRows
-  state.heldRoleIds = heldRoleIds
-  state.prefLayoutId = null
+    formRows: Row[];
+    heldRoleIds: string[];
+    prefLayoutId: string | null;
+  };
+  state.formRows = formRows;
+  state.heldRoleIds = heldRoleIds;
+  state.prefLayoutId = null;
   return resolveFormLayout({
     orgId: org,
-    userId: 'user-1',
-    recordType: 'vendor_bill',
+    userId: "user-1",
+    recordType: "vendor_bill",
     userRoles,
     headerDefs: [],
     lineDefs: [],
-  })
+  });
 }
 
-test('resolveFormLayout does not throw when stored allowedRoles is a non-array', async () => {
-  let resolved
+test("resolveFormLayout does not throw when stored allowedRoles is a non-array", async () => {
+  let resolved;
   try {
-    resolved = await resolve([formRow({ allowedRoles: 'admin' })], ['clerk'], 'org-malformed-string')
+    resolved = await resolve(
+      [formRow({ allowedRoles: "admin" })],
+      ["clerk"],
+      "org-malformed-string",
+    );
   } catch (error) {
-    assert.fail(`resolveFormLayout threw on a stored string allowedRoles: ${(error as Error).message}`)
+    assert.fail(
+      `resolveFormLayout threw on a stored string allowedRoles: ${(error as Error).message}`,
+    );
   }
-  assert.equal(resolved.source, 'system')
-  assert.equal(resolved.row, null)
-  assert.equal(resolved.available.length, 0)
-  assert.ok(resolved.layout.header.groups.some((group) => group.collapsible), 'Essentials applies to the system fallback')
-})
+  assert.equal(resolved.source, "system");
+  assert.equal(resolved.row, null);
+  assert.equal(resolved.available.length, 0);
+  assert.ok(
+    resolved.layout.header.groups.some((group) => group.collapsible),
+    "Essentials applies to the system fallback",
+  );
+});
 
-test('resolveFormLayout does not throw when stored allowedRoles is a non-UUID list', async () => {
-  let resolved
+test("resolveFormLayout does not throw when stored allowedRoles is a non-UUID list", async () => {
+  let resolved;
   try {
-    resolved = await resolve([formRow({ allowedRoles: ['admin'] })], ['admin'], 'org-malformed-keys')
+    resolved = await resolve(
+      [formRow({ allowedRoles: ["admin"] })],
+      ["admin"],
+      "org-malformed-keys",
+    );
   } catch (error) {
-    assert.fail(`resolveFormLayout threw on a stored non-UUID allowedRoles: ${(error as Error).message}`)
+    assert.fail(
+      `resolveFormLayout threw on a stored non-UUID allowedRoles: ${(error as Error).message}`,
+    );
   }
-  assert.equal(resolved.source, 'system')
-  assert.equal(resolved.row, null)
-  assert.equal(resolved.available.length, 0)
-})
+  assert.equal(resolved.source, "system");
+  assert.equal(resolved.row, null);
+  assert.equal(resolved.available.length, 0);
+});
 
-test('a clerk who holds the gated role id can use the form', async () => {
+test("a clerk who holds the gated role id can use the form", async () => {
   const resolved = await resolve(
     [formRow({ allowedRoles: [ROLE_ID] })],
-    ['clerk'],
-    'org-clerk-holds-gate',
+    ["clerk"],
+    "org-clerk-holds-gate",
     [ROLE_ID],
-  )
-  assert.equal(resolved.source, 'org')
-  assert.equal(resolved.row?.id, LAYOUT_ID)
-  assert.equal(resolved.available.length, 1)
-  assert.deepEqual(resolved.layout, defaultFormLayout('vendor_bill'), 'an assigned form takes precedence over Essentials')
-})
+  );
+  assert.equal(resolved.source, "org");
+  assert.equal(resolved.row?.id, LAYOUT_ID);
+  assert.equal(resolved.available.length, 1);
+  assert.deepEqual(
+    resolved.layout,
+    defaultFormLayout("vendor_bill"),
+    "an assigned form takes precedence over Essentials",
+  );
+});
 
-test('a clerk who holds a different role id cannot use the gated form', async () => {
+test("a clerk who holds a different role id cannot use the gated form", async () => {
   const resolved = await resolve(
     [formRow({ allowedRoles: [OTHER_ROLE_ID] })],
-    ['clerk'],
-    'org-clerk-other-role',
+    ["clerk"],
+    "org-clerk-other-role",
     [ROLE_ID],
-  )
-  assert.equal(resolved.source, 'system')
-  assert.equal(resolved.row, null)
-  assert.equal(resolved.available.length, 0)
-})
+  );
+  assert.equal(resolved.source, "system");
+  assert.equal(resolved.row, null);
+  assert.equal(resolved.available.length, 0);
+});
 
-test('a UUID stuffed into userRoles does not grant access', async () => {
+test("a UUID stuffed into userRoles does not grant access", async () => {
   const resolved = await resolve(
     [formRow({ allowedRoles: [ROLE_ID] })],
     [ROLE_ID],
-    'org-impossible-userRoles',
+    "org-impossible-userRoles",
     [],
-  )
-  assert.equal(resolved.source, 'system')
-  assert.equal(resolved.row, null)
-  assert.equal(resolved.available.length, 0)
-})
+  );
+  assert.equal(resolved.source, "system");
+  assert.equal(resolved.row, null);
+  assert.equal(resolved.available.length, 0);
+});

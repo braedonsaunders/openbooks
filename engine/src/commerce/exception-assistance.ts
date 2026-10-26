@@ -13,12 +13,19 @@ import {
   readSettlementDocument,
   type LineDocumentEvidence,
 } from "./payout-reconciliation.ts";
-import { isMatchableSettlementLineKind, setSettlementLineDocument } from "../payments/psp-settlement.ts";
+import {
+  isMatchableSettlementLineKind,
+  setSettlementLineDocument,
+} from "../payments/psp-settlement.ts";
 import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
 } from "../organization/org-feature-lock.ts";
-import { subsidiaryScopeAllows, subsidiaryVisibleFilter, withScopeSnapshot } from "../organization/subsidiary-scope.ts";
+import {
+  subsidiaryScopeAllows,
+  subsidiaryVisibleFilter,
+  withScopeSnapshot,
+} from "../organization/subsidiary-scope.ts";
 import type { PayoutSubsidiaryScope } from "./payout-reconciliation.ts";
 import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
 
@@ -39,7 +46,12 @@ export type SuggestionConfidence = "high" | "medium" | "low";
 export type SuggestionAction =
   | { type: "link_variant"; variantExternalId: string; itemId: string }
   | { type: "map_account"; role: string; key: string; accountId: string; effectiveFrom: string }
-  | { type: "map_location"; externalLocationId: string; externalName: string; stockLocationId: string }
+  | {
+      type: "map_location";
+      externalLocationId: string;
+      externalName: string;
+      stockLocationId: string;
+    }
   | { type: "link_document"; documentId: string }
   | { type: "manual"; note: string };
 
@@ -76,23 +88,38 @@ export interface AssistanceReplay {
   waiting: number;
 }
 
-function refuse(code: string, message: string, remedy: string, field: string | null = null, status: 422 | 409 = 422): never {
+function refuse(
+  code: string,
+  message: string,
+  remedy: string,
+  field: string | null = null,
+  status: 422 | 409 = 422,
+): never {
   throw new CommerceError(code, message, remedy, { field, status });
 }
 
 /** Fold case and visual separators so "TEE-RED_M" and "tee red m" compare equal. */
 export function normalizeExceptionSku(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
-  const folded = value.trim().toUpperCase().replaceAll(/[-_\s]+/g, "");
+  const folded = value
+    .trim()
+    .toUpperCase()
+    .replaceAll(/[-_\s]+/g, "");
   return folded === "" ? null : folded;
 }
 
 function wordTokens(value: string): string[] {
-  return value.toLowerCase().split(/[^a-z0-9]+/g).filter((token) => token !== "");
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter((token) => token !== "");
 }
 
 /** Deterministic SKU score: 100 exact, 90 separator-blind, else leading-overlap below 90. */
-export function skuMatchScore(querySku: string, itemCode: string): { score: number; signals: string[] } {
+export function skuMatchScore(
+  querySku: string,
+  itemCode: string,
+): { score: number; signals: string[] } {
   const query = querySku.trim();
   const code = itemCode.trim();
   if (query.toLowerCase() === code.toLowerCase() && query !== "") {
@@ -106,16 +133,26 @@ export function skuMatchScore(querySku: string, itemCode: string): { score: numb
   const lowerQuery = query.toLowerCase();
   const lowerCode = code.toLowerCase();
   let prefix = 0;
-  while (prefix < lowerQuery.length && prefix < lowerCode.length && lowerQuery[prefix] === lowerCode[prefix]) {
+  while (
+    prefix < lowerQuery.length &&
+    prefix < lowerCode.length &&
+    lowerQuery[prefix] === lowerCode[prefix]
+  ) {
     prefix += 1;
   }
   const score = Math.floor((200 * prefix) / (lowerQuery.length + lowerCode.length || 1));
   if (score <= 0) return { score: 0, signals: [] };
-  return { score: Math.min(score, 89), signals: [`SKU shares the first ${prefix} characters with "${code}"`] };
+  return {
+    score: Math.min(score, 89),
+    signals: [`SKU shares the first ${prefix} characters with "${code}"`],
+  };
 }
 
 /** Deterministic title score: word-overlap share, 0 when no word is shared. */
-export function titleMatchScore(queryTitle: string, itemName: string): { score: number; signals: string[] } {
+export function titleMatchScore(
+  queryTitle: string,
+  itemName: string,
+): { score: number; signals: string[] } {
   const queryWords = new Set(wordTokens(queryTitle));
   const nameWords = new Set(wordTokens(itemName));
   if (queryWords.size === 0 || nameWords.size === 0) return { score: 0, signals: [] };
@@ -123,12 +160,24 @@ export function titleMatchScore(queryTitle: string, itemName: string): { score: 
   if (shared.length === 0) return { score: 0, signals: [] };
   const union = new Set([...queryWords, ...nameWords]);
   const score = Math.round((100 * shared.length) / union.size);
-  return { score, signals: [`Title shares ${shared.length === 1 ? "word" : "words"} ${shared.map((word) => `"${word}"`).join(", ")} with "${itemName}"`] };
+  return {
+    score,
+    signals: [
+      `Title shares ${shared.length === 1 ? "word" : "words"} ${shared.map((word) => `"${word}"`).join(", ")} with "${itemName}"`,
+    ],
+  };
 }
 
 export function exceptionGroupKey(
   code: string,
-  parts: { sku?: string | null; variantExternalId?: string | null; gateway?: string | null; role?: string | null; key?: string | null; jurisdiction?: string | null },
+  parts: {
+    sku?: string | null;
+    variantExternalId?: string | null;
+    gateway?: string | null;
+    role?: string | null;
+    key?: string | null;
+    jurisdiction?: string | null;
+  },
 ): string {
   const clean = (value: string | null | undefined): string | null =>
     typeof value === "string" && value.trim() !== "" ? value.trim() : null;
@@ -148,7 +197,9 @@ export function exceptionGroupKey(
     }
     case "tax_mismatch": {
       const jurisdiction = clean(parts.jurisdiction);
-      return jurisdiction ? `tax_mismatch:jurisdiction:${jurisdiction.toUpperCase()}` : "tax_mismatch";
+      return jurisdiction
+        ? `tax_mismatch:jurisdiction:${jurisdiction.toUpperCase()}`
+        : "tax_mismatch";
     }
     default:
       return code;
@@ -173,9 +224,14 @@ type ChannelRow = Record<string, unknown> & {
 };
 
 async function loadChannel(orgId: string, channelId: string): Promise<ChannelRow> {
-  const row = (await db.execute<ChannelRow>(sql`
+  const row = (
+    await db.execute<ChannelRow>(
+      sql`
     select id, kind, name, currency, external_account, subsidiary_id from sales_channels
-     where org_id = ${orgId} and id = ${channelId}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${channelId}`,
+      "objects",
+    )
+  )[0];
   if (!row) {
     refuse(
       "channel_not_found",
@@ -216,7 +272,11 @@ interface UnmappedLine {
 }
 
 /** The first line the posting resolver would park on: variant link, then exact SKU, else unmapped. */
-async function findUnmappedLine(orgId: string, channel: ChannelRow, order: ChannelOrderDetail): Promise<UnmappedLine | null> {
+async function findUnmappedLine(
+  orgId: string,
+  channel: ChannelRow,
+  order: ChannelOrderDetail,
+): Promise<UnmappedLine | null> {
   for (let index = 0; index < order.lines.length; index += 1) {
     const line = order.lines[index]!;
     if (line.variantExternalId) {
@@ -227,17 +287,27 @@ async function findUnmappedLine(orgId: string, channel: ChannelRow, order: Chann
         externalId: line.variantExternalId,
       });
       if (linked?.nativeTable === "items") {
-        const item = (await db.execute<{ id: string }>(sql`
-          select id from items where org_id = ${orgId} and id = ${linked.nativeId} and is_active`, "objects"))[0];
+        const item = (
+          await db.execute<{ id: string }>(
+            sql`
+          select id from items where org_id = ${orgId} and id = ${linked.nativeId} and is_active`,
+            "objects",
+          )
+        )[0];
         if (item) continue;
       }
     }
     const sku = typeof line.sku === "string" && line.sku.trim() !== "" ? line.sku.trim() : null;
     if (sku) {
-      const item = (await db.execute<{ id: string }>(sql`
+      const item = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from items
          where org_id = ${orgId} and code = ${sku} and is_active
-         order by created_at limit 1`, "objects"))[0];
+         order by created_at limit 1`,
+          "objects",
+        )
+      )[0];
       if (item) continue;
     }
     return { index, sku, variantExternalId: line.variantExternalId, title: line.title };
@@ -252,74 +322,156 @@ function parseAccountRole(reason: string): { role: string; key: string } | null 
 }
 
 function gatewayTokens(gateway: string): string[] {
-  return gateway.toLowerCase().split(/[^a-z0-9]+/g).filter((token) => token !== "");
+  return gateway
+    .toLowerCase()
+    .split(/[^a-z0-9]+/g)
+    .filter((token) => token !== "");
 }
 
 async function postableAccounts(orgId: string, channel: ChannelRow): Promise<AccountRow[]> {
-  const rows = await db.execute<AccountRow>(sql`
+  const rows = await db.execute<AccountRow>(
+    sql`
     select id, name, type, currency_restriction as "currencyRestriction", subsidiary_id as "subsidiaryId"
       from accounts
-     where org_id = ${orgId} and is_active and not is_summary`, "objects");
+     where org_id = ${orgId} and is_active and not is_summary`,
+    "objects",
+  );
   return rows.filter((account) => {
-    if (account.currencyRestriction && account.currencyRestriction.toUpperCase() !== channel.currency.toUpperCase()) return false;
-    if (channel.subsidiary_id && account.subsidiaryId && account.subsidiaryId !== channel.subsidiary_id) return false;
+    if (
+      account.currencyRestriction &&
+      account.currencyRestriction.toUpperCase() !== channel.currency.toUpperCase()
+    )
+      return false;
+    if (
+      channel.subsidiary_id &&
+      account.subsidiaryId &&
+      account.subsidiaryId !== channel.subsidiary_id
+    )
+      return false;
     return true;
   });
 }
 
-function rankAccount(goal: { types: string[]; tokens: RegExp[] }, account: AccountRow): { score: number; evidence: string } | null {
+function rankAccount(
+  goal: { types: string[]; tokens: RegExp[] },
+  account: AccountRow,
+): { score: number; evidence: string } | null {
   const name = account.name;
   const typeHit = goal.types.includes(account.type);
   const nameHit = goal.tokens.some((pattern) => pattern.test(name));
-  if (typeHit && nameHit) return { score: 100, evidence: `Type ${account.type} with a matching name ("${name}")` };
-  if (nameHit) return { score: 70, evidence: `Name matches ("${name}"); confirm the type ${account.type} posts correctly here` };
-  if (typeHit) return { score: 40, evidence: `Type ${account.type} fits; confirm "${name}" is the right account` };
+  if (typeHit && nameHit)
+    return { score: 100, evidence: `Type ${account.type} with a matching name ("${name}")` };
+  if (nameHit)
+    return {
+      score: 70,
+      evidence: `Name matches ("${name}"); confirm the type ${account.type} posts correctly here`,
+    };
+  if (typeHit)
+    return {
+      score: 40,
+      evidence: `Type ${account.type} fits; confirm "${name}" is the right account`,
+    };
   return null;
 }
 
 function accountGoalFor(role: string, key: string): { types: string[]; tokens: RegExp[] } {
   if (role === "gateway_clearing" || role === "refund_clearing") {
-    const tokens = gatewayTokens(key).map((token) => new RegExp(token.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+    const tokens = gatewayTokens(key).map(
+      (token) => new RegExp(token.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
+    );
     return { types: ["asset_bank", "asset_current_other"], tokens: [...tokens, /clearing/i] };
   }
   if (role === "sales_tax_liability") {
-    const keyToken = key.trim() !== "" ? [new RegExp(key.trim().replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")] : [];
-    return { types: ["liability_payable", "liability_current_other", "liability_long_term"], tokens: [...keyToken, /sales tax|vat|gst|hst|tax payable/i] };
+    const keyToken =
+      key.trim() !== ""
+        ? [new RegExp(key.trim().replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")]
+        : [];
+    return {
+      types: ["liability_payable", "liability_current_other", "liability_long_term"],
+      tokens: [...keyToken, /sales tax|vat|gst|hst|tax payable/i],
+    };
   }
-  if (role === "revenue") return { types: ["income", "income_other"], tokens: [/sales|revenue|merchandise|product sales/i] };
-  if (role === "discount") return { types: ["income", "income_other", "expense", "expense_other"], tokens: [/discount/i] };
-  if (role === "shipping_income") return { types: ["income", "income_other"], tokens: [/shipping|delivery|freight/i] };
+  if (role === "revenue")
+    return {
+      types: ["income", "income_other"],
+      tokens: [/sales|revenue|merchandise|product sales/i],
+    };
+  if (role === "discount")
+    return { types: ["income", "income_other", "expense", "expense_other"], tokens: [/discount/i] };
+  if (role === "shipping_income")
+    return { types: ["income", "income_other"], tokens: [/shipping|delivery|freight/i] };
   if (role === "gift_card_liability") {
-    return { types: ["liability_payable", "liability_current_other", "liability_long_term"], tokens: [/gift/i] };
+    return {
+      types: ["liability_payable", "liability_current_other", "liability_long_term"],
+      tokens: [/gift/i],
+    };
   }
   return { types: [], tokens: [/clearing/i] };
 }
 
-function manualCandidate(rank: number, label: string, detail: string, evidence: string[]): SuggestionCandidate {
-  return { rank, kind: "manual", label, detail, confidence: "low", evidence, action: { type: "manual", note: detail } };
+function manualCandidate(
+  rank: number,
+  label: string,
+  detail: string,
+  evidence: string[],
+): SuggestionCandidate {
+  return {
+    rank,
+    kind: "manual",
+    label,
+    detail,
+    confidence: "low",
+    evidence,
+    action: { type: "manual", note: detail },
+  };
 }
 
-async function suggestUnmappedItem(orgId: string, channel: ChannelRow, order: ChannelOrderDetail): Promise<{ candidates: SuggestionCandidate[]; groupKey: string }> {
+async function suggestUnmappedItem(
+  orgId: string,
+  channel: ChannelRow,
+  order: ChannelOrderDetail,
+): Promise<{ candidates: SuggestionCandidate[]; groupKey: string }> {
   const line = await findUnmappedLine(orgId, channel, order);
   if (!line) {
     return {
       groupKey: exceptionGroupKey("unmapped_item", {}),
-      candidates: [manualCandidate(0, "Replay the order", "Every line already maps; the park may predate the mapping.", ["Re-resolution finds no unmapped line"])],
+      candidates: [
+        manualCandidate(
+          0,
+          "Replay the order",
+          "Every line already maps; the park may predate the mapping.",
+          ["Re-resolution finds no unmapped line"],
+        ),
+      ],
     };
   }
-  const groupKey = exceptionGroupKey("unmapped_item", { sku: line.sku, variantExternalId: line.variantExternalId });
+  const groupKey = exceptionGroupKey("unmapped_item", {
+    sku: line.sku,
+    variantExternalId: line.variantExternalId,
+  });
   const querySku = typeof line.sku === "string" ? line.sku : "";
   const tokens = [...new Set([...wordTokens(querySku), ...wordTokens(line.title)])].slice(0, 6);
-  const like = tokens.length > 0
-    ? sql`and (${sql.join(tokens.map((token) => sql`lower(code) like ${`%${token}%`} or lower(name) like ${`%${token}%`}`), sql` or `)})`
-    : sql``;
-  const rows = await db.execute<ItemRow>(sql`
+  const like =
+    tokens.length > 0
+      ? sql`and (${sql.join(
+          tokens.map(
+            (token) => sql`lower(code) like ${`%${token}%`} or lower(name) like ${`%${token}%`}`,
+          ),
+          sql` or `,
+        )})`
+      : sql``;
+  const rows = await db.execute<ItemRow>(
+    sql`
     select id, code, name from items
      where org_id = ${orgId} and is_active ${like}
-     order by code nulls last, name limit 50`, "objects");
+     order by code nulls last, name limit 50`,
+    "objects",
+  );
   const scored = rows
     .map((row) => {
-      const sku = querySku ? skuMatchScore(querySku, row.code ?? "") : { score: 0, signals: [] as string[] };
+      const sku = querySku
+        ? skuMatchScore(querySku, row.code ?? "")
+        : { score: 0, signals: [] as string[] };
       const title = titleMatchScore(line.title, row.name);
       const score = Math.max(sku.score, Math.round(title.score * 0.8));
       return { row, score, signals: [...sku.signals, ...title.signals] };
@@ -329,7 +481,10 @@ async function suggestUnmappedItem(orgId: string, channel: ChannelRow, order: Ch
     .slice(0, 5);
   // A past mapping decision for this exact SKU outranks similarity: the
   // operator already answered this question on the Products tab.
-  const past = line.sku ? (await db.execute<ItemRow>(sql`
+  const past = line.sku
+    ? (
+        await db.execute<ItemRow>(
+          sql`
     select i.id, i.code, i.name
       from external_links l
       join items i on i.org_id = l.org_id and i.id = l.native_id
@@ -338,7 +493,11 @@ async function suggestUnmappedItem(orgId: string, channel: ChannelRow, order: Ch
      where l.org_id = ${orgId} and l.channel_id = ${order.channelId}
        and l.object_type = 'variant' and l.native_table = 'items'
        and i.is_active
-     limit 1`, "objects"))[0] : undefined;
+     limit 1`,
+          "objects",
+        )
+      )[0]
+    : undefined;
   const candidates: SuggestionCandidate[] = [];
   if (past && line.variantExternalId) {
     candidates.push({
@@ -361,51 +520,83 @@ async function suggestUnmappedItem(orgId: string, channel: ChannelRow, order: Ch
       detail: `Link this storefront variant to ${entry.row.code ?? entry.row.name} ("${entry.row.name}").`,
       confidence: entry.score >= 90 ? "high" : entry.score >= 50 ? "medium" : "low",
       evidence: entry.signals,
-      action: { type: "link_variant", variantExternalId: line.variantExternalId, itemId: entry.row.id },
+      action: {
+        type: "link_variant",
+        variantExternalId: line.variantExternalId,
+        itemId: entry.row.id,
+      },
     });
     if (candidates.length >= 3) break;
   }
   if (candidates.length === 0) {
-    candidates.push(manualCandidate(
-      0,
-      line.sku ? `Match SKU "${line.sku}"` : `Match "${line.title}"`,
-      line.variantExternalId
-        ? "No similar item found. Match the variant to an item under Channels → Products, or create the item from the exception row, then replay."
-        : "This line carries no storefront variant id, so it cannot be linked automatically. Match SKU to an item code under Channels → Products, or create the item from the exception row, then replay.",
-      line.sku ? [`No active item resembles SKU "${line.sku}" or title "${line.title}"`] : [`Line "${line.title}" names no SKU and no variant`],
-    ));
+    candidates.push(
+      manualCandidate(
+        0,
+        line.sku ? `Match SKU "${line.sku}"` : `Match "${line.title}"`,
+        line.variantExternalId
+          ? "No similar item found. Match the variant to an item under Channels → Products, or create the item from the exception row, then replay."
+          : "This line carries no storefront variant id, so it cannot be linked automatically. Match SKU to an item code under Channels → Products, or create the item from the exception row, then replay.",
+        line.sku
+          ? [`No active item resembles SKU "${line.sku}" or title "${line.title}"`]
+          : [`Line "${line.title}" names no SKU and no variant`],
+      ),
+    );
   }
   return { candidates, groupKey };
 }
 
-async function suggestUnmappedAccount(orgId: string, channel: ChannelRow, order: ChannelOrderDetail): Promise<{ candidates: SuggestionCandidate[]; groupKey: string }> {
+async function suggestUnmappedAccount(
+  orgId: string,
+  channel: ChannelRow,
+  order: ChannelOrderDetail,
+): Promise<{ candidates: SuggestionCandidate[]; groupKey: string }> {
   const reason = order.exceptionReason ?? "";
   const parsed = parseAccountRole(reason);
-  const gateway = order.tenders.find((tender) => gatewayTokens(tender.gateway).length > 0)?.gateway ?? null;
+  const gateway =
+    order.tenders.find((tender) => gatewayTokens(tender.gateway).length > 0)?.gateway ?? null;
   if (!parsed) {
     if (/marketplace-collected tax/.test(reason)) {
       const jurisdiction = /for "([^"]+)"/.exec(reason)?.[1] ?? null;
       return {
         groupKey: exceptionGroupKey("tax_mismatch", { jurisdiction }),
-        candidates: [manualCandidate(
-          0,
-          "Add the marketplace facilitator",
-          "Add the marketplace facilitator in Setup → Taxes → Marketplace facilitators (named exactly as the storefront reports it), then replay the order.",
-          [reason],
-        )],
+        candidates: [
+          manualCandidate(
+            0,
+            "Add the marketplace facilitator",
+            "Add the marketplace facilitator in Setup → Taxes → Marketplace facilitators (named exactly as the storefront reports it), then replay the order.",
+            [reason],
+          ),
+        ],
       };
     }
     return {
       groupKey: exceptionGroupKey("unmapped_account", { gateway }),
-      candidates: [manualCandidate(0, "Set the posting account", reason || "The channel is missing a posting account.", [reason])],
+      candidates: [
+        manualCandidate(
+          0,
+          "Set the posting account",
+          reason || "The channel is missing a posting account.",
+          [reason],
+        ),
+      ],
     };
   }
-  const groupKey = exceptionGroupKey("unmapped_account", { gateway: parsed.role === "gateway_clearing" ? (parsed.key || gateway) : null, role: parsed.role, key: parsed.key });
-  const goal = accountGoalFor(parsed.role, parsed.role === "gateway_clearing" && !parsed.key ? (gateway ?? "") : parsed.key);
+  const groupKey = exceptionGroupKey("unmapped_account", {
+    gateway: parsed.role === "gateway_clearing" ? parsed.key || gateway : null,
+    role: parsed.role,
+    key: parsed.key,
+  });
+  const goal = accountGoalFor(
+    parsed.role,
+    parsed.role === "gateway_clearing" && !parsed.key ? (gateway ?? "") : parsed.key,
+  );
   const accounts = await postableAccounts(orgId, channel);
   const ranked = accounts
     .map((account) => ({ account, ranked: rankAccount(goal, account) }))
-    .filter((entry): entry is { account: AccountRow; ranked: { score: number; evidence: string } } => entry.ranked !== null)
+    .filter(
+      (entry): entry is { account: AccountRow; ranked: { score: number; evidence: string } } =>
+        entry.ranked !== null,
+    )
     .sort((a, b) => b.ranked.score - a.ranked.score || a.account.name.localeCompare(b.account.name))
     .slice(0, 3);
   // The map takes effect on the order's own date so the parked order is
@@ -419,50 +610,89 @@ async function suggestUnmappedAccount(orgId: string, channel: ChannelRow, order:
     detail: `Map ${parsed.role}${parsed.key ? ` for "${parsed.key}"` : ""} to ${entry.account.name}, effective ${effectiveFrom}.`,
     confidence: entry.ranked.score >= 90 ? "high" : entry.ranked.score >= 60 ? "medium" : "low",
     evidence: [entry.ranked.evidence],
-    action: { type: "map_account", role: parsed.role, key: parsed.key, accountId: entry.account.id, effectiveFrom },
+    action: {
+      type: "map_account",
+      role: parsed.role,
+      key: parsed.key,
+      accountId: entry.account.id,
+      effectiveFrom,
+    },
   }));
   if (candidates.length === 0) {
-    candidates.push(manualCandidate(
-      0,
-      "Set the posting account",
-      `Map this role under Channels → Settings → Posting accounts, effective on or before the posting date.`,
-      [`No active posting account fits role ${parsed.role}${parsed.key ? ` for "${parsed.key}"` : ""}`],
-    ));
+    candidates.push(
+      manualCandidate(
+        0,
+        "Set the posting account",
+        `Map this role under Channels → Settings → Posting accounts, effective on or before the posting date.`,
+        [
+          `No active posting account fits role ${parsed.role}${parsed.key ? ` for "${parsed.key}"` : ""}`,
+        ],
+      ),
+    );
   }
   return { candidates, groupKey };
 }
 
-async function suggestUnmappedLocation(orgId: string, channel: ChannelRow, order: ChannelOrderDetail): Promise<{ candidates: SuggestionCandidate[]; groupKey: string }> {
+async function suggestUnmappedLocation(
+  orgId: string,
+  channel: ChannelRow,
+  order: ChannelOrderDetail,
+): Promise<{ candidates: SuggestionCandidate[]; groupKey: string }> {
   const groupKey = exceptionGroupKey("unmapped_location", {});
-  const open = await db.execute<{ external_location_id: string; external_name: string }>(sql`
+  const open = await db.execute<{ external_location_id: string; external_name: string }>(
+    sql`
     select external_location_id, external_name from sales_channel_locations
      where org_id = ${orgId} and channel_id = ${order.channelId} and stock_location_id is null
-     order by external_name limit 5`, "objects");
+     order by external_name limit 5`,
+    "objects",
+  );
   if (open.length === 0) {
     return {
       groupKey,
-      candidates: [manualCandidate(
-        0,
-        "Map exactly one fulfilment location",
-        "Map exactly one fulfilment location under Channels → Settings → Locations, then replay the order.",
-        [order.exceptionReason ?? "The channel has no single fulfilment location"],
-      )],
+      candidates: [
+        manualCandidate(
+          0,
+          "Map exactly one fulfilment location",
+          "Map exactly one fulfilment location under Channels → Settings → Locations, then replay the order.",
+          [order.exceptionReason ?? "The channel has no single fulfilment location"],
+        ),
+      ],
     };
   }
-  const stocks = await db.execute<{ id: string; name: string }>(sql`
-    select id, name from stock_locations where org_id = ${orgId} and is_active order by name limit 20`, "objects");
+  const stocks = await db.execute<{ id: string; name: string }>(
+    sql`
+    select id, name from stock_locations where org_id = ${orgId} and is_active order by name limit 20`,
+    "objects",
+  );
   const channelWords = new Set(wordTokens(channel.name));
   const candidates: SuggestionCandidate[] = open.slice(0, 3).map((location, index) => {
     const scored = stocks
-      .map((stock) => ({ stock, shared: wordTokens(stock.name).filter((word) => channelWords.has(word) || wordTokens(location.external_name).includes(word)) }))
-      .sort((a, b) => b.shared.length - a.shared.length || a.stock.name.localeCompare(b.stock.name));
+      .map((stock) => ({
+        stock,
+        shared: wordTokens(stock.name).filter(
+          (word) => channelWords.has(word) || wordTokens(location.external_name).includes(word),
+        ),
+      }))
+      .sort(
+        (a, b) => b.shared.length - a.shared.length || a.stock.name.localeCompare(b.stock.name),
+      );
     const best = scored[0];
-    const evidence = best && best.shared.length > 0
-      ? [`"${location.external_name}" shares ${best.shared.map((word) => `"${word}"`).join(", ")} with "${best.stock.name}"`]
-      : [`No stock location name resembles "${location.external_name}"; first alphabetically proposed — confirm before applying`];
+    const evidence =
+      best && best.shared.length > 0
+        ? [
+            `"${location.external_name}" shares ${best.shared.map((word) => `"${word}"`).join(", ")} with "${best.stock.name}"`,
+          ]
+        : [
+            `No stock location name resembles "${location.external_name}"; first alphabetically proposed — confirm before applying`,
+          ];
     const target = best?.stock;
     if (!target) {
-      return manualCandidate(index, `Map "${location.external_name}"`, "Create a stock location first, then map it under Channels → Settings → Locations.", [`No active stock location exists`]);
+      return manualCandidate(
+        index,
+        `Map "${location.external_name}"`,
+        "Create a stock location first, then map it under Channels → Settings → Locations.",
+        [`No active stock location exists`],
+      );
     }
     return {
       rank: index,
@@ -471,17 +701,32 @@ async function suggestUnmappedLocation(orgId: string, channel: ChannelRow, order
       detail: `Point storefront location "${location.external_name}" at ${target.name} for fulfilment.`,
       confidence: best.shared.length > 0 ? "medium" : "low",
       evidence,
-      action: { type: "map_location", externalLocationId: location.external_location_id, externalName: location.external_name, stockLocationId: target.id },
+      action: {
+        type: "map_location",
+        externalLocationId: location.external_location_id,
+        externalName: location.external_name,
+        stockLocationId: target.id,
+      },
     } satisfies SuggestionCandidate;
   });
   return { candidates, groupKey };
 }
 
-function suggestManual(order: ChannelOrderDetail): { candidates: SuggestionCandidate[]; groupKey: string } {
+function suggestManual(order: ChannelOrderDetail): {
+  candidates: SuggestionCandidate[];
+  groupKey: string;
+} {
   const code = order.exceptionCode ?? "exception";
   return {
     groupKey: exceptionGroupKey(code, {}),
-    candidates: [manualCandidate(0, "Follow the remedy", order.exceptionRemedy ?? order.exceptionReason ?? "Resolve the cause, then replay.", [order.exceptionReason ?? code])],
+    candidates: [
+      manualCandidate(
+        0,
+        "Follow the remedy",
+        order.exceptionRemedy ?? order.exceptionReason ?? "Resolve the cause, then replay.",
+        [order.exceptionReason ?? code],
+      ),
+    ],
   };
 }
 
@@ -507,16 +752,24 @@ export async function suggestExceptionFix(
   const code = order.exceptionCode ?? "exception";
   let result: { candidates: SuggestionCandidate[]; groupKey: string };
   if (code === "unmapped_item") result = await suggestUnmappedItem(orgId, channel, order);
-  else if (code === "unmapped_account") result = await suggestUnmappedAccount(orgId, channel, order);
-  else if (code === "unmapped_location") result = await suggestUnmappedLocation(orgId, channel, order);
+  else if (code === "unmapped_account")
+    result = await suggestUnmappedAccount(orgId, channel, order);
+  else if (code === "unmapped_location")
+    result = await suggestUnmappedLocation(orgId, channel, order);
   else result = suggestManual(order);
   const similar = await similarExceptionOrderIds(
-    orgId, order.channelId, code, result.groupKey, allowedSubsidiaryIds, 200,
+    orgId,
+    order.channelId,
+    code,
+    result.groupKey,
+    allowedSubsidiaryIds,
+    200,
   );
   const top = result.candidates[0];
-  const explanation = top && top.kind !== "manual"
-    ? `Proposed fix for order ${order.externalNumber}: ${top.detail} Evidence: ${top.evidence.join("; ")}. Approving replays ${similar.length === 1 ? "this order" : `${similar.length} similar orders`} — nothing posts until then.`
-    : `Order ${order.externalNumber} needs ${order.exceptionReason ?? code} ${order.exceptionRemedy ?? ""}`.trim();
+  const explanation =
+    top && top.kind !== "manual"
+      ? `Proposed fix for order ${order.externalNumber}: ${top.detail} Evidence: ${top.evidence.join("; ")}. Approving replays ${similar.length === 1 ? "this order" : `${similar.length} similar orders`} — nothing posts until then.`
+      : `Order ${order.externalNumber} needs ${order.exceptionReason ?? code} ${order.exceptionRemedy ?? ""}`.trim();
   return {
     orderId: order.id,
     channelId: order.channelId,
@@ -538,13 +791,21 @@ export async function similarExceptionOrderIds(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   limit = 200,
 ): Promise<string[]> {
-  const rows = await db.execute<{ id: string; exception_reason: string | null; lines: unknown; tenders: unknown }>(sql`
+  const rows = await db.execute<{
+    id: string;
+    exception_reason: string | null;
+    lines: unknown;
+    tenders: unknown;
+  }>(
+    sql`
     select o.id, o.exception_reason, o.lines, o.tenders from channel_orders o
       join sales_channels channel on channel.org_id = o.org_id and channel.id = o.channel_id
      where o.org_id = ${orgId} and o.channel_id = ${channelId}
        and o.posting_status = 'exception' and o.exception_code = ${code}
        ${subsidiaryVisibleFilter(sql`channel.subsidiary_id`, allowedSubsidiaryIds)}
-     order by o.ordered_at limit ${limit}`, "objects");
+     order by o.ordered_at limit ${limit}`,
+    "objects",
+  );
   const out: string[] = [];
   for (const row of rows) {
     const key = exceptionGroupKeyForRow(code, row.exception_reason, row.lines, row.tenders);
@@ -560,12 +821,19 @@ function jsonText(value: unknown, field: string): string | null {
   return typeof raw === "string" && raw.trim() !== "" ? raw : null;
 }
 
-export function exceptionGroupKeyForRow(code: string, reason: string | null, lines: unknown, tenders: unknown): string {
+export function exceptionGroupKeyForRow(
+  code: string,
+  reason: string | null,
+  lines: unknown,
+  tenders: unknown,
+): string {
   if (code === "unmapped_item") {
     const items = Array.isArray(lines) ? (lines as Record<string, unknown>[]) : [];
-    const namedSku = /names SKU (.*?) with no matching item/.exec(reason ?? "")?.[1]?.trim() ?? null;
+    const namedSku =
+      /names SKU (.*?) with no matching item/.exec(reason ?? "")?.[1]?.trim() ?? null;
     const line = items.find((item) => {
-      const rawSku = typeof item.sku === "string" && item.sku.trim() !== "" ? item.sku.trim() : null;
+      const rawSku =
+        typeof item.sku === "string" && item.sku.trim() !== "" ? item.sku.trim() : null;
       return namedSku === "(none)" ? rawSku === null : namedSku !== null && rawSku === namedSku;
     });
     const variant = typeof line?.variantExternalId === "string" ? line.variantExternalId : null;
@@ -577,7 +845,7 @@ export function exceptionGroupKeyForRow(code: string, reason: string | null, lin
     const gateway = jsonText(tenders, "gateway");
     if (parsed) {
       return exceptionGroupKey(code, {
-        gateway: parsed.role === "gateway_clearing" ? (parsed.key || gateway) : null,
+        gateway: parsed.role === "gateway_clearing" ? parsed.key || gateway : null,
         role: parsed.role,
         key: parsed.key,
       });
@@ -591,12 +859,19 @@ export function exceptionGroupKeyForRow(code: string, reason: string | null, lin
   return exceptionGroupKey(code, {});
 }
 
-async function writeApprovalAudit(orgId: string, actor: string, orderId: string, code: string, detail: string): Promise<void> {
+async function writeApprovalAudit(
+  orgId: string,
+  actor: string,
+  orderId: string,
+  code: string,
+  detail: string,
+): Promise<void> {
   const inserted = await db.execute<never>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'channel_orders', ${orderId}, 'update',
       ${JSON.stringify({ before: { exceptionCode: code }, after: { suggestionApproved: detail }, reason: "Operator approved the proposed exception fix" })}::jsonb, ${actor})`);
-  if (inserted.rowCount !== 1) throw new Error("Approval audit insert matched no row; the decision was lost");
+  if (inserted.rowCount !== 1)
+    throw new Error("Approval audit insert matched no row; the decision was lost");
 }
 
 /**
@@ -638,15 +913,20 @@ export async function approveExceptionSuggestion(
     const action = candidate.action;
     let applied: string;
     if (action.type === "link_variant") {
-      const row = await linkExternal(orgId, actor, {
-        channelId: suggestion.channelId,
-        provider: channel.kind,
-        externalAccount: channel.external_account,
-        objectType: "variant",
-        externalId: action.variantExternalId,
-        nativeTable: "items",
-        nativeId: action.itemId,
-      }, "salesChannels");
+      const row = await linkExternal(
+        orgId,
+        actor,
+        {
+          channelId: suggestion.channelId,
+          provider: channel.kind,
+          externalAccount: channel.external_account,
+          objectType: "variant",
+          externalId: action.variantExternalId,
+          nativeTable: "items",
+          nativeId: action.itemId,
+        },
+        "salesChannels",
+      );
       applied = `Variant ${action.variantExternalId} now maps to item ${row.nativeId}.`;
     } else if (action.type === "map_account") {
       await upsertAccountMap(orgId, actor, {
@@ -674,11 +954,21 @@ export async function approveExceptionSuggestion(
         "rank",
       );
     }
-    await writeApprovalAudit(orgId, actor, orderId, suggestion.code, `${applied} Similar: ${input.applyToSimilar ? suggestion.groupKey : "this order only"}.`);
+    await writeApprovalAudit(
+      orgId,
+      actor,
+      orderId,
+      suggestion.code,
+      `${applied} Similar: ${input.applyToSimilar ? suggestion.groupKey : "this order only"}.`,
+    );
     const targets = input.applyToSimilar
       ? await similarExceptionOrderIds(
-          orgId, suggestion.channelId, suggestion.code, suggestion.groupKey,
-          input.allowedSubsidiaryIds, 200,
+          orgId,
+          suggestion.channelId,
+          suggestion.code,
+          suggestion.groupKey,
+          input.allowedSubsidiaryIds,
+          200,
         )
       : [orderId];
     const replay: AssistanceReplay = { replayed: 0, posted: 0, parked: 0, waiting: 0 };
@@ -707,7 +997,12 @@ export async function approveExceptionSuggestion(
  * Decline the proposal with a reason. The order stays parked and the
  * decision lands in the audit log with who said no and why.
  */
-export async function rejectExceptionSuggestion(orgId: string, actor: string, orderId: string, reason: string): Promise<void> {
+export async function rejectExceptionSuggestion(
+  orgId: string,
+  actor: string,
+  orderId: string,
+  reason: string,
+): Promise<void> {
   const why = typeof reason === "string" ? reason.trim() : "";
   if (why === "") {
     refuse(
@@ -727,7 +1022,8 @@ export async function rejectExceptionSuggestion(orgId: string, actor: string, or
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'channel_orders', ${orderId}, 'update',
         ${JSON.stringify({ before: { exceptionCode: order.exceptionCode }, after: { exceptionCode: order.exceptionCode, suggestionRejected: true }, reason: why })}::jsonb, ${actor})`);
-    if (inserted.rowCount !== 1) throw new Error("Rejection audit insert matched no row; the decision was lost");
+    if (inserted.rowCount !== 1)
+      throw new Error("Rejection audit insert matched no row; the decision was lost");
   });
 }
 
@@ -750,7 +1046,14 @@ export interface PayoutLineSuggestion {
   batchId: string;
   provider: string;
   /** Discovery outcome: what the identity chain found behind the line. */
-  code: "ambiguous_candidates" | "single_candidate" | "candidates_unposted" | "links_dangling" | "no_candidate" | "already_linked" | "not_matchable";
+  code:
+    | "ambiguous_candidates"
+    | "single_candidate"
+    | "candidates_unposted"
+    | "links_dangling"
+    | "no_candidate"
+    | "already_linked"
+    | "not_matchable";
   /** Stable key grouping batch lines blocked by the same cause for fix-all-similar. */
   groupKey: string;
   candidates: SuggestionCandidate[];
@@ -795,14 +1098,19 @@ async function loadPayoutLine(
       "lineId",
     );
   }
-  const row = (await db.execute<PayoutLineRow>(sql`
+  const row = (
+    await db.execute<PayoutLineRow>(
+      sql`
     select l.id, l.batch_id as "batchId", b.subsidiary_id as "batchSubsidiaryId", b.currency as "batchCurrency",
            l.kind, l.external_ref as "externalRef",
            l.description, l.amount::text as amount, l.currency, l.document_id as "documentId",
            l.meta, b.provider
       from psp_settlement_lines l
       join psp_settlement_batches b on b.org_id = l.org_id and b.id = l.batch_id
-     where l.org_id = ${orgId} and l.id = ${lineId}`, "objects"))[0];
+     where l.org_id = ${orgId} and l.id = ${lineId}`,
+      "objects",
+    )
+  )[0];
   if (!row || !subsidiaryScopeAllows(allowedSubsidiaryIds, row.batchSubsidiaryId)) {
     refuse(
       "payout_line_unknown",
@@ -829,12 +1137,28 @@ function decimalTextEqual(a: string | null, b: string | null): boolean {
   return left !== null && left === right;
 }
 
-function payoutManual(provider: string, code: PayoutLineSuggestion["code"], label: string, detail: string, evidence: string[]): Omit<PayoutLineSuggestion, "lineId" | "batchId" | "similarCount"> {
+function payoutManual(
+  provider: string,
+  code: PayoutLineSuggestion["code"],
+  label: string,
+  detail: string,
+  evidence: string[],
+): Omit<PayoutLineSuggestion, "lineId" | "batchId" | "similarCount"> {
   return {
     provider,
     code,
     groupKey: `payout:${code}:${provider}`,
-    candidates: [{ rank: 0, kind: "manual", label, detail, confidence: "low", evidence, action: { type: "manual", note: detail } }],
+    candidates: [
+      {
+        rank: 0,
+        kind: "manual",
+        label,
+        detail,
+        confidence: "low",
+        evidence,
+        action: { type: "manual", note: detail },
+      },
+    ],
     explanation: `${label}. ${detail}`,
     modelRanked: false,
   };
@@ -861,7 +1185,9 @@ export async function suggestPayoutLineFix(
   // same entity map, so a subsidiary rehomed mid-suggestion can neither leak
   // another entity's evidence into the proposal nor tear it. Writes never run
   // here — approval links later through the link writer's own transaction.
-  return withScopeSnapshot(orgId, () => suggestPayoutLineFixInner(orgId, lineId, allowedSubsidiaryIds, true));
+  return withScopeSnapshot(orgId, () =>
+    suggestPayoutLineFixInner(orgId, lineId, allowedSubsidiaryIds, true),
+  );
 }
 
 async function suggestPayoutLineFixInner(
@@ -875,16 +1201,37 @@ async function suggestPayoutLineFixInner(
   const line = await loadPayoutLine(orgId, lineId, allowedSubsidiaryIds);
   if (!isMatchableSettlementLineKind(line.kind)) {
     return {
-      lineId: line.id, batchId: line.batchId, similarCount: 1,
-      ...payoutManual(line.provider, "not_matchable", `Kind "${line.kind}" never links`, `${line.kind} lines settle provider charges, never native documents; mark the line as an adjustment when it is one.`, [`Line kind ${line.kind} is outside the matcher`]),
+      lineId: line.id,
+      batchId: line.batchId,
+      similarCount: 1,
+      ...payoutManual(
+        line.provider,
+        "not_matchable",
+        `Kind "${line.kind}" never links`,
+        `${line.kind} lines settle provider charges, never native documents; mark the line as an adjustment when it is one.`,
+        [`Line kind ${line.kind} is outside the matcher`],
+      ),
     };
   }
   if (line.documentId) {
-    const stored = await readSettlementDocument(orgId, line.documentId, allowedSubsidiaryIds, line.batchSubsidiaryId);
+    const stored = await readSettlementDocument(
+      orgId,
+      line.documentId,
+      allowedSubsidiaryIds,
+      line.batchSubsidiaryId,
+    );
     if (stored && stored.status === "posted") {
       return {
-        lineId: line.id, batchId: line.batchId, similarCount: 1,
-        ...payoutManual(line.provider, "already_linked", `Already linked to ${stored.documentNumber ?? "a posted document"}`, "This line already points at a posted document; matching again changes nothing.", [`Stored link resolves to posted ${stored.kind} ${stored.documentNumber ?? stored.id}`]),
+        lineId: line.id,
+        batchId: line.batchId,
+        similarCount: 1,
+        ...payoutManual(
+          line.provider,
+          "already_linked",
+          `Already linked to ${stored.documentNumber ?? "a posted document"}`,
+          "This line already points at a posted document; matching again changes nothing.",
+          [`Stored link resolves to posted ${stored.kind} ${stored.documentNumber ?? stored.id}`],
+        ),
       };
     }
   }
@@ -894,28 +1241,51 @@ async function suggestPayoutLineFixInner(
   const claim = (id: string, signal: string): void => {
     provenance.set(id, [...(provenance.get(id) ?? []), signal]);
   };
-  for (const id of await lineExternalDocumentIds(orgId, line.provider, [line.externalRef, sourceOrderId])) {
-    claim(id, `Provider reference "${line.externalRef ?? sourceOrderId}" claims this document directly.`);
+  for (const id of await lineExternalDocumentIds(orgId, line.provider, [
+    line.externalRef,
+    sourceOrderId,
+  ])) {
+    claim(
+      id,
+      `Provider reference "${line.externalRef ?? sourceOrderId}" claims this document directly.`,
+    );
   }
-  const orders = line.provider === "shopify_payments" && sourceOrderId && sourceOrderId.trim() !== ""
-    ? await findLineSourceOrders(orgId, sourceOrderId, allowedSubsidiaryIds, line.batchSubsidiaryId)
-    : [];
-  const isRefundLine = line.kind === "refund" || line.kind === "dispute" || line.kind === "dispute_reversal";
+  const orders =
+    line.provider === "shopify_payments" && sourceOrderId && sourceOrderId.trim() !== ""
+      ? await findLineSourceOrders(
+          orgId,
+          sourceOrderId,
+          allowedSubsidiaryIds,
+          line.batchSubsidiaryId,
+        )
+      : [];
+  const isRefundLine =
+    line.kind === "refund" || line.kind === "dispute" || line.kind === "dispute_reversal";
   for (const order of orders) {
     if (isRefundLine) {
       for (const id of await findOrderRefundDocumentIds(orgId, order.id)) {
         claim(id, `Channel order ${order.externalNumber} posted its refund as this document.`);
       }
     } else {
-      const saleId = await findOrderSaleDocumentId(orgId, { postingDocumentId: order.postingDocumentId, summaryId: order.summaryId });
+      const saleId = await findOrderSaleDocumentId(orgId, {
+        postingDocumentId: order.postingDocumentId,
+        summaryId: order.summaryId,
+      });
       if (saleId) claim(saleId, `Channel order ${order.externalNumber} posted as this document.`);
     }
   }
   const found: Array<{ id: string; doc: LineDocumentEvidence | null; signals: string[] }> = [];
   for (const [id, signals] of provenance) {
-    found.push({ id, doc: await readSettlementDocument(orgId, id, allowedSubsidiaryIds, line.batchSubsidiaryId), signals });
+    found.push({
+      id,
+      doc: await readSettlementDocument(orgId, id, allowedSubsidiaryIds, line.batchSubsidiaryId),
+      signals,
+    });
   }
-  const posted = found.filter((entry): entry is { id: string; doc: LineDocumentEvidence; signals: string[] } => entry.doc !== null && entry.doc.status === "posted");
+  const posted = found.filter(
+    (entry): entry is { id: string; doc: LineDocumentEvidence; signals: string[] } =>
+      entry.doc !== null && entry.doc.status === "posted",
+  );
   const unposted = found.filter((entry) => entry.doc !== null && entry.doc.status !== "posted");
   const dangling = found.filter((entry) => entry.doc === null);
   const lineMoney = `${line.currency ?? ""} ${line.amount}`.trim();
@@ -924,10 +1294,15 @@ async function suggestPayoutLineFixInner(
     const scored = posted
       .map((entry) => ({
         entry,
-        exact: decimalTextEqual(line.amount, entry.doc.total)
-          && (line.currency ?? "").toUpperCase() === (entry.doc.currency ?? "").toUpperCase(),
+        exact:
+          decimalTextEqual(line.amount, entry.doc.total) &&
+          (line.currency ?? "").toUpperCase() === (entry.doc.currency ?? "").toUpperCase(),
       }))
-      .sort((a, b) => Number(b.exact) - Number(a.exact) || (a.entry.doc.documentNumber ?? "").localeCompare(b.entry.doc.documentNumber ?? ""));
+      .sort(
+        (a, b) =>
+          Number(b.exact) - Number(a.exact) ||
+          (a.entry.doc.documentNumber ?? "").localeCompare(b.entry.doc.documentNumber ?? ""),
+      );
     const candidates = scored.map((item, index): SuggestionCandidate => {
       const doc = item.entry.doc;
       const label = `${doc.documentNumber ?? "Unnumbered document"} · ${doc.kind}`;
@@ -948,7 +1323,15 @@ async function suggestPayoutLineFixInner(
       };
     });
     const top = candidates[0]!;
-    const similar = includeSimilar ? await similarPayoutLineIds(orgId, line.batchId, `payout:${code}:${line.provider}`, allowedSubsidiaryIds, 200) : [line.id];
+    const similar = includeSimilar
+      ? await similarPayoutLineIds(
+          orgId,
+          line.batchId,
+          `payout:${code}:${line.provider}`,
+          allowedSubsidiaryIds,
+          200,
+        )
+      : [line.id];
     return {
       lineId: line.id,
       batchId: line.batchId,
@@ -957,28 +1340,63 @@ async function suggestPayoutLineFixInner(
       groupKey: `payout:${code}:${line.provider}`,
       candidates,
       similarCount: similar.length,
-      explanation: posted.length > 1
-        ? `The matcher refuses to guess between ${posted.length} documents; top proposal for this line: ${top.detail} Evidence: ${top.evidence.join(" ")} Approving links this line only unless fix-all-similar is chosen — nothing else changes.`
-        : `Proposed link for this line: ${top.detail} Evidence: ${top.evidence.join(" ")} Approving links the line; the link writer re-validates the document first.`,
+      explanation:
+        posted.length > 1
+          ? `The matcher refuses to guess between ${posted.length} documents; top proposal for this line: ${top.detail} Evidence: ${top.evidence.join(" ")} Approving links this line only unless fix-all-similar is chosen — nothing else changes.`
+          : `Proposed link for this line: ${top.detail} Evidence: ${top.evidence.join(" ")} Approving links the line; the link writer re-validates the document first.`,
       modelRanked: false,
     };
   }
   if (unposted.length > 0) {
-    const names = unposted.map((entry) => entry.doc!.documentNumber ?? "an unnumbered document").join(", ");
+    const names = unposted
+      .map((entry) => entry.doc!.documentNumber ?? "an unnumbered document")
+      .join(", ");
     return {
-      lineId: line.id, batchId: line.batchId, similarCount: 1,
-      ...payoutManual(line.provider, "candidates_unposted", `Post ${names}`, `The identity chain finds ${names}, but it is not posted and a line links only to a posted document. Post it, then match the payout again.`, unposted.flatMap((entry) => [...entry.signals, `${entry.doc!.documentNumber ?? entry.id} is ${entry.doc!.status}, not posted.`])),
+      lineId: line.id,
+      batchId: line.batchId,
+      similarCount: 1,
+      ...payoutManual(
+        line.provider,
+        "candidates_unposted",
+        `Post ${names}`,
+        `The identity chain finds ${names}, but it is not posted and a line links only to a posted document. Post it, then match the payout again.`,
+        unposted.flatMap((entry) => [
+          ...entry.signals,
+          `${entry.doc!.documentNumber ?? entry.id} is ${entry.doc!.status}, not posted.`,
+        ]),
+      ),
     };
   }
   if (dangling.length > 0) {
     return {
-      lineId: line.id, batchId: line.batchId, similarCount: 1,
-      ...payoutManual(line.provider, "links_dangling", "The claimed reference is unavailable in this payout's legal entity", "The provider reference names no receipt available in that entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.", dangling.flatMap((entry) => [...entry.signals, "The claimed reference resolves to no visible receipt in this payout's legal entity."])),
+      lineId: line.id,
+      batchId: line.batchId,
+      similarCount: 1,
+      ...payoutManual(
+        line.provider,
+        "links_dangling",
+        "The claimed reference is unavailable in this payout's legal entity",
+        "The provider reference names no receipt available in that entity; link the line to a visible posted receipt in that entity, or ask an authorized operator to review access to the reference.",
+        dangling.flatMap((entry) => [
+          ...entry.signals,
+          "The claimed reference resolves to no visible receipt in this payout's legal entity.",
+        ]),
+      ),
     };
   }
   return {
-    lineId: line.id, batchId: line.batchId, similarCount: 1,
-    ...payoutManual(line.provider, "no_candidate", "No document claims this line", "No native document claims this provider reference; link the receipt manually, or mark the line as an adjustment.", [`Provider reference "${line.externalRef ?? sourceOrderId ?? line.description ?? line.id}" names no document`]),
+    lineId: line.id,
+    batchId: line.batchId,
+    similarCount: 1,
+    ...payoutManual(
+      line.provider,
+      "no_candidate",
+      "No document claims this line",
+      "No native document claims this provider reference; link the receipt manually, or mark the line as an adjustment.",
+      [
+        `Provider reference "${line.externalRef ?? sourceOrderId ?? line.description ?? line.id}" names no document`,
+      ],
+    ),
   };
 }
 
@@ -994,10 +1412,13 @@ export async function similarPayoutLineIds(
   allowedSubsidiaryIds: PayoutSubsidiaryScope,
   limit = 200,
 ): Promise<string[]> {
-  const rows = await db.execute<{ id: string; kind: string }>(sql`
+  const rows = await db.execute<{ id: string; kind: string }>(
+    sql`
     select id, kind from psp_settlement_lines
      where org_id = ${orgId} and batch_id = ${batchId} and document_id is null
-     order by line_number limit ${limit}`, "objects");
+     order by line_number limit ${limit}`,
+    "objects",
+  );
   const out: string[] = [];
   for (const row of rows) {
     if (!isMatchableSettlementLineKind(row.kind)) continue;
@@ -1007,12 +1428,19 @@ export async function similarPayoutLineIds(
   return out;
 }
 
-async function writePayoutApprovalAudit(orgId: string, actor: string, lineId: string, code: string, detail: string): Promise<void> {
+async function writePayoutApprovalAudit(
+  orgId: string,
+  actor: string,
+  lineId: string,
+  code: string,
+  detail: string,
+): Promise<void> {
   const inserted = await db.execute<never>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'psp_settlement_lines', ${lineId}, 'update',
       ${JSON.stringify({ before: { unmatchedReason: code }, after: { suggestionApproved: detail }, reason: "Operator approved the proposed payout fix" })}::jsonb, ${actor})`);
-  if (inserted.rowCount !== 1) throw new Error("Approval audit insert matched no row; the decision was lost");
+  if (inserted.rowCount !== 1)
+    throw new Error("Approval audit insert matched no row; the decision was lost");
 }
 
 /**
@@ -1029,7 +1457,11 @@ export async function approvePayoutSuggestion(
   lineId: string,
   input: { rank: number; applyToSimilar: boolean },
   allowedSubsidiaryIds: PayoutSubsidiaryScope,
-): Promise<{ applied: string; linked: Array<{ lineId: string; documentId: string }>; skipped: number }> {
+): Promise<{
+  applied: string;
+  linked: Array<{ lineId: string; documentId: string }>;
+  skipped: number;
+}> {
   if (!Number.isInteger(input.rank) || input.rank < 0) {
     refuse(
       "payout_assistance_candidate_unknown",
@@ -1045,67 +1477,102 @@ export async function approvePayoutSuggestion(
   // opens no snapshot of its own (nesting a snapshot inside this writer
   // would refuse), so the fix-all links and their audits stay atomic and
   // the link writer re-validates every document before writing.
-  return withOrgTransaction(orgId, async () => {
-    if (!(await lockAndCheckOrgFeature(db, orgId, "banking"))) {
-      refuse("payout_feature_off", "Payout reconciliation is turned off for this organization.", PAYOUT_FEATURE_REMEDY);
-    }
-    const approverLine = await loadPayoutLine(orgId, lineId, allowedSubsidiaryIds);
-    const suggestion = await suggestPayoutLineFixInner(orgId, lineId, allowedSubsidiaryIds, true);
-    const candidate = suggestion.candidates[input.rank];
-    if (!candidate) {
-      refuse(
-        "payout_assistance_candidate_unknown",
-        "The chosen fix is not one of the proposed candidates.",
-        "Reload the suggestion and approve one of the listed fixes.",
-        "rank",
-      );
-    }
-    if (candidate.action.type !== "link_document") {
-      refuse(
-        "payout_assistance_manual_only",
-        "This line has no document the assistant can link.",
-        candidate.detail,
-        "rank",
-      );
-    }
-    const targets = input.applyToSimilar
-      ? await similarPayoutLineIds(orgId, suggestion.batchId, suggestion.groupKey, allowedSubsidiaryIds, 200)
-      : [lineId];
-    const ordered = targets.includes(lineId) ? targets : [lineId, ...targets];
-    const linked: Array<{ lineId: string; documentId: string }> = [];
-    let skipped = 0;
-    for (const targetId of ordered) {
-      const live = targetId === lineId ? suggestion : await suggestPayoutLineFixInner(orgId, targetId, allowedSubsidiaryIds, false);
-      if (live.groupKey !== suggestion.groupKey) {
-        skipped += 1;
-        continue;
+  return withOrgTransaction(
+    orgId,
+    async () => {
+      if (!(await lockAndCheckOrgFeature(db, orgId, "banking"))) {
+        refuse(
+          "payout_feature_off",
+          "Payout reconciliation is turned off for this organization.",
+          PAYOUT_FEATURE_REMEDY,
+        );
       }
-      const pick = targetId === lineId ? candidate : live.candidates[0];
-      if (!pick || pick.action.type !== "link_document") {
-        skipped += 1;
-        continue;
+      const approverLine = await loadPayoutLine(orgId, lineId, allowedSubsidiaryIds);
+      const suggestion = await suggestPayoutLineFixInner(orgId, lineId, allowedSubsidiaryIds, true);
+      const candidate = suggestion.candidates[input.rank];
+      if (!candidate) {
+        refuse(
+          "payout_assistance_candidate_unknown",
+          "The chosen fix is not one of the proposed candidates.",
+          "Reload the suggestion and approve one of the listed fixes.",
+          "rank",
+        );
       }
-      const doc = await readSettlementDocument(orgId, pick.action.documentId, allowedSubsidiaryIds, approverLine.batchSubsidiaryId);
-      if (!doc || doc.status !== "posted") {
-        skipped += 1;
-        continue;
+      if (candidate.action.type !== "link_document") {
+        refuse(
+          "payout_assistance_manual_only",
+          "This line has no document the assistant can link.",
+          candidate.detail,
+          "rank",
+        );
       }
-      await setSettlementLineDocument(orgId, live.batchId, targetId, pick.action.documentId, actor, allowedSubsidiaryIds);
-      await writePayoutApprovalAudit(orgId, actor, targetId, suggestion.code, `${doc.documentNumber ?? doc.id} linked on approval. Similar: ${input.applyToSimilar ? suggestion.groupKey : "this line only"}.`);
-      linked.push({ lineId: targetId, documentId: pick.action.documentId });
-    }
-    if (linked.length === 0) {
-      refuse(
-        "payout_assistance_candidate_stale",
-        "The proposed document changed before approval.",
-        "Reload the suggestion and approve the fresh proposal.",
-        "rank",
-      );
-    }
-    const first = linked[0]!;
-    const applied = input.applyToSimilar
-      ? `${linked.length} line${linked.length === 1 ? "" : "s"} linked${skipped > 0 ? `, ${skipped} skipped (their proposal changed)` : ""}.`
-      : `Line linked to ${first.documentId}.`;
-    return { applied, linked, skipped };
-  }, { isolationLevel: "REPEATABLE READ" });
+      const targets = input.applyToSimilar
+        ? await similarPayoutLineIds(
+            orgId,
+            suggestion.batchId,
+            suggestion.groupKey,
+            allowedSubsidiaryIds,
+            200,
+          )
+        : [lineId];
+      const ordered = targets.includes(lineId) ? targets : [lineId, ...targets];
+      const linked: Array<{ lineId: string; documentId: string }> = [];
+      let skipped = 0;
+      for (const targetId of ordered) {
+        const live =
+          targetId === lineId
+            ? suggestion
+            : await suggestPayoutLineFixInner(orgId, targetId, allowedSubsidiaryIds, false);
+        if (live.groupKey !== suggestion.groupKey) {
+          skipped += 1;
+          continue;
+        }
+        const pick = targetId === lineId ? candidate : live.candidates[0];
+        if (!pick || pick.action.type !== "link_document") {
+          skipped += 1;
+          continue;
+        }
+        const doc = await readSettlementDocument(
+          orgId,
+          pick.action.documentId,
+          allowedSubsidiaryIds,
+          approverLine.batchSubsidiaryId,
+        );
+        if (!doc || doc.status !== "posted") {
+          skipped += 1;
+          continue;
+        }
+        await setSettlementLineDocument(
+          orgId,
+          live.batchId,
+          targetId,
+          pick.action.documentId,
+          actor,
+          allowedSubsidiaryIds,
+        );
+        await writePayoutApprovalAudit(
+          orgId,
+          actor,
+          targetId,
+          suggestion.code,
+          `${doc.documentNumber ?? doc.id} linked on approval. Similar: ${input.applyToSimilar ? suggestion.groupKey : "this line only"}.`,
+        );
+        linked.push({ lineId: targetId, documentId: pick.action.documentId });
+      }
+      if (linked.length === 0) {
+        refuse(
+          "payout_assistance_candidate_stale",
+          "The proposed document changed before approval.",
+          "Reload the suggestion and approve the fresh proposal.",
+          "rank",
+        );
+      }
+      const first = linked[0]!;
+      const applied = input.applyToSimilar
+        ? `${linked.length} line${linked.length === 1 ? "" : "s"} linked${skipped > 0 ? `, ${skipped} skipped (their proposal changed)` : ""}.`
+        : `Line linked to ${first.documentId}.`;
+      return { applied, linked, skipped };
+    },
+    { isolationLevel: "REPEATABLE READ" },
+  );
 }

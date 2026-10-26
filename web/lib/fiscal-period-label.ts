@@ -1,5 +1,5 @@
-import type { FiscalPeriodRef } from '@openbooks/reports'
-import { periodDisplayLabel } from '@openbooks/engine/periods/period-policy'
+import type { FiscalPeriodRef } from "@openbooks/reports";
+import { periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
 
 /**
  * A declared accounting-period window labelled like every period list,
@@ -15,5 +15,5 @@ export function fiscalPeriodLabel(period: FiscalPeriodRef, locale: string): stri
       endsOn: period.to,
     },
     locale,
-  )
+  );
 }

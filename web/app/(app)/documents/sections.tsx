@@ -1,5 +1,5 @@
-import Link from 'next/link'
-import { ChevronRight, Home, Trash2 } from 'lucide-react'
+import Link from "next/link";
+import { ChevronRight, Home, Trash2 } from "lucide-react";
 
 /**
  * Pieces of the documents page that the page and the widget registry share.
@@ -20,10 +20,10 @@ import { ChevronRight, Home, Trash2 } from 'lucide-react'
 
 /** Crumb label type shared by the page loader and this strip. */
 export interface DocumentCrumb {
-  id: string
-  name: string
-  href: string
-  isLast: boolean
+  id: string;
+  name: string;
+  href: string;
+  isLast: boolean;
 }
 
 /** The breadcrumb path pinned above the listing. */
@@ -32,9 +32,9 @@ export function DocumentsBreadcrumb({
   homeLabel,
   crumbs,
 }: {
-  homeHref: string
-  homeLabel: string
-  crumbs: DocumentCrumb[]
+  homeHref: string;
+  homeLabel: string;
+  crumbs: DocumentCrumb[];
 }) {
   return (
     <div className="sticky top-0 z-10 flex items-center gap-1 border-b border-slate-200 bg-white/95 px-3 py-2 text-sm backdrop-blur sm:px-6 dark:border-slate-800 dark:bg-slate-900/95">
@@ -63,7 +63,7 @@ export function DocumentsBreadcrumb({
         </span>
       ))}
     </div>
-  )
+  );
 }
 
 /**
@@ -81,7 +81,7 @@ export function DocumentsLinkNotice({ message }: { message: string }) {
     >
       {message}
     </div>
-  )
+  );
 }
 
 /**
@@ -95,10 +95,10 @@ export function DocumentsActions({
   newFolder,
   upload,
 }: {
-  trashHref: string
-  trashLabel: string
-  newFolder: React.ReactNode
-  upload: React.ReactNode
+  trashHref: string;
+  trashLabel: string;
+  newFolder: React.ReactNode;
+  upload: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -112,5 +112,5 @@ export function DocumentsActions({
       {newFolder}
       {upload}
     </div>
-  )
+  );
 }

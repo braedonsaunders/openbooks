@@ -36,10 +36,19 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { bmin, D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
-import { certificateAmount, certificateChoice, certificateCount, certificateFlag } from "../../certificates.ts";
+import {
+  certificateAmount,
+  certificateChoice,
+  certificateCount,
+  certificateFlag,
+} from "../../certificates.ts";
 import { PayrollError } from "../../error.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   type UsStatePayPeriod,
@@ -54,7 +63,12 @@ const RATES_MODULE = "engine/src/payroll/us/states/ma.ts";
 type MaPeriod = "weekly" | "biweekly" | "semimonthly" | "monthly" | "daily" | "annual";
 
 const MA_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly", "daily", "annual",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "daily",
+  "annual",
 ];
 
 /** One period's exemption factor: `perExemption` × n, plus `base`. */
@@ -82,9 +96,15 @@ export interface MaYearRates {
    *  wages are less than…" */
   noWithholdingBelow: Readonly<Record<MaPeriod, string>>;
   /** Section G step 1's exemption factors, for pension/annuity payees (M-4P). */
-  supplementalExemptionFactors: Readonly<Record<"monthly" | "quarterly" | "semiannual" | "annual", {
-    perExemption: string; base: string;
-  }>>;
+  supplementalExemptionFactors: Readonly<
+    Record<
+      "monthly" | "quarterly" | "semiannual" | "annual",
+      {
+        perExemption: string;
+        base: string;
+      }
+    >
+  >;
 }
 
 export const MA_RATES_2026: MaYearRates = {
@@ -103,16 +123,28 @@ export const MA_RATES_2026: MaYearRates = {
     annual: { perExemption: "1000", base: "3400", printedClaimingOne: "4400" },
   },
   headOfHousehold: {
-    weekly: "2.31", biweekly: "4.62", semimonthly: "5.00",
-    monthly: "10.00", daily: "0.33", annual: "120.00",
+    weekly: "2.31",
+    biweekly: "4.62",
+    semimonthly: "5.00",
+    monthly: "10.00",
+    daily: "0.33",
+    annual: "120.00",
   },
   blindness: {
-    weekly: "2.12", biweekly: "4.23", semimonthly: "4.58",
-    monthly: "9.17", daily: "0.30", annual: "110.00",
+    weekly: "2.12",
+    biweekly: "4.23",
+    semimonthly: "4.58",
+    monthly: "9.17",
+    daily: "0.30",
+    annual: "110.00",
   },
   noWithholdingBelow: {
-    weekly: "154", biweekly: "308", semimonthly: "333",
-    monthly: "667", daily: "22", annual: "8000",
+    weekly: "154",
+    biweekly: "308",
+    semimonthly: "333",
+    monthly: "667",
+    daily: "22",
+    annual: "8000",
   },
   supplementalExemptionFactors: {
     monthly: { perExemption: "83", base: "284" },
@@ -126,17 +158,19 @@ const MA_EDITIONS_BY_YEAR: Record<number, MaYearRates> = {
   [MA_RATES_2026.year]: MA_RATES_2026,
 };
 
-export const MA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Circular M (Rev. 12/25), effective January 1, 2026",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Massachusetts Department of Revenue, Massachusetts Circular M: Income Tax Withholding Tables "
-    + "at 5.0% Effective January 1, 2026 (Rev. 12/25) — percentage methods for wages (p. 12) and "
-    + "for supplemental wage payments (p. 13); Form M-4",
-  status: "published",
-  region: "MA",
-}];
+export const MA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Circular M (Rev. 12/25), effective January 1, 2026",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Massachusetts Department of Revenue, Massachusetts Circular M: Income Tax Withholding Tables " +
+      "at 5.0% Effective January 1, 2026 (Rev. 12/25) — percentage methods for wages (p. 12) and " +
+      "for supplemental wage payments (p. 13); Form M-4",
+    status: "published",
+    region: "MA",
+  },
+];
 
 /**
  * Circular M's own list of pay-period divisors, which is NOT the pack's general
@@ -146,9 +180,9 @@ export const MA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
  * be refused as an unprinted frequency.
  */
 function maPeriodFor(periodsPerYear: number): MaPeriod {
-  return MA_STATE_ENGINE.requirePrintedPeriod(
-    periodsPerYear, MA_PERIODS, [260, 365], { 27: "biweekly" },
-  ) as MaPeriod;
+  return MA_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, MA_PERIODS, [260, 365], {
+    27: "biweekly",
+  }) as MaPeriod;
 }
 
 /** Step 2 — the dollar value of the employee's exemptions for the period. */
@@ -162,8 +196,10 @@ export function maExemptionFactor(rates: MaYearRates, period: MaPeriod, claimed:
 export function maAnnualTax(rates: MaYearRates, annualWages: bigint): bigint {
   const threshold = U(rates.surtaxThreshold);
   if (annualWages <= threshold) return mulRateCents(annualWages, rates.baseRate);
-  return mulRateCents(annualWages - threshold, rates.surtaxRate)
-    + mulRateCents(threshold, rates.baseRate);
+  return (
+    mulRateCents(annualWages - threshold, rates.surtaxRate) +
+    mulRateCents(threshold, rates.baseRate)
+  );
 }
 
 function compute(
@@ -185,17 +221,47 @@ function compute(
     }
     if (claim !== "no_longer_qualified") {
       requireMilitarySpouseEligibility(militarySpouseCertificate, "Massachusetts", [
-        { key: "active_duty_servicemember_spouse", description: "the employee is the civilian spouse of an active-duty servicemember" },
-        { key: "servicemember_orders_assign_ma", description: "current military orders assign the servicemember to Massachusetts" },
-        { key: "spouse_present_to_accompany", description: "the spouse is in Massachusetts solely to be with the servicemember" },
-        { key: "same_non_ma_domicile", description: "the spouse and servicemember have the same non-Massachusetts tax residence or the spouse elects that residence" },
-        { key: "military_spouse_id_on_file", description: "a current Military Spouse ID card is on file" },
+        {
+          key: "active_duty_servicemember_spouse",
+          description: "the employee is the civilian spouse of an active-duty servicemember",
+        },
+        {
+          key: "servicemember_orders_assign_ma",
+          description: "current military orders assign the servicemember to Massachusetts",
+        },
+        {
+          key: "spouse_present_to_accompany",
+          description: "the spouse is in Massachusetts solely to be with the servicemember",
+        },
+        {
+          key: "same_non_ma_domicile",
+          description:
+            "the spouse and servicemember have the same non-Massachusetts tax residence or the spouse elects that residence",
+        },
+        {
+          key: "military_spouse_id_on_file",
+          description: "a current Military Spouse ID card is on file",
+        },
         { key: "dd2058_on_file", description: "the servicemember's DD Form 2058 is on file" },
-        { key: "servicemember_les_on_file", description: "the servicemember's current Leave and Earnings Statement is on file" },
-        { key: "current_military_orders_on_file", description: "the servicemember's current Massachusetts military orders are on file" },
+        {
+          key: "servicemember_les_on_file",
+          description: "the servicemember's current Leave and Earnings Statement is on file",
+        },
+        {
+          key: "current_military_orders_on_file",
+          description: "the servicemember's current Massachusetts military orders are on file",
+        },
       ]);
       factors.MA_MILITARY_SPOUSE_EXEMPT = "1";
-      return { state: "MA", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
+      return {
+        state: "MA",
+        year: rates.year,
+        tax: D(0n),
+        statutoryTax: D(0n),
+        additionalWithholding: D(0n),
+        taxSupplemental: D(0n),
+        factors,
+      };
     }
   }
 
@@ -203,8 +269,10 @@ function compute(
   // whose annual income will not exceed $8,000. "Employer: Do not withhold if D
   // is filled in."
   const studentExempt = context.exemptResult({
-    flagKey: "student_exempt", factorKey: "MA_STUDENT_EXEMPT",
-    statutoryTax: true, additionalWithholding: true,
+    flagKey: "student_exempt",
+    factorKey: "MA_STUDENT_EXEMPT",
+    statutoryTax: true,
+    additionalWithholding: true,
   });
   if (studentExempt) return studentExempt;
 
@@ -223,9 +291,12 @@ function compute(
   const cap = U(rates.retirementDeductionCap);
   const alreadyTaken = U(contributions?.yearToDate ?? "0");
   const remainingCap = max0(cap - alreadyTaken);
-  const step1 = contributions == null
-    ? 0n
-    : (U(contributions.period) < remainingCap ? U(contributions.period) : remainingCap);
+  const step1 =
+    contributions == null
+      ? 0n
+      : U(contributions.period) < remainingCap
+        ? U(contributions.period)
+        : remainingCap;
   factors.MA_RETIREMENT_DEDUCTION = D(step1);
   if (contributions == null) {
     // Named, not silent. The caller did not supply the figure, so the deduction
@@ -255,8 +326,9 @@ function compute(
     factors.MA_HEAD_OF_HOUSEHOLD = D(value);
     tax = tax - value;
   }
-  const blindCount = (certificateFlag(input.certificate, "blind") ? 1 : 0)
-    + (certificateFlag(input.certificate, "spouse_blind") ? 1 : 0);
+  const blindCount =
+    (certificateFlag(input.certificate, "blind") ? 1 : 0) +
+    (certificateFlag(input.certificate, "spouse_blind") ? 1 : 0);
   if (blindCount > 0) {
     const value = U(rates.blindness[period]) * BigInt(blindCount);
     factors.MA_BLINDNESS = D(value);
@@ -268,14 +340,17 @@ function compute(
   factors.MA_TAX = D(tax);
 
   // Supplemental wages are section G's own calculation, not this one.
-  const supplemental = U(input.supplemental ?? "0") > 0n
-    ? U(maSupplementalWithholding({
-      payDate: input.payDate,
-      payment: input.supplemental!,
-      annualizedRegularWagesNet: D(annual),
-      priorSupplemental: input.ytd?.supplemental ?? "0",
-    }).tax)
-    : 0n;
+  const supplemental =
+    U(input.supplemental ?? "0") > 0n
+      ? U(
+          maSupplementalWithholding({
+            payDate: input.payDate,
+            payment: input.supplemental!,
+            annualizedRegularWagesNet: D(annual),
+            priorSupplemental: input.ytd?.supplemental ?? "0",
+          }).tax,
+        )
+      : 0n;
   if (supplemental > 0n) factors.MA_SUPPLEMENTAL_TAX = D(supplemental);
 
   // M-4 line 5 — an additional amount by agreement with the employer.
@@ -337,8 +412,8 @@ export function maSupplementalWithholding(input: {
   const excess = step4 - threshold;
   const overThreshold = excess > step3 ? step3 : excess;
   const remainder = max0(step3 - overThreshold);
-  const split = mulRateCents(overThreshold, rates.surtaxRate)
-    + mulRateCents(remainder, rates.baseRate);
+  const split =
+    mulRateCents(overThreshold, rates.surtaxRate) + mulRateCents(remainder, rates.baseRate);
   const flat = mulRateCents(step3, rates.surtaxRate);
   // "the LESSER of (i) 9% of the amount determined in step 3, or (ii) 9% of the
   // amount by which the result of step 4 exceeds the threshold, plus 5% of the

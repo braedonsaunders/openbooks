@@ -3,102 +3,111 @@
 // when the editor is dirty; a clean editor closes without prompting, and
 // declining the confirm keeps the drawer open with the typed work intact.
 
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
-const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/expenses/reports?expense=019f0000-0000-4000-8000-000000000002', matchMediaMatches: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/expenses/reports?expense=019f0000-0000-4000-8000-000000000002",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
-const script = { confirmResult: true, confirmCalls: 0 }
+const script = { confirmResult: true, confirmCalls: 0 };
 Object.assign(globalThis, {
   __expenseDiscard: script,
   __expenseDiscardRouter: { push() {}, replace() {}, refresh() {}, back() {}, prefetch() {} },
   __expenseDiscardPrompt: null,
-})
+});
 
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return globalThis.__expenseDiscardRouter}export function usePathname(){return "/expenses/reports"}export function useSearchParams(){return new URLSearchParams()}' })
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({
+  navigation:
+    'export function useRouter(){return globalThis.__expenseDiscardRouter}export function usePathname(){return "/expenses/reports"}export function useSearchParams(){return new URLSearchParams()}',
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'next/link') {
+    if (specifier === "next/link") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export default function Link(p){return p.children}',
-      }
+        url: "data:text/javascript,export default function Link(p){return p.children}",
+      };
     }
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}',
-      }
+        url: "data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}",
+      };
     }
-    if (specifier.endsWith('/lib/confirm')) {
+    if (specifier.endsWith("/lib/confirm")) {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export async function confirmDialog(){const s=globalThis.__expenseDiscard;s.confirmCalls++;return s.confirmResult}',
-      }
+        url: "data:text/javascript,export async function confirmDialog(){const s=globalThis.__expenseDiscard;s.confirmCalls++;return s.confirmResult}",
+      };
     }
-    if (specifier.endsWith('/lib/prompt')) {
+    if (specifier.endsWith("/lib/prompt")) {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export async function promptDialog(){return globalThis.__expenseDiscardPrompt}',
-      }
+        url: "data:text/javascript,export async function promptDialog(){return globalThis.__expenseDiscardPrompt}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../messages/en')).default
-const { MoneyProvider } = await import('../../../components/money-provider')
-const { ExpenseDrawer } = await import('./ExpenseDrawer')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../messages/en")).default;
+const { MoneyProvider } = await import("../../../components/money-provider");
+const { ExpenseDrawer } = await import("./ExpenseDrawer");
 
-const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms))
-const REPORT_ID = '019f0000-0000-4000-8000-000000000002'
+const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
+const REPORT_ID = "019f0000-0000-4000-8000-000000000002";
 
 const DOC = {
   id: REPORT_ID,
-  kind: 'expense_report',
-  status: 'draft',
-  party_id: '',
-  employee_name: 'Sammy Sloppy',
-  document_number: 'EXP-00001',
-  document_date: '2026-07-15',
-  memo: '',
-  subtotal: '875.50',
-  tax_total: '0',
-  total: '875.50',
+  kind: "expense_report",
+  status: "draft",
+  party_id: "",
+  employee_name: "Sammy Sloppy",
+  document_number: "EXP-00001",
+  document_date: "2026-07-15",
+  memo: "",
+  subtotal: "875.50",
+  tax_total: "0",
+  total: "875.50",
   custom: {},
   extra_dims: {},
-  updated_at: '2026-09-01T10:00:00.000000Z',
-  submitted_by: 'submitter-1',
-  created_by: 'submitter-1',
-}
+  updated_at: "2026-09-01T10:00:00.000000Z",
+  submitted_by: "submitter-1",
+  created_by: "submitter-1",
+};
 
 async function mount() {
-  script.confirmResult = true
-  script.confirmCalls = 0
-  const prior = globalThis.fetch
+  script.confirmResult = true;
+  script.confirmCalls = 0;
+  const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
-    const url = String(input)
-    if (url.startsWith('/api/flows/manual')) return Response.json({ buttons: [] })
-    if (url.startsWith('/api/flows/record-state')) {
-      return Response.json({ approvalState: { status: 'none', pendingWith: [], myActions: null }, history: [] })
+    const url = String(input);
+    if (url.startsWith("/api/flows/manual")) return Response.json({ buttons: [] });
+    if (url.startsWith("/api/flows/record-state")) {
+      return Response.json({
+        approvalState: { status: "none", pendingWith: [], myActions: null },
+        history: [],
+      });
     }
-    if (url === `/api/expenses/${REPORT_ID}` && (init?.method ?? 'GET') === 'GET') {
-      return Response.json({ doc: DOC, lines: [] })
+    if (url === `/api/expenses/${REPORT_ID}` && (init?.method ?? "GET") === "GET") {
+      return Response.json({ doc: DOC, lines: [] });
     }
-    return Response.json({})
-  }) as typeof fetch
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const rootHandle = createRoot(host)
+    return Response.json({});
+  }) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const rootHandle = createRoot(host);
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -122,51 +131,52 @@ async function mount() {
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
-    )
-    await tick()
-  })
-  await tick(60)
+    );
+    await tick();
+  });
+  await tick(60);
   return {
     cleanup: async () => {
-      globalThis.fetch = prior
+      globalThis.fetch = prior;
       await act(async () => {
-        rootHandle.unmount()
-      })
-      host.remove()
-      for (const node of [...document.body.children]) node.remove()
+        rootHandle.unmount();
+      });
+      host.remove();
+      for (const node of [...document.body.children]) node.remove();
     },
-  }
+  };
 }
 
 /** Type into every plain text input so at least the tracked fields dirty the form. */
 async function typeIntoForm() {
   await act(async () => {
-    const inputs = [...document.querySelectorAll('input')] as HTMLInputElement[]
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
+    const inputs = [...document.querySelectorAll("input")] as HTMLInputElement[];
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")?.set;
     for (const input of inputs) {
-      if (input.disabled || input.readOnly || input.type === 'hidden' || input.type === 'checkbox') continue
-      setter?.call(input, `${input.value}x`)
-      input.dispatchEvent(new window.Event('input', { bubbles: true }))
+      if (input.disabled || input.readOnly || input.type === "hidden" || input.type === "checkbox")
+        continue;
+      setter?.call(input, `${input.value}x`);
+      input.dispatchEvent(new window.Event("input", { bubbles: true }));
     }
-    await tick()
-  })
-  await tick(60)
+    await tick();
+  });
+  await tick(60);
 }
 
 function closeButton(): HTMLButtonElement {
-  const button = [...document.querySelectorAll('button[aria-label]')].find((b) =>
-    /close/i.test(b.getAttribute('aria-label') ?? ''),
-  ) as HTMLButtonElement | undefined
-  assert.ok(button, 'the drawer must offer a labelled close button')
-  return button
+  const button = [...document.querySelectorAll("button[aria-label]")].find((b) =>
+    /close/i.test(b.getAttribute("aria-label") ?? ""),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(button, "the drawer must offer a labelled close button");
+  return button;
 }
 
 async function clickX() {
   await act(async () => {
-    closeButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick(120)
-  })
-  await tick(120)
+    closeButton().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick(120);
+  });
+  await tick(120);
 }
 
 /**
@@ -177,35 +187,35 @@ async function clickX() {
  * completes under jsdom).
  */
 function drawerOpen(): boolean {
-  return document.body.style.overflow === 'hidden'
+  return document.body.style.overflow === "hidden";
 }
 
-test('X on a dirty expense report asks first and keeps the work when declined', async (t) => {
-  const { cleanup } = await mount()
-  t.after(cleanup)
-  assert.ok(drawerOpen(), 'the mounted drawer holds the page open')
-  await typeIntoForm()
-  script.confirmResult = false
-  await clickX()
-  assert.equal(script.confirmCalls, 1, 'closing a dirty editor must ask')
-  assert.ok(drawerOpen(), 'declining must keep the drawer open with the typed work')
-})
+test("X on a dirty expense report asks first and keeps the work when declined", async (t) => {
+  const { cleanup } = await mount();
+  t.after(cleanup);
+  assert.ok(drawerOpen(), "the mounted drawer holds the page open");
+  await typeIntoForm();
+  script.confirmResult = false;
+  await clickX();
+  assert.equal(script.confirmCalls, 1, "closing a dirty editor must ask");
+  assert.ok(drawerOpen(), "declining must keep the drawer open with the typed work");
+});
 
-test('X on a dirty expense report closes when confirmed', async (t) => {
-  const { cleanup } = await mount()
-  t.after(cleanup)
-  await typeIntoForm()
-  script.confirmResult = true
-  await clickX()
-  assert.equal(script.confirmCalls, 1, 'closing a dirty editor must ask')
-  assert.ok(!drawerOpen(), 'confirming must let the close proceed')
-})
+test("X on a dirty expense report closes when confirmed", async (t) => {
+  const { cleanup } = await mount();
+  t.after(cleanup);
+  await typeIntoForm();
+  script.confirmResult = true;
+  await clickX();
+  assert.equal(script.confirmCalls, 1, "closing a dirty editor must ask");
+  assert.ok(!drawerOpen(), "confirming must let the close proceed");
+});
 
-test('X on a clean expense report closes without asking', async (t) => {
-  const { cleanup } = await mount()
-  t.after(cleanup)
-  script.confirmResult = false
-  await clickX()
-  assert.equal(script.confirmCalls, 0, 'a clean editor must not prompt')
-  assert.ok(!drawerOpen(), 'a clean editor must close straight through')
-})
+test("X on a clean expense report closes without asking", async (t) => {
+  const { cleanup } = await mount();
+  t.after(cleanup);
+  script.confirmResult = false;
+  await clickX();
+  assert.equal(script.confirmCalls, 0, "a clean editor must not prompt");
+  assert.ok(!drawerOpen(), "a clean editor must close straight through");
+});

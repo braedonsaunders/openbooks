@@ -41,15 +41,28 @@ test("sandbox-derived ids outside RFC 9562 version/variant are UUIDs", () => {
 });
 
 test("uuidString refuses non-ids with the default or the caller's message", () => {
-  for (const value of ["", "not-an-id", "-".repeat(36), "435d3903de4cda3a0183ee5f8be57bfd", `${DERIVED_IDS[0]} `, `${DERIVED_IDS[0]}0`]) {
+  for (const value of [
+    "",
+    "not-an-id",
+    "-".repeat(36),
+    "435d3903de4cda3a0183ee5f8be57bfd",
+    `${DERIVED_IDS[0]} `,
+    `${DERIVED_IDS[0]}0`,
+  ]) {
     const parsed = uuidString().safeParse(value);
     assert.equal(parsed.success, false, value);
     assert.equal(parsed.error?.issues[0]?.message, UUID_MESSAGE);
   }
   const custom = uuidString("periodId must be a valid id");
   assert.equal(custom.safeParse("x").error?.issues[0]?.message, "periodId must be a valid id");
-  assert.equal(custom.safeParse(undefined).error?.issues[0]?.message, "periodId must be a valid id");
-  assert.equal(uuidString({ error: "pick a saved record" }).safeParse(42).error?.issues[0]?.message, "pick a saved record");
+  assert.equal(
+    custom.safeParse(undefined).error?.issues[0]?.message,
+    "periodId must be a valid id",
+  );
+  assert.equal(
+    uuidString({ error: "pick a saved record" }).safeParse(42).error?.issues[0]?.message,
+    "pick a saved record",
+  );
   assert.equal(uuidString().nullable().optional().safeParse(null).success, true);
   assert.equal(uuidString().safeParse(undefined).success, false);
 });

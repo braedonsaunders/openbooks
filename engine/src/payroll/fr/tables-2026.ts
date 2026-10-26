@@ -118,10 +118,10 @@ export function frPasEditionForVersement(payDate: string): FrPasEdition {
   }
   if (payDate < "2026-01-01" || payDate > "2026-12-31") {
     throw new PayrollPackError(
-      `FR PAS has no transcribed grille for versements dated ${payDate}: `
-      + "the FR pack transcribes calendar 2026 only "
-      + "(BOI-BAREME-000037-20250410 and -20260407). This date is not yet supported by the FR pack; "
-      + "contact support.",
+      `FR PAS has no transcribed grille for versements dated ${payDate}: ` +
+        "the FR pack transcribes calendar 2026 only " +
+        "(BOI-BAREME-000037-20250410 and -20260407). This date is not yet supported by the FR pack; " +
+        "contact support.",
     );
   }
   return payDate < "2026-05-01" ? "may2025" : "may2026";
@@ -142,8 +142,8 @@ export function frPasDefaultRateUnits(
     return band.rate;
   }
   throw new PayrollPackError(
-    "FR PAS grille lookup fell through: the transcribed grids start at 0 "
-    + "with no cap, so this is an engine defect, not a table gap.",
+    "FR PAS grille lookup fell through: the transcribed grids start at 0 " +
+      "with no cap, so this is an engine defect, not a table gap.",
   );
 }
 

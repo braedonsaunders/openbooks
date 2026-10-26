@@ -80,7 +80,10 @@ function compactValue(
 }
 
 /** Compact one tool result so its serialized size fits `budget` bytes. Pure. */
-export function compactToolResultForModel(value: unknown, budget: number = MODEL_RESULT_BYTES): unknown {
+export function compactToolResultForModel(
+  value: unknown,
+  budget: number = MODEL_RESULT_BYTES,
+): unknown {
   const floor = Math.max(512, Math.min(budget, MODEL_RESULT_BYTES));
   let cap = MODEL_RESULT_ARRAY_ITEMS;
   const state: CompactState = { truncated: false };
@@ -129,7 +132,10 @@ export function createTurnCompactor(
 type ModelOutputArgs = { output: unknown };
 type ModelOutput = { type: "json"; value: unknown };
 
-function attachModelOutput<T extends object>(definition: T, compact: (output: unknown) => unknown): T {
+function attachModelOutput<T extends object>(
+  definition: T,
+  compact: (output: unknown) => unknown,
+): T {
   return {
     ...(definition as Record<string, unknown>),
     toModelOutput: ({ output }: ModelOutputArgs): ModelOutput => ({
@@ -150,7 +156,10 @@ export function withModelCompaction(tools: ToolSet): ToolSet {
   if (compactedSets.has(tools)) return tools;
   const compact = createTurnCompactor();
   const wrapped = Object.fromEntries(
-    Object.entries(tools).map(([name, definition]) => [name, attachModelOutput(definition, compact)]),
+    Object.entries(tools).map(([name, definition]) => [
+      name,
+      attachModelOutput(definition, compact),
+    ]),
   );
   const out = wrapped as ToolSet;
   compactedSets.add(out);

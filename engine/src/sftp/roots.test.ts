@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { detectRootOverlaps, findRootOverlap, rootOverlapRefusal, splitRootSegments } from "./roots.ts";
+import {
+  detectRootOverlaps,
+  findRootOverlap,
+  rootOverlapRefusal,
+  splitRootSegments,
+} from "./roots.ts";
 
 const BANK_A = { id: "a", name: "Bank A", rootPrefix: "sftp/org-1/bank-a" };
 
@@ -12,7 +17,9 @@ test("equal, ancestor, and descendant roots all conflict", () => {
   const child = findRootOverlap("sftp/org-1/bank-a/sub", [BANK_A]);
   assert.equal(child?.relation, "descendant");
 
-  const parent = findRootOverlap("sftp/org-1", [{ id: "p", name: "Parent", rootPrefix: "sftp/org-1/bank-a/deep" }]);
+  const parent = findRootOverlap("sftp/org-1", [
+    { id: "p", name: "Parent", rootPrefix: "sftp/org-1/bank-a/deep" },
+  ]);
   assert.equal(parent?.relation, "ancestor");
 });
 
@@ -46,5 +53,8 @@ test("the preflight detector names every overlapping pair exactly once", () => {
   assert.equal(pairs.length, 1);
   assert.equal(pairs[0]!.a.id, "a");
   assert.equal(pairs[0]!.b.id, "b");
-  assert.deepEqual(detectRootOverlaps([BANK_A, { id: "c", name: "Bank C", rootPrefix: "sftp/org-1/bank-c" }]), []);
+  assert.deepEqual(
+    detectRootOverlaps([BANK_A, { id: "c", name: "Bank C", rootPrefix: "sftp/org-1/bank-c" }]),
+    [],
+  );
 });

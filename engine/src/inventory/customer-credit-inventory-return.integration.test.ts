@@ -13,7 +13,12 @@ import { PostingError } from "../journal/posting-contracts.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { issueInventory, receiveInventory } from "./movements.ts";
 import { ensureLot, ensureSerial } from "./tracking.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 import { reverseInventoryMovement } from "./reversal.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -36,11 +41,16 @@ const depsFor = (org: ScratchOrg) => ({
 });
 
 async function glBalance(orgId: string, accountId: string): Promise<string> {
-  return (await db.execute<{ balance: string }>(sql`
+  return (
+    await db.execute<{ balance: string }>(
+      sql`
     select coalesce(sum(amount), 0)::text as balance
       from journal_lines
      where org_id = ${orgId} and account_id = ${accountId}
-  `, "objects"))[0]!.balance;
+  `,
+      "objects",
+    )
+  )[0]!.balance;
 }
 
 /** Post an invoice carrying one inventory line; its posting issues the stock. */
@@ -72,9 +82,14 @@ async function postInvoiceShipping(
   await db.execute(sql`
     update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
   await postDocument(documentId, depsFor(org));
-  const issue = (await db.execute<{ id: string }>(sql`
+  const issue = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from inventory_movements
-     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`, "objects"))[0];
+     where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`,
+      "objects",
+    )
+  )[0];
   assert.ok(issue, "posting the invoice should have issued the stock");
   return { documentId, lineId, issueMovementId: issue.id };
 }
@@ -129,7 +144,8 @@ async function createApprovedCustomerReturn(
 test("cumulative proration restores a shipment's exact value across partial returns", () => {
   // 10 units that cost 100.0000 in total, returned 3 then 3 then 4. Naive
   // per-slice rounding of 100/10*3 would drift; cumulative proration cannot.
-  const shipped = "10", value = "100";
+  const shipped = "10",
+    value = "100";
   const first = restoredReturnCost(shipped, value, "0", "3");
   const second = restoredReturnCost(shipped, value, "3", "3");
   const third = restoredReturnCost(shipped, value, "6", "4");
@@ -150,10 +166,7 @@ test("cumulative proration restores a shipment's exact value across partial retu
     { returned: "0", costs: [] },
   );
   assert.deepEqual(odd.costs, ["3.3333", "3.3334", "3.3333"]);
-  assert.equal(
-    odd.costs.reduce((total, cost) => total + Number(cost), 0).toFixed(4),
-    "10.0000",
-  );
+  assert.equal(odd.costs.reduce((total, cost) => total + Number(cost), 0).toFixed(4), "10.0000");
 });
 
 test("customer-return evidence is strict about its shipment link", () => {
@@ -201,7 +214,10 @@ test(
         unitPrice: "25",
         amount: "250",
       });
-      assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity, "0.0000");
+      assert.equal(
+        (await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity,
+        "0.0000",
+      );
       const cogsAfterSale = await glBalance(org.orgId, org.accounts.cogs);
       assert.equal(cogsAfterSale, "40.0000");
 
@@ -223,9 +239,14 @@ test(
       assert.equal(await glBalance(org.orgId, org.accounts.cogs), "24.0000");
       assert.equal(await glBalance(org.orgId, org.accounts.invAsset), "16.0000");
 
-      const movement = (await db.execute<{ quantity: string; total_value: string }>(sql`
+      const movement = (
+        await db.execute<{ quantity: string; total_value: string }>(
+          sql`
         select quantity::text, total_value::text from inventory_movements
-         where org_id = ${org.orgId} and document_line_id = ${credit.lineId} and kind = 'receipt'`, "objects"))[0];
+         where org_id = ${org.orgId} and document_line_id = ${credit.lineId} and kind = 'receipt'`,
+          "objects",
+        )
+      )[0];
       assert.equal(movement!.quantity, "4.0000");
       assert.equal(movement!.total_value, "16.0000");
 
@@ -237,8 +258,11 @@ test(
         }),
         /customer-credit returns; reverse those credits before voiding the shipment/,
       );
-      assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity, "4.0000",
-        "a refused shipment reversal leaves the customer-return stock unchanged");
+      assert.equal(
+        (await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity,
+        "4.0000",
+        "a refused shipment reversal leaves the customer-return stock unchanged",
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -258,9 +282,16 @@ test(
         await db.execute(sql`
           update item_inventory_profiles set tracking = ${tracking}
            where org_id = ${org.orgId} and item_id = ${itemId}`);
-        const lotId = tracking === "lot_serial"
-          ? await ensureLot(org.orgId, itemId, `RETURN-${tracking}-${randomUUID().slice(0, 8)}`, null, null)
-          : null;
+        const lotId =
+          tracking === "lot_serial"
+            ? await ensureLot(
+                org.orgId,
+                itemId,
+                `RETURN-${tracking}-${randomUUID().slice(0, 8)}`,
+                null,
+                null,
+              )
+            : null;
         const serialId = await ensureSerial(
           org.orgId,
           itemId,
@@ -300,7 +331,9 @@ test(
           values (${saleLineId}, ${org.orgId}, ${saleId}, 1, ${itemId},
             ${org.accounts.revenue}, '1', '4', '4', '0', false, '1', '0',
             ${org.stockLocationId}, '{}'::jsonb, false)`);
-        await db.execute(sql`update documents set status = 'approved' where id = ${saleId} and org_id = ${org.orgId}`);
+        await db.execute(
+          sql`update documents set status = 'approved' where id = ${saleId} and org_id = ${org.orgId}`,
+        );
         const shipment = await issueInventory(org.orgId, null, {
           itemId,
           stockLocationId: org.stockLocationId,
@@ -322,19 +355,24 @@ test(
         });
         await postDocument(credit.documentId, depsFor(org));
 
-        const returned = (await db.execute<{
-          status: string;
-          current_stock_location_id: string | null;
-          reverses_movement_id: string | null;
-          created_by: string | null;
-        }>(sql`
+        const returned = (
+          await db.execute<{
+            status: string;
+            current_stock_location_id: string | null;
+            reverses_movement_id: string | null;
+            created_by: string | null;
+          }>(
+            sql`
           select serial.status, serial.current_stock_location_id,
                  movement.reverses_movement_id, movement.created_by
             from serials serial
             join inventory_movements movement
               on movement.org_id = serial.org_id and movement.serial_id = serial.id
              and movement.document_line_id = ${credit.lineId}
-           where serial.org_id = ${org.orgId} and serial.id = ${serialId}`, "objects"))[0]!;
+           where serial.org_id = ${org.orgId} and serial.id = ${serialId}`,
+            "objects",
+          )
+        )[0]!;
         assert.deepEqual(returned, {
           status: "in_stock",
           current_stock_location_id: org.stockLocationId,
@@ -356,25 +394,43 @@ test(
     try {
       const { receiveInventory } = await import("./movements.ts");
       await receiveInventory(org.orgId, null, {
-        itemId: org.items.fifo, stockLocationId: org.stockLocationId,
-        quantity: "6", unitCost: "5", subsidiaryId: org.subsidiaryId,
-        offsetAccountId: org.accounts.clearing, date: org.date,
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "6",
+        unitCost: "5",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
       });
       const shipment = await postInvoiceShipping(org, {
-        itemId: org.items.fifo, quantity: "6", unitPrice: "30", amount: "180",
+        itemId: org.items.fifo,
+        quantity: "6",
+        unitPrice: "30",
+        amount: "180",
       });
       const credit = await createApprovedCustomerReturn(org, {
-        itemId: org.items.fifo, quantity: "2", unitPrice: "30", amount: "60",
+        itemId: org.items.fifo,
+        quantity: "2",
+        unitPrice: "30",
+        amount: "60",
         sourceIssueMovementId: shipment.issueMovementId,
       });
       await postDocument(credit.documentId, depsFor(org));
-      const { applyInventoryReturnsForCustomerCredit } = await import("./documents-customer-credits.ts");
+      const { applyInventoryReturnsForCustomerCredit } =
+        await import("./documents-customer-credits.ts");
       // Replaying the post-commit effect must be a no-op, not a second receipt.
       const replayed = await applyInventoryReturnsForCustomerCredit(
-        org.orgId, null, credit.documentId, org.date, org.subsidiaryId,
+        org.orgId,
+        null,
+        credit.documentId,
+        org.date,
+        org.subsidiaryId,
       );
       assert.equal(replayed, 0);
-      assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity, "2.0000");
+      assert.equal(
+        (await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity,
+        "2.0000",
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -389,15 +445,25 @@ test(
     try {
       const { receiveInventory } = await import("./movements.ts");
       await receiveInventory(org.orgId, null, {
-        itemId: org.items.fifo, stockLocationId: org.stockLocationId,
-        quantity: "5", unitCost: "3", subsidiaryId: org.subsidiaryId,
-        offsetAccountId: org.accounts.clearing, date: org.date,
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "5",
+        unitCost: "3",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
       });
       const shipment = await postInvoiceShipping(org, {
-        itemId: org.items.fifo, quantity: "5", unitPrice: "9", amount: "45",
+        itemId: org.items.fifo,
+        quantity: "5",
+        unitPrice: "9",
+        amount: "45",
       });
       const credit = await createApprovedCustomerReturn(org, {
-        itemId: org.items.fifo, quantity: "6", unitPrice: "9", amount: "54",
+        itemId: org.items.fifo,
+        quantity: "6",
+        unitPrice: "9",
+        amount: "54",
         sourceIssueMovementId: shipment.issueMovementId,
       });
       await assert.rejects(
@@ -405,15 +471,23 @@ test(
         /exceeds the unreturned quantity on its source shipment/,
       );
       // Nothing half-posted: the credit stays unposted and no stock moved back.
-      const state = (await db.execute<{ status: string; movements: number }>(sql`
+      const state = (
+        await db.execute<{ status: string; movements: number }>(
+          sql`
         select d.status,
                (select count(*)::int from inventory_movements m
                  join document_lines l on l.id = m.document_line_id
                 where m.org_id = d.org_id and l.document_id = d.id) as movements
-          from documents d where d.org_id = ${org.orgId} and d.id = ${credit.documentId}`, "objects"))[0];
+          from documents d where d.org_id = ${org.orgId} and d.id = ${credit.documentId}`,
+          "objects",
+        )
+      )[0];
       assert.notEqual(state!.status, "posted");
       assert.equal(state!.movements, 0);
-      assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity, "0.0000");
+      assert.equal(
+        (await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity,
+        "0.0000",
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -428,20 +502,31 @@ test(
     try {
       const { receiveInventory } = await import("./movements.ts");
       await receiveInventory(org.orgId, null, {
-        itemId: org.items.fifo, stockLocationId: org.stockLocationId,
-        quantity: "4", unitCost: "7", subsidiaryId: org.subsidiaryId,
-        offsetAccountId: org.accounts.clearing, date: org.date,
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "4",
+        unitCost: "7",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
       });
       const shipment = await postInvoiceShipping(org, {
-        itemId: org.items.fifo, quantity: "4", unitPrice: "20", amount: "80",
+        itemId: org.items.fifo,
+        quantity: "4",
+        unitPrice: "20",
+        amount: "80",
       });
       const otherCustomer = randomUUID();
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${otherCustomer}, ${org.orgId}, 'customer', 'Other Buyer', true, '{}'::jsonb)`);
       const credit = await createApprovedCustomerReturn(org, {
-        itemId: org.items.fifo, quantity: "1", unitPrice: "20", amount: "20",
-        sourceIssueMovementId: shipment.issueMovementId, partyId: otherCustomer,
+        itemId: org.items.fifo,
+        quantity: "1",
+        unitPrice: "20",
+        amount: "20",
+        sourceIssueMovementId: shipment.issueMovementId,
+        partyId: otherCustomer,
       });
       await assert.rejects(
         () => postDocument(credit.documentId, depsFor(org)),
@@ -461,9 +546,13 @@ test(
     try {
       const { receiveInventory } = await import("./movements.ts");
       await receiveInventory(org.orgId, null, {
-        itemId: org.items.fifo, stockLocationId: org.stockLocationId,
-        quantity: "3", unitCost: "2", subsidiaryId: org.subsidiaryId,
-        offsetAccountId: org.accounts.clearing, date: org.date,
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "3",
+        unitCost: "2",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
       });
       const documentId = randomUUID();
       await db.execute(sql`
@@ -484,11 +573,19 @@ test(
         update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId}`);
       await postDocument(documentId, depsFor(org));
 
-      const posted = (await db.execute<{ status: string }>(sql`
-        select status from documents where id = ${documentId} and org_id = ${org.orgId}`, "objects"))[0];
+      const posted = (
+        await db.execute<{ status: string }>(
+          sql`
+        select status from documents where id = ${documentId} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0];
       assert.equal(posted!.status, "posted");
       // A goodwill credit must not invent a stock movement.
-      assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity, "3.0000");
+      assert.equal(
+        (await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity,
+        "3.0000",
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -536,8 +633,13 @@ test(
           /has no sales document behind it/.test(error.message) &&
           /without inventory-return evidence/.test(error.message),
       );
-      const status = (await db.execute<{ status: string }>(sql`
-        select status from documents where id = ${credit.documentId} and org_id = ${org.orgId}`, "objects"))[0]!;
+      const status = (
+        await db.execute<{ status: string }>(
+          sql`
+        select status from documents where id = ${credit.documentId} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(status.status, "approved");
     } finally {
       await dropScratchOrg(org.orgId);

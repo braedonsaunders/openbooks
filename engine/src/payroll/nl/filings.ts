@@ -102,7 +102,8 @@ export async function jaaropgaafSlips(orgId: string, taxYear: number): Promise<J
   // The withholding the statement reprints only exists where the tables are
   // transcribed: any other year is refused by name, never printed as zeros.
   nlRatesForTaxYear(taxYear);
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     with committed as (
       select s.*
         from pay_stubs s
@@ -133,7 +134,9 @@ export async function jaaropgaafSlips(orgId: string, taxYear: number): Promise<J
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
      group by c.employee_party_id, c.employment_id, p.display_name
      order by p.display_name, c.employment_id
-  `, "objects"));
+  `,
+    "objects",
+  );
   const slips: JaaropgaafSlip[] = [];
   for (const row of rows) {
     const employeePartyId = String(row.employee_party_id);
@@ -164,16 +167,22 @@ export async function jaaropgaafSlips(orgId: string, taxYear: number): Promise<J
  * opgaaf is on file.
  */
 async function nlOpgaafOnFile(
-  orgId: string, employeePartyId: string, taxYear: number,
+  orgId: string,
+  employeePartyId: string,
+  taxYear: number,
 ): Promise<{ ageClass: NlAgeClass; kortingToegepast: boolean }> {
-  const declared = NL_CERTIFICATES.certificates.find((certificate) => certificate.key === "nl_loonheffingen");
+  const declared = NL_CERTIFICATES.certificates.find(
+    (certificate) => certificate.key === "nl_loonheffingen",
+  );
   if (!declared) {
-    throw new PayrollError("the NL payroll pack declares no nl_loonheffingen certificate — the jaaropgaaf cannot state the tabeltoepassing");
+    throw new PayrollError(
+      "the NL payroll pack declares no nl_loonheffingen certificate — the jaaropgaaf cannot state the tabeltoepassing",
+    );
   }
   const stored: StoredCertificate[] = await storedTaxCertificates(db, orgId, employeePartyId, "NL");
   const resolved = resolveCertificate({ certificate: declared, stored, asOf: `${taxYear}-12-31` });
   return {
-    ageClass: ((certificateChoice(resolved, "age_class") ?? "under_aow") as NlAgeClass),
+    ageClass: (certificateChoice(resolved, "age_class") ?? "under_aow") as NlAgeClass,
     kortingToegepast: certificateFlag(resolved, "apply_loonheffingskorting"),
   };
 }
@@ -183,9 +192,10 @@ function ageClassLabel(ageClass: NlAgeClass): string {
   const declared = NL_CERTIFICATES.certificates
     .find((certificate) => certificate.key === "nl_loonheffingen")
     ?.fields.find((field) => field.key === "age_class");
-  const choice = declared?.kind === "choice"
-    ? declared.choices?.find((option) => option.value === ageClass)
-    : undefined;
+  const choice =
+    declared?.kind === "choice"
+      ? declared.choices?.find((option) => option.value === ageClass)
+      : undefined;
   return choice?.label ?? ageClass;
 }
 
@@ -197,29 +207,39 @@ function ageClassLabel(ageClass: NlAgeClass): string {
  * mandatory identifier field.
  */
 async function bsnForSlip(orgId: string, employeePartyId: string): Promise<string> {
-  const rows = (await db.execute<{ sin_encrypted: string | null }>(sql`
+  const rows = await db.execute<{ sin_encrypted: string | null }>(
+    sql`
     select prof.sin_encrypted
       from employee_payroll_profiles prof
      where prof.org_id = ${orgId} and prof.employee_party_id = ${employeePartyId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const sealed = rows[0]?.sin_encrypted ?? null;
-  const bsn = sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
-  const citation = "Handboek Loonheffingen 2026, hoofdstuk 15, §15.3 requires the BSN on the statement";
+  const bsn =
+    sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
+  const citation =
+    "Handboek Loonheffingen 2026, hoofdstuk 15, §15.3 requires the BSN on the statement";
   const remedy = "add or correct the BSN on the employee payroll profile before issuing";
   if (!bsn) {
-    throw new PayrollError(`cannot issue the NL jaaropgaaf because the employee BSN is missing — ${remedy} (${citation})`);
+    throw new PayrollError(
+      `cannot issue the NL jaaropgaaf because the employee BSN is missing — ${remedy} (${citation})`,
+    );
   }
   if (isValidBsn(bsn)) return bsn;
   throw new PayrollError(
-    `cannot issue the NL jaaropgaaf because the employee BSN is invalid — ${remedy} `
-    + `(the stored identifier must contain 9 digits and pass the 11-proef; ${citation})`,
+    `cannot issue the NL jaaropgaaf because the employee BSN is invalid — ${remedy} ` +
+      `(the stored identifier must contain 9 digits and pass the 11-proef; ${citation})`,
   );
 }
 
 async function employerName(orgId: string): Promise<string> {
-  const rows = (await db.execute<{ name: string | null }>(sql`
+  const rows = await db.execute<{ name: string | null }>(
+    sql`
     select name from orgs where id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows[0]?.name ?? "Unknown employer";
 }
 
@@ -237,7 +257,9 @@ async function employerName(orgId: string): Promise<string> {
  * Owned HERE, beside the builder — the subsidiary-scope guard parses through
  * the declaration, never its own copy of this shape.
  */
-export function jaaropgaafRowId(slip: Pick<JaaropgaafSlip, "employeePartyId" | "employmentId">): string {
+export function jaaropgaafRowId(
+  slip: Pick<JaaropgaafSlip, "employeePartyId" | "employmentId">,
+): string {
   return slip.employmentId === null
     ? slip.employeePartyId
     : `${slip.employeePartyId}:${slip.employmentId}`;
@@ -295,12 +317,16 @@ async function jaaropgaafPopulation(orgId: string, taxYear: number): Promise<Pay
 }
 
 /** One dienstbetrekking's jaaropgaaf — the §15.3 mandatory list in the authority's own terms. */
-async function jaaropgaafSlip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+async function jaaropgaafSlip(
+  orgId: string,
+  taxYear: number,
+  rowId: string,
+): Promise<PayrollFilingSlipData> {
   const parsed = parseJaaropgaafRowId(rowId);
   if (!parsed) {
     throw new PayrollError(
-      `no ${taxYear} jaaropgaaf matches the requested row — a jaaropgaaf row is the employee UUID, `
-      + "or the employee and employment UUIDs joined by a colon for a stamped dienstbetrekking",
+      `no ${taxYear} jaaropgaaf matches the requested row — a jaaropgaaf row is the employee UUID, ` +
+        "or the employee and employment UUIDs joined by a colon for a stamped dienstbetrekking",
     );
   }
   const slips = await jaaropgaafSlips(orgId, taxYear);
@@ -389,27 +415,25 @@ export function nlPackFilings(): PayrollPackFilings {
 function buildNlPackFilings(): PayrollPackFilings {
   return {
     country: "NL",
-    programTypes: [
-      { key: "nl_loonheffingen", label: "Loonheffingen (payroll tax number)" },
-    ],
+    programTypes: [{ key: "nl_loonheffingen", label: "Loonheffingen (payroll tax number)" }],
     yearEnd: [
       {
         key: "jaaropgaaf",
         label: "Jaaropgaaf",
         cadence: "annual",
         description:
-          "The annual statement the employer issues to the employee (Handboek Loonheffingen 2026, "
-          + "hoofdstuk 15, §15.3): loon (kolom 14), ingehouden loonbelasting/premie volksverzekeringen "
-          + "(kolom 15), verrekende arbeidskorting (kolom 18), BSN, ingehouden bijdrage Zvw (kolom 16), "
-          + "werkgeversheffing Zvw, and totaal premies werknemersverzekeringen — with the tabeltoepassing "
-          + "and the loonheffingskorting election per the opgaaf on file.",
+          "The annual statement the employer issues to the employee (Handboek Loonheffingen 2026, " +
+          "hoofdstuk 15, §15.3): loon (kolom 14), ingehouden loonbelasting/premie volksverzekeringen " +
+          "(kolom 15), verrekende arbeidskorting (kolom 18), BSN, ingehouden bijdrage Zvw (kolom 16), " +
+          "werkgeversheffing Zvw, and totaal premies werknemersverzekeringen — with the tabeltoepassing " +
+          "and the loonheffingskorting election per the opgaaf on file.",
         population: (orgId, taxYear) => jaaropgaafPopulation(orgId, taxYear),
         parseRowId: parseJaaropgaafRowId,
         slip: { build: (orgId, taxYear, rowId) => jaaropgaafSlip(orgId, taxYear, rowId) },
         downloadRefusal:
-          "the NL payroll pack produces no jaaropgaaf file — no jaaropgaaf file builder exists "
-          + "(the 2026 withholding figures it would print are transcribed; the file is not). Issue "
-          + "each employee's statement from the year-end slip view, which carries every transcribed box",
+          "the NL payroll pack produces no jaaropgaaf file — no jaaropgaaf file builder exists " +
+          "(the 2026 withholding figures it would print are transcribed; the file is not). Issue " +
+          "each employee's statement from the year-end slip view, which carries every transcribed box",
         // A wrong jaaropgaaf is corrected where the wrong number IS: the
         // loonaangifte is corrected with a correctiebericht (Handboek
         // Loonheffingen 2026, hoofdstuk 14, Correctie), and the employee gets
@@ -425,9 +449,9 @@ function buildNlPackFilings(): PayrollPackFilings {
             build: async (row, orgId, taxYear) => jaaropgaafSlip(orgId, taxYear, row.rowId),
           },
           downloadRefusal:
-            "no corrected-statement file is produced — re-issue the corrected jaaropgaaf from the "
-            + "corrected committed runs, and file the correctiebericht (loonaangifte correction) with "
-            + "the Belastingdienst (Handboek Loonheffingen 2026, hoofdstuk 14)",
+            "no corrected-statement file is produced — re-issue the corrected jaaropgaaf from the " +
+            "corrected committed runs, and file the correctiebericht (loonaangifte correction) with " +
+            "the Belastingdienst (Handboek Loonheffingen 2026, hoofdstuk 14)",
         },
       },
     ],

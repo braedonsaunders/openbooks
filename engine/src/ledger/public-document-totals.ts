@@ -7,5 +7,5 @@ export {
   taxProfileMap,
   type ProviderBillTotalsOptions,
   type TaxProfiles,
-} from './document-totals.ts'
-export type { TaxComponentConfig } from '../tax/tax.ts'
+} from "./document-totals.ts";
+export type { TaxComponentConfig } from "../tax/tax.ts";

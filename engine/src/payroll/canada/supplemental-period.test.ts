@@ -24,24 +24,28 @@ const ON_52 = {
 } as const;
 
 test("supplemental-period example: first run withholds on its base less one exemption", () => {
-  const first = calculateT4127(assessedCanadianWages({
-    ...ON_52,
-    income: "300.00",
-    pensionable: "300.00",
-    insurable: "300.00",
-  }));
+  const first = calculateT4127(
+    assessedCanadianWages({
+      ...ON_52,
+      income: "300.00",
+      pensionable: "300.00",
+      insurable: "300.00",
+    }),
+  );
   // (300.00 - 67.30) x 0.0595 = 13.85; 300.00 x 0.0163 = 4.89.
   assert.equal(first.cpp, "13.8500");
   assert.equal(first.ei, "4.8900");
 });
 
 test("supplemental-period example: combined base less one exemption, minus the first run", () => {
-  const combined = calculateT4127(assessedCanadianWages({
-    ...ON_52,
-    income: "1555.00",
-    pensionable: "1555.00",
-    insurable: "1550.00",
-  }));
+  const combined = calculateT4127(
+    assessedCanadianWages({
+      ...ON_52,
+      income: "1555.00",
+      pensionable: "1555.00",
+      insurable: "1550.00",
+    }),
+  );
   // (300.00 + 1255.00 - 67.30) x 0.0595 = 88.52, not (1255.00 - 67.30) x 0.0595 = 70.68.
   assert.equal(combined.cpp, "88.5200");
   // (300.00 + 1250.00) x 0.0163 = 25.27.
@@ -52,12 +56,14 @@ test("supplemental-period example: combined base less one exemption, minus the f
 });
 
 test("supplemental-period example: pricing the second run standalone double-applies the exemption", () => {
-  const standalone = calculateT4127(assessedCanadianWages({
-    ...ON_52,
-    income: "1255.00",
-    pensionable: "1255.00",
-    insurable: "1250.00",
-  }));
+  const standalone = calculateT4127(
+    assessedCanadianWages({
+      ...ON_52,
+      income: "1255.00",
+      pensionable: "1255.00",
+      insurable: "1250.00",
+    }),
+  );
   // (1255.00 - 67.30) x 0.0595 = 70.67 — the 4.00 shortfall a per-run
   // exemption leaves against the correct 74.67.
   assert.equal(standalone.cpp, "70.6700");

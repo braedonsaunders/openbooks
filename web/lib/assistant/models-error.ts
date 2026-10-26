@@ -7,10 +7,13 @@
  * the contract is unit-testable.
  */
 
-export function classifyModelsError(error: unknown): { code: 'unauthorized' | 'failed'; status: number | null } {
-  const message = error instanceof Error ? error.message : String(error ?? '');
+export function classifyModelsError(error: unknown): {
+  code: "unauthorized" | "failed";
+  status: number | null;
+} {
+  const message = error instanceof Error ? error.message : String(error ?? "");
   const status = /^\s*(\d{3})\b/.exec(message)?.[1];
   const statusCode = status ? Number(status) : null;
-  if (statusCode === 401 || statusCode === 403) return { code: 'unauthorized', status: statusCode };
-  return { code: 'failed', status: null };
+  if (statusCode === 401 || statusCode === 403) return { code: "unauthorized", status: statusCode };
+  return { code: "failed", status: null };
 }

@@ -11,11 +11,14 @@ export const POST = defineRoute({
   feature: "resourceRequests",
   params: Params,
   body: Body,
-  handler: async ({ authz, params, body }) => Response.json(await cancelResourceRequest({
-    orgId: authz.user.orgId,
-    actorId: authz.user.id,
-    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-    requestId: params.id,
-    reason: body.reason,
-  })),
+  handler: async ({ authz, params, body }) =>
+    Response.json(
+      await cancelResourceRequest({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        requestId: params.id,
+        reason: body.reason,
+      }),
+    ),
 });

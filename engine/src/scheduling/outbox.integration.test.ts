@@ -3,11 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { after } from "node:test";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import {
-  closeJobConnections,
-  enqueueEmail,
-  getEmailQueue,
-} from "@openbooks/jobs";
+import { closeJobConnections, enqueueEmail, getEmailQueue } from "@openbooks/jobs";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { loadEmailAttachments } from "../delivery/email-attachments.ts";
 import {
@@ -45,7 +41,10 @@ import {
   scriptOccurrenceKey,
 } from "./scheduler.ts";
 import { SCHEDULED_SCRIPT_SCHEDULER_IDENTITY } from "../scripting/scripting.ts";
-import { SCHEDULER_OUTBOX_WORKER_IDENTITY, TERMINAL_FAILURE_LOG_EVENT } from "../platform/terminal-failure.ts";
+import {
+  SCHEDULER_OUTBOX_WORKER_IDENTITY,
+  TERMINAL_FAILURE_LOG_EVENT,
+} from "../platform/terminal-failure.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -54,12 +53,20 @@ function captureConsoleLogs(): { lines: string[]; restore: () => void } {
   const lines: string[] = [];
   const original = console.log;
   console.log = (...args: unknown[]) => {
-    lines.push(args.map((value) => (typeof value === "string" ? value : JSON.stringify(value))).join(" "));
+    lines.push(
+      args.map((value) => (typeof value === "string" ? value : JSON.stringify(value))).join(" "),
+    );
   };
   return { lines, restore: () => (console.log = original) };
 }
 
-type TerminalLog = { event: string; surface: string; id: string; attempts: number; markedBy: string };
+type TerminalLog = {
+  event: string;
+  surface: string;
+  id: string;
+  attempts: number;
+  markedBy: string;
+};
 
 function terminalEvents(lines: string[]): TerminalLog[] {
   return lines
@@ -73,133 +80,163 @@ function terminalEvents(lines: string[]): TerminalLog[] {
     .filter((value): value is TerminalLog => value?.event === TERMINAL_FAILURE_LOG_EVENT);
 }
 
-test("every registered scan kind is admitted by the scheduler outbox constraints", { skip: !DB }, async () => {
-  // The tick enqueues every scan kind in one pass, so a kind the constraints
-  // refuse stops every scheduled job, not just its own.
-  await ensureScanOutboxRows();
-  const rows = (await db.execute<{ kind: string }>(sql`
+test(
+  "every registered scan kind is admitted by the scheduler outbox constraints",
+  { skip: !DB },
+  async () => {
+    // The tick enqueues every scan kind in one pass, so a kind the constraints
+    // refuse stops every scheduled job, not just its own.
+    await ensureScanOutboxRows();
+    const rows = (
+      await db.execute<{ kind: string }>(
+        sql`
     select kind from scheduler_outbox where kind = occurrence_key
-  `, "objects")).map((row) => row.kind);
-  for (const kind of SCHEDULER_OUTBOX_SCAN_KINDS) assert.ok(rows.includes(kind), `scan kind ${kind} has no outbox row`);
-});
+  `,
+        "objects",
+      )
+    ).map((row) => row.kind);
+    for (const kind of SCHEDULER_OUTBOX_SCAN_KINDS)
+      assert.ok(rows.includes(kind), `scan kind ${kind} has no outbox row`);
+  },
+);
 
-test("failed dunning and escalation rows stay visible and retry with backoff", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const gateId = randomUUID();
-  const dunningKey = `dunning-test-${randomUUID()}`;
-  try {
-    await db.execute(sql`
+test(
+  "failed dunning and escalation rows stay visible and retry with backoff",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const gateId = randomUUID();
+    const dunningKey = `dunning-test-${randomUUID()}`;
+    try {
+      await db.execute(sql`
       insert into scheduler_outbox (kind, occurrence_key, status, next_attempt_at)
       values ('dunning', ${dunningKey}, 'pending', ${new Date(Date.now() - 1_000)})
     `);
-    const inserted = await enqueueApprovalEscalation({ orgId: org.orgId, gateId });
-    assert.ok(inserted);
-    await db.execute(sql`
+      const inserted = await enqueueApprovalEscalation({ orgId: org.orgId, gateId });
+      assert.ok(inserted);
+      await db.execute(sql`
       update scheduler_outbox set next_attempt_at=${new Date(Date.now() - 1_000)}
        where id=${inserted}
     `);
 
-    const asOf = new Date();
-    const first = await processDueSchedulerOutbox(asOf, 50, async (row) => {
-      if (row.occurrence_key === dunningKey || row.subject_id === gateId) {
-        throw new Error(`${row.kind} crashed mid-run`);
-      }
-    });
-    assert.ok(first.failed >= 2, `expected two failures, got ${JSON.stringify(first)}`);
+      const asOf = new Date();
+      const first = await processDueSchedulerOutbox(asOf, 50, async (row) => {
+        if (row.occurrence_key === dunningKey || row.subject_id === gateId) {
+          throw new Error(`${row.kind} crashed mid-run`);
+        }
+      });
+      assert.ok(first.failed >= 2, `expected two failures, got ${JSON.stringify(first)}`);
 
-    const failed = (await listFailedSchedulerOutbox()).filter(
-      (row) => row.kind === "dunning" && !row.orgId || row.subjectId === gateId,
-    );
-    const dunning = failed.find((row) => row.kind === "dunning");
-    const escalation = failed.find((row) => row.subjectId === gateId);
-    assert.ok(dunning, "dunning failure must remain in scheduler_outbox");
-    assert.ok(escalation, "escalation failure must remain in scheduler_outbox");
-    assert.equal(dunning.error, "dunning crashed mid-run");
-    assert.equal(escalation.error, "approval_escalation crashed mid-run");
-    assert.equal(dunning.status, "failed");
-    assert.equal(escalation.orgId, org.orgId);
+      const failed = (await listFailedSchedulerOutbox()).filter(
+        (row) => (row.kind === "dunning" && !row.orgId) || row.subjectId === gateId,
+      );
+      const dunning = failed.find((row) => row.kind === "dunning");
+      const escalation = failed.find((row) => row.subjectId === gateId);
+      assert.ok(dunning, "dunning failure must remain in scheduler_outbox");
+      assert.ok(escalation, "escalation failure must remain in scheduler_outbox");
+      assert.equal(dunning.error, "dunning crashed mid-run");
+      assert.equal(escalation.error, "approval_escalation crashed mid-run");
+      assert.equal(dunning.status, "failed");
+      assert.equal(escalation.orgId, org.orgId);
 
-    const tooSoon = await processDueSchedulerOutbox(asOf, 50, async (row) => {
-      if (row.occurrence_key === dunningKey || row.subject_id === gateId) {
-        throw new Error("should not retry before backoff");
-      }
-    });
-    assert.equal(tooSoon.failed, 0);
+      const tooSoon = await processDueSchedulerOutbox(asOf, 50, async (row) => {
+        if (row.occurrence_key === dunningKey || row.subject_id === gateId) {
+          throw new Error("should not retry before backoff");
+        }
+      });
+      assert.equal(tooSoon.failed, 0);
 
-    const later = new Date(asOf.getTime() + 70_000);
-    const retried = await processDueSchedulerOutbox(later, 50, async (row) => {
-      if (row.occurrence_key === dunningKey || row.subject_id === gateId) {
-        throw new Error(`${row.kind} crashed mid-run`);
-      }
-    });
-    assert.ok(retried.failed >= 2);
+      const later = new Date(asOf.getTime() + 70_000);
+      const retried = await processDueSchedulerOutbox(later, 50, async (row) => {
+        if (row.occurrence_key === dunningKey || row.subject_id === gateId) {
+          throw new Error(`${row.kind} crashed mid-run`);
+        }
+      });
+      assert.ok(retried.failed >= 2);
 
-    await db.execute(sql`
+      await db.execute(sql`
       update scheduler_outbox
          set attempt_count=${MAX_SCHEDULER_OUTBOX_ATTEMPTS - 1},
              next_attempt_at=${later}
        where occurrence_key=${dunningKey}
     `);
-    const captured = captureConsoleLogs();
-    await processDueSchedulerOutbox(later, 50, async (row) => {
-      if (row.occurrence_key === dunningKey) throw new Error("terminal dunning failure");
-    });
-    captured.restore();
-    const terminal = (await listFailedSchedulerOutbox()).find((row) => row.kind === "dunning" && !row.orgId);
-    assert.equal(terminal?.attemptCount, MAX_SCHEDULER_OUTBOX_ATTEMPTS);
-    assert.equal(terminal?.error, "terminal dunning failure");
+      const captured = captureConsoleLogs();
+      await processDueSchedulerOutbox(later, 50, async (row) => {
+        if (row.occurrence_key === dunningKey) throw new Error("terminal dunning failure");
+      });
+      captured.restore();
+      const terminal = (await listFailedSchedulerOutbox()).find(
+        (row) => row.kind === "dunning" && !row.orgId,
+      );
+      assert.equal(terminal?.attemptCount, MAX_SCHEDULER_OUTBOX_ATTEMPTS);
+      assert.equal(terminal?.error, "terminal dunning failure");
 
-    // The terminal transition is surfaced durably and exactly once: one
-    // stamped row (timestamp + recording system identity) plus one structured
-    // log line for the poison row.
-    assert.ok(terminal?.terminalFailedAt, "terminal failure must be timestamped on the row");
-    assert.equal(terminal?.terminalFailedBy, SCHEDULER_OUTBOX_WORKER_IDENTITY);
-    const dunningId = (await db.execute<{ id: string }>(sql`
+      // The terminal transition is surfaced durably and exactly once: one
+      // stamped row (timestamp + recording system identity) plus one structured
+      // log line for the poison row.
+      assert.ok(terminal?.terminalFailedAt, "terminal failure must be timestamped on the row");
+      assert.equal(terminal?.terminalFailedBy, SCHEDULER_OUTBOX_WORKER_IDENTITY);
+      const dunningId = (
+        await db.execute<{ id: string }>(
+          sql`
       select id from scheduler_outbox where occurrence_key=${dunningKey}
-    `, "objects"))[0]!.id;
-    const emissions = terminalEvents(captured.lines).filter((event) => event.id === dunningId);
-    assert.equal(emissions.length, 1, `expected exactly one terminal log line, got ${JSON.stringify(emissions)}`);
-    assert.equal(emissions[0]?.surface, "scheduler_outbox");
-    assert.equal(emissions[0]?.attempts, MAX_SCHEDULER_OUTBOX_ATTEMPTS);
-    assert.equal(emissions[0]?.markedBy, SCHEDULER_OUTBOX_WORKER_IDENTITY);
+    `,
+          "objects",
+        )
+      )[0]!.id;
+      const emissions = terminalEvents(captured.lines).filter((event) => event.id === dunningId);
+      assert.equal(
+        emissions.length,
+        1,
+        `expected exactly one terminal log line, got ${JSON.stringify(emissions)}`,
+      );
+      assert.equal(emissions[0]?.surface, "scheduler_outbox");
+      assert.equal(emissions[0]?.attempts, MAX_SCHEDULER_OUTBOX_ATTEMPTS);
+      assert.equal(emissions[0]?.markedBy, SCHEDULER_OUTBOX_WORKER_IDENTITY);
 
-    const stampedAtBefore = terminal.terminalFailedAt;
-    await processDueSchedulerOutbox(new Date(later.getTime() + 3_600_000), 50, async (row) => {
-      if (row.occurrence_key === dunningKey) throw new Error("must not retry a terminal failed row");
-    });
-    const stillDunning = (await listFailedSchedulerOutbox()).find((row) => row.kind === "dunning" && !row.orgId);
-    assert.equal(stillDunning?.error, "terminal dunning failure");
-    assert.equal(stillDunning?.attemptCount, MAX_SCHEDULER_OUTBOX_ATTEMPTS);
-    // The stamp is never rewritten or duplicated by later ticks.
-    assert.deepEqual(stillDunning?.terminalFailedAt, stampedAtBefore);
+      const stampedAtBefore = terminal.terminalFailedAt;
+      await processDueSchedulerOutbox(new Date(later.getTime() + 3_600_000), 50, async (row) => {
+        if (row.occurrence_key === dunningKey)
+          throw new Error("must not retry a terminal failed row");
+      });
+      const stillDunning = (await listFailedSchedulerOutbox()).find(
+        (row) => row.kind === "dunning" && !row.orgId,
+      );
+      assert.equal(stillDunning?.error, "terminal dunning failure");
+      assert.equal(stillDunning?.attemptCount, MAX_SCHEDULER_OUTBOX_ATTEMPTS);
+      // The stamp is never rewritten or duplicated by later ticks.
+      assert.deepEqual(stillDunning?.terminalFailedAt, stampedAtBefore);
 
-    await db.execute(sql`
+      await db.execute(sql`
       update scheduler_outbox
          set status='running', locked_at=${new Date(later.getTime() - 20 * 60_000)}, error=null,
              attempt_count=${MAX_SCHEDULER_OUTBOX_ATTEMPTS}
        where subject_id=${gateId}
     `);
-    const staleCapture = captureConsoleLogs();
-    assert.ok(await recoverStaleSchedulerOutbox(later) >= 1);
-    staleCapture.restore();
-    // Crash recovery of a running row already at the ceiling is itself a
-    // terminal transition: it must stamp and emit exactly like a failed run.
-    const recovered = (await listFailedSchedulerOutbox()).find((row) => row.subjectId === gateId);
-    assert.equal(recovered?.status, "failed");
-    assert.match(recovered?.error ?? "", /stale lock recovered after crash/);
-    assert.ok(recovered?.terminalFailedAt, "stale recovery at the ceiling stamps the row");
-    assert.equal(recovered?.terminalFailedBy, SCHEDULER_OUTBOX_WORKER_IDENTITY);
-    const staleEmissions = terminalEvents(staleCapture.lines).filter((event) => event.id === inserted);
-    assert.equal(staleEmissions.length, 1);
-    assert.equal(staleEmissions[0]?.surface, "scheduler_outbox");
-  } finally {
-    await db.execute(sql`
+      const staleCapture = captureConsoleLogs();
+      assert.ok((await recoverStaleSchedulerOutbox(later)) >= 1);
+      staleCapture.restore();
+      // Crash recovery of a running row already at the ceiling is itself a
+      // terminal transition: it must stamp and emit exactly like a failed run.
+      const recovered = (await listFailedSchedulerOutbox()).find((row) => row.subjectId === gateId);
+      assert.equal(recovered?.status, "failed");
+      assert.match(recovered?.error ?? "", /stale lock recovered after crash/);
+      assert.ok(recovered?.terminalFailedAt, "stale recovery at the ceiling stamps the row");
+      assert.equal(recovered?.terminalFailedBy, SCHEDULER_OUTBOX_WORKER_IDENTITY);
+      const staleEmissions = terminalEvents(staleCapture.lines).filter(
+        (event) => event.id === inserted,
+      );
+      assert.equal(staleEmissions.length, 1);
+      assert.equal(staleEmissions[0]?.surface, "scheduler_outbox");
+    } finally {
+      await db.execute(sql`
       delete from scheduler_outbox
        where occurrence_key=${dunningKey} or subject_id=${gateId} or org_id=${org.orgId}
     `);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("a recovered scheduler lease fences the stale worker completion", { skip: !DB }, async () => {
   const occurrenceKey = `dunning-fence-${randomUUID()}`;
@@ -207,8 +244,12 @@ test("a recovered scheduler lease fences the stale worker completion", { skip: !
   const recoveryNow = new Date(firstNow.getTime() + 16 * 60_000);
   let releaseOld!: () => void;
   let signalOldClaimed!: () => void;
-  const oldHeld = new Promise<void>((resolve) => { releaseOld = resolve; });
-  const oldClaimed = new Promise<void>((resolve) => { signalOldClaimed = resolve; });
+  const oldHeld = new Promise<void>((resolve) => {
+    releaseOld = resolve;
+  });
+  const oldClaimed = new Promise<void>((resolve) => {
+    signalOldClaimed = resolve;
+  });
   let oldLease = "";
   let replacementLease = "";
   try {
@@ -239,10 +280,13 @@ test("a recovered scheduler lease fences the stale worker completion", { skip: !
       status: string;
       attempt_count: number;
       lease_token: string | null;
-    }>(sql`
+    }>(
+      sql`
       select status, attempt_count, lease_token
         from scheduler_outbox where occurrence_key=${occurrenceKey}
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.deepEqual(stored, [{ status: "pending", attempt_count: 0, lease_token: null }]);
   } finally {
     releaseOld?.();
@@ -278,105 +322,146 @@ test("flow email payload validation fails closed on every malformed shape", () =
   }
 });
 
-test("flow_email rows are idempotent by occurrence key and terminal once delivered", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const runId = randomUUID();
-  try {
-    const payload = { to: ["approver@scratch.test"], subject: "Approval", html: "<b>Approval</b>", text: "Approval" };
-    const first = await enqueueFlowEmail({
-      orgId: org.orgId,
-      runId,
-      occurrenceKey: `${runId}:email:n1`,
-      payload,
-    });
-    // A replay of the same effect (same occurrence key) collapses onto the
-    // existing row instead of enqueueing a second send.
-    const second = await enqueueFlowEmail({
-      orgId: org.orgId,
-      runId,
-      occurrenceKey: `${runId}:email:n1`,
-      payload,
-    });
-    assert.equal(first, true);
-    assert.equal(second, false);
+test(
+  "flow_email rows are idempotent by occurrence key and terminal once delivered",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const runId = randomUUID();
+    try {
+      const payload = {
+        to: ["approver@scratch.test"],
+        subject: "Approval",
+        html: "<b>Approval</b>",
+        text: "Approval",
+      };
+      const first = await enqueueFlowEmail({
+        orgId: org.orgId,
+        runId,
+        occurrenceKey: `${runId}:email:n1`,
+        payload,
+      });
+      // A replay of the same effect (same occurrence key) collapses onto the
+      // existing row instead of enqueueing a second send.
+      const second = await enqueueFlowEmail({
+        orgId: org.orgId,
+        runId,
+        occurrenceKey: `${runId}:email:n1`,
+        payload,
+      });
+      assert.equal(first, true);
+      assert.equal(second, false);
 
-    let deliveries = 0;
-    await processDueSchedulerOutbox(new Date(Date.now() + 1_000), 50, async (row) => {
-      if (row.subject_id === runId) {
-        deliveries++;
-        assert.deepEqual(row.payload, payload);
-      }
-    });
-    assert.equal(deliveries, 1, "the worker delivered the deferred email exactly once");
-    const delivered = (await db.execute<{ status: string; attempt_count: number }>(sql`
+      let deliveries = 0;
+      await processDueSchedulerOutbox(new Date(Date.now() + 1_000), 50, async (row) => {
+        if (row.subject_id === runId) {
+          deliveries++;
+          assert.deepEqual(row.payload, payload);
+        }
+      });
+      assert.equal(deliveries, 1, "the worker delivered the deferred email exactly once");
+      const delivered = (
+        await db.execute<{ status: string; attempt_count: number }>(
+          sql`
       select status, attempt_count from scheduler_outbox where subject_id=${runId}
-    `, "objects"))[0]!;
-    assert.equal(delivered.status, "succeeded", "a flow email is terminal after delivery");
-    assert.equal(delivered.attempt_count, 1);
-  } finally {
-    await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(delivered.status, "succeeded", "a flow email is terminal after delivery");
+      assert.equal(delivered.attempt_count, 1);
+    } finally {
+      await db.execute(
+        sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`,
+      );
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("an undeliverable flow email retries visibly instead of sending garbage", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const runId = randomUUID();
-  try {
-    // Tampered storage: a payload that cannot be validated must fail the
-    // attempt loudly (the default runner validates before any delivery and
-    // must never reach the mail transport).
-    await db.execute(sql`
+test(
+  "an undeliverable flow email retries visibly instead of sending garbage",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const runId = randomUUID();
+    try {
+      // Tampered storage: a payload that cannot be validated must fail the
+      // attempt loudly (the default runner validates before any delivery and
+      // must never reach the mail transport).
+      await db.execute(sql`
       insert into scheduler_outbox
         (org_id, kind, subject_id, occurrence_key, status, next_attempt_at, payload)
       values (${org.orgId}, 'flow_email', ${runId}, ${`${runId}:corrupt`}, 'pending', ${new Date(Date.now() - 1_000)}, '{"to":"all"}'::jsonb)
     `);
-    await processDueSchedulerOutbox(new Date(), 50);
-    const failedRow = (await listFailedSchedulerOutbox(200)).find((row) => row.subjectId === runId);
-    assert.ok(failedRow, "the corrupt row stays visible to operators");
-    assert.match(failedRow!.error ?? "", /malformed/);
-    assert.equal(failedRow!.status, "failed");
-    assert.equal(failedRow!.attemptCount, 1);
-  } finally {
-    await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await processDueSchedulerOutbox(new Date(), 50);
+      const failedRow = (await listFailedSchedulerOutbox(200)).find(
+        (row) => row.subjectId === runId,
+      );
+      assert.ok(failedRow, "the corrupt row stays visible to operators");
+      assert.match(failedRow!.error ?? "", /malformed/);
+      assert.equal(failedRow!.status, "failed");
+      assert.equal(failedRow!.attemptCount, 1);
+    } finally {
+      await db.execute(
+        sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`,
+      );
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("an invalid flow email refuses at enqueue and never becomes a row", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const runId = randomUUID();
-  try {
-    await assert.rejects(
-      enqueueFlowEmail({
+test(
+  "an invalid flow email refuses at enqueue and never becomes a row",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const runId = randomUUID();
+    try {
+      await assert.rejects(
+        enqueueFlowEmail({
+          orgId: org.orgId,
+          runId,
+          occurrenceKey: `${runId}:email:bad`,
+          payload: { to: ["x@"], subject: "Approval", html: "<b>x</b>", text: "x" },
+        }),
+        /flow email refused: Email delivery contains an invalid recipient address\./,
+      );
+      const refused = await db.execute<{ id: string }>(
+        sql`
+      select id from scheduler_outbox where subject_id=${runId}
+    `,
+        "objects",
+      );
+      assert.equal(refused.length, 0, "a refused send must leave no outbox row behind");
+
+      const ok = await enqueueFlowEmail({
         orgId: org.orgId,
         runId,
-        occurrenceKey: `${runId}:email:bad`,
-        payload: { to: ["x@"], subject: "Approval", html: "<b>x</b>", text: "x" },
-      }),
-      /flow email refused: Email delivery contains an invalid recipient address\./,
-    );
-    const refused = await db.execute<{ id: string }>(sql`
+        occurrenceKey: `${runId}:email:good`,
+        payload: {
+          to: ["approver@scratch.test"],
+          subject: "Approval",
+          html: "<b>Approval</b>",
+          text: "Approval",
+        },
+      });
+      assert.equal(ok, true, "a valid message still enqueues");
+      const stored = await db.execute<{ id: string }>(
+        sql`
       select id from scheduler_outbox where subject_id=${runId}
-    `, "objects");
-    assert.equal(refused.length, 0, "a refused send must leave no outbox row behind");
-
-    const ok = await enqueueFlowEmail({
-      orgId: org.orgId,
-      runId,
-      occurrenceKey: `${runId}:email:good`,
-      payload: { to: ["approver@scratch.test"], subject: "Approval", html: "<b>Approval</b>", text: "Approval" },
-    });
-    assert.equal(ok, true, "a valid message still enqueues");
-    const stored = await db.execute<{ id: string }>(sql`
-      select id from scheduler_outbox where subject_id=${runId}
-    `, "objects");
-    assert.equal(stored.length, 1);
-  } finally {
-    await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+        "objects",
+      );
+      assert.equal(stored.length, 1);
+    } finally {
+      await db.execute(
+        sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`,
+      );
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // fnd_mt97ro32_l25fnb — the crash gap between the queued provider send and the
@@ -427,143 +512,231 @@ async function eventually(predicate: () => boolean, timeoutMs = 5_000): Promise<
 
 /** Storage raises surface wrapped in DrizzleQueryError; match along the cause chain. */
 async function assertRejectsWithCause(promise: Promise<unknown>, pattern: RegExp): Promise<void> {
-  await assert.rejects(promise, (error: unknown) => {
-    let current: unknown = error;
-    while (current instanceof Error) {
-      if (pattern.test(current.message)) return true;
-      current = (current as { cause?: unknown }).cause;
-    }
-    return false;
-  }, `no rejection matching ${pattern}`);
+  await assert.rejects(
+    promise,
+    (error: unknown) => {
+      let current: unknown = error;
+      while (current instanceof Error) {
+        if (pattern.test(current.message)) return true;
+        current = (current as { cause?: unknown }).cause;
+      }
+      return false;
+    },
+    `no rejection matching ${pattern}`,
+  );
 }
 
-test("a crashed flow-email delivery retries onto one queue identity instead of duplicating customer mail", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const runId = randomUUID();
-  let releaseCrashed!: () => void;
-  let crashedWorker: Promise<{
-    processed: number;
-    succeeded: number;
-    failed: number;
-    fenced: number;
-  }> | null = null;
-  const fake = createFakeEmailQueue();
-  try {
-    const payload = { to: ["customer@scratch.test"], subject: "Renewal reminder", html: "<p>Renewal reminder</p>", text: "Renewal reminder" };
-    assert.ok(await enqueueFlowEmail({ orgId: org.orgId, runId, occurrenceKey: `${runId}:email:n1`, payload }));
-    const rowId = (await db.execute<{ id: string }>(sql`
+test(
+  "a crashed flow-email delivery retries onto one queue identity instead of duplicating customer mail",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const runId = randomUUID();
+    let releaseCrashed!: () => void;
+    let crashedWorker: Promise<{
+      processed: number;
+      succeeded: number;
+      failed: number;
+      fenced: number;
+    }> | null = null;
+    const fake = createFakeEmailQueue();
+    try {
+      const payload = {
+        to: ["customer@scratch.test"],
+        subject: "Renewal reminder",
+        html: "<p>Renewal reminder</p>",
+        text: "Renewal reminder",
+      };
+      assert.ok(
+        await enqueueFlowEmail({
+          orgId: org.orgId,
+          runId,
+          occurrenceKey: `${runId}:email:n1`,
+          payload,
+        }),
+      );
+      const rowId = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from scheduler_outbox where subject_id=${runId}
-      `, "objects"))[0]!.id;
-    // The deterministic identity both attempts must share.
-    assert.equal(flowEmailJobId(rowId), `flow-email|${rowId}`);
+      `,
+          "objects",
+        )
+      )[0]!.id;
+      // The deterministic identity both attempts must share.
+      assert.equal(flowEmailJobId(rowId), `flow-email|${rowId}`);
 
-    // Attempt 1 performs the REAL delivery handoff, then the process "dies":
-    // the worker parks forever between the successful provider call and any
-    // completion statement, leaving the exact durable state a post-enqueue/
-    // pre-mark crash leaves behind.
-    const crashGate = new Promise<void>((resolve) => { releaseCrashed = resolve; });
-    const asOf = new Date(Date.now() + 5_000);
-    crashedWorker = processDueSchedulerOutbox(asOf, 50, async (row) => {
-      if (row.subject_id !== runId) return;
-      await deliverFlowEmail(row, fake.enqueue);
-      await crashGate;
-    });
-    await eventually(() => fake.sends.length === 1);
-    const crashedRow = (await db.execute<{ status: string; attemptCount: number; claimed: boolean; leased: boolean }>(sql`
+      // Attempt 1 performs the REAL delivery handoff, then the process "dies":
+      // the worker parks forever between the successful provider call and any
+      // completion statement, leaving the exact durable state a post-enqueue/
+      // pre-mark crash leaves behind.
+      const crashGate = new Promise<void>((resolve) => {
+        releaseCrashed = resolve;
+      });
+      const asOf = new Date(Date.now() + 5_000);
+      crashedWorker = processDueSchedulerOutbox(asOf, 50, async (row) => {
+        if (row.subject_id !== runId) return;
+        await deliverFlowEmail(row, fake.enqueue);
+        await crashGate;
+      });
+      await eventually(() => fake.sends.length === 1);
+      const crashedRow = (
+        await db.execute<{
+          status: string;
+          attemptCount: number;
+          claimed: boolean;
+          leased: boolean;
+        }>(
+          sql`
         select status, attempt_count as "attemptCount",
                (locked_at is not null) as claimed,
                (lease_token is not null) as leased
           from scheduler_outbox where id=${rowId}
-      `, "objects"))[0]!;
-    assert.deepEqual(crashedRow, { status: "running", attemptCount: 1, claimed: true, leased: true });
-    // Ordinary stale recovery releases the orphaned claim; the row retries.
-    const staleNow = new Date(asOf.getTime() + STALE_SCHEDULER_OUTBOX_MS + 60_000);
-    assert.equal(await recoverStaleSchedulerOutbox(staleNow), 1);
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(crashedRow, {
+        status: "running",
+        attemptCount: 1,
+        claimed: true,
+        leased: true,
+      });
+      // Ordinary stale recovery releases the orphaned claim; the row retries.
+      const staleNow = new Date(asOf.getTime() + STALE_SCHEDULER_OUTBOX_MS + 60_000);
+      assert.equal(await recoverStaleSchedulerOutbox(staleNow), 1);
 
-    // Attempt 2 is ordinary due processing of the recovered row.
-    const later = new Date(staleNow.getTime() + 90_000);
-    const retried = await processDueSchedulerOutbox(later, 50, async (row) => {
-      if (row.subject_id !== runId) return;
-      await deliverFlowEmail(row, fake.enqueue);
-    });
-    assert.deepEqual(retried, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
+      // Attempt 2 is ordinary due processing of the recovered row.
+      const later = new Date(staleNow.getTime() + 90_000);
+      const retried = await processDueSchedulerOutbox(later, 50, async (row) => {
+        if (row.subject_id !== runId) return;
+        await deliverFlowEmail(row, fake.enqueue);
+      });
+      assert.deepEqual(retried, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
 
-    // THE assertion: across both attempts the provider received exactly ONE
-    // send. The retry DID call the provider again, but its deterministic id
-    // collapsed onto the already-enqueued job instead of minting a duplicate.
-    assert.equal(
-      fake.jobs.size,
-      1,
-      "the customer was queued exactly once across a crash, recovery, and retry",
-    );
-    assert.equal(fake.sends.length, 2, "both attempts really handed the mail to the provider");
-    for (const send of fake.sends) assert.equal(send.jobId, flowEmailJobId(rowId));
-    assert.equal(fake.sends[0]!.created, true);
-    assert.equal(fake.sends[1]!.created, false, "the retry collapsed onto the original job");
-    const queuedData = [...fake.jobs.values()][0]!.data;
-    assert.deepEqual(queuedData.to, payload.to);
-    assert.equal(queuedData.subject, payload.subject);
+      // THE assertion: across both attempts the provider received exactly ONE
+      // send. The retry DID call the provider again, but its deterministic id
+      // collapsed onto the already-enqueued job instead of minting a duplicate.
+      assert.equal(
+        fake.jobs.size,
+        1,
+        "the customer was queued exactly once across a crash, recovery, and retry",
+      );
+      assert.equal(fake.sends.length, 2, "both attempts really handed the mail to the provider");
+      for (const send of fake.sends) assert.equal(send.jobId, flowEmailJobId(rowId));
+      assert.equal(fake.sends[0]!.created, true);
+      assert.equal(fake.sends[1]!.created, false, "the retry collapsed onto the original job");
+      const queuedData = [...fake.jobs.values()][0]!.data;
+      assert.deepEqual(queuedData.to, payload.to);
+      assert.equal(queuedData.subject, payload.subject);
 
-    const delivered = (await db.execute<{ status: string; attemptCount: number }>(sql`
+      const delivered = (
+        await db.execute<{ status: string; attemptCount: number }>(
+          sql`
         select status, attempt_count as "attemptCount" from scheduler_outbox where id=${rowId}
-      `, "objects"))[0]!;
-    assert.deepEqual(delivered, { status: "succeeded", attemptCount: 2 });
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(delivered, { status: "succeeded", attemptCount: 2 });
 
-    // Release the parked worker: its stale completion must be FENCED by the
-    // replacement lease — it can neither overwrite 'succeeded' nor re-enqueue.
-    releaseCrashed();
-    const crashed = await crashedWorker!;
-    crashedWorker = null;
-    assert.equal(crashed.fenced, 1);
-    assert.equal(crashed.succeeded, 0);
-    const settled = (await db.execute<{ status: string; attemptCount: number }>(sql`
+      // Release the parked worker: its stale completion must be FENCED by the
+      // replacement lease — it can neither overwrite 'succeeded' nor re-enqueue.
+      releaseCrashed();
+      const crashed = await crashedWorker!;
+      crashedWorker = null;
+      assert.equal(crashed.fenced, 1);
+      assert.equal(crashed.succeeded, 0);
+      const settled = (
+        await db.execute<{ status: string; attemptCount: number }>(
+          sql`
         select status, attempt_count as "attemptCount" from scheduler_outbox where id=${rowId}
-      `, "objects"))[0]!;
-    assert.deepEqual(settled, { status: "succeeded", attemptCount: 2 });
-  } finally {
-    releaseCrashed();
-    if (crashedWorker) await crashedWorker.catch(() => {});
-    await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(settled, { status: "succeeded", attemptCount: 2 });
+    } finally {
+      releaseCrashed();
+      if (crashedWorker) await crashedWorker.catch(() => {});
+      await db.execute(
+        sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`,
+      );
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a genuine transport failure does not dedupe away the eventual single send", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const runId = randomUUID();
-  try {
-    const payload = { to: ["retry@scratch.test"], subject: "Escalation", html: "<p>Escalation</p>", text: "Escalation" };
-    assert.ok(await enqueueFlowEmail({ orgId: org.orgId, runId, occurrenceKey: `${runId}:email:n2`, payload }));
-    const fake = createFakeEmailQueue();
-    // Attempt 1 hits a real transport error BEFORE anything is enqueued.
-    const failingFirstCall: FlowEmailQueueEnqueuer = async (data, options) => {
-      if (fake.sends.length === 0) throw new Error("provider 5xx");
-      return fake.enqueue(data, options);
-    };
-    const first = await processDueSchedulerOutbox(new Date(Date.now() + 5_000), 50, async (row) => {
-      if (row.subject_id !== runId) return;
-      await deliverFlowEmail(row, failingFirstCall);
-    });
-    assert.deepEqual(first, { processed: 1, succeeded: 0, failed: 1, fenced: 0 });
-    assert.equal((await listFailedSchedulerOutbox(200)).find((r) => r.subjectId === runId)?.status, "failed");
-    assert.equal(fake.jobs.size, 0, "a rejected send leaves nothing queued");
+test(
+  "a genuine transport failure does not dedupe away the eventual single send",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const runId = randomUUID();
+    try {
+      const payload = {
+        to: ["retry@scratch.test"],
+        subject: "Escalation",
+        html: "<p>Escalation</p>",
+        text: "Escalation",
+      };
+      assert.ok(
+        await enqueueFlowEmail({
+          orgId: org.orgId,
+          runId,
+          occurrenceKey: `${runId}:email:n2`,
+          payload,
+        }),
+      );
+      const fake = createFakeEmailQueue();
+      // Attempt 1 hits a real transport error BEFORE anything is enqueued.
+      const failingFirstCall: FlowEmailQueueEnqueuer = async (data, options) => {
+        if (fake.sends.length === 0) throw new Error("provider 5xx");
+        return fake.enqueue(data, options);
+      };
+      const first = await processDueSchedulerOutbox(
+        new Date(Date.now() + 5_000),
+        50,
+        async (row) => {
+          if (row.subject_id !== runId) return;
+          await deliverFlowEmail(row, failingFirstCall);
+        },
+      );
+      assert.deepEqual(first, { processed: 1, succeeded: 0, failed: 1, fenced: 0 });
+      assert.equal(
+        (await listFailedSchedulerOutbox(200)).find((r) => r.subjectId === runId)?.status,
+        "failed",
+      );
+      assert.equal(fake.jobs.size, 0, "a rejected send leaves nothing queued");
 
-    // The retry succeeds through the same identity and delivers once.
-    const retried = await processDueSchedulerOutbox(new Date(Date.now() + 120_000), 50, async (row) => {
-      if (row.subject_id !== runId) return;
-      await deliverFlowEmail(row, fake.enqueue);
-    });
-    assert.deepEqual(retried, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
-    assert.equal(fake.jobs.size, 1, "exactly one send eventually reached the provider");
-    const rowId = (await db.execute<{ id: string }>(sql`
+      // The retry succeeds through the same identity and delivers once.
+      const retried = await processDueSchedulerOutbox(
+        new Date(Date.now() + 120_000),
+        50,
+        async (row) => {
+          if (row.subject_id !== runId) return;
+          await deliverFlowEmail(row, fake.enqueue);
+        },
+      );
+      assert.deepEqual(retried, { processed: 1, succeeded: 1, failed: 0, fenced: 0 });
+      assert.equal(fake.jobs.size, 1, "exactly one send eventually reached the provider");
+      const rowId = (
+        await db.execute<{ id: string }>(
+          sql`
       select id from scheduler_outbox where subject_id=${runId}
-    `, "objects"))[0]!.id;
-    assert.equal([...fake.jobs.keys()][0], flowEmailJobId(rowId));
-  } finally {
-    await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+          "objects",
+        )
+      )[0]!.id;
+      assert.equal([...fake.jobs.keys()][0], flowEmailJobId(rowId));
+    } finally {
+      await db.execute(
+        sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`,
+      );
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Live-PG + live-Redis supplements. Redis is off by default in tests, so only
@@ -624,8 +797,20 @@ test(
           },
         ],
       };
-      assert.ok(await enqueueFlowEmail({ orgId: org.orgId, runId, occurrenceKey: `${runId}:email:n1`, payload }));
-      const rowId = (await db.execute<{ id: string }>(sql`select id from scheduler_outbox where subject_id=${runId}`, "objects"))[0]!.id;
+      assert.ok(
+        await enqueueFlowEmail({
+          orgId: org.orgId,
+          runId,
+          occurrenceKey: `${runId}:email:n1`,
+          payload,
+        }),
+      );
+      const rowId = (
+        await db.execute<{ id: string }>(
+          sql`select id from scheduler_outbox where subject_id=${runId}`,
+          "objects",
+        )
+      )[0]!.id;
       const expectedJobId = flowEmailJobId(rowId);
       createdJobId = expectedJobId;
       const asOf = new Date(Date.now() + 5_000);
@@ -641,12 +826,21 @@ test(
         }),
       );
       assert.equal(enqueuedBeforeLostAck, expectedJobId);
-      assert.equal(await countQueueJob(expectedJobId), 1, "one durable send exists after the lost acknowledgement");
+      assert.equal(
+        await countQueueJob(expectedJobId),
+        1,
+        "one durable send exists after the lost acknowledgement",
+      );
       // The settlement found the accepted job, so the row is delivered on
       // attempt 1 — not failed for retry.
-      const delivered = (await db.execute<{ status: string; attempt_count: number }>(sql`
+      const delivered = (
+        await db.execute<{ status: string; attempt_count: number }>(
+          sql`
           select status, attempt_count from scheduler_outbox where id=${rowId}
-        `, "objects"))[0];
+        `,
+          "objects",
+        )
+      )[0];
       assert.equal(delivered!.status, "succeeded");
       assert.equal(delivered!.attempt_count, 1);
       // And the staged refs the accepted job carries are still readable —
@@ -667,12 +861,18 @@ test(
       const later = new Date(asOf.getTime() + 90_000);
       const again = await processDueSchedulerOutbox(later, 50);
       assert.deepEqual(again, { processed: 0, succeeded: 0, failed: 0, fenced: 0 });
-      assert.equal(await countQueueJob(expectedJobId), 1, "no duplicate send may exist after the lost acknowledgement");
+      assert.equal(
+        await countQueueJob(expectedJobId),
+        1,
+        "no duplicate send may exist after the lost acknowledgement",
+      );
     } finally {
       try {
         await removeQueueJobs([createdJobId]);
       } finally {
-        await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
+        await db.execute(
+          sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`,
+        );
         await dropScratchOrg(org.orgId);
       }
     }
@@ -694,11 +894,28 @@ test(
         text: "Escalation",
         meta: { category: "flows" },
       };
-      assert.ok(await enqueueFlowEmail({ orgId: org.orgId, runId, occurrenceKey: `${runId}:email:n3`, payload }));
-      const rowId = (await db.execute<{ id: string }>(sql`select id from scheduler_outbox where subject_id=${runId}`, "objects"))[0]!.id;
+      assert.ok(
+        await enqueueFlowEmail({
+          orgId: org.orgId,
+          runId,
+          occurrenceKey: `${runId}:email:n3`,
+          payload,
+        }),
+      );
+      const rowId = (
+        await db.execute<{ id: string }>(
+          sql`select id from scheduler_outbox where subject_id=${runId}`,
+          "objects",
+        )
+      )[0]!.id;
       await processDueSchedulerOutbox(new Date(Date.now() + 5_000), 50);
 
-      const rowStatus = (await db.execute<{ status: string }>(sql`select status from scheduler_outbox where id=${rowId}`, "objects"))[0]!.status;
+      const rowStatus = (
+        await db.execute<{ status: string }>(
+          sql`select status from scheduler_outbox where id=${rowId}`,
+          "objects",
+        )
+      )[0]!.status;
       assert.equal(rowStatus, "succeeded", "production delivery completes end to end");
 
       // Multi-recipient fanout digests the base row identity once per
@@ -706,13 +923,19 @@ test(
       const base = flowEmailJobId(rowId);
       const createdJobIds = recipients.map(
         (recipient) =>
-          `email-fanout|${
-            createHash("sha256").update(base).update("\0").update(recipient.toLowerCase()).digest("hex")
-          }`,
+          `email-fanout|${createHash("sha256")
+            .update(base)
+            .update("\0")
+            .update(recipient.toLowerCase())
+            .digest("hex")}`,
       );
       try {
         for (let i = 0; i < createdJobIds.length; i++) {
-          assert.equal(await countQueueJob(createdJobIds[i]!), 1, `exactly one send for ${recipients[i]}`);
+          assert.equal(
+            await countQueueJob(createdJobIds[i]!),
+            1,
+            `exactly one send for ${recipients[i]}`,
+          );
           const job = await getEmailQueue().getJob(createdJobIds[i]!);
           assert.ok(job, `fanout job for ${recipients[i]} exists`);
           assert.equal(job!.data.to, recipients[i]);
@@ -722,7 +945,9 @@ test(
         await removeQueueJobs(createdJobIds);
       }
     } finally {
-      await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
+      await db.execute(
+        sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`,
+      );
       await dropScratchOrg(org.orgId);
     }
   },
@@ -750,20 +975,29 @@ type TerminalEvidenceRow = {
 };
 
 async function readTerminalEvidence(outboxRowId: string): Promise<TerminalEvidenceRow[]> {
-  return (await db.execute<TerminalEvidenceRow>(sql`
+  return (
+    await db.execute<TerminalEvidenceRow>(
+      sql`
       select event, org_id as "orgId", kind, occurrence_key as "occurrenceKey",
              attempt_count as "attemptCount", reason, marked_by as "markedBy",
              detail->>'path' as "detailPath"
         from scheduler_outbox_terminal_audit
        where outbox_row_id=${outboxRowId}
        order by at
-    `, "objects")).map((row) => ({ ...row }));
+    `,
+      "objects",
+    )
+  ).map((row) => ({ ...row }));
 }
 
 /** Push one row to the ceiling through the public drain and leave it stamped. */
 async function exhaustToTerminal(input: {
   now?: Date;
-  runnerShouldThrow: (row: { id: string; occurrence_key: string; subject_id: string | null }) => boolean;
+  runnerShouldThrow: (row: {
+    id: string;
+    occurrence_key: string;
+    subject_id: string | null;
+  }) => boolean;
 }): Promise<void> {
   const now = input.now ?? new Date(Date.now() + 5_000);
   const result = await processDueSchedulerOutbox(now, 50, async (row) => {
@@ -772,270 +1006,389 @@ async function exhaustToTerminal(input: {
   assert.ok(result.failed >= 1, `expected the poison attempt to fail: ${JSON.stringify(result)}`);
 }
 
-test("ordinary exhaustion writes exactly one immutable evidence row and survives replay attempts", { skip: !DB }, async () => {
-  const dunningKey = `dunning-terminal-audit-${randomUUID()}`;
-  try {
-    await db.execute(sql`
+test(
+  "ordinary exhaustion writes exactly one immutable evidence row and survives replay attempts",
+  { skip: !DB },
+  async () => {
+    const dunningKey = `dunning-terminal-audit-${randomUUID()}`;
+    try {
+      await db.execute(sql`
       insert into scheduler_outbox (kind, occurrence_key, status, next_attempt_at, attempt_count)
       values ('dunning', ${dunningKey}, 'pending', ${new Date(Date.now() - 1_000)}, ${MAX_SCHEDULER_OUTBOX_ATTEMPTS - 1})
     `);
-    const rowId = (await db.execute<{ id: string }>(sql`select id from scheduler_outbox where occurrence_key=${dunningKey}`, "objects"))[0]!.id;
+      const rowId = (
+        await db.execute<{ id: string }>(
+          sql`select id from scheduler_outbox where occurrence_key=${dunningKey}`,
+          "objects",
+        )
+      )[0]!.id;
 
-    await exhaustToTerminal({
-      runnerShouldThrow: (row) => row.id === rowId,
-    });
+      await exhaustToTerminal({
+        runnerShouldThrow: (row) => row.id === rowId,
+      });
 
-    // Exactly one evidence row certifies the poisoning, written transactionally
-    // with the stamp it describes.
-    let evidence = await readTerminalEvidence(rowId);
-    assert.equal(evidence.length, 1, JSON.stringify(evidence));
-    assert.equal(evidence[0]!.event, "terminal_failure");
-    assert.equal(evidence[0]!.detailPath, "exhaustion");
-    assert.equal(evidence[0]!.occurrenceKey, dunningKey);
-    assert.equal(evidence[0]!.attemptCount, MAX_SCHEDULER_OUTBOX_ATTEMPTS);
-    assert.equal(evidence[0]!.reason, "poison at the ceiling");
-    assert.equal(evidence[0]!.markedBy, SCHEDULER_OUTBOX_WORKER_IDENTITY);
-    const stampsBefore = (await db.execute<{ at: string; by: string }>(sql`
+      // Exactly one evidence row certifies the poisoning, written transactionally
+      // with the stamp it describes.
+      let evidence = await readTerminalEvidence(rowId);
+      assert.equal(evidence.length, 1, JSON.stringify(evidence));
+      assert.equal(evidence[0]!.event, "terminal_failure");
+      assert.equal(evidence[0]!.detailPath, "exhaustion");
+      assert.equal(evidence[0]!.occurrenceKey, dunningKey);
+      assert.equal(evidence[0]!.attemptCount, MAX_SCHEDULER_OUTBOX_ATTEMPTS);
+      assert.equal(evidence[0]!.reason, "poison at the ceiling");
+      assert.equal(evidence[0]!.markedBy, SCHEDULER_OUTBOX_WORKER_IDENTITY);
+      const stampsBefore = (
+        await db.execute<{ at: string; by: string }>(
+          sql`
         select terminal_failed_at::text as at, terminal_failed_by as by
           from scheduler_outbox where id=${rowId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
 
-    // Repeated ticks and repeated recovery passes cannot duplicate evidence.
-    await processDueSchedulerOutbox(new Date(Date.now() + 3_600_000), 50, async () => {});
-    assert.equal(await recoverStaleSchedulerOutbox(new Date()), 0);
-    evidence = await readTerminalEvidence(rowId);
-    assert.equal(evidence.length, 1, "repeat passes must never write a second evidence row");
+      // Repeated ticks and repeated recovery passes cannot duplicate evidence.
+      await processDueSchedulerOutbox(new Date(Date.now() + 3_600_000), 50, async () => {});
+      assert.equal(await recoverStaleSchedulerOutbox(new Date()), 0);
+      evidence = await readTerminalEvidence(rowId);
+      assert.equal(evidence.length, 1, "repeat passes must never write a second evidence row");
 
-    // The code path that wrote the evidence cannot rewrite its certified facts.
-    await assertRejectsWithCause(
-      db.execute(sql`update scheduler_outbox set subject_id=gen_random_uuid() where id=${rowId}`),
-      /terminal-failure evidence is immutable/,
-    );
-    await assertRejectsWithCause(
-      db.execute(sql`update scheduler_outbox set terminal_failed_at=null where id=${rowId}`),
-      /replay reset requires its replay_authorized audit evidence first/,
-    );
+      // The code path that wrote the evidence cannot rewrite its certified facts.
+      await assertRejectsWithCause(
+        db.execute(sql`update scheduler_outbox set subject_id=gen_random_uuid() where id=${rowId}`),
+        /terminal-failure evidence is immutable/,
+      );
+      await assertRejectsWithCause(
+        db.execute(sql`update scheduler_outbox set terminal_failed_at=null where id=${rowId}`),
+        /replay reset requires its replay_authorized audit evidence first/,
+      );
 
-    // Even a pinned transaction cannot clear the stamps before its own
-    // replay evidence exists — unevidenced resets commit nothing.
-    await assertRejectsWithCause(
-      db.transaction(async (tx) => {
-        await tx.execute(sql`
+      // Even a pinned transaction cannot clear the stamps before its own
+      // replay evidence exists — unevidenced resets commit nothing.
+      await assertRejectsWithCause(
+        db.transaction(async (tx) => {
+          await tx.execute(sql`
           select set_config('openbooks.scheduler_outbox_replay_org', coalesce(org_id::text, ''), true)
             from scheduler_outbox where id=${rowId}
         `);
-        await tx.execute(sql`update scheduler_outbox set terminal_failed_at=null where id=${rowId}`);
-      }),
-      /replay reset requires its replay_authorized audit evidence first/,
-    );
-    const stampsAfterRefusals = (await db.execute<{ at: string; by: string }>(sql`
+          await tx.execute(
+            sql`update scheduler_outbox set terminal_failed_at=null where id=${rowId}`,
+          );
+        }),
+        /replay reset requires its replay_authorized audit evidence first/,
+      );
+      const stampsAfterRefusals = (
+        await db.execute<{ at: string; by: string }>(
+          sql`
         select terminal_failed_at::text as at, terminal_failed_by as by
           from scheduler_outbox where id=${rowId}
-      `, "objects"))[0]!;
-    assert.deepEqual(stampsAfterRefusals, stampsBefore, "refused rewrites left no residue");
-  } finally {
-    // The org-less scan row's evidence has no tenant teardown path: drop it
-    // through the same guarded-trigger dance the fixture wipe uses.
-    await db.transaction(async (tx) => {
-      const r = (await tx.execute(
-        sql`select 1 as x from scheduler_outbox_terminal_audit where event <> 'replay_authorized'
-              and outbox_row_id in (select id from scheduler_outbox where occurrence_key=${dunningKey}) limit 1`, "objects",
-      ));
-      if (r.length === 0) return;
-      await tx.execute(sql.raw("alter table scheduler_outbox_terminal_audit disable trigger scheduler_outbox_terminal_audit_append_only"));
-      await tx.execute(sql`
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(stampsAfterRefusals, stampsBefore, "refused rewrites left no residue");
+    } finally {
+      // The org-less scan row's evidence has no tenant teardown path: drop it
+      // through the same guarded-trigger dance the fixture wipe uses.
+      await db.transaction(async (tx) => {
+        const r = await tx.execute(
+          sql`select 1 as x from scheduler_outbox_terminal_audit where event <> 'replay_authorized'
+              and outbox_row_id in (select id from scheduler_outbox where occurrence_key=${dunningKey}) limit 1`,
+          "objects",
+        );
+        if (r.length === 0) return;
+        await tx.execute(
+          sql.raw(
+            "alter table scheduler_outbox_terminal_audit disable trigger scheduler_outbox_terminal_audit_append_only",
+          ),
+        );
+        await tx.execute(sql`
         delete from scheduler_outbox_terminal_audit
          where outbox_row_id in (select id from scheduler_outbox where occurrence_key=${dunningKey})
       `);
-      await tx.execute(sql.raw("alter table scheduler_outbox_terminal_audit enable trigger scheduler_outbox_terminal_audit_append_only"));
-    });
-    await db.execute(sql`delete from scheduler_outbox where occurrence_key=${dunningKey}`);
-  }
-});
+        await tx.execute(
+          sql.raw(
+            "alter table scheduler_outbox_terminal_audit enable trigger scheduler_outbox_terminal_audit_append_only",
+          ),
+        );
+      });
+      await db.execute(sql`delete from scheduler_outbox where occurrence_key=${dunningKey}`);
+    }
+  },
+);
 
-test("crash recovery at the ceiling leaves identical exactly-once evidence", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const gateId = randomUUID();
-  try {
-    await enqueueApprovalEscalation({ orgId: org.orgId, gateId });
-    // The exact durable state a crash at the ceiling leaves behind: running,
-    // stale past the recovery window, and out of attempts.
-    await db.execute(sql`
+test(
+  "crash recovery at the ceiling leaves identical exactly-once evidence",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const gateId = randomUUID();
+    try {
+      await enqueueApprovalEscalation({ orgId: org.orgId, gateId });
+      // The exact durable state a crash at the ceiling leaves behind: running,
+      // stale past the recovery window, and out of attempts.
+      await db.execute(sql`
       update scheduler_outbox
          set status='running', attempt_count=${MAX_SCHEDULER_OUTBOX_ATTEMPTS},
              locked_at=${new Date(Date.now() - 20 * 60_000)}, error='worker died mid-run'
        where subject_id=${gateId}
     `);
-    const rowId = (await db.execute<{ id: string }>(sql`
+      const rowId = (
+        await db.execute<{ id: string }>(
+          sql`
       select id from scheduler_outbox where subject_id=${gateId}
-    `, "objects"))[0]!.id;
+    `,
+          "objects",
+        )
+      )[0]!.id;
 
-    assert.ok(await recoverStaleSchedulerOutbox(new Date()) >= 1);
-    const evidence = await readTerminalEvidence(rowId);
-    assert.equal(evidence.length, 1, JSON.stringify(evidence));
-    assert.equal(evidence[0]!.event, "crash_recovery_terminal_failure");
-    assert.equal(evidence[0]!.detailPath, "crash_recovery");
-    assert.equal(evidence[0]!.orgId, org.orgId);
-    assert.match(evidence[0]!.reason!, /stale lock recovered after crash at the attempt ceiling/);
+      assert.ok((await recoverStaleSchedulerOutbox(new Date())) >= 1);
+      const evidence = await readTerminalEvidence(rowId);
+      assert.equal(evidence.length, 1, JSON.stringify(evidence));
+      assert.equal(evidence[0]!.event, "crash_recovery_terminal_failure");
+      assert.equal(evidence[0]!.detailPath, "crash_recovery");
+      assert.equal(evidence[0]!.orgId, org.orgId);
+      assert.match(evidence[0]!.reason!, /stale lock recovered after crash at the attempt ceiling/);
 
-    // Repeating recovery finds nothing new and duplicates nothing.
-    assert.equal(await recoverStaleSchedulerOutbox(new Date(Date.now() + 60 * 60_000)), 0);
-    assert.equal((await readTerminalEvidence(rowId)).length, 1);
-  } finally {
-    await db.execute(sql`delete from scheduler_outbox where subject_id=${gateId} or org_id=${org.orgId}`);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Repeating recovery finds nothing new and duplicates nothing.
+      assert.equal(await recoverStaleSchedulerOutbox(new Date(Date.now() + 60 * 60_000)), 0);
+      assert.equal((await readTerminalEvidence(rowId)).length, 1);
+    } finally {
+      await db.execute(
+        sql`delete from scheduler_outbox where subject_id=${gateId} or org_id=${org.orgId}`,
+      );
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-for (const refusal of ["exception", "no_row"] as const) test(`terminalization cannot commit when evidence storage returns ${refusal}`, { skip: !DB }, async () => {
-  await assertDedicatedFixtureDatabase();
-  const org = await createScratchOrg();
-  const gateId = randomUUID();
-  const sabotageTrigger = "sabotage_scheduler_terminal_audit";
-  try {
-    await enqueueApprovalEscalation({ orgId: org.orgId, gateId });
-    await db.execute(sql`
+for (const refusal of ["exception", "no_row"] as const)
+  test(
+    `terminalization cannot commit when evidence storage returns ${refusal}`,
+    { skip: !DB },
+    async () => {
+      await assertDedicatedFixtureDatabase();
+      const org = await createScratchOrg();
+      const gateId = randomUUID();
+      const sabotageTrigger = "sabotage_scheduler_terminal_audit";
+      try {
+        await enqueueApprovalEscalation({ orgId: org.orgId, gateId });
+        await db.execute(sql`
       update scheduler_outbox set next_attempt_at=${new Date(Date.now() - 1_000)}, attempt_count=${MAX_SCHEDULER_OUTBOX_ATTEMPTS - 1}
        where subject_id=${gateId}
     `);
-    const rowId = (await db.execute<{ id: string }>(sql`
+        const rowId = (
+          await db.execute<{ id: string }>(
+            sql`
       select id from scheduler_outbox where subject_id=${gateId}
-    `, "objects"))[0]!.id;
+    `,
+            "objects",
+          )
+        )[0]!.id;
 
-    // Org-scoped sabotage: only THIS scratch org's evidence inserts fail.
-    await db.execute(sql`
+        // Org-scoped sabotage: only THIS scratch org's evidence inserts fail.
+        await db.execute(sql`
       create or replace function fail_terminal_evidence() returns trigger language plpgsql as $fn$
       begin ${refusal === "exception" ? sql`raise exception 'terminal-audit unavailable';` : sql`return null;`} end $fn$
     `);
-    await db.execute(sql`
+        await db.execute(sql`
       create trigger ${sql.raw(sabotageTrigger)} before insert on scheduler_outbox_terminal_audit
       for each row when (new.org_id = ${sql.raw(`'${org.orgId}'`)}) execute function fail_terminal_evidence()
     `);
-    try {
-      await assertRejectsWithCause(
-        exhaustToTerminal({ runnerShouldThrow: (row) => row.id === rowId }),
-        refusal === "exception" ? /terminal-audit unavailable/ : /terminal failure evidence was not stored/,
-      );
+        try {
+          await assertRejectsWithCause(
+            exhaustToTerminal({ runnerShouldThrow: (row) => row.id === rowId }),
+            refusal === "exception"
+              ? /terminal-audit unavailable/
+              : /terminal failure evidence was not stored/,
+          );
 
-      // Nothing committed: the stamp did not stick and no partial evidence
-      // remains, while the exhausted claim stays recoverable.
-      const stranded = (await db.execute<{ status: string; attemptCount: number; stampedAt: string | null; evidence: number }>(sql`
+          // Nothing committed: the stamp did not stick and no partial evidence
+          // remains, while the exhausted claim stays recoverable.
+          const stranded = (
+            await db.execute<{
+              status: string;
+              attemptCount: number;
+              stampedAt: string | null;
+              evidence: number;
+            }>(
+              sql`
           select o.status, o.attempt_count as "attemptCount",
                  o.terminal_failed_at::text as "stampedAt",
                  (select count(*)::int from scheduler_outbox_terminal_audit e
                    where e.outbox_row_id=o.id) as evidence
             from scheduler_outbox o where o.id=${rowId}
-        `, "objects"))[0]!;
-      assert.equal(stranded.status, "running");
-      assert.equal(stranded.attemptCount, MAX_SCHEDULER_OUTBOX_ATTEMPTS);
-      assert.equal(stranded.stampedAt, null);
-      assert.equal(stranded.evidence, 0);
-    } finally {
-      await db.execute(sql`drop trigger if exists ${sql.raw(sabotageTrigger)} on scheduler_outbox_terminal_audit`);
-      await db.execute(sql`drop function if exists fail_terminal_evidence()`);
-    }
+        `,
+              "objects",
+            )
+          )[0]!;
+          assert.equal(stranded.status, "running");
+          assert.equal(stranded.attemptCount, MAX_SCHEDULER_OUTBOX_ATTEMPTS);
+          assert.equal(stranded.stampedAt, null);
+          assert.equal(stranded.evidence, 0);
+        } finally {
+          await db.execute(
+            sql`drop trigger if exists ${sql.raw(sabotageTrigger)} on scheduler_outbox_terminal_audit`,
+          );
+          await db.execute(sql`drop function if exists fail_terminal_evidence()`);
+        }
 
-    // With storage healthy again, crash recovery completes the transition AND
-    // its evidence in one transaction — the work was never lost.
-    const staleNow = new Date(Date.now() + 16 * 60_000);
-    assert.equal(await recoverStaleSchedulerOutbox(staleNow), 1);
-    const completed = await readTerminalEvidence(rowId);
-    assert.equal(completed.length, 1);
-    assert.equal(completed[0]!.event, "crash_recovery_terminal_failure");
-  } finally {
-    await db.execute(sql`delete from scheduler_outbox where subject_id=${gateId} or org_id=${org.orgId}`);
-    await dropScratchOrg(org.orgId);
-  }
-});
+        // With storage healthy again, crash recovery completes the transition AND
+        // its evidence in one transaction — the work was never lost.
+        const staleNow = new Date(Date.now() + 16 * 60_000);
+        assert.equal(await recoverStaleSchedulerOutbox(staleNow), 1);
+        const completed = await readTerminalEvidence(rowId);
+        assert.equal(completed.length, 1);
+        assert.equal(completed[0]!.event, "crash_recovery_terminal_failure");
+      } finally {
+        await db.execute(
+          sql`delete from scheduler_outbox where subject_id=${gateId} or org_id=${org.orgId}`,
+        );
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
 
-test("an authorized replay audits before/after and the failure evidence survives untouched", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const gateId = randomUUID();
-  try {
-    const actorId = await createScratchUser(org.orgId, "Ops Admin", "admin");
-    await grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]);
-    await enqueueApprovalEscalation({ orgId: org.orgId, gateId });
-    await db.execute(sql`
+test(
+  "an authorized replay audits before/after and the failure evidence survives untouched",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const gateId = randomUUID();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Ops Admin", "admin");
+      await grantScratchPermissions(org.orgId, actorId, ["admin.setup.manage"]);
+      await enqueueApprovalEscalation({ orgId: org.orgId, gateId });
+      await db.execute(sql`
       update scheduler_outbox set next_attempt_at=${new Date(Date.now() - 1_000)}, attempt_count=${MAX_SCHEDULER_OUTBOX_ATTEMPTS - 1}
        where subject_id=${gateId}
     `);
-    const rowId = (await db.execute<{ id: string }>(sql`
+      const rowId = (
+        await db.execute<{ id: string }>(
+          sql`
       select id from scheduler_outbox where subject_id=${gateId}
-    `, "objects"))[0]!.id;
-    await exhaustToTerminal({ runnerShouldThrow: (row) => row.id === rowId });
+    `,
+          "objects",
+        )
+      )[0]!.id;
+      await exhaustToTerminal({ runnerShouldThrow: (row) => row.id === rowId });
 
-    const failureEnvelope = (await readTerminalEvidence(rowId))[0]!;
-    const stampsBeforeReplay = (await db.execute<{ at: string; by: string }>(sql`
+      const failureEnvelope = (await readTerminalEvidence(rowId))[0]!;
+      const stampsBeforeReplay = (
+        await db.execute<{ at: string; by: string }>(
+          sql`
         select terminal_failed_at::text as at, terminal_failed_by as by
           from scheduler_outbox where id=${rowId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
 
-    // Bad justifications never touch the row.
-    await assert.rejects(
-      replayTerminalSchedulerOutbox({ orgId: org.orgId, id: rowId, actorId, reason: "too short" }),
-      /replay reason must be/,
-    );
-    await assert.rejects(
-      replayTerminalSchedulerOutbox({ orgId: org.orgId, id: rowId, actorId: randomUUID(), reason: "legitimate operator retry" }),
-      /replay actor is not an active user/,
-    );
-    assert.equal((await readTerminalEvidence(rowId)).length, 1);
+      // Bad justifications never touch the row.
+      await assert.rejects(
+        replayTerminalSchedulerOutbox({
+          orgId: org.orgId,
+          id: rowId,
+          actorId,
+          reason: "too short",
+        }),
+        /replay reason must be/,
+      );
+      await assert.rejects(
+        replayTerminalSchedulerOutbox({
+          orgId: org.orgId,
+          id: rowId,
+          actorId: randomUUID(),
+          reason: "legitimate operator retry",
+        }),
+        /replay actor is not an active user/,
+      );
+      assert.equal((await readTerminalEvidence(rowId)).length, 1);
 
-    await assertDedicatedFixtureDatabase();
-    const terminalBefore = await db.execute(sql`select to_jsonb(o) as envelope from scheduler_outbox o where id=${rowId}`, "objects");
-    await db.execute(sql`create function refuse_replay_evidence() returns trigger language plpgsql as $fn$
+      await assertDedicatedFixtureDatabase();
+      const terminalBefore = await db.execute(
+        sql`select to_jsonb(o) as envelope from scheduler_outbox o where id=${rowId}`,
+        "objects",
+      );
+      await db.execute(sql`create function refuse_replay_evidence() returns trigger language plpgsql as $fn$
       begin return null; end $fn$`);
-    try {
-      await db.execute(sql`create trigger refuse_replay_evidence before insert on scheduler_outbox_terminal_audit
+      try {
+        await db.execute(sql`create trigger refuse_replay_evidence before insert on scheduler_outbox_terminal_audit
         for each row when (new.org_id=${sql.raw("'" + org.orgId + "'::uuid")} and new.event='replay_authorized')
         execute function refuse_replay_evidence()`);
-      await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId,
-        reason:"The outage is resolved and monitored delivery may resume"}), /authorization evidence was not stored/);
-      assert.deepEqual(await db.execute(sql`select to_jsonb(o) as envelope from scheduler_outbox o where id=${rowId}`, "objects"),
-        terminalBefore, "a missing authorization write leaves every terminal envelope field intact");
-      assert.equal((await readTerminalEvidence(rowId)).length,1);
-    } finally {
-      await db.execute(sql`drop trigger if exists refuse_replay_evidence on scheduler_outbox_terminal_audit`);
-      await db.execute(sql`drop function refuse_replay_evidence()`);
-    }
+        await assert.rejects(
+          replayTerminalSchedulerOutbox({
+            orgId: org.orgId,
+            id: rowId,
+            actorId,
+            reason: "The outage is resolved and monitored delivery may resume",
+          }),
+          /authorization evidence was not stored/,
+        );
+        assert.deepEqual(
+          await db.execute(
+            sql`select to_jsonb(o) as envelope from scheduler_outbox o where id=${rowId}`,
+            "objects",
+          ),
+          terminalBefore,
+          "a missing authorization write leaves every terminal envelope field intact",
+        );
+        assert.equal((await readTerminalEvidence(rowId)).length, 1);
+      } finally {
+        await db.execute(
+          sql`drop trigger if exists refuse_replay_evidence on scheduler_outbox_terminal_audit`,
+        );
+        await db.execute(sql`drop function refuse_replay_evidence()`);
+      }
 
-    const authorized = await replayTerminalSchedulerOutbox({
-      orgId: org.orgId,
-      id: rowId,
-      actorId,
-      reason: "queue outage cleared; retrying the poisoned escalation",
-    });
-    assert.equal(authorized, undefined);
-    const evidence = await readTerminalEvidence(rowId);
-    assert.equal(evidence.length, 2, JSON.stringify(evidence));
+      const authorized = await replayTerminalSchedulerOutbox({
+        orgId: org.orgId,
+        id: rowId,
+        actorId,
+        reason: "queue outage cleared; retrying the poisoned escalation",
+      });
+      assert.equal(authorized, undefined);
+      const evidence = await readTerminalEvidence(rowId);
+      assert.equal(evidence.length, 2, JSON.stringify(evidence));
 
-    // The original terminal-failure evidence survived byte-for-byte.
-    const [originalFailure, replayAuthorization] = [
-      evidence.find((e) => e.event === "terminal_failure"),
-      evidence.find((e) => e.event === "replay_authorized"),
-    ];
-    assert.ok(originalFailure && replayAuthorization);
-    assert.equal(originalFailure.reason, failureEnvelope.reason);
-    assert.equal(originalFailure.attemptCount, MAX_SCHEDULER_OUTBOX_ATTEMPTS);
-    assert.equal(originalFailure.markedBy, SCHEDULER_OUTBOX_WORKER_IDENTITY);
+      // The original terminal-failure evidence survived byte-for-byte.
+      const [originalFailure, replayAuthorization] = [
+        evidence.find((e) => e.event === "terminal_failure"),
+        evidence.find((e) => e.event === "replay_authorized"),
+      ];
+      assert.ok(originalFailure && replayAuthorization);
+      assert.equal(originalFailure.reason, failureEnvelope.reason);
+      assert.equal(originalFailure.attemptCount, MAX_SCHEDULER_OUTBOX_ATTEMPTS);
+      assert.equal(originalFailure.markedBy, SCHEDULER_OUTBOX_WORKER_IDENTITY);
 
-    // The authorization carries the operator, their justification, and the
-    // verbatim before-stamps they chose to discard.
-    assert.equal(replayAuthorization.markedBy, actorId);
-    assert.equal(replayAuthorization.reason, "queue outage cleared; retrying the poisoned escalation");
+      // The authorization carries the operator, their justification, and the
+      // verbatim before-stamps they chose to discard.
+      assert.equal(replayAuthorization.markedBy, actorId);
+      assert.equal(
+        replayAuthorization.reason,
+        "queue outage cleared; retrying the poisoned escalation",
+      );
 
-    // The live row is reset for another lifecycle round.
-    const reset = (await db.execute<{ status: string; attemptCount: number; stampedAt: string | null }>(sql`
+      // The live row is reset for another lifecycle round.
+      const reset = (
+        await db.execute<{ status: string; attemptCount: number; stampedAt: string | null }>(
+          sql`
         select status, attempt_count as "attemptCount", terminal_failed_at::text as "stampedAt"
           from scheduler_outbox where id=${rowId}
-      `, "objects"))[0]!;
-    assert.deepEqual(reset, { status: "pending", attemptCount: 0, stampedAt: null });
-    assert.notEqual(stampsBeforeReplay.at, null);
-  } finally {
-    await db.execute(sql`delete from scheduler_outbox where subject_id=${gateId} or org_id=${org.orgId}`);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(reset, { status: "pending", attemptCount: 0, stampedAt: null });
+      assert.notEqual(stampsBeforeReplay.at, null);
+    } finally {
+      await db.execute(
+        sql`delete from scheduler_outbox where subject_id=${gateId} or org_id=${org.orgId}`,
+      );
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Scheduled-script occurrence durability (engine/src/scheduling/scheduler.ts). The claim
@@ -1079,20 +1432,30 @@ async function seedDueScheduledScript(orgId: string, source: string): Promise<st
 async function loadOccurrence(
   scriptId: string,
 ): Promise<{ status: string; errorMessage: string | null; logs: OccurrenceEventRow[] }> {
-  const row = (await db.execute<{ status: string; errorMessage: string | null; logs: OccurrenceEventRow[] }>(sql`
+  const row = (
+    await db.execute<{ status: string; errorMessage: string | null; logs: OccurrenceEventRow[] }>(
+      sql`
       select status, error_message as "errorMessage", logs
         from script_runs
        where script_id = ${scriptId} and target_kind = 'scheduled_occurrence'
-    `, "objects"))[0];
+    `,
+      "objects",
+    )
+  )[0];
   assert.ok(row, `expected a dispatch-ledger row for script ${scriptId}`);
   return row;
 }
 
 async function countScheduledRuns(scriptId: string): Promise<number> {
-  return (await db.execute<{ n: number }>(sql`
+  return (
+    await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from script_runs
        where script_id = ${scriptId} and target_kind = 'scheduled'
-    `, "objects"))[0]!.n;
+    `,
+      "objects",
+    )
+  )[0]!.n;
 }
 
 /**
@@ -1123,160 +1486,208 @@ async function runDueScriptsInline(): Promise<void> {
   }
 }
 
-test("a malformed legacy scheduled script is durably quarantined and runs after repair", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const invalidCron = "definitely not a cron expression";
-  const validCron = "0 0 1 1 *";
-  try {
-    const scriptId = await seedDueScheduledScript(
-      org.orgId,
-      'function main(ctx) { ob.log("must not run before repair"); return "repaired"; }',
-    );
-    const dueAt = new Date(Date.now() - 60_000);
-    await db.execute(sql`
+test(
+  "a malformed legacy scheduled script is durably quarantined and runs after repair",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const invalidCron = "definitely not a cron expression";
+    const validCron = "0 0 1 1 *";
+    try {
+      const scriptId = await seedDueScheduledScript(
+        org.orgId,
+        'function main(ctx) { ob.log("must not run before repair"); return "repaired"; }',
+      );
+      const dueAt = new Date(Date.now() - 60_000);
+      await db.execute(sql`
       update user_scripts
          set cron = ${invalidCron}, next_run_at = ${dueAt}
        where id = ${scriptId}
     `);
 
-    await runDueScriptsInline();
+      await runDueScriptsInline();
 
-    // The invalid occurrence never executes and never silently disappears:
-    // the exact repairable cron/cursor survive while the row is explicitly
-    // deactivated. A later scan is idempotent because inactive rows are not due.
-    const quarantined = (await db.execute<{
-        cron: string | null;
-        nextRunAt: Date | string | null;
-        isActive: boolean;
-        lastRunAt: Date | string | null;
-      }>(sql`
+      // The invalid occurrence never executes and never silently disappears:
+      // the exact repairable cron/cursor survive while the row is explicitly
+      // deactivated. A later scan is idempotent because inactive rows are not due.
+      const quarantined = (
+        await db.execute<{
+          cron: string | null;
+          nextRunAt: Date | string | null;
+          isActive: boolean;
+          lastRunAt: Date | string | null;
+        }>(
+          sql`
         select cron, next_run_at as "nextRunAt", is_active as "isActive",
                last_run_at as "lastRunAt"
           from user_scripts
          where id = ${scriptId}
-      `, "objects"))[0]!;
-    assert.equal(quarantined.cron, invalidCron);
-    assert.equal(new Date(quarantined.nextRunAt!).toISOString(), dueAt.toISOString());
-    assert.equal(quarantined.isActive, false);
-    assert.equal(quarantined.lastRunAt, null);
-    assert.equal(await countScheduledRuns(scriptId), 0, "invalid configuration must not execute source");
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(quarantined.cron, invalidCron);
+      assert.equal(new Date(quarantined.nextRunAt!).toISOString(), dueAt.toISOString());
+      assert.equal(quarantined.isActive, false);
+      assert.equal(quarantined.lastRunAt, null);
+      assert.equal(
+        await countScheduledRuns(scriptId),
+        0,
+        "invalid configuration must not execute source",
+      );
 
-    const failure = (await db.execute<{
-        id: string;
-        status: string;
-        errorMessage: string | null;
-        logs: OccurrenceEventRow[];
-      }>(sql`
+      const failure = (
+        await db.execute<{
+          id: string;
+          status: string;
+          errorMessage: string | null;
+          logs: OccurrenceEventRow[];
+        }>(
+          sql`
         select id, status, error_message as "errorMessage", logs
           from script_runs
          where script_id = ${scriptId} and target_kind = 'scheduled_configuration'
-      `, "objects"))[0]!;
-    assert.equal(failure.status, "error");
-    assert.match(failure.errorMessage ?? "", /invalid cron expression/);
-    assert.equal(failure.logs[0]?.event, "invalid_cron_quarantined");
-    assert.equal(failure.logs[0]?.markedBy, SCHEDULED_SCRIPT_SCHEDULER_IDENTITY);
-    assert.equal(failure.logs[0]?.cron, invalidCron);
-    assert.equal(new Date(failure.logs[0]!.nextRunAt!).toISOString(), dueAt.toISOString());
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(failure.status, "error");
+      assert.match(failure.errorMessage ?? "", /invalid cron expression/);
+      assert.equal(failure.logs[0]?.event, "invalid_cron_quarantined");
+      assert.equal(failure.logs[0]?.markedBy, SCHEDULED_SCRIPT_SCHEDULER_IDENTITY);
+      assert.equal(failure.logs[0]?.cron, invalidCron);
+      assert.equal(new Date(failure.logs[0]!.nextRunAt!).toISOString(), dueAt.toISOString());
 
-    const audit = (await db.execute<{
-        actorId: string | null;
-        changes: {
-          event: string;
-          actorKind: string;
-          actor: string;
-          reason: string;
-          scriptRunId: string;
-          before: { isActive: boolean; cron: string; nextRunAt: string };
-          after: { isActive: boolean; cron: string; nextRunAt: string };
-        };
-      }>(sql`
+      const audit = (
+        await db.execute<{
+          actorId: string | null;
+          changes: {
+            event: string;
+            actorKind: string;
+            actor: string;
+            reason: string;
+            scriptRunId: string;
+            before: { isActive: boolean; cron: string; nextRunAt: string };
+            after: { isActive: boolean; cron: string; nextRunAt: string };
+          };
+        }>(
+          sql`
         select actor_id as "actorId", changes
           from audit_log
          where table_name = 'user_scripts' and row_id = ${scriptId}
            and changes->>'event' = 'invalid_cron_quarantined'
-      `, "objects"))[0]!;
-    assert.equal(audit.actorId, null, "the system quarantine must not impersonate a human actor");
-    assert.equal(audit.changes.actorKind, "system");
-    assert.equal(audit.changes.actor, SCHEDULED_SCRIPT_SCHEDULER_IDENTITY);
-    assert.equal(audit.changes.scriptRunId, failure.id);
-    assert.equal(audit.changes.before.cron, invalidCron);
-    assert.equal(new Date(audit.changes.before.nextRunAt).toISOString(), dueAt.toISOString());
-    assert.equal(audit.changes.before.isActive, true);
-    assert.equal(audit.changes.after.isActive, false);
-    assert.equal(audit.changes.after.cron, invalidCron);
-    assert.equal(new Date(audit.changes.after.nextRunAt).toISOString(), dueAt.toISOString());
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(audit.actorId, null, "the system quarantine must not impersonate a human actor");
+      assert.equal(audit.changes.actorKind, "system");
+      assert.equal(audit.changes.actor, SCHEDULED_SCRIPT_SCHEDULER_IDENTITY);
+      assert.equal(audit.changes.scriptRunId, failure.id);
+      assert.equal(audit.changes.before.cron, invalidCron);
+      assert.equal(new Date(audit.changes.before.nextRunAt).toISOString(), dueAt.toISOString());
+      assert.equal(audit.changes.before.isActive, true);
+      assert.equal(audit.changes.after.isActive, false);
+      assert.equal(audit.changes.after.cron, invalidCron);
+      assert.equal(new Date(audit.changes.after.nextRunAt).toISOString(), dueAt.toISOString());
 
-    await runDueScriptsInline();
-    const evidenceCount = (await db.execute<{ n: number }>(sql`
+      await runDueScriptsInline();
+      const evidenceCount = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n
           from script_runs
          where script_id = ${scriptId} and target_kind = 'scheduled_configuration'
-      `, "objects"))[0]!.n;
-    assert.equal(evidenceCount, 1, "quarantine evidence is written once");
+      `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(evidenceCount, 1, "quarantine evidence is written once");
 
-    // A controlled repair explicitly supplies a valid expression and
-    // reactivates the row. The ordinary claim/dispatch path then runs once and
-    // advances from the repaired due tick.
-    const repairedDueAt = new Date(Date.now() - 30_000);
-    await db.execute(sql`
+      // A controlled repair explicitly supplies a valid expression and
+      // reactivates the row. The ordinary claim/dispatch path then runs once and
+      // advances from the repaired due tick.
+      const repairedDueAt = new Date(Date.now() - 30_000);
+      await db.execute(sql`
       update user_scripts
          set cron = ${validCron}, next_run_at = ${repairedDueAt},
              is_active = true, updated_at = now()
        where id = ${scriptId}
     `);
-    await runDueScriptsInline();
+      await runDueScriptsInline();
 
-    assert.equal(await countScheduledRuns(scriptId), 1);
-    assert.equal((await loadOccurrence(scriptId)).status, "ok");
-    const repaired = (await db.execute<{ cron: string; nextRunAt: Date | string; isActive: boolean }>(sql`
+      assert.equal(await countScheduledRuns(scriptId), 1);
+      assert.equal((await loadOccurrence(scriptId)).status, "ok");
+      const repaired = (
+        await db.execute<{ cron: string; nextRunAt: Date | string; isActive: boolean }>(
+          sql`
         select cron, next_run_at as "nextRunAt", is_active as "isActive"
           from user_scripts
          where id = ${scriptId}
-      `, "objects"))[0]!;
-    assert.equal(repaired.cron, validCron);
-    assert.equal(repaired.isActive, true);
-    assert.ok(new Date(repaired.nextRunAt).getTime() > repairedDueAt.getTime());
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(repaired.cron, validCron);
+      assert.equal(repaired.isActive, true);
+      assert.ok(new Date(repaired.nextRunAt).getTime() > repairedDueAt.getTime());
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a valid scheduled-script control commits its durable occurrence with the cursor advance", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const scriptId = await seedDueScheduledScript(
-      org.orgId,
-      'function main(ctx) { ob.log("tick"); return "done"; }',
-    );
-    const dueAt = new Date(Date.now() - 60_000);
-    await db.execute(sql`update user_scripts set next_run_at = ${dueAt} where id = ${scriptId}`);
+test(
+  "a valid scheduled-script control commits its durable occurrence with the cursor advance",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const scriptId = await seedDueScheduledScript(
+        org.orgId,
+        'function main(ctx) { ob.log("tick"); return "done"; }',
+      );
+      const dueAt = new Date(Date.now() - 60_000);
+      await db.execute(sql`update user_scripts set next_run_at = ${dueAt} where id = ${scriptId}`);
 
-    await runDueScriptsInline();
+      await runDueScriptsInline();
 
-    // The ledger row exists, carries the deterministic occurrence identity and
-    // the scheduled-for stamp, and reached a terminal state via the inline
-    // fallback that shares it.
-    const occ = await loadOccurrence(scriptId);
-    assert.equal(occ.status, "ok");
-    assert.equal(occ.logs[0]?.event, "claimed");
-    assert.equal(occ.logs[0]?.scheduledFor, dueAt.toISOString());
-    assert.ok(occ.logs.some((e) => e.event === "ran_inline"), "the inline fallback ran under the shared identity");
+      // The ledger row exists, carries the deterministic occurrence identity and
+      // the scheduled-for stamp, and reached a terminal state via the inline
+      // fallback that shares it.
+      const occ = await loadOccurrence(scriptId);
+      assert.equal(occ.status, "ok");
+      assert.equal(occ.logs[0]?.event, "claimed");
+      assert.equal(occ.logs[0]?.scheduledFor, dueAt.toISOString());
+      assert.ok(
+        occ.logs.some((e) => e.event === "ran_inline"),
+        "the inline fallback ran under the shared identity",
+      );
 
-    // Exactly one real scheduled-run audit row backs the occurrence.
-    assert.equal(await countScheduledRuns(scriptId), 1);
+      // Exactly one real scheduled-run audit row backs the occurrence.
+      assert.equal(await countScheduledRuns(scriptId), 1);
 
-    // The cron cursor advanced past the claimed tick — future schedule advance
-    // stays recoverable and due again on time. The raw driver value is
-    // normalized first so the assertion tests financial state, not whether the
-    // pg driver happened to hand back a Date or its text form.
-    const cursor = (await db.execute<{ nextRunAt: Date | string }>(sql`
+      // The cron cursor advanced past the claimed tick — future schedule advance
+      // stays recoverable and due again on time. The raw driver value is
+      // normalized first so the assertion tests financial state, not whether the
+      // pg driver happened to hand back a Date or its text form.
+      const cursor = (
+        await db.execute<{ nextRunAt: Date | string }>(
+          sql`
         select next_run_at as "nextRunAt" from user_scripts where id = ${scriptId}
-      `, "objects"))[0]!.nextRunAt;
-    assert.ok(new Date(cursor).getTime() > dueAt.getTime(), "the cron cursor advanced past the claimed tick");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `,
+          "objects",
+        )
+      )[0]!.nextRunAt;
+      assert.ok(
+        new Date(cursor).getTime() > dueAt.getTime(),
+        "the cron cursor advanced past the claimed tick",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // A crash between the claim commit and any dispatch leaves the exact state
 // crafted below; recovery must re-dispatch it eventually-exactly-once while
@@ -1286,27 +1697,30 @@ test("a valid scheduled-script control commits its durable occurrence with the c
 // is just an empty claim), and the exhausted-retry loss is the identical
 // finalize transition recovery makes when no evidence arrives — only the
 // pre-state differs, so neither permutation needs its own scenario here.
-test("a crash-orphaned occurrence is recovered exactly once and the cursor is not skipped", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await db.execute(sql`
+test(
+  "a crash-orphaned occurrence is recovered exactly once and the cursor is not skipped",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,scripts}', 'true'::jsonb)
        where id = ${org.orgId}
     `);
-    // A crash after the claim committed but before any dispatch — craft the
-    // exact state the atomic claim leaves behind, stale past the recovery
-    // window, with the cursor already advanced past the missed tick.
-    const crashedId = randomUUID();
-    const scheduledFor = new Date(Date.now() - 30 * 60_000);
-    const advancedTo = new Date(Date.now() + 3_600_000);
-    await db.execute(sql`
+      // A crash after the claim committed but before any dispatch — craft the
+      // exact state the atomic claim leaves behind, stale past the recovery
+      // window, with the cursor already advanced past the missed tick.
+      const crashedId = randomUUID();
+      const scheduledFor = new Date(Date.now() - 30 * 60_000);
+      const advancedTo = new Date(Date.now() + 3_600_000);
+      await db.execute(sql`
       insert into user_scripts (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active)
       values (${crashedId}, ${org.orgId}, ${`Scratch cron ${crashedId.slice(0, 8)}`}, 'scheduled',
               'function main(ctx) { return "recovered"; }',
               '*/5 * * * *', ${advancedTo}, 2000, true)
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into script_runs (org_id, script_id, target_kind, target_id, status, logs, at)
       values (${org.orgId}, ${crashedId}, 'scheduled_occurrence', null, 'queued',
               jsonb_build_array(jsonb_build_object(
@@ -1317,50 +1731,68 @@ test("a crash-orphaned occurrence is recovered exactly once and the cursor is no
               ${scheduledFor})
     `);
 
-    await recoverLostScriptOccurrences();
+      await recoverLostScriptOccurrences();
 
-    // The orphaned claim was re-dispatched exactly once (attempt 2) and the
-    // inline retry completed with terminal evidence on the SAME row.
-    const recovered = await loadOccurrence(crashedId);
-    assert.equal(recovered.status, "ok");
-    assert.ok(recovered.logs.some((e) => e.event === "recover" && e.attempt === 2), "recovery consumed attempt 2");
-    assert.ok(recovered.logs.some((e) => e.event === "ran_inline" && e.attempt === 2));
-    assert.equal(await countScheduledRuns(crashedId), 1);
+      // The orphaned claim was re-dispatched exactly once (attempt 2) and the
+      // inline retry completed with terminal evidence on the SAME row.
+      const recovered = await loadOccurrence(crashedId);
+      assert.equal(recovered.status, "ok");
+      assert.ok(
+        recovered.logs.some((e) => e.event === "recover" && e.attempt === 2),
+        "recovery consumed attempt 2",
+      );
+      assert.ok(recovered.logs.some((e) => e.event === "ran_inline" && e.attempt === 2));
+      assert.equal(await countScheduledRuns(crashedId), 1);
 
-    // Recovery is not re-armed by later ticks — eventually exactly once.
-    await recoverLostScriptOccurrences(new Date(Date.now() + 16 * 60_000));
-    assert.equal(await countScheduledRuns(crashedId), 1, "no further executions after the single retry");
+      // Recovery is not re-armed by later ticks — eventually exactly once.
+      await recoverLostScriptOccurrences(new Date(Date.now() + 16 * 60_000));
+      assert.equal(
+        await countScheduledRuns(crashedId),
+        1,
+        "no further executions after the single retry",
+      );
 
-    // The cursor keeps its claimed advance: the missed tick is recovered
-    // without being re-armed as due.
-    const cursor = (await db.execute<{ nextRunAt: Date | string }>(sql`
+      // The cursor keeps its claimed advance: the missed tick is recovered
+      // without being re-armed as due.
+      const cursor = (
+        await db.execute<{ nextRunAt: Date | string }>(
+          sql`
         select next_run_at as "nextRunAt" from user_scripts where id = ${crashedId}
-      `, "objects"))[0]!.nextRunAt;
-    assert.equal(new Date(cursor).toISOString(), advancedTo.toISOString());
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `,
+          "objects",
+        )
+      )[0]!.nextRunAt;
+      assert.equal(new Date(cursor).toISOString(), advancedTo.toISOString());
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // Recovery must also absorb REAL worker evidence: when the dispatched run
 // actually executed, the worker-written target_kind='scheduled' row (the exact
 // shape runScheduledScript persists) closes the open occurrence with its
 // terminal outcome instead of recovery burning the one allowed retry on top.
-test("worker-written terminal evidence closes an orphaned occurrence without a retry", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const scriptId = randomUUID();
-    const scheduledFor = new Date(Date.now() - 30 * 60_000);
-    await db.execute(sql`
+test(
+  "worker-written terminal evidence closes an orphaned occurrence without a retry",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const scriptId = randomUUID();
+      const scheduledFor = new Date(Date.now() - 30 * 60_000);
+      await db.execute(sql`
       insert into user_scripts (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active)
       values (${scriptId}, ${org.orgId}, ${`Scratch cron ${scriptId.slice(0, 8)}`}, 'scheduled',
               'function main(ctx) { return "ran-on-worker"; }', '*/5 * * * *',
               ${new Date(Date.now() + 3_600_000)}, 2000, true)
     `);
-    // The same crash state as above — but this time the worker DID execute:
-    // a real scheduled-run row landed after the claim committed, stamped
-    // with the occurrence's ledger row id (the identity recovery matches on).
-    const occurrenceId = (await db.execute<{ id: string }>(sql`
+      // The same crash state as above — but this time the worker DID execute:
+      // a real scheduled-run row landed after the claim committed, stamped
+      // with the occurrence's ledger row id (the identity recovery matches on).
+      const occurrenceId = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into script_runs (org_id, script_id, target_kind, target_id, status, logs, at)
         values (${org.orgId}, ${scriptId}, 'scheduled_occurrence', null, 'queued',
                 jsonb_build_array(jsonb_build_object(
@@ -1370,53 +1802,63 @@ test("worker-written terminal evidence closes an orphaned occurrence without a r
                   'attempt', 1)),
                 ${scheduledFor})
         returning id
-      `, "objects"))[0]!.id;
-    await db.execute(sql`
+      `,
+          "objects",
+        )
+      )[0]!.id;
+      await db.execute(sql`
       insert into script_runs (org_id, script_id, target_kind, target_id, status, duration_ms, logs, at)
       values (${org.orgId}, ${scriptId}, 'scheduled', ${occurrenceId}, 'ok', 120, '[{"event":"done"}]'::jsonb,
               ${new Date(scheduledFor.getTime() + 5_000)})
     `);
 
-    await recoverLostScriptOccurrences();
+      await recoverLostScriptOccurrences();
 
-    // The occurrence mirrored the worker's terminal outcome instead of
-    // re-dispatching: absorbed status, durable absorb marker, no retry events,
-    // and still exactly one real execution behind it.
-    const closed = await loadOccurrence(scriptId);
-    assert.equal(closed.status, "ok");
-    assert.equal(closed.errorMessage, null);
-    assert.ok(closed.logs.some((e) => e.event === "completed_on_worker"), "the absorb is durably logged");
-    assert.ok(!closed.logs.some((e) => e.event === "recover"), "no retry was consumed");
-    assert.equal(await countScheduledRuns(scriptId), 1);
+      // The occurrence mirrored the worker's terminal outcome instead of
+      // re-dispatching: absorbed status, durable absorb marker, no retry events,
+      // and still exactly one real execution behind it.
+      const closed = await loadOccurrence(scriptId);
+      assert.equal(closed.status, "ok");
+      assert.equal(closed.errorMessage, null);
+      assert.ok(
+        closed.logs.some((e) => e.event === "completed_on_worker"),
+        "the absorb is durably logged",
+      );
+      assert.ok(!closed.logs.some((e) => e.event === "recover"), "no retry was consumed");
+      assert.equal(await countScheduledRuns(scriptId), 1);
 
-    // A later tick neither resurrects nor re-retries it — eventually exactly once.
-    await recoverLostScriptOccurrences(new Date(Date.now() + 16 * 60_000));
-    assert.equal(await countScheduledRuns(scriptId), 1);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // A later tick neither resurrects nor re-retries it — eventually exactly once.
+      await recoverLostScriptOccurrences(new Date(Date.now() + 16 * 60_000));
+      assert.equal(await countScheduledRuns(scriptId), 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // Legacy shape: a worker run from before the identity link existed carries
 // no target_id, so recovery cannot tie it to an occurrence id and assigns it
 // to the oldest open occurrence; newer occurrences remain eligible for their
 // own one-time retry. New-shape runs always carry target_id and never take
 // this path (see the one-to-one test below).
-test("worker evidence closes the oldest open occurrence before a newer claim", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const scriptId = await seedDueScheduledScript(
-      org.orgId,
-      'function main(ctx) { return "newer-retry"; }',
-    );
-    const oldestAt = new Date(Date.now() - 30 * 60_000);
-    const newerAt = new Date(Date.now() - 20 * 60_000);
-    const workerAt = new Date(Date.now() - 10 * 60_000);
-    await db.execute(sql`
+test(
+  "worker evidence closes the oldest open occurrence before a newer claim",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const scriptId = await seedDueScheduledScript(
+        org.orgId,
+        'function main(ctx) { return "newer-retry"; }',
+      );
+      const oldestAt = new Date(Date.now() - 30 * 60_000);
+      const newerAt = new Date(Date.now() - 20 * 60_000);
+      const workerAt = new Date(Date.now() - 10 * 60_000);
+      await db.execute(sql`
       update user_scripts set next_run_at = ${new Date(Date.now() + 3_600_000)} where id = ${scriptId}
     `);
-    for (const scheduledFor of [oldestAt, newerAt]) {
-      await db.execute(sql`
+      for (const scheduledFor of [oldestAt, newerAt]) {
+        await db.execute(sql`
         insert into script_runs (org_id, script_id, target_kind, target_id, status, logs, at)
         values (${org.orgId}, ${scriptId}, 'scheduled_occurrence', null, 'queued',
                 jsonb_build_array(jsonb_build_object(
@@ -1426,37 +1868,48 @@ test("worker evidence closes the oldest open occurrence before a newer claim", {
                   'attempt', 1)),
                 ${scheduledFor})
       `);
-    }
-    // The worker completed after the newer occurrence was claimed. Without
-    // oldest-first recovery, this evidence is absorbed by the newer row and
-    // the oldest row is dispatched again.
-    await db.execute(sql`
+      }
+      // The worker completed after the newer occurrence was claimed. Without
+      // oldest-first recovery, this evidence is absorbed by the newer row and
+      // the oldest row is dispatched again.
+      await db.execute(sql`
       insert into script_runs (org_id, script_id, target_kind, status, duration_ms, logs, at)
       values (${org.orgId}, ${scriptId}, 'scheduled', 'ok', 120, '[{"event":"done"}]'::jsonb,
               ${workerAt})
     `);
 
-    await recoverLostScriptOccurrences();
+      await recoverLostScriptOccurrences();
 
-    const occurrences = await db.execute<{ status: string; logs: OccurrenceEventRow[] }>(sql`
+      const occurrences = await db.execute<{ status: string; logs: OccurrenceEventRow[] }>(
+        sql`
         select status, logs
           from script_runs
          where script_id = ${scriptId} and target_kind = 'scheduled_occurrence'
          order by at
-      `, "objects");
-    assert.equal(occurrences.length, 2);
-    const [oldest, newer] = occurrences;
-    assert.equal(oldest!.status, "ok");
-    assert.ok(oldest!.logs.some((event) => event.event === "completed_on_worker"));
-    assert.ok(!oldest!.logs.some((event) => event.event === "recover"), "oldest occurrence was not retried");
-    assert.equal(newer!.status, "ok");
-    assert.ok(newer!.logs.some((event) => event.event === "recover" && event.attempt === 2));
-    assert.ok(newer!.logs.some((event) => event.event === "ran_inline" && event.attempt === 2));
-    assert.equal(await countScheduledRuns(scriptId), 2, "one worker run plus one newer-occurrence retry");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `,
+        "objects",
+      );
+      assert.equal(occurrences.length, 2);
+      const [oldest, newer] = occurrences;
+      assert.equal(oldest!.status, "ok");
+      assert.ok(oldest!.logs.some((event) => event.event === "completed_on_worker"));
+      assert.ok(
+        !oldest!.logs.some((event) => event.event === "recover"),
+        "oldest occurrence was not retried",
+      );
+      assert.equal(newer!.status, "ok");
+      assert.ok(newer!.logs.some((event) => event.event === "recover" && event.attempt === 2));
+      assert.ok(newer!.logs.some((event) => event.event === "ran_inline" && event.attempt === 2));
+      assert.equal(
+        await countScheduledRuns(scriptId),
+        2,
+        "one worker run plus one newer-occurrence retry",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // SCHED2: worker evidence is matched one-to-one BY IDENTITY. Two claims A
 // then B exist, exactly one worker execution — for A — landed after B's
@@ -1464,21 +1917,26 @@ test("worker evidence closes the oldest open occurrence before a newer claim", {
 // producing evidence. Recovery must report B as a loss. The old timestamp
 // join still saw A's execution row (at >= B.at) with no older OPEN
 // occurrence left to protect B, and recorded the unexecuted tick complete.
-test("worker evidence closes only its own occurrence; a lost retry is reported, never marked ok", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const scriptId = await seedDueScheduledScript(
-      org.orgId,
-      'function main(ctx) { return "one-to-one"; }',
-    );
-    const oldestAt = new Date(Date.now() - 30 * 60_000);
-    const newerAt = new Date(Date.now() - 20 * 60_000);
-    await db.execute(sql`
+test(
+  "worker evidence closes only its own occurrence; a lost retry is reported, never marked ok",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const scriptId = await seedDueScheduledScript(
+        org.orgId,
+        'function main(ctx) { return "one-to-one"; }',
+      );
+      const oldestAt = new Date(Date.now() - 30 * 60_000);
+      const newerAt = new Date(Date.now() - 20 * 60_000);
+      await db.execute(sql`
       update user_scripts set next_run_at = ${new Date(Date.now() + 3_600_000)} where id = ${scriptId}
     `);
-    const occurrenceIds = [];
-    for (const scheduledFor of [oldestAt, newerAt]) {
-      const id = (await db.execute<{ id: string }>(sql`
+      const occurrenceIds = [];
+      for (const scheduledFor of [oldestAt, newerAt]) {
+        const id = (
+          await db.execute<{ id: string }>(
+            sql`
           insert into script_runs (org_id, script_id, target_kind, target_id, status, logs, at)
           values (${org.orgId}, ${scriptId}, 'scheduled_occurrence', null, 'queued',
                   jsonb_build_array(jsonb_build_object(
@@ -1488,107 +1946,138 @@ test("worker evidence closes only its own occurrence; a lost retry is reported, 
                     'attempt', 1)),
                   ${scheduledFor})
           returning id
-        `, "objects"))[0]!.id;
-      occurrenceIds.push(id);
-    }
-    const [oldestId, newerId] = occurrenceIds;
-    // Exactly one execution, for the OLDER occurrence — stamped with its
-    // ledger row id, landing after the newer claim was committed — and the
-    // older occurrence already closed from it.
-    await db.execute(sql`
+        `,
+            "objects",
+          )
+        )[0]!.id;
+        occurrenceIds.push(id);
+      }
+      const [oldestId, newerId] = occurrenceIds;
+      // Exactly one execution, for the OLDER occurrence — stamped with its
+      // ledger row id, landing after the newer claim was committed — and the
+      // older occurrence already closed from it.
+      await db.execute(sql`
       insert into script_runs (org_id, script_id, target_kind, target_id, status, duration_ms, logs, at)
       values (${org.orgId}, ${scriptId}, 'scheduled', ${oldestId}, 'ok', 120, '[{"event":"done"}]'::jsonb,
               ${new Date(Date.now() - 10 * 60_000)})
     `);
-    await db.execute(sql`
+      await db.execute(sql`
       update script_runs
          set status = 'ok',
              logs = logs || '[{"event":"completed_on_worker"}]'::jsonb
        where id = ${oldestId}
     `);
-    // The newer occurrence already consumed its single retry and produced no
-    // evidence: a lost retry with no execution behind it.
-    await db.execute(sql`
+      // The newer occurrence already consumed its single retry and produced no
+      // evidence: a lost retry with no execution behind it.
+      await db.execute(sql`
       update script_runs
          set status = 'dispatch_retry',
              logs = logs || '[{"event":"recover","attempt":2}]'::jsonb
        where id = ${newerId}
     `);
 
-    await recoverLostScriptOccurrences();
+      await recoverLostScriptOccurrences();
 
-    const occurrences = await db.execute<{ id: string; status: string; logs: OccurrenceEventRow[] }>(sql`
+      const occurrences = await db.execute<{
+        id: string;
+        status: string;
+        logs: OccurrenceEventRow[];
+      }>(
+        sql`
         select id, status, logs
           from script_runs
          where script_id = ${scriptId} and target_kind = 'scheduled_occurrence'
          order by at
-      `, "objects");
-    assert.equal(occurrences.length, 2);
-    const [oldest, newer] = occurrences;
-    assert.equal(oldest!.id, oldestId);
-    assert.equal(oldest!.status, "ok");
-    assert.equal(newer!.id, newerId);
-    assert.notEqual(newer!.status, "ok", "an unexecuted tick must never read complete");
-    assert.equal(newer!.status, "error", "the lost retry is stamped as a terminal loss");
-    assert.ok(!newer!.logs.some((event) => event.event === "completed_on_worker"));
-    assert.equal(await countScheduledRuns(scriptId), 1, "exactly one execution behind both rows");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `,
+        "objects",
+      );
+      assert.equal(occurrences.length, 2);
+      const [oldest, newer] = occurrences;
+      assert.equal(oldest!.id, oldestId);
+      assert.equal(oldest!.status, "ok");
+      assert.equal(newer!.id, newerId);
+      assert.notEqual(newer!.status, "ok", "an unexecuted tick must never read complete");
+      assert.equal(newer!.status, "error", "the lost retry is stamped as a terminal loss");
+      assert.ok(!newer!.logs.some((event) => event.event === "completed_on_worker"));
+      assert.equal(await countScheduledRuns(scriptId), 1, "exactly one execution behind both rows");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // SCHED3: the cursor advances from the claimed tick, never from now. An
 // hourly script whose scheduler was down for 3+ hours must produce one
 // durable row per missed tick — not a single row for the oldest tick with
 // the rest silently skipped — and land its cursor on the next future tick.
-test("a multi-hour outage produces one run row per missed tick and advances the cursor past now", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const scriptId = randomUUID();
-    await db.execute(sql`
+test(
+  "a multi-hour outage produces one run row per missed tick and advances the cursor past now",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const scriptId = randomUUID();
+      await db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,scripts}', 'true'::jsonb)
        where id = ${org.orgId}
     `);
-    // An exact hour boundary three hours ago: four ticks are due
-    // (dueAt, +1h, +2h, +3h), all within one pass's catch-up bound.
-    const dueAt = new Date(Date.now() - 3 * 3_600_000);
-    dueAt.setMinutes(0, 0, 0);
-    await db.execute(sql`
+      // An exact hour boundary three hours ago: four ticks are due
+      // (dueAt, +1h, +2h, +3h), all within one pass's catch-up bound.
+      const dueAt = new Date(Date.now() - 3 * 3_600_000);
+      dueAt.setMinutes(0, 0, 0);
+      await db.execute(sql`
       insert into user_scripts (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active)
       values (${scriptId}, ${org.orgId}, ${`Scratch hourly ${scriptId.slice(0, 8)}`}, 'scheduled',
               'function main(ctx) { return "catch-up"; }', '0 * * * *', ${dueAt}, 2000, true)
     `);
 
-    await runDueScriptsInline();
+      await runDueScriptsInline();
 
-    const occurrences = await db.execute<{ scheduledFor: string; occurrence: string }>(sql`
+      const occurrences = await db.execute<{ scheduledFor: string; occurrence: string }>(
+        sql`
         select logs->0->>'scheduledFor' as "scheduledFor", logs->0->>'occurrence' as "occurrence"
           from script_runs
          where script_id = ${scriptId} and target_kind = 'scheduled_occurrence'
          order by logs->0->>'scheduledFor'
-      `, "objects");
-    assert.equal(occurrences.length, 4, "one durable row per missed tick");
-    const tick = dueAt.getTime();
-    occurrences.forEach((row, index) => {
-      const expected = new Date(tick + index * 3_600_000);
-      assert.equal(row.scheduledFor, expected.toISOString(), `tick ${index} keeps its own fire time`);
-      assert.equal(row.occurrence, scriptOccurrenceKey(scriptId, expected));
-    });
-    const cursor = (await db.execute<{ nextRunAt: Date | string }>(sql`
+      `,
+        "objects",
+      );
+      assert.equal(occurrences.length, 4, "one durable row per missed tick");
+      const tick = dueAt.getTime();
+      occurrences.forEach((row, index) => {
+        const expected = new Date(tick + index * 3_600_000);
+        assert.equal(
+          row.scheduledFor,
+          expected.toISOString(),
+          `tick ${index} keeps its own fire time`,
+        );
+        assert.equal(row.occurrence, scriptOccurrenceKey(scriptId, expected));
+      });
+      const cursor = (
+        await db.execute<{ nextRunAt: Date | string }>(
+          sql`
         select next_run_at as "nextRunAt" from user_scripts where id = ${scriptId}
-      `, "objects"))[0]!.nextRunAt;
-    assert.equal(
-      new Date(cursor).toISOString(),
-      new Date(tick + 4 * 3_600_000).toISOString(),
-      "the cursor lands on the next future tick",
-    );
-    assert.ok(new Date(cursor).getTime() > Date.now(), "nothing remains due after the pass");
-    assert.equal(await countScheduledRuns(scriptId), 4, "every missed tick executed exactly once");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `,
+          "objects",
+        )
+      )[0]!.nextRunAt;
+      assert.equal(
+        new Date(cursor).toISOString(),
+        new Date(tick + 4 * 3_600_000).toISOString(),
+        "the cursor lands on the next future tick",
+      );
+      assert.ok(new Date(cursor).getTime() > Date.now(), "nothing remains due after the pass");
+      assert.equal(
+        await countScheduledRuns(scriptId),
+        4,
+        "every missed tick executed exactly once",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 // fnd_mt97sc1r_null regression — "durable claim before script execution": the
 // audited scheduler advanced user_scripts.next_run_at in its own committed
@@ -1598,236 +2087,422 @@ test("a multi-hour outage produces one run row per missed tick and advances the 
 // dispatch-ledger row land in ONE statement, execution only ever happens
 // after that commit, so every intermediate crash either loses nothing or
 // duplicates nothing.
-test("the claim commits the cursor advance with its ledger row before any execution and cannot double-claim", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const scriptId = await seedDueScheduledScript(
-      org.orgId,
-      'function main(ctx) { return "recovered"; }',
-    );
-    const dueAt = new Date(Date.now() - 60_000);
-    await db.execute(sql`update user_scripts set next_run_at = ${dueAt} where id = ${scriptId}`);
+test(
+  "the claim commits the cursor advance with its ledger row before any execution and cannot double-claim",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const scriptId = await seedDueScheduledScript(
+        org.orgId,
+        'function main(ctx) { return "recovered"; }',
+      );
+      const dueAt = new Date(Date.now() - 60_000);
+      await db.execute(sql`update user_scripts set next_run_at = ${dueAt} where id = ${scriptId}`);
 
-    const target = (await scanDueScripts()).find((s) => s.id === scriptId);
-    assert.ok(target, "the due scheduled script is scanned");
+      const target = (await scanDueScripts()).find((s) => s.id === scriptId);
+      assert.ok(target, "the due scheduled script is scanned");
 
-    // The winning claim commits atomically: exactly one queued occurrence row
-    // exists together with the advanced cursor — and NO script has executed.
-    const claimed = await claimDueScriptOccurrence(target);
-    assert.ok(claimed, "exactly one scanner wins the claim");
-    assert.equal(claimed.occurrenceKey, scriptOccurrenceKey(scriptId, dueAt));
-    const occ = await loadOccurrence(scriptId);
-    assert.equal(occ.status, "queued");
-    assert.equal(occ.logs[0]?.event, "claimed");
-    assert.equal(occ.logs[0]?.attempt, 1);
-    assert.equal(occ.logs[0]?.scheduledFor, dueAt.toISOString());
-    assert.equal(occ.logs[0]?.occurrence, claimed.occurrenceKey);
-    assert.equal(
-      await countScheduledRuns(scriptId),
-      0,
-      "execution may never precede the durable claim",
-    );
-    const cursor = (await db.execute<{ nextRunAt: Date | string }>(sql`
+      // The winning claim commits atomically: exactly one queued occurrence row
+      // exists together with the advanced cursor — and NO script has executed.
+      const claimed = await claimDueScriptOccurrence(target);
+      assert.ok(claimed, "exactly one scanner wins the claim");
+      assert.equal(claimed.occurrenceKey, scriptOccurrenceKey(scriptId, dueAt));
+      const occ = await loadOccurrence(scriptId);
+      assert.equal(occ.status, "queued");
+      assert.equal(occ.logs[0]?.event, "claimed");
+      assert.equal(occ.logs[0]?.attempt, 1);
+      assert.equal(occ.logs[0]?.scheduledFor, dueAt.toISOString());
+      assert.equal(occ.logs[0]?.occurrence, claimed.occurrenceKey);
+      assert.equal(
+        await countScheduledRuns(scriptId),
+        0,
+        "execution may never precede the durable claim",
+      );
+      const cursor = (
+        await db.execute<{ nextRunAt: Date | string }>(
+          sql`
         select next_run_at as "nextRunAt" from user_scripts where id = ${scriptId}
-      `, "objects"))[0]!.nextRunAt;
-    assert.ok(new Date(cursor).getTime() > dueAt.getTime(), "the cursor advanced with the claim");
+      `,
+          "objects",
+        )
+      )[0]!.nextRunAt;
+      assert.ok(new Date(cursor).getTime() > dueAt.getTime(), "the cursor advanced with the claim");
 
-    // CRASH SIMULATION: this process dies here — dispatch never happens. A
-    // re-scanner replaying the SAME stale due snapshot must lose the CAS and
-    // must not insert a duplicate occurrence or move the cursor again.
-    const again = await claimDueScriptOccurrence(target);
-    assert.equal(again, null, "a losing claimant observes an empty claim");
-    const occurrences = (await db.execute<{ n: number }>(sql`
+      // CRASH SIMULATION: this process dies here — dispatch never happens. A
+      // re-scanner replaying the SAME stale due snapshot must lose the CAS and
+      // must not insert a duplicate occurrence or move the cursor again.
+      const again = await claimDueScriptOccurrence(target);
+      assert.equal(again, null, "a losing claimant observes an empty claim");
+      const occurrences = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from script_runs
          where script_id = ${scriptId} and target_kind = 'scheduled_occurrence'
-      `, "objects"))[0]!.n;
-    assert.equal(occurrences, 1, "no duplicate dispatch-ledger rows");
-    const cursorAfterReclaim = (await db.execute<{ nextRunAt: Date | string }>(sql`
+      `,
+          "objects",
+        )
+      )[0]!.n;
+      assert.equal(occurrences, 1, "no duplicate dispatch-ledger rows");
+      const cursorAfterReclaim = (
+        await db.execute<{ nextRunAt: Date | string }>(
+          sql`
         select next_run_at as "nextRunAt" from user_scripts where id = ${scriptId}
-      `, "objects"))[0]!.nextRunAt;
-    assert.equal(new Date(cursorAfterReclaim).toISOString(), new Date(cursor).toISOString());
+      `,
+          "objects",
+        )
+      )[0]!.nextRunAt;
+      assert.equal(new Date(cursorAfterReclaim).toISOString(), new Date(cursor).toISOString());
 
-    // Recovery re-dispatches the orphaned first attempt exactly once; the run
-    // loses nothing despite the crash window and can never double-fire.
-    await recoverLostScriptOccurrences(new Date(Date.now() + 16 * 60_000));
-    const recovered = await loadOccurrence(scriptId);
-    assert.equal(recovered.status, "ok");
-    assert.ok(recovered.logs.some((e) => e.event === "recover" && e.attempt === 2));
-    assert.ok(recovered.logs.some((e) => e.event === "ran_inline" && e.attempt === 2));
-    assert.equal(await countScheduledRuns(scriptId), 1, "zero loss, exactly one run");
-    const cursorAfterRecovery = (await db.execute<{ nextRunAt: Date | string }>(sql`
+      // Recovery re-dispatches the orphaned first attempt exactly once; the run
+      // loses nothing despite the crash window and can never double-fire.
+      await recoverLostScriptOccurrences(new Date(Date.now() + 16 * 60_000));
+      const recovered = await loadOccurrence(scriptId);
+      assert.equal(recovered.status, "ok");
+      assert.ok(recovered.logs.some((e) => e.event === "recover" && e.attempt === 2));
+      assert.ok(recovered.logs.some((e) => e.event === "ran_inline" && e.attempt === 2));
+      assert.equal(await countScheduledRuns(scriptId), 1, "zero loss, exactly one run");
+      const cursorAfterRecovery = (
+        await db.execute<{ nextRunAt: Date | string }>(
+          sql`
         select next_run_at as "nextRunAt" from user_scripts where id = ${scriptId}
-      `, "objects"))[0]!.nextRunAt;
-    assert.equal(new Date(cursorAfterRecovery).toISOString(), new Date(cursor).toISOString(), "recovery never re-arms the cursor");
+      `,
+          "objects",
+        )
+      )[0]!.nextRunAt;
+      assert.equal(
+        new Date(cursorAfterRecovery).toISOString(),
+        new Date(cursor).toISOString(),
+        "recovery never re-arms the cursor",
+      );
 
-    // Later ticks neither resurrect nor re-fire the closed occurrence.
-    await recoverLostScriptOccurrences(new Date(Date.now() + 40 * 60_000));
-    assert.equal(await loadOccurrence(scriptId).then((o) => o.status), "ok");
-    assert.equal(await countScheduledRuns(scriptId), 1, "no duplicate run");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Later ticks neither resurrect nor re-fire the closed occurrence.
+      await recoverLostScriptOccurrences(new Date(Date.now() + 40 * 60_000));
+      assert.equal(await loadOccurrence(scriptId).then((o) => o.status), "ok");
+      assert.equal(await countScheduledRuns(scriptId), 1, "no duplicate run");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("the scheduler sweep routes allocation_run rows to the allocation processor", { skip: !DB }, async () => {
-  // Production path: the tick calls processDueSchedulerOutbox with the real
-  // runner, never the per-kind processor directly. A malformed allocation
-  // payload must fail LOUDLY with the allocation contract named — proving
-  // the row reached processAllocationRunOutboxRow. If the dispatch branch
-  // regressed, the row would fall through to the escalation path instead
-  // ("approval escalation is missing its gate").
-  const org = await createScratchOrg();
-  const occurrenceKey = `allocation-dispatch-probe-${randomUUID()}`;
-  try {
-    const inserted = (await db.execute<{ id: string }>(sql`
+test(
+  "the scheduler sweep routes allocation_run rows to the allocation processor",
+  { skip: !DB },
+  async () => {
+    // Production path: the tick calls processDueSchedulerOutbox with the real
+    // runner, never the per-kind processor directly. A malformed allocation
+    // payload must fail LOUDLY with the allocation contract named — proving
+    // the row reached processAllocationRunOutboxRow. If the dispatch branch
+    // regressed, the row would fall through to the escalation path instead
+    // ("approval escalation is missing its gate").
+    const org = await createScratchOrg();
+    const occurrenceKey = `allocation-dispatch-probe-${randomUUID()}`;
+    try {
+      const inserted = (
+        await db.execute<{ id: string }>(
+          sql`
       insert into scheduler_outbox (org_id, kind, subject_id, occurrence_key, status, next_attempt_at, payload)
       values (${org.orgId}, 'allocation_run', ${randomUUID()}, ${occurrenceKey}, 'pending',
               ${new Date(Date.now() - 1_000)}, '{}'::jsonb)
       returning id
-    `, "objects"))[0]!;
-    const rowId = inserted.id;
+    `,
+          "objects",
+        )
+      )[0]!;
+      const rowId = inserted.id;
 
-    const result = await processDueSchedulerOutbox(new Date());
-    assert.equal(result.failed, 1, `expected the probe row to fail, got ${JSON.stringify(result)}`);
+      const result = await processDueSchedulerOutbox(new Date());
+      assert.equal(
+        result.failed,
+        1,
+        `expected the probe row to fail, got ${JSON.stringify(result)}`,
+      );
 
-    const failed = (await listFailedSchedulerOutbox()).find((row) => row.id === rowId);
-    assert.ok(failed, "the probe row stays visible as failed");
-    assert.match(
-      failed.error ?? "",
-      /allocation_run payload requires ruleId, versionId, periodId, and bookId/,
-      "the failure names the allocation payload contract, not the escalation fallthrough",
-    );
-  } finally {
-    await db.execute(sql`delete from scheduler_outbox where occurrence_key = ${occurrenceKey}`);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const failed = (await listFailedSchedulerOutbox()).find((row) => row.id === rowId);
+      assert.ok(failed, "the probe row stays visible as failed");
+      assert.match(
+        failed.error ?? "",
+        /allocation_run payload requires ruleId, versionId, periodId, and bookId/,
+        "the failure names the allocation payload contract, not the escalation fallthrough",
+      );
+    } finally {
+      await db.execute(sql`delete from scheduler_outbox where occurrence_key = ${occurrenceKey}`);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("appendOccurrenceEvents reports a missing row instead of dropping logs silently (B3-SCH-01)", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const scriptId = randomUUID();
-    await db.execute(sql`
+test(
+  "appendOccurrenceEvents reports a missing row instead of dropping logs silently (B3-SCH-01)",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const scriptId = randomUUID();
+      await db.execute(sql`
       insert into user_scripts (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active)
       values (${scriptId}, ${org.orgId}, 'Scratch events', 'scheduled',
               'function main(ctx) { return "events"; }', '*/5 * * * *',
               ${new Date(Date.now() + 3_600_000)}, 2000, true)
     `);
-    const occurrenceId = (await db.execute<{ id: string }>(sql`
+      const occurrenceId = (
+        await db.execute<{ id: string }>(
+          sql`
       insert into script_runs (org_id, script_id, target_kind, target_id, status, logs, at)
       values (${org.orgId}, ${scriptId}, 'scheduled_occurrence', null, 'queued', '[]'::jsonb, now())
       returning id
-    `, "objects"))[0]!.id;
-    // A live row appends and reports applied, and the event is readable back.
-    assert.equal(await appendOccurrenceEvents(occurrenceId, org.orgId, [{ event: "enqueued" }]), true);
-    const logs = (await db.execute<{ logs: { event: string }[] }>(sql`
+    `,
+          "objects",
+        )
+      )[0]!.id;
+      // A live row appends and reports applied, and the event is readable back.
+      assert.equal(
+        await appendOccurrenceEvents(occurrenceId, org.orgId, [{ event: "enqueued" }]),
+        true,
+      );
+      const logs = (
+        await db.execute<{ logs: { event: string }[] }>(
+          sql`
       select logs from script_runs where id = ${occurrenceId}
-    `, "objects"))[0]!.logs;
-    assert.deepEqual(logs, [{ event: "enqueued" }]);
-    // A wrong-org row and a deleted row both report not-applied.
-    const other = await createScratchOrg();
-    try {
-      assert.equal(await appendOccurrenceEvents(occurrenceId, other.orgId, [{ event: "enqueued" }]), false);
+    `,
+          "objects",
+        )
+      )[0]!.logs;
+      assert.deepEqual(logs, [{ event: "enqueued" }]);
+      // A wrong-org row and a deleted row both report not-applied.
+      const other = await createScratchOrg();
+      try {
+        assert.equal(
+          await appendOccurrenceEvents(occurrenceId, other.orgId, [{ event: "enqueued" }]),
+          false,
+        );
+      } finally {
+        await dropScratchOrg(other.orgId);
+      }
+      assert.equal(
+        await appendOccurrenceEvents(randomUUID(), org.orgId, [{ event: "enqueued" }]),
+        false,
+      );
     } finally {
-      await dropScratchOrg(other.orgId);
+      await dropScratchOrg(org.orgId);
     }
-    assert.equal(await appendOccurrenceEvents(randomUUID(), org.orgId, [{ event: "enqueued" }]), false);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
-
-test("tenant scan failures remain retryable and system recovery requires live platform authority", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const key = `system-scan-${randomUUID()}`;
-  let rowId: string | undefined;
-  try {
-    const operator = await createScratchUser(org.orgId, "Tenant operator", "scheduler_operator");
-    await grantScratchPermissions(org.orgId, operator, ["admin.setup.manage"]);
-    const platformAdmin = await createScratchUser(org.orgId, "Platform operator", "scheduler_platform");
-    await db.execute(sql`update users set is_super_admin=true where org_id=${org.orgId} and id=${platformAdmin}`);
-    rowId = (await db.execute<{ id: string }>(sql`insert into scheduler_outbox(kind,occurrence_key,status,next_attempt_at,attempt_count)
-      values('dunning',${key},'pending','2000-01-01',${MAX_SCHEDULER_OUTBOX_ATTEMPTS-1}) returning id`, "objects"))[0]!.id;
-    for (let attempt = 0; attempt <= MAX_SCHEDULER_OUTBOX_ATTEMPTS; attempt++) {
-      await db.execute(sql`update scheduler_outbox set next_attempt_at='2000-01-01' where id=${rowId}`);
+test(
+  "tenant scan failures remain retryable and system recovery requires live platform authority",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const key = `system-scan-${randomUUID()}`;
+    let rowId: string | undefined;
+    try {
+      const operator = await createScratchUser(org.orgId, "Tenant operator", "scheduler_operator");
+      await grantScratchPermissions(org.orgId, operator, ["admin.setup.manage"]);
+      const platformAdmin = await createScratchUser(
+        org.orgId,
+        "Platform operator",
+        "scheduler_platform",
+      );
+      await db.execute(
+        sql`update users set is_super_admin=true where org_id=${org.orgId} and id=${platformAdmin}`,
+      );
+      rowId = (
+        await db.execute<{ id: string }>(
+          sql`insert into scheduler_outbox(kind,occurrence_key,status,next_attempt_at,attempt_count)
+      values('dunning',${key},'pending','2000-01-01',${MAX_SCHEDULER_OUTBOX_ATTEMPTS - 1}) returning id`,
+          "objects",
+        )
+      )[0]!.id;
+      for (let attempt = 0; attempt <= MAX_SCHEDULER_OUTBOX_ATTEMPTS; attempt++) {
+        await db.execute(
+          sql`update scheduler_outbox set next_attempt_at='2000-01-01' where id=${rowId}`,
+        );
+        await processDueSchedulerOutbox(new Date(), 200, async (row) => {
+          if (row.id === rowId)
+            throw new SchedulerScanOrganizationError(
+              "One organization must configure its billing policy",
+            );
+        });
+        const retained: { attempt_count: number; terminal_failed_at: Date | null; error: string } =
+          (
+            await db.execute<{
+              attempt_count: number;
+              terminal_failed_at: Date | null;
+              error: string;
+            }>(
+              sql`
+        select attempt_count,terminal_failed_at,error from scheduler_outbox where id=${rowId}`,
+              "objects",
+            )
+          )[0]!;
+        assert.equal(retained.attempt_count, 0);
+        assert.equal(retained.terminal_failed_at, null);
+        assert.match(retained.error, /configure its billing policy/);
+      }
+      assert.deepEqual(await readTerminalEvidence(rowId), []);
+      await db.execute(
+        sql`update scheduler_outbox set next_attempt_at='2000-01-01',attempt_count=${MAX_SCHEDULER_OUTBOX_ATTEMPTS - 1} where id=${rowId}`,
+      );
       await processDueSchedulerOutbox(new Date(), 200, async (row) => {
-        if (row.id === rowId) throw new SchedulerScanOrganizationError("One organization must configure its billing policy");
+        if (row.id === rowId) throw new Error("Scheduler infrastructure is unavailable");
       });
-      const retained: {attempt_count:number;terminal_failed_at:Date|null;error:string} = (await db.execute<{attempt_count:number;terminal_failed_at:Date|null;error:string}>(sql`
-        select attempt_count,terminal_failed_at,error from scheduler_outbox where id=${rowId}`, "objects"))[0]!;
-      assert.equal(retained.attempt_count, 0);
-      assert.equal(retained.terminal_failed_at, null);
-      assert.match(retained.error, /configure its billing policy/);
-    }
-    assert.deepEqual(await readTerminalEvidence(rowId), []);
-    await db.execute(sql`update scheduler_outbox set next_attempt_at='2000-01-01',attempt_count=${MAX_SCHEDULER_OUTBOX_ATTEMPTS-1} where id=${rowId}`);
-    await processDueSchedulerOutbox(new Date(), 200, async (row) => {
-      if (row.id === rowId) throw new Error("Scheduler infrastructure is unavailable");
-    });
-    assert.equal((await readTerminalEvidence(rowId)).length, 1);
-    await withOrgTransaction(org.orgId, async () => {
-      await db.execute(sql`select set_config('openbooks.scheduler_outbox_replay_org','__system__',true)`);
-      const allowed = (await db.execute<{allowed:boolean}>(sql`
-        select public.openbooks_scheduler_outbox_replay_allowed(null) as allowed`, "objects"))[0]!;
-      assert.equal(allowed.allowed, false, "a tenant connection cannot authorize system replay by setting a scope pin");
-    });
-    await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:operator,reason:"Infrastructure has recovered and delivery can resume"}), /platform administrator/);
-    assert.equal((await readTerminalEvidence(rowId)).length, 1);
-    await withOrgTransaction(org.orgId, async () => {
-      await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId!,actorId:platformAdmin,
-        reason:"Infrastructure has recovered and delivery can resume"}), /outside the current transaction/);
-    });
-    assert.equal((await readTerminalEvidence(rowId)).length, 1);
-    await replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:platformAdmin,reason:"Infrastructure has recovered and delivery can resume"});
-    assert.equal((await readTerminalEvidence(rowId)).length, 2);
-    const replayed = (await db.execute<{status:string;attempt_count:number;terminal_failed_at:Date|null}>(sql`
-      select status,attempt_count,terminal_failed_at from scheduler_outbox where id=${rowId}`, "objects"))[0]!;
-    assert.deepEqual(replayed, {status:"pending",attempt_count:0,terminal_failed_at:null});
-    const originalAudit = await db.execute(sql`select to_jsonb(a) as evidence from scheduler_outbox_terminal_audit a
-      where outbox_row_id=${rowId} and failure_generation=0 order by id`, "objects");
-    for (const generation of [1,2]) {
-      await db.execute(sql`update scheduler_outbox set next_attempt_at='2000-01-01',attempt_count=${MAX_SCHEDULER_OUTBOX_ATTEMPTS-1} where id=${rowId}`);
-      await processDueSchedulerOutbox(new Date(), 200, async row => {
-        if (row.id === rowId) throw new Error("A later infrastructure outage requires another controlled recovery");
+      assert.equal((await readTerminalEvidence(rowId)).length, 1);
+      await withOrgTransaction(org.orgId, async () => {
+        await db.execute(
+          sql`select set_config('openbooks.scheduler_outbox_replay_org','__system__',true)`,
+        );
+        const allowed = (
+          await db.execute<{ allowed: boolean }>(
+            sql`
+        select public.openbooks_scheduler_outbox_replay_allowed(null) as allowed`,
+            "objects",
+          )
+        )[0]!;
+        assert.equal(
+          allowed.allowed,
+          false,
+          "a tenant connection cannot authorize system replay by setting a scope pin",
+        );
       });
-      assert.equal((await readTerminalEvidence(rowId)).length, generation*2+1);
-      await assertRejectsWithCause(db.execute(sql`update scheduler_outbox set status='pending',attempt_count=0
-        where id=${rowId}`), /terminal scheduler delivery requires an authorized replay/);
-      await assertRejectsWithCause(db.transaction(async tx => {
-        await tx.execute(sql`select set_config('app.bypass_rls','on',true),set_config('openbooks.scheduler_outbox_replay_org','__system__',true)`);
-        await tx.execute(sql`update scheduler_outbox set status='pending',attempt_count=0,
+      await assert.rejects(
+        replayTerminalSchedulerOutbox({
+          orgId: org.orgId,
+          id: rowId,
+          actorId: operator,
+          reason: "Infrastructure has recovered and delivery can resume",
+        }),
+        /platform administrator/,
+      );
+      assert.equal((await readTerminalEvidence(rowId)).length, 1);
+      await withOrgTransaction(org.orgId, async () => {
+        await assert.rejects(
+          replayTerminalSchedulerOutbox({
+            orgId: org.orgId,
+            id: rowId!,
+            actorId: platformAdmin,
+            reason: "Infrastructure has recovered and delivery can resume",
+          }),
+          /outside the current transaction/,
+        );
+      });
+      assert.equal((await readTerminalEvidence(rowId)).length, 1);
+      await replayTerminalSchedulerOutbox({
+        orgId: org.orgId,
+        id: rowId,
+        actorId: platformAdmin,
+        reason: "Infrastructure has recovered and delivery can resume",
+      });
+      assert.equal((await readTerminalEvidence(rowId)).length, 2);
+      const replayed = (
+        await db.execute<{
+          status: string;
+          attempt_count: number;
+          terminal_failed_at: Date | null;
+        }>(
+          sql`
+      select status,attempt_count,terminal_failed_at from scheduler_outbox where id=${rowId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.deepEqual(replayed, { status: "pending", attempt_count: 0, terminal_failed_at: null });
+      const originalAudit = await db.execute(
+        sql`select to_jsonb(a) as evidence from scheduler_outbox_terminal_audit a
+      where outbox_row_id=${rowId} and failure_generation=0 order by id`,
+        "objects",
+      );
+      for (const generation of [1, 2]) {
+        await db.execute(
+          sql`update scheduler_outbox set next_attempt_at='2000-01-01',attempt_count=${MAX_SCHEDULER_OUTBOX_ATTEMPTS - 1} where id=${rowId}`,
+        );
+        await processDueSchedulerOutbox(new Date(), 200, async (row) => {
+          if (row.id === rowId)
+            throw new Error("A later infrastructure outage requires another controlled recovery");
+        });
+        assert.equal((await readTerminalEvidence(rowId)).length, generation * 2 + 1);
+        await assertRejectsWithCause(
+          db.execute(sql`update scheduler_outbox set status='pending',attempt_count=0
+        where id=${rowId}`),
+          /terminal scheduler delivery requires an authorized replay/,
+        );
+        await assertRejectsWithCause(
+          db.transaction(async (tx) => {
+            await tx.execute(
+              sql`select set_config('app.bypass_rls','on',true),set_config('openbooks.scheduler_outbox_replay_org','__system__',true)`,
+            );
+            await tx.execute(sql`update scheduler_outbox set status='pending',attempt_count=0,
           terminal_failed_at=null,terminal_failed_by=null where id=${rowId}`);
-      }), /replay_authorized audit evidence first/);
-      const replay = () => replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId!,actorId:platformAdmin,
-        reason:"The infrastructure outage is resolved and monitored delivery may resume"});
-      const attempts = await Promise.allSettled([replay(),replay()]);
-      assert.equal(attempts.filter(result => result.status === "fulfilled").length, 1,
-        "concurrent recovery operators authorize only one replay for this failure");
-      const refused = attempts.find(result => result.status === "rejected");
-      assert.ok(refused && refused.status === "rejected");
-      assert.match(refused.reason.message, /only terminal-failed/);
-      assert.equal((await readTerminalEvidence(rowId)).length, (generation+1)*2);
-    }
-    assert.deepEqual(await db.execute(sql`select to_jsonb(a) as evidence from scheduler_outbox_terminal_audit a
-      where outbox_row_id=${rowId} and failure_generation=0 order by id`, "objects"), originalAudit,
-      "later failures and replays preserve every original audit field");
-    const generations = await db.execute<{failure_generation:number;events:number}>(sql`
+          }),
+          /replay_authorized audit evidence first/,
+        );
+        const replay = () =>
+          replayTerminalSchedulerOutbox({
+            orgId: org.orgId,
+            id: rowId!,
+            actorId: platformAdmin,
+            reason: "The infrastructure outage is resolved and monitored delivery may resume",
+          });
+        const attempts = await Promise.allSettled([replay(), replay()]);
+        assert.equal(
+          attempts.filter((result) => result.status === "fulfilled").length,
+          1,
+          "concurrent recovery operators authorize only one replay for this failure",
+        );
+        const refused = attempts.find((result) => result.status === "rejected");
+        assert.ok(refused && refused.status === "rejected");
+        assert.match(refused.reason.message, /only terminal-failed/);
+        assert.equal((await readTerminalEvidence(rowId)).length, (generation + 1) * 2);
+      }
+      assert.deepEqual(
+        await db.execute(
+          sql`select to_jsonb(a) as evidence from scheduler_outbox_terminal_audit a
+      where outbox_row_id=${rowId} and failure_generation=0 order by id`,
+          "objects",
+        ),
+        originalAudit,
+        "later failures and replays preserve every original audit field",
+      );
+      const generations = await db.execute<{ failure_generation: number; events: number }>(
+        sql`
       select failure_generation,count(*)::int as events from scheduler_outbox_terminal_audit
-       where outbox_row_id=${rowId} group by failure_generation order by failure_generation`, "objects");
-    assert.deepEqual(generations,[{failure_generation:0,events:2},{failure_generation:1,events:2},{failure_generation:2,events:2}]);
-    await db.execute(sql`update users set is_active=false where org_id=${org.orgId} and id=${platformAdmin}`);
-    await assert.rejects(replayTerminalSchedulerOutbox({orgId:org.orgId,id:rowId,actorId:platformAdmin,reason:"Infrastructure has recovered and delivery can resume"}), /not an active user/);
-  } finally {
-    if (rowId) {
-      await assertDedicatedFixtureDatabase();
-      await db.transaction(async tx => {
-        await tx.execute(sql`alter table scheduler_outbox_terminal_audit disable trigger scheduler_outbox_terminal_audit_append_only`);
-        await tx.execute(sql`delete from scheduler_outbox_terminal_audit where outbox_row_id=${rowId}`);
-        await tx.execute(sql`alter table scheduler_outbox_terminal_audit enable trigger scheduler_outbox_terminal_audit_append_only`);
-        await tx.execute(sql`delete from scheduler_outbox where id=${rowId}`);
-      });
+       where outbox_row_id=${rowId} group by failure_generation order by failure_generation`,
+        "objects",
+      );
+      assert.deepEqual(generations, [
+        { failure_generation: 0, events: 2 },
+        { failure_generation: 1, events: 2 },
+        { failure_generation: 2, events: 2 },
+      ]);
+      await db.execute(
+        sql`update users set is_active=false where org_id=${org.orgId} and id=${platformAdmin}`,
+      );
+      await assert.rejects(
+        replayTerminalSchedulerOutbox({
+          orgId: org.orgId,
+          id: rowId,
+          actorId: platformAdmin,
+          reason: "Infrastructure has recovered and delivery can resume",
+        }),
+        /not an active user/,
+      );
+    } finally {
+      if (rowId) {
+        await assertDedicatedFixtureDatabase();
+        await db.transaction(async (tx) => {
+          await tx.execute(
+            sql`alter table scheduler_outbox_terminal_audit disable trigger scheduler_outbox_terminal_audit_append_only`,
+          );
+          await tx.execute(
+            sql`delete from scheduler_outbox_terminal_audit where outbox_row_id=${rowId}`,
+          );
+          await tx.execute(
+            sql`alter table scheduler_outbox_terminal_audit enable trigger scheduler_outbox_terminal_audit_append_only`,
+          );
+          await tx.execute(sql`delete from scheduler_outbox where id=${rowId}`);
+        });
+      }
+      await dropScratchOrg(org.orgId);
     }
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);

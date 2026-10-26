@@ -4,7 +4,12 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "../platform/db.ts";
 import { claimDueScriptOccurrence } from "../scheduling/scheduler.ts";
-import { ScriptActorError, resolveScriptUser, runBulkScript, runScheduledScript } from "./scripting.ts";
+import {
+  ScriptActorError,
+  resolveScriptUser,
+  runBulkScript,
+  runScheduledScript,
+} from "./scripting.ts";
 import { processScriptJobData } from "../worker/scripts-worker.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { SYSTEM_AUTOMATION_ACTOR_ID } from "../organization/actor-permissions.ts";
@@ -85,35 +90,51 @@ async function seedSaver(org: ScratchOrg): Promise<string> {
 async function latestRun(
   scriptId: string,
 ): Promise<{ createdBy: string | null; status: string; errorMessage: string | null }> {
-  const r = await db.execute<{ createdBy: string | null; status: string; errorMessage: string | null }>(sql`
+  const r = await db.execute<{
+    createdBy: string | null;
+    status: string;
+    errorMessage: string | null;
+  }>(
+    sql`
     select created_by as "createdBy", status, error_message as "errorMessage"
       from script_runs
      where script_id = ${scriptId}
      order by at desc, id desc
-     limit 1`, "objects");
+     limit 1`,
+    "objects",
+  );
   return r[0]!;
 }
 
 async function countRuns(scriptId: string): Promise<number> {
-  const r = await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from script_runs where script_id = ${scriptId}`, "objects");
+  const r = await db.execute<{ n: string }>(
+    sql`
+    select count(*)::text as n from script_runs where script_id = ${scriptId}`,
+    "objects",
+  );
   return Number(r[0]!.n);
 }
 
 async function countDocuments(orgId: string): Promise<number> {
-  const r = await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from documents where org_id = ${orgId}`, "objects");
+  const r = await db.execute<{ n: string }>(
+    sql`
+    select count(*)::text as n from documents where org_id = ${orgId}`,
+    "objects",
+  );
   return Number(r[0]!.n);
 }
 
 type JournalRow = { createdBy: string | null; custom: Record<string, unknown> };
 
 async function journalRow(orgId: string, documentNumber: string): Promise<JournalRow> {
-  const r = await db.execute<{ createdBy: string | null; custom: Record<string, unknown> }>(sql`
+  const r = await db.execute<{ createdBy: string | null; custom: Record<string, unknown> }>(
+    sql`
     select created_by as "createdBy", custom
       from documents
      where org_id = ${orgId} and kind = 'journal'
-       and document_number = ${documentNumber}`, "objects");
+       and document_number = ${documentNumber}`,
+    "objects",
+  );
   return r[0]!;
 }
 
@@ -146,9 +167,7 @@ const JOURNAL_POST_SOURCE = `function main(ctx) {
 test("manual scheduled Run Now persists its authenticated actor", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const actorId = await withBypass(() =>
-      createScratchUser(org.orgId, "Run Now admin", "admin"),
-    );
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Run Now admin", "admin"));
     await enableScriptsFeature(org.orgId);
 
     // The exact call web/app/api/admin/scripts/[id]/run/route.ts makes today.
@@ -168,43 +187,51 @@ test("manual scheduled Run Now persists its authenticated actor", { skip: !DB },
   }
 });
 
-test("queued bulk Run Now keeps its actor through job data into runs and journals", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() =>
-      createScratchUser(org.orgId, "Queued bulk admin", "admin"),
-    );
-    await grantGlPost(org.orgId, "admin");
-    await enableScriptsFeature(org.orgId);
+test(
+  "queued bulk Run Now keeps its actor through job data into runs and journals",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Queued bulk admin", "admin"),
+      );
+      await grantGlPost(org.orgId, "admin");
+      await enableScriptsFeature(org.orgId);
 
-    // Exactly what scripts-worker consumes for a queued interactive bulk job.
-    const probeId = await seedScript(org, "bulk", PROBE_SOURCE);
-    const result = await processScriptJobData({
-      orgId: org.orgId,
-      scriptId: probeId,
-      kind: "bulk",
-      actorId,
-    });
-    assert.equal(result.status, "ok", result.abortReason ?? JSON.stringify(result.logs));
-    assert.equal((await latestRun(probeId)).createdBy, actorId);
+      // Exactly what scripts-worker consumes for a queued interactive bulk job.
+      const probeId = await seedScript(org, "bulk", PROBE_SOURCE);
+      const result = await processScriptJobData({
+        orgId: org.orgId,
+        scriptId: probeId,
+        kind: "bulk",
+        actorId,
+      });
+      assert.equal(result.status, "ok", result.abortReason ?? JSON.stringify(result.logs));
+      assert.equal((await latestRun(probeId)).createdBy, actorId);
 
-    const journalId = await seedScript(org, "bulk", JOURNAL_DRAFT_SOURCE);
-    const journalOutcome = await processScriptJobData({
-      orgId: org.orgId,
-      scriptId: journalId,
-      kind: "bulk",
-      actorId,
-    });
-    assert.equal(journalOutcome.status, "ok", journalOutcome.abortReason ?? JSON.stringify(journalOutcome.logs));
-    const returned = journalOutcome.returned as { documentNumber: string };
-    const doc = await journalRow(org.orgId, returned.documentNumber);
-    assert.equal(doc.createdBy, actorId);
-    // Interactive provenance carries NO system marker — created_by says who.
-    assert.deepEqual(doc.custom, {});
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      const journalId = await seedScript(org, "bulk", JOURNAL_DRAFT_SOURCE);
+      const journalOutcome = await processScriptJobData({
+        orgId: org.orgId,
+        scriptId: journalId,
+        kind: "bulk",
+        actorId,
+      });
+      assert.equal(
+        journalOutcome.status,
+        "ok",
+        journalOutcome.abortReason ?? JSON.stringify(journalOutcome.logs),
+      );
+      const returned = journalOutcome.returned as { documentNumber: string };
+      const doc = await journalRow(org.orgId, returned.documentNumber);
+      assert.equal(doc.createdBy, actorId);
+      // Interactive provenance carries NO system marker — created_by says who.
+      assert.deepEqual(doc.custom, {});
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("inline bulk fallback attributes the same authenticated actor", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
@@ -224,7 +251,11 @@ test("inline bulk fallback attributes the same authenticated actor", { skip: !DB
 
     const journalId = await seedScript(org, "bulk", JOURNAL_DRAFT_SOURCE);
     const journalOutcome = await runBulkScript(journalId, org.orgId, { actorId });
-    assert.equal(journalOutcome.status, "ok", journalOutcome.abortReason ?? JSON.stringify(journalOutcome.logs));
+    assert.equal(
+      journalOutcome.status,
+      "ok",
+      journalOutcome.abortReason ?? JSON.stringify(journalOutcome.logs),
+    );
     const returned = journalOutcome.returned as { documentNumber: string };
     const doc = await journalRow(org.orgId, returned.documentNumber);
     assert.equal(doc.createdBy, actorId);
@@ -234,139 +265,156 @@ test("inline bulk fallback attributes the same authenticated actor", { skip: !DB
   }
 });
 
-test("true cron ticks stay explicitly system-attributed with durable scheduler source", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    await enableScriptsFeature(org.orgId);
-    const duePast = new Date(Date.now() - 60_000);
-    const scriptId = await seedScript(org, "scheduled", JOURNAL_DRAFT_SOURCE, {
-      cron: "* * * * *",
-      nextRunAt: duePast,
-      runAsUserId: await seedSaver(org),
-    });
-
-    // No options object is exactly how engine/src/scheduling/scheduler.ts invokes the
-    // runner for a real tick — both for its inline dispatch and in the queue
-    // payload it enqueues (no actorId field at all).
-    const outcome = await runScheduledScript(scriptId, org.orgId);
-    assert.equal(outcome.status, "ok", outcome.abortReason ?? JSON.stringify(outcome.logs));
-
-    // ctx.user was never fabricated for automation: the probe's journal went
-    // to the ledger under explicit system provenance — created_by NULL plus
-    // the durable markers — instead of a guessed author.
-    const returned = outcome.returned as { documentNumber: string };
-    const doc = await journalRow(org.orgId, returned.documentNumber);
-    assert.equal(doc.createdBy, null);
-    assert.equal(doc.custom.actorKind, "system");
-    assert.equal(doc.custom.actorReason, "sandboxed script");
-
-    const run = await latestRun(scriptId);
-    assert.equal(run.createdBy, null);
-
-    const occ = await withBypass(() =>
-      claimDueScriptOccurrence({
-        id: scriptId,
-        orgId: org.orgId,
+test(
+  "true cron ticks stay explicitly system-attributed with durable scheduler source",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await enableScriptsFeature(org.orgId);
+      const duePast = new Date(Date.now() - 60_000);
+      const scriptId = await seedScript(org, "scheduled", JOURNAL_DRAFT_SOURCE, {
         cron: "* * * * *",
         nextRunAt: duePast,
-      }),
-    );
-    assert.ok(occ, "the tick must win its one-occurrence claim");
-    const ledger = await db.execute<{
-      createdBy: string | null;
-      logs: { event: string; occurrence?: string }[];
-    }>(sql`
+        runAsUserId: await seedSaver(org),
+      });
+
+      // No options object is exactly how engine/src/scheduling/scheduler.ts invokes the
+      // runner for a real tick — both for its inline dispatch and in the queue
+      // payload it enqueues (no actorId field at all).
+      const outcome = await runScheduledScript(scriptId, org.orgId);
+      assert.equal(outcome.status, "ok", outcome.abortReason ?? JSON.stringify(outcome.logs));
+
+      // ctx.user was never fabricated for automation: the probe's journal went
+      // to the ledger under explicit system provenance — created_by NULL plus
+      // the durable markers — instead of a guessed author.
+      const returned = outcome.returned as { documentNumber: string };
+      const doc = await journalRow(org.orgId, returned.documentNumber);
+      assert.equal(doc.createdBy, null);
+      assert.equal(doc.custom.actorKind, "system");
+      assert.equal(doc.custom.actorReason, "sandboxed script");
+
+      const run = await latestRun(scriptId);
+      assert.equal(run.createdBy, null);
+
+      const occ = await withBypass(() =>
+        claimDueScriptOccurrence({
+          id: scriptId,
+          orgId: org.orgId,
+          cron: "* * * * *",
+          nextRunAt: duePast,
+        }),
+      );
+      assert.ok(occ, "the tick must win its one-occurrence claim");
+      const ledger = await db.execute<{
+        createdBy: string | null;
+        logs: { event: string; occurrence?: string }[];
+      }>(
+        sql`
       select created_by as "createdBy", logs
         from script_runs
-       where id = ${occ.id}`, "objects");
-    assert.equal(ledger[0]!.createdBy, null);
-    const claimed = ledger[0]!.logs.find((e) => e.event === "claimed");
-    assert.ok(claimed, "the occurrence ledger records its durable scheduler source");
-    assert.match(String(claimed!.occurrence), new RegExp(`^sched\\|${scriptId}\\|`));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where id = ${occ.id}`,
+        "objects",
+      );
+      assert.equal(ledger[0]!.createdBy, null);
+      const claimed = ledger[0]!.logs.find((e) => e.event === "claimed");
+      assert.ok(claimed, "the occurrence ledger records its durable scheduler source");
+      assert.match(String(claimed!.occurrence), new RegExp(`^sched\\|${scriptId}\\|`));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("system-attributed cron journals carry provenance markers instead of an actor", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    await enableScriptsFeature(org.orgId);
-    const scriptId = await seedScript(org, "bulk", JOURNAL_DRAFT_SOURCE, { runAsUserId: await seedSaver(org) });
+test(
+  "system-attributed cron journals carry provenance markers instead of an actor",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await enableScriptsFeature(org.orgId);
+      const scriptId = await seedScript(org, "bulk", JOURNAL_DRAFT_SOURCE, {
+        runAsUserId: await seedSaver(org),
+      });
 
-    // A worker pickup whose payload has no actorId (cron-shaped) writes a
-    // system journal: created_by NULL, durable custom markers, no actor guess.
-    const result = await processScriptJobData({
-      orgId: org.orgId,
-      scriptId,
-      kind: "bulk",
-    });
-    assert.equal(result.status, "ok", result.abortReason ?? JSON.stringify(result.logs));
-    const returned = result.returned as { documentNumber?: string };
-    assert.ok(returned.documentNumber, "the probe records which journal it made");
-    const doc = await journalRow(org.orgId, returned.documentNumber!);
-    assert.equal(doc.createdBy, null);
-    assert.equal(doc.custom.actorKind, "system");
-    assert.equal(doc.custom.actorReason, "sandboxed script");
-    assert.equal(await countRuns(scriptId), 1);
-    assert.equal((await latestRun(scriptId)).createdBy, null);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // A worker pickup whose payload has no actorId (cron-shaped) writes a
+      // system journal: created_by NULL, durable custom markers, no actor guess.
+      const result = await processScriptJobData({
+        orgId: org.orgId,
+        scriptId,
+        kind: "bulk",
+      });
+      assert.equal(result.status, "ok", result.abortReason ?? JSON.stringify(result.logs));
+      const returned = result.returned as { documentNumber?: string };
+      assert.ok(returned.documentNumber, "the probe records which journal it made");
+      const doc = await journalRow(org.orgId, returned.documentNumber!);
+      assert.equal(doc.createdBy, null);
+      assert.equal(doc.custom.actorKind, "system");
+      assert.equal(doc.custom.actorReason, "sandboxed script");
+      assert.equal(await countRuns(scriptId), 1);
+      assert.equal((await latestRun(scriptId)).createdBy, null);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("an actor from another domain or deactivation is refused before anything is written", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() =>
-      createScratchUser(org.orgId, "Refused actor admin", "admin"),
-    );
-    await enableScriptsFeature(org.orgId);
+test(
+  "an actor from another domain or deactivation is refused before anything is written",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Refused actor admin", "admin"),
+      );
+      await enableScriptsFeature(org.orgId);
 
-    // Foreign-domain UUIDs can be perfectly valid identifiers — here the
-    // script's own id, exactly like a subscription/template row would be.
-    // The users-table round-trip makes them impossible to stamp as actors.
-    const probeId = await seedScript(org, "bulk", JOURNAL_DRAFT_SOURCE);
-    await assert.rejects(
-      runBulkScript(probeId, org.orgId, { actorId: probeId }),
-      ScriptActorError,
-    );
+      // Foreign-domain UUIDs can be perfectly valid identifiers — here the
+      // script's own id, exactly like a subscription/template row would be.
+      // The users-table round-trip makes them impossible to stamp as actors.
+      const probeId = await seedScript(org, "bulk", JOURNAL_DRAFT_SOURCE);
+      await assert.rejects(
+        runBulkScript(probeId, org.orgId, { actorId: probeId }),
+        ScriptActorError,
+      );
 
-    // Same refusal for an id that exists nowhere at all.
-    await assert.rejects(
-      runBulkScript(probeId, org.orgId, { actorId: randomUUID() }),
-      ScriptActorError,
-    );
+      // Same refusal for an id that exists nowhere at all.
+      await assert.rejects(
+        runBulkScript(probeId, org.orgId, { actorId: randomUUID() }),
+        ScriptActorError,
+      );
 
-    // A real actor who was deactivated between enqueue and pickup fails
-    // closed too — the run is refused rather than silently downgraded to
-    // unattributed system execution.
-    await db.execute(sql`update users set is_active = false where id = ${actorId}`);
-    await assert.rejects(
-      runBulkScript(probeId, org.orgId, { actorId }),
-      ScriptActorError,
-    );
+      // A real actor who was deactivated between enqueue and pickup fails
+      // closed too — the run is refused rather than silently downgraded to
+      // unattributed system execution.
+      await db.execute(sql`update users set is_active = false where id = ${actorId}`);
+      await assert.rejects(runBulkScript(probeId, org.orgId, { actorId }), ScriptActorError);
 
-    assert.equal(await countRuns(probeId), 0, "no run evidence forged for refused actors");
-    assert.equal(await countDocuments(org.orgId), 0, "no journals created past the refusal");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      assert.equal(await countRuns(probeId), 0, "no run evidence forged for refused actors");
+      assert.equal(await countDocuments(org.orgId), 0, "no journals created past the refusal");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a forced posting failure rolls back atomically and the failed run stays attributed", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() =>
-      createScratchUser(org.orgId, "Failing poster", "poster"),
-    );
-    await grantGlPost(org.orgId, "poster");
-    await enableScriptsFeature(org.orgId);
-    const scriptId = await seedScript(org, "bulk", JOURNAL_POST_SOURCE);
+test(
+  "a forced posting failure rolls back atomically and the failed run stays attributed",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Failing poster", "poster"),
+      );
+      await grantGlPost(org.orgId, "poster");
+      await enableScriptsFeature(org.orgId);
+      const scriptId = await seedScript(org, "bulk", JOURNAL_POST_SOURCE);
 
-    // Close the GL period so postDocument refuses AFTER the draft rows were
-    // inserted inside the same transaction — the exact orphan-draft trap.
-    await db.execute(sql`
+      // Close the GL period so postDocument refuses AFTER the draft rows were
+      // inserted inside the same transaction — the exact orphan-draft trap.
+      await db.execute(sql`
       insert into period_locks
         (org_id, period_id, book_id, subsidiary_id, module, state,
          locked_at, locked_by, reason, created_by, updated_by)
@@ -375,36 +423,60 @@ test("a forced posting failure rolls back atomically and the failed run stays at
         'gl', 'closed', now(), ${actorId}, 'Attribution rollback probe',
         ${actorId}, ${actorId})`);
 
-    const outcome = await runBulkScript(scriptId, org.orgId, { actorId });
+      const outcome = await runBulkScript(scriptId, org.orgId, { actorId });
 
-    assert.equal(outcome.status, "error");
-    assert.match(outcome.abortReason ?? "", /journal\.create failed:/i);
-    // The failing run is still attributed, terminal evidence.
-    const run = await latestRun(scriptId);
-    assert.equal(run.createdBy, actorId);
-    assert.equal(run.status, "error");
-    // ...and nothing was stranded: zero documents, zero lines.
-    assert.equal(await countDocuments(org.orgId), 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      assert.equal(outcome.status, "error");
+      assert.match(outcome.abortReason ?? "", /journal\.create failed:/i);
+      // The failing run is still attributed, terminal evidence.
+      const run = await latestRun(scriptId);
+      assert.equal(run.createdBy, actorId);
+      assert.equal(run.status, "error");
+      // ...and nothing was stranded: zero documents, zero lines.
+      assert.equal(await countDocuments(org.orgId), 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-
-test("script human identity supports platform actors and never downgrades unknown humans to run-as", { skip: !DB }, async () => {
-  const home = await withBypass(() => createScratchOrg());
-  const target = await withBypass(() => createScratchOrg());
-  try {
-    const platform = await withBypass(() => createScratchUser(home.orgId, "Platform script actor", "admin"));
-    await withBypass(() => db.execute(sql`update users set is_super_admin=true where id=${platform}`));
-    await withOrg(target.orgId, async () => {
-      assert.equal((await resolveScriptUser(target.orgId, platform))?.id, platform);
-      await assert.rejects(resolveScriptUser(target.orgId, randomUUID(), { required: false }), ScriptActorError);
-      assert.equal(await resolveScriptUser(target.orgId, null, { required: false }), null);
-      // The engine's own automation principal is not a user: scripts run under their recorded unattended identity.
-      assert.equal(await resolveScriptUser(target.orgId, SYSTEM_AUTOMATION_ACTOR_ID, { required: false }), null);
-    });
-    await withBypass(() => db.execute(sql`update users set is_super_admin=false where id=${platform}`));
-    await withOrg(target.orgId, () => assert.rejects(resolveScriptUser(target.orgId, platform, { required: false }), ScriptActorError));
-  } finally { await withBypass(() => dropScratchOrg(target.orgId)); await withBypass(() => dropScratchOrg(home.orgId)); }
-});
+test(
+  "script human identity supports platform actors and never downgrades unknown humans to run-as",
+  { skip: !DB },
+  async () => {
+    const home = await withBypass(() => createScratchOrg());
+    const target = await withBypass(() => createScratchOrg());
+    try {
+      const platform = await withBypass(() =>
+        createScratchUser(home.orgId, "Platform script actor", "admin"),
+      );
+      await withBypass(() =>
+        db.execute(sql`update users set is_super_admin=true where id=${platform}`),
+      );
+      await withOrg(target.orgId, async () => {
+        assert.equal((await resolveScriptUser(target.orgId, platform))?.id, platform);
+        await assert.rejects(
+          resolveScriptUser(target.orgId, randomUUID(), { required: false }),
+          ScriptActorError,
+        );
+        assert.equal(await resolveScriptUser(target.orgId, null, { required: false }), null);
+        // The engine's own automation principal is not a user: scripts run under their recorded unattended identity.
+        assert.equal(
+          await resolveScriptUser(target.orgId, SYSTEM_AUTOMATION_ACTOR_ID, { required: false }),
+          null,
+        );
+      });
+      await withBypass(() =>
+        db.execute(sql`update users set is_super_admin=false where id=${platform}`),
+      );
+      await withOrg(target.orgId, () =>
+        assert.rejects(
+          resolveScriptUser(target.orgId, platform, { required: false }),
+          ScriptActorError,
+        ),
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(target.orgId));
+      await withBypass(() => dropScratchOrg(home.orgId));
+    }
+  },
+);

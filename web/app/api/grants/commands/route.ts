@@ -1,7 +1,7 @@
-import { defineRoute } from '@/lib/api/route'
-import { uuidId } from '../../../../lib/api/json'
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
+import { defineRoute } from "@/lib/api/route";
+import { uuidId } from "../../../../lib/api/json";
+import { NextResponse } from "next/server";
+import { z } from "zod";
 import {
   activateGrant,
   closeGrant,
@@ -12,13 +12,17 @@ import {
   satisfyGrantBarrier,
   submitGrantDrawdown,
   submitGrantReport,
-} from '@openbooks/engine/nonprofit/grants'
+} from "@openbooks/engine/nonprofit/grants";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
-const sponsorKind = z.enum(['government', 'foundation', 'corporate'])
-const determination = z.enum(['contribution_unconditional', 'contribution_conditional', 'exchange'])
-const drawdownKind = z.enum(['advance', 'reimbursement', 'final'])
+const sponsorKind = z.enum(["government", "foundation", "corporate"]);
+const determination = z.enum([
+  "contribution_unconditional",
+  "contribution_conditional",
+  "exchange",
+]);
+const drawdownKind = z.enum(["advance", "reimbursement", "final"]);
 
 /**
  * Non-posting grant commands. Route-level grants.manage is proven before the
@@ -27,9 +31,9 @@ const drawdownKind = z.enum(['advance', 'reimbursement', 'final'])
  * proves gl.post. Exhaustive switch: an action the schema admits but the
  * handler does not name fails closed instead of falling through.
  */
-const grantCommandBody = z.discriminatedUnion('action', [
+const grantCommandBody = z.discriminatedUnion("action", [
   z.strictObject({
-    action: z.literal('create'),
+    action: z.literal("create"),
     code: z.string(),
     name: z.string(),
     sponsorPartyId: uuidId,
@@ -41,7 +45,7 @@ const grantCommandBody = z.discriminatedUnion('action', [
     periodFrom: z.string(),
     periodTo: z.string(),
     indirectRate: z.string().optional(),
-    indirectBase: z.enum(['direct_costs', 'modified_total_direct']).optional(),
+    indirectBase: z.enum(["direct_costs", "modified_total_direct"]).optional(),
     mtdcExclusionAccountGroupId: uuidId.nullable().optional(),
     mtdcSubawardAccountGroupId: uuidId.nullable().optional(),
     mtdcSubawardThreshold: z.string().nullable().optional(),
@@ -50,72 +54,101 @@ const grantCommandBody = z.discriminatedUnion('action', [
     fundId: uuidId,
     allowableAccountGroupId: uuidId,
   }),
-  z.strictObject({ action: z.literal('activate'), grantId: uuidId }),
-  z.strictObject({ action: z.literal('satisfyBarrier'), grantId: uuidId, evidence: z.string() }),
+  z.strictObject({ action: z.literal("activate"), grantId: uuidId }),
+  z.strictObject({ action: z.literal("satisfyBarrier"), grantId: uuidId, evidence: z.string() }),
   z.strictObject({
-    action: z.literal('createDrawdown'),
+    action: z.literal("createDrawdown"),
     grantId: uuidId,
     amount: z.string(),
     kind: drawdownKind,
   }),
-  z.strictObject({ action: z.literal('submitDrawdown'), drawdownId: uuidId }),
+  z.strictObject({ action: z.literal("submitDrawdown"), drawdownId: uuidId }),
   z.strictObject({
-    action: z.literal('createReport'),
+    action: z.literal("createReport"),
     grantId: uuidId,
     title: z.string(),
     dueOn: z.string(),
   }),
-  z.strictObject({ action: z.literal('submitReport'), reportId: uuidId }),
-  z.strictObject({ action: z.literal('closeOut'), grantId: uuidId }),
-  z.strictObject({ action: z.literal('close'), grantId: uuidId }),
-])
+  z.strictObject({ action: z.literal("submitReport"), reportId: uuidId }),
+  z.strictObject({ action: z.literal("closeOut"), grantId: uuidId }),
+  z.strictObject({ action: z.literal("close"), grantId: uuidId }),
+]);
 
 export const POST = defineRoute({
-  permission: 'grants.manage',
-  feature: 'grantManagement',
-  scope: 'unrestricted',
+  permission: "grants.manage",
+  feature: "grantManagement",
+  scope: "unrestricted",
   body: grantCommandBody,
   handler: async ({ authz, body }) => {
-    const orgId = authz.user.orgId
-    const actorId = authz.user.id
+    const orgId = authz.user.orgId;
+    const actorId = authz.user.id;
     switch (body.action) {
-      case 'create': {
-        const { action: _action, ...fields } = body
-        return NextResponse.json({ ok: true, grant: await createGrant({ ...fields, orgId, actorId }) })
+      case "create": {
+        const { action: _action, ...fields } = body;
+        return NextResponse.json({
+          ok: true,
+          grant: await createGrant({ ...fields, orgId, actorId }),
+        });
       }
-      case 'activate':
-        return NextResponse.json({ ok: true, grant: await activateGrant({ orgId, grantId: body.grantId, actorId }) })
-      case 'satisfyBarrier':
+      case "activate":
         return NextResponse.json({
           ok: true,
-          grant: await satisfyGrantBarrier({ orgId, grantId: body.grantId, evidence: body.evidence, actorId }),
-        })
-      case 'createDrawdown':
+          grant: await activateGrant({ orgId, grantId: body.grantId, actorId }),
+        });
+      case "satisfyBarrier":
         return NextResponse.json({
           ok: true,
-          drawdown: await createGrantDrawdown({ orgId, grantId: body.grantId, amount: body.amount, kind: body.kind, actorId }),
-        })
-      case 'submitDrawdown':
+          grant: await satisfyGrantBarrier({
+            orgId,
+            grantId: body.grantId,
+            evidence: body.evidence,
+            actorId,
+          }),
+        });
+      case "createDrawdown":
+        return NextResponse.json({
+          ok: true,
+          drawdown: await createGrantDrawdown({
+            orgId,
+            grantId: body.grantId,
+            amount: body.amount,
+            kind: body.kind,
+            actorId,
+          }),
+        });
+      case "submitDrawdown":
         return NextResponse.json({
           ok: true,
           drawdown: await submitGrantDrawdown({ orgId, drawdownId: body.drawdownId, actorId }),
-        })
-      case 'createReport':
+        });
+      case "createReport":
         return NextResponse.json({
           ok: true,
-          report: await createGrantReport({ orgId, grantId: body.grantId, title: body.title, dueOn: body.dueOn, actorId }),
-        })
-      case 'submitReport':
+          report: await createGrantReport({
+            orgId,
+            grantId: body.grantId,
+            title: body.title,
+            dueOn: body.dueOn,
+            actorId,
+          }),
+        });
+      case "submitReport":
         return NextResponse.json({
           ok: true,
           report: await submitGrantReport({ orgId, reportId: body.reportId, actorId }),
-        })
-      case 'closeOut':
-        return NextResponse.json({ ok: true, grant: await closeOutGrant({ orgId, grantId: body.grantId, actorId }) })
-      case 'close':
-        return NextResponse.json({ ok: true, grant: await closeGrant({ orgId, grantId: body.grantId, actorId }) })
+        });
+      case "closeOut":
+        return NextResponse.json({
+          ok: true,
+          grant: await closeOutGrant({ orgId, grantId: body.grantId, actorId }),
+        });
+      case "close":
+        return NextResponse.json({
+          ok: true,
+          grant: await closeGrant({ orgId, grantId: body.grantId, actorId }),
+        });
       default:
-        return NextResponse.json({ error: 'unknown action' }, { status: 400 })
+        return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   },
-})
+});

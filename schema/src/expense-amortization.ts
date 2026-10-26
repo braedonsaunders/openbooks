@@ -38,11 +38,32 @@ import { auditColumns, id, money, orgRef } from "./helpers";
  * event history are immutable.
  */
 
-export const EXPENSE_AMORTIZATION_METHODS = ["straight_line", "prorated_first_last", "exact_days", "variable"] as const;
+export const EXPENSE_AMORTIZATION_METHODS = [
+  "straight_line",
+  "prorated_first_last",
+  "exact_days",
+  "variable",
+] as const;
 export const EXPENSE_AMORTIZATION_TERM_SOURCES = ["template", "service_dates"] as const;
-export const EXPENSE_AMORTIZATION_SCHEDULE_STATUSES = ["draft", "active", "on_hold", "completed", "cancelled"] as const;
-export const EXPENSE_AMORTIZATION_SOURCE_KINDS = ["vendor_bill", "journal", "expense_report", "manual"] as const;
-export const EXPENSE_AMORTIZATION_LINE_STATUSES = ["planned", "posted", "superseded", "cancelled"] as const;
+export const EXPENSE_AMORTIZATION_SCHEDULE_STATUSES = [
+  "draft",
+  "active",
+  "on_hold",
+  "completed",
+  "cancelled",
+] as const;
+export const EXPENSE_AMORTIZATION_SOURCE_KINDS = [
+  "vendor_bill",
+  "journal",
+  "expense_report",
+  "manual",
+] as const;
+export const EXPENSE_AMORTIZATION_LINE_STATUSES = [
+  "planned",
+  "posted",
+  "superseded",
+  "cancelled",
+] as const;
 export const EXPENSE_AMORTIZATION_EVENT_KINDS = [
   "created",
   "activated",
@@ -74,7 +95,9 @@ export const expenseAmortizationTemplates = pgTable(
     /** Null amortizes to the source line's own account. */
     destinationAccountId: uuid("destination_account_id"),
     periodOffset: integer("period_offset").notNull().default(0),
-    rounding: text("rounding", { enum: ["remainder_last_period"] }).notNull().default("remainder_last_period"),
+    rounding: text("rounding", { enum: ["remainder_last_period"] })
+      .notNull()
+      .default("remainder_last_period"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
@@ -144,7 +167,11 @@ export const expenseAmortizationSchedules = pgTable(
       .on(t.orgId, t.sourceLineId, t.bookId)
       .where(sql`${t.sourceLineId} IS NOT NULL`),
     index("expense_amortization_schedules_status").on(t.orgId, t.status),
-    index("expense_amortization_schedules_deferral").on(t.orgId, t.deferralAccountId, t.subsidiaryId),
+    index("expense_amortization_schedules_deferral").on(
+      t.orgId,
+      t.deferralAccountId,
+      t.subsidiaryId,
+    ),
     foreignKey({
       name: "expense_amortization_schedules_source_document_fkey",
       columns: [t.orgId, t.sourceDocumentId],
@@ -216,7 +243,9 @@ export const expenseAmortizationScheduleLines = pgTable(
     weight: bigint("weight", { mode: "bigint" }).notNull(),
     plannedAmount: money("planned_amount").notNull(),
     destinationAccountId: uuid("destination_account_id").notNull(),
-    status: text("status", { enum: EXPENSE_AMORTIZATION_LINE_STATUSES }).notNull().default("planned"),
+    status: text("status", { enum: EXPENSE_AMORTIZATION_LINE_STATUSES })
+      .notNull()
+      .default("planned"),
     journalEntryId: uuid("journal_entry_id"),
     postedAt: timestamp("posted_at", { withTimezone: true }),
     postedBy: uuid("posted_by"),

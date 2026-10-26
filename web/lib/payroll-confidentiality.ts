@@ -1,15 +1,15 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
 import {
   PAYROLL_RESTRICTED_PARTY_LABEL as PAYROLL_RESTRICTED_PARTY_LABEL_BASE,
   payrollRestrictedEntity,
   type ReportEntity,
-} from '@openbooks/reports'
+} from "@openbooks/reports";
 // Permission check only — never './authz' here: that module pulls
 // next/navigation, which breaks plain-node consumers of the ledger readers
 // (spawned test children without the react-server condition).
-import { permissionSetCovers } from './permissions'
-import { decimalAdd, type ExactDecimal } from './statement-format'
+import { permissionSetCovers } from "./permissions";
+import { decimalAdd, type ExactDecimal } from "./statement-format";
 
 /**
  * ONE consistent payroll-line confidentiality policy for every ledger reader.
@@ -41,11 +41,13 @@ import { decimalAdd, type ExactDecimal } from './statement-format'
  *   per-employee detail and pass through untouched.
  */
 
-export const PAYROLL_RESTRICTED_PARTY_LABEL = PAYROLL_RESTRICTED_PARTY_LABEL_BASE
+export const PAYROLL_RESTRICTED_PARTY_LABEL = PAYROLL_RESTRICTED_PARTY_LABEL_BASE;
 
 /** True when this reader may see per-employee payroll detail. */
-export function canSeePayrollDetail(authz: { permissions: Set<string> } | null | undefined): boolean {
-  return !!authz && permissionSetCovers(authz.permissions, 'payroll.read')
+export function canSeePayrollDetail(
+  authz: { permissions: Set<string> } | null | undefined,
+): boolean {
+  return !!authz && permissionSetCovers(authz.permissions, "payroll.read");
 }
 
 /**
@@ -59,18 +61,18 @@ export function canSeePayrollDetail(authz: { permissions: Set<string> } | null |
 export function payrollOriginSql(docKind: SQL, entryOrigin?: SQL): SQL {
   return entryOrigin === undefined
     ? sql`(${docKind} = 'pay_run')`
-    : sql`(${docKind} = 'pay_run' or ${entryOrigin} = 'payroll')`
+    : sql`(${docKind} = 'pay_run' or ${entryOrigin} = 'payroll')`;
 }
 
 /** Minimal shape a reader row needs for confidentiality collapsing. */
 export interface PayrollCollapsibleLine {
-  entryId: string
-  accountId: string
+  entryId: string;
+  accountId: string;
   /** Null for non-party lines, which never collapse. */
-  partyId: string | null
-  payrollOrigin: boolean
+  partyId: string | null;
+  payrollOrigin: boolean;
   /** Debit-signed exact decimal. */
-  amount: ExactDecimal
+  amount: ExactDecimal;
 }
 
 /**
@@ -99,44 +101,44 @@ export function applyPayrollConfidentialityToCatalog(
   catalog: Record<string, ReportEntity>,
   canSeePayroll: boolean,
 ): Record<string, ReportEntity> {
-  if (canSeePayroll) return catalog
+  if (canSeePayroll) return catalog;
   // Pre-collapse at the source (UNION grain in the entity FROM), not just
   // masked expressions: masking leaves per-leg amounts that a limit:1 plan,
   // an amount oracle, or a party/entry breakout would isolate before any
   // post-processing. The UNION folds payroll legs per (entry, account,
   // currency) before any caller filter, breakout, grouping, sort, or LIMIT.
-  let out = catalog
-  for (const key of ['ledger_lines', 'transaction_lines'] as const) {
-    const entity = out[key]
-    if (!entity || entity.key !== key) continue
-    const restricted = payrollRestrictedEntity(entity, false)
-    if (restricted !== entity) out = { ...out, [key]: restricted }
+  let out = catalog;
+  for (const key of ["ledger_lines", "transaction_lines"] as const) {
+    const entity = out[key];
+    if (!entity || entity.key !== key) continue;
+    const restricted = payrollRestrictedEntity(entity, false);
+    if (restricted !== entity) out = { ...out, [key]: restricted };
   }
-  return out
+  return out;
 }
 
 export function collapseRestrictedPayrollLines<T extends PayrollCollapsibleLine>(
   lines: T[],
   build: (first: T, total: ExactDecimal) => T,
 ): T[] {
-  const groups = new Map<string, { first: T; index: number; total: ExactDecimal }>()
-  const out: (T | null)[] = []
+  const groups = new Map<string, { first: T; index: number; total: ExactDecimal }>();
+  const out: (T | null)[] = [];
   for (const line of lines) {
     if (!line.payrollOrigin || line.partyId == null) {
-      out.push(line)
-      continue
+      out.push(line);
+      continue;
     }
-    const key = `${line.entryId}\0${line.accountId}`
-    const group = groups.get(key)
+    const key = `${line.entryId}\0${line.accountId}`;
+    const group = groups.get(key);
     if (!group) {
-      groups.set(key, { first: line, index: out.length, total: line.amount })
-      out.push(null)
+      groups.set(key, { first: line, index: out.length, total: line.amount });
+      out.push(null);
     } else {
-      group.total = decimalAdd(group.total, line.amount)
+      group.total = decimalAdd(group.total, line.amount);
     }
   }
   for (const group of groups.values()) {
-    out[group.index] = build(group.first, group.total)
+    out[group.index] = build(group.first, group.total);
   }
-  return out as T[]
+  return out as T[];
 }

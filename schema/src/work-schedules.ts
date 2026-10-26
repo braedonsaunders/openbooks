@@ -8,7 +8,7 @@ import {
   pgTable,
   text,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -90,7 +90,9 @@ export const workSchedules = pgTable(
      * `varies` — no regular schedule; hours are set period by period. A
      * declared fact, never a default, and never confused with an absent row.
      */
-    pattern: text("pattern", { enum: ["cycle", "varies"] }).notNull().default("cycle"),
+    pattern: text("pattern", { enum: ["cycle", "varies"] })
+      .notNull()
+      .default("cycle"),
     /** Length of the repeating cycle in days. 7 is the ordinary week. */
     cycleDays: integer("cycle_days"),
     /**

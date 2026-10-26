@@ -30,10 +30,12 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    const entityRoute = context.parentURL?.includes("%5Bentity%5D")
-      ?? context.parentURL?.includes("[entity]");
-    if ((specifier === "../../../../../lib/authz" && entityRoute)
-      || (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))) {
+    const entityRoute =
+      context.parentURL?.includes("%5Bentity%5D") ?? context.parentURL?.includes("[entity]");
+    if (
+      (specifier === "../../../../../lib/authz" && entityRoute) ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -49,13 +51,10 @@ registerHooks({
 const routeUrl = "./route.ts?bom-generic-refusal-route-test";
 const { DELETE, PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-const { createSetupRecord, deleteSetupRecord, preflightSetupWrite, updateSetupRecord } = await import(
-  "../../../../../lib/setup/write.ts"
-);
-
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { createSetupRecord, deleteSetupRecord, preflightSetupWrite, updateSetupRecord } =
+  await import("../../../../../lib/setup/write.ts");
 
 function authenticate(orgId: string, actorId: string) {
   routeState.authz = {
@@ -68,11 +67,21 @@ function authenticate(orgId: string, actorId: string) {
 const call = (entity: string) => ({ params: Promise.resolve({ entity }) });
 
 async function bomEvidence(orgId: string) {
-  const components = (await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from bom_components where org_id = ${orgId}`, "objects"))[0]!.n;
-  const audits = (await db.execute<{ n: number }>(sql`
+  const components = (
+    await db.execute<{ n: number }>(
+      sql`
+    select count(*)::int as n from bom_components where org_id = ${orgId}`,
+      "objects",
+    )
+  )[0]!.n;
+  const audits = (
+    await db.execute<{ n: number }>(
+      sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name = 'bom_components'`, "objects"))[0]!.n;
+     where org_id = ${orgId} and table_name = 'bom_components'`,
+      "objects",
+    )
+  )[0]!.n;
   return { components, audits };
 }
 
@@ -80,7 +89,8 @@ test("generic Setup CRUD refuses every bom-components mutation and names the BOM
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() =>
-      createScratchUser(org.orgId, "BOM Refusal Admin", "admin"));
+      createScratchUser(org.orgId, "BOM Refusal Admin", "admin"),
+    );
     authenticate(org.orgId, actorId);
     const before = await bomEvidence(org.orgId);
 
@@ -111,7 +121,9 @@ test("generic Setup CRUD refuses every bom-components mutation and names the BOM
     assert.match(((await updated.json()) as { error: string }).error, /\/api\/inventory\/bom/);
 
     const deleted = await DELETE(
-      new Request(`http://localhost/api/admin/setup/bom-components?id=${randomUUID()}`, { method: "DELETE" }),
+      new Request(`http://localhost/api/admin/setup/bom-components?id=${randomUUID()}`, {
+        method: "DELETE",
+      }),
       call("bom-components"),
     );
     assert.equal(deleted.status, 405);
@@ -123,13 +135,20 @@ test("generic Setup CRUD refuses every bom-components mutation and names the BOM
       const refused = await preflightSetupWrite(actor, "bom-components", method);
       assert.ok(refused, `${method} preflight must refuse`);
       assert.equal(refused.status, 405);
-      assert.match((refused.body.error as string), /\/api\/inventory\/bom/);
+      assert.match(refused.body.error as string, /\/api\/inventory\/bom/);
     }
     assert.equal((await createSetupRecord(actor, "bom-components", {})).status, 405);
-    assert.equal((await updateSetupRecord(actor, "bom-components", { id: randomUUID() })).status, 405);
+    assert.equal(
+      (await updateSetupRecord(actor, "bom-components", { id: randomUUID() })).status,
+      405,
+    );
     assert.equal((await deleteSetupRecord(actor, "bom-components", randomUUID())).status, 405);
 
-    assert.deepEqual(await bomEvidence(org.orgId), before, "refused writes store no component and no audit");
+    assert.deepEqual(
+      await bomEvidence(org.orgId),
+      before,
+      "refused writes store no component and no audit",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

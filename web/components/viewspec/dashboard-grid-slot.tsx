@@ -1,14 +1,14 @@
-import 'server-only'
+import "server-only";
 
-import { getAuthz } from '../../lib/authz'
-import { loadDashboardLayout } from '../../app/(app)/dashboard/_load-layout'
-import { canSeeWidget } from '../../app/(app)/dashboard/_widget-access'
-import { packDefaultLayout } from '../../app/(app)/dashboard/_default-layout'
-import { WIDGETS } from '../../app/(app)/dashboard/_widget-registry'
-import { resolveAllowedWidgetIds } from '../../app/(app)/dashboard/widget-features'
-import { loadDashboardView } from '../../app/(app)/dashboard/_edit-canvas'
-import { saveQuickActions } from '../../app/(app)/dashboard/actions'
-import { DashboardGrid } from '../../app/(app)/dashboard/_dashboard-grid'
+import { getAuthz } from "../../lib/authz";
+import { loadDashboardLayout } from "../../app/(app)/dashboard/_load-layout";
+import { canSeeWidget } from "../../app/(app)/dashboard/_widget-access";
+import { packDefaultLayout } from "../../app/(app)/dashboard/_default-layout";
+import { WIDGETS } from "../../app/(app)/dashboard/_widget-registry";
+import { resolveAllowedWidgetIds } from "../../app/(app)/dashboard/widget-features";
+import { loadDashboardView } from "../../app/(app)/dashboard/_edit-canvas";
+import { saveQuickActions } from "../../app/(app)/dashboard/actions";
+import { DashboardGrid } from "../../app/(app)/dashboard/_dashboard-grid";
 
 /**
  * Slot for the home dashboard's tile grid.
@@ -39,22 +39,25 @@ import { DashboardGrid } from '../../app/(app)/dashboard/_dashboard-grid'
  * and app tiles carry no single feature key and keep canSeeWidget.
  */
 export async function DashboardGridSlot() {
-  const authz = await getAuthz()
-  if (!authz) return null
+  const authz = await getAuthz();
+  if (!authz) return null;
 
-  const { layout, role, hiddenQuickActionIds, isSystemDefault } = await loadDashboardLayout(authz)
-  const allowedWidgetIds = await resolveAllowedWidgetIds(authz)
-  const defaultActionsVisible = layout.quickActions?.some((action) => !hiddenQuickActionIds.includes(action.id)) !== false
-  const widgets = layout.widgets.filter((widget) => !isSystemDefault || widget.id !== 'personal-actions' || defaultActionsVisible).filter((w) =>
-    w.id in WIDGETS ? allowedWidgetIds.has(w.id) : canSeeWidget(authz, w.id),
-  )
-  const visibleLayout = { ...layout, widgets }
+  const { layout, role, hiddenQuickActionIds, isSystemDefault } = await loadDashboardLayout(authz);
+  const allowedWidgetIds = await resolveAllowedWidgetIds(authz);
+  const defaultActionsVisible =
+    layout.quickActions?.some((action) => !hiddenQuickActionIds.includes(action.id)) !== false;
+  const widgets = layout.widgets
+    .filter(
+      (widget) => !isSystemDefault || widget.id !== "personal-actions" || defaultActionsVisible,
+    )
+    .filter((w) => (w.id in WIDGETS ? allowedWidgetIds.has(w.id) : canSeeWidget(authz, w.id)));
+  const visibleLayout = { ...layout, widgets };
 
-  const { nodes } = await loadDashboardView(authz, visibleLayout, allowedWidgetIds)
+  const { nodes } = await loadDashboardView(authz, visibleLayout, allowedWidgetIds);
   const renderedLayout = {
     ...visibleLayout,
     widgets: visibleLayout.widgets.filter((widget) => nodes[widget.id] !== undefined),
-  }
+  };
 
   return (
     <DashboardGrid
@@ -65,5 +68,5 @@ export async function DashboardGridSlot() {
       quickActionsSaveAction={saveQuickActions}
       hiddenQuickActionIds={hiddenQuickActionIds}
     />
-  )
+  );
 }

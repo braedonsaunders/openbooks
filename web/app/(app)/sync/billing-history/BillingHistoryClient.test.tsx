@@ -3,14 +3,18 @@ import test from "node:test";
 import { bootJsdomEnvironment } from "../../../../testing/jsdom-env";
 import { stubModules } from "../../../../testing/stub-modules";
 
-await bootJsdomEnvironment({ url: "http://localhost:4800/sync/billing-history", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/sync/billing-history",
+  matchMediaMatches: false,
+});
 stubModules({
   navigation: true,
   intl: false,
   authz: false,
   features: false,
   extra: {
-    sonner: "export const toast={error(message){(globalThis.__billingToasts??=[]).push(String(message))},success(){}}",
+    sonner:
+      "export const toast={error(message){(globalThis.__billingToasts??=[]).push(String(message))},success(){}}",
   },
 });
 
@@ -49,15 +53,19 @@ test("billing history shows a retryable error instead of the empty state after f
   });
 
   await act(async () => {
-    root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-      <BillingHistoryClient />
-    </NextIntlClientProvider>);
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <BillingHistoryClient />
+      </NextIntlClientProvider>,
+    );
     await tick();
   });
 
   assert.match(host.textContent ?? "", /Billing import history is unavailable/);
   assert.doesNotMatch(host.textContent ?? "", /No billing imports yet/);
-  const retry = [...host.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Retry");
+  const retry = [...host.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === "Retry",
+  );
   assert.ok(retry);
 
   await act(async () => {

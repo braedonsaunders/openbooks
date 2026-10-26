@@ -59,14 +59,17 @@ test("a blob swapped into another org or purpose refuses naming all three", () =
     { orgId: "org-b", purpose: "connection.secrets" },
     { orgId: "org-a", purpose: "fx.provider.secrets" },
   ]) {
-    assert.throws(() => unsealSecret(sealed, scope), (error: unknown) => {
-      assert.ok(error instanceof SecretIntegrityError);
-      assert.equal(error.orgId, scope.orgId);
-      assert.equal(error.purpose, scope.purpose);
-      assert.equal(error.keyId, "k1");
-      assert.match(error.message, /re-enter|rotate-data-key/);
-      return true;
-    });
+    assert.throws(
+      () => unsealSecret(sealed, scope),
+      (error: unknown) => {
+        assert.ok(error instanceof SecretIntegrityError);
+        assert.equal(error.orgId, scope.orgId);
+        assert.equal(error.purpose, scope.purpose);
+        assert.equal(error.keyId, "k1");
+        assert.match(error.message, /re-enter|rotate-data-key/);
+        return true;
+      },
+    );
   }
   // And the reverse swap refuses too: neither row reads the other's blob.
   const b = sealSecret("other", { orgId: "org-b", purpose: "connection.secrets" });
@@ -108,11 +111,14 @@ test("rotation: new seals use the active key, retired keys refuse by name", () =
 
   delete process.env.OPENBOOKS_DATA_KEYS;
   process.env.OPENBOOKS_DATA_KEY = K2_HEX;
-  assert.throws(() => unsealSecret(k1Blob, scope), (error: unknown) => {
-    assert.ok(error instanceof SecretIntegrityError);
-    assert.equal((error as SecretIntegrityError).keyId, "k1");
-    return true;
-  });
+  assert.throws(
+    () => unsealSecret(k1Blob, scope),
+    (error: unknown) => {
+      assert.ok(error instanceof SecretIntegrityError);
+      assert.equal((error as SecretIntegrityError).keyId, "k1");
+      return true;
+    },
+  );
 });
 
 test("boot validation refuses missing, placeholder, and wrong-length keys", () => {
@@ -163,7 +169,10 @@ test("keyed fingerprints carry the producing key id; legacy bare digests read as
   assert.match(fp, /^k1:[0-9a-f]{64}$/);
   assert.deepEqual(parseKeyedFingerprint(fp), { keyId: "k1", hmac: fp.slice("k1:".length) });
   // Snapshots written before key ids existed store the bare digest.
-  assert.deepEqual(parseKeyedFingerprint(fp.slice("k1:".length)), { keyId: "k1", hmac: fp.slice("k1:".length) });
+  assert.deepEqual(parseKeyedFingerprint(fp.slice("k1:".length)), {
+    keyId: "k1",
+    hmac: fp.slice("k1:".length),
+  });
   assert.equal(parseKeyedFingerprint(""), null);
   assert.equal(parseKeyedFingerprint("k1:not-hex"), null);
   useKeyRing("k2");
@@ -185,7 +194,10 @@ test("fingerprint comparison recomputes under the stored key id and refuses a dr
   assert.notEqual(keyedFingerprintForComparison("ca.sin", "987654321", stored), stored);
   assert.ok(matchKeyedFingerprint("ca.sin", stored, "046454286"));
   assert.equal(matchKeyedFingerprint("ca.sin", stored, "987654321"), false);
-  assert.ok(matchKeyedFingerprint("ca.sin", stored.slice("k1:".length), "046454286"), "legacy bare digests verify under k1");
+  assert.ok(
+    matchKeyedFingerprint("ca.sin", stored.slice("k1:".length), "046454286"),
+    "legacy bare digests verify under k1",
+  );
   assert.equal(fingerprintUnderKey("k1", "ca.sin", "046454286"), stored);
   // The retired key leaves the ring: the comparison refuses naming the key
   // and the remedy instead of reading every identifier as changed.

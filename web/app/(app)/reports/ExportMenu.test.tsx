@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
 
 // UX-16b: report exports were bare `<a href>` download links whose onClick
 // only closed the popover, so the app announced nothing on success and a
@@ -8,14 +8,14 @@ import test, { type TestContext } from 'node:test'
 // the bytes arrive; refusals must surface their named message.
 
 // jsdom first: Popover/Button read browser globals at render.
-const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/reports/aging' })
+const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
+await bootJsdomEnvironment({ url: "http://localhost:4800/reports/aging" });
 
 declare global {
-  var __reportExportToasts: { kind: string; message: string }[] | undefined
+  var __reportExportToasts: { kind: string; message: string }[] | undefined;
 }
 
-const { stubModules } = await import('../../../testing/stub-modules')
+const { stubModules } = await import("../../../testing/stub-modules");
 stubModules({
   navigation: false,
   intl: false,
@@ -25,17 +25,17 @@ stubModules({
     sonner:
       "export const toast={success(m){(globalThis.__reportExportToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__reportExportToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../messages/en')).default
-const { ExportMenu } = await import('./ExportMenu')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../messages/en")).default;
+const { ExportMenu } = await import("./ExportMenu");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
@@ -44,176 +44,207 @@ const script = {
   exportHtmlError: false,
   deferred: null as null | { resolve: (res: Response) => void },
   clickedDownloads: [] as Array<string | undefined>,
-}
+};
 
 function mockBrowser(t: TestContext): void {
-  const priorFetch = globalThis.fetch
-  const priorCreateObjectURL = URL.createObjectURL
-  const priorRevokeObjectURL = URL.revokeObjectURL
-  const priorAnchorClick = window.HTMLAnchorElement.prototype.click
+  const priorFetch = globalThis.fetch;
+  const priorCreateObjectURL = URL.createObjectURL;
+  const priorRevokeObjectURL = URL.revokeObjectURL;
+  const priorAnchorClick = window.HTMLAnchorElement.prototype.click;
   globalThis.fetch = ((input: unknown) => {
-    const url = String(input)
-    if (!url.includes('/export?')) throw new Error(`unexpected fetch ${url}`)
-    if (script.deferred) return new Promise<Response>((resolve) => script.deferred!.resolve = resolve)
-    return Promise.resolve(buildExportResponse())
-  }) as typeof fetch
-  URL.createObjectURL = (() => 'blob:mock') as typeof URL.createObjectURL
-  URL.revokeObjectURL = (() => {}) as typeof URL.revokeObjectURL
+    const url = String(input);
+    if (!url.includes("/export?")) throw new Error(`unexpected fetch ${url}`);
+    if (script.deferred)
+      return new Promise<Response>((resolve) => (script.deferred!.resolve = resolve));
+    return Promise.resolve(buildExportResponse());
+  }) as typeof fetch;
+  URL.createObjectURL = (() => "blob:mock") as typeof URL.createObjectURL;
+  URL.revokeObjectURL = (() => {}) as typeof URL.revokeObjectURL;
   window.HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
-    script.clickedDownloads.push(this.download)
-  }
+    script.clickedDownloads.push(this.download);
+  };
   t.after(() => {
-    globalThis.fetch = priorFetch
-    URL.createObjectURL = priorCreateObjectURL
-    URL.revokeObjectURL = priorRevokeObjectURL
-    window.HTMLAnchorElement.prototype.click = priorAnchorClick
-  })
+    globalThis.fetch = priorFetch;
+    URL.createObjectURL = priorCreateObjectURL;
+    URL.revokeObjectURL = priorRevokeObjectURL;
+    window.HTMLAnchorElement.prototype.click = priorAnchorClick;
+  });
 }
 
 function buildExportResponse(): Response {
   if (script.exportStatus !== 200) {
     if (script.exportHtmlError) {
-      return new Response('<html><body>Bad Gateway</body></html>', {
+      return new Response("<html><body>Bad Gateway</body></html>", {
         status: script.exportStatus,
-        headers: { 'Content-Type': 'text/html' },
-      })
+        headers: { "Content-Type": "text/html" },
+      });
     }
-    return new Response(JSON.stringify({ error: script.exportJsonError ?? 'export failed' }), {
+    return new Response(JSON.stringify({ error: script.exportJsonError ?? "export failed" }), {
       status: script.exportStatus,
-      headers: { 'Content-Type': 'application/json' },
-    })
+      headers: { "Content-Type": "application/json" },
+    });
   }
-  return new Response('a,b\n1,2\n', {
+  return new Response("a,b\n1,2\n", {
     status: 200,
     headers: {
-      'Content-Type': 'text/csv',
-      'Content-Disposition': 'attachment; filename="aging-2026-09-23.csv"',
+      "Content-Type": "text/csv",
+      "Content-Disposition": 'attachment; filename="aging-2026-09-23.csv"',
     },
-  })
+  });
 }
 
 async function mountMenu(t: TestContext): Promise<void> {
-  ;(globalThis as Record<string, unknown>).__reportExportToasts = script.toasts
-  mockBrowser(t)
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+  (globalThis as Record<string, unknown>).__reportExportToasts = script.toasts;
+  mockBrowser(t);
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   t.after(async () => {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-    for (const node of [...document.body.querySelectorAll('[data-ui-overlay]')]) node.remove()
-  })
-  script.toasts.length = 0
-  script.clickedDownloads.length = 0
-  script.exportStatus = 200
-  script.exportJsonError = null
-  script.exportHtmlError = false
-  script.deferred = null
+      root.unmount();
+    });
+    host.remove();
+    for (const node of [...document.body.querySelectorAll("[data-ui-overlay]")]) node.remove();
+  });
+  script.toasts.length = 0;
+  script.clickedDownloads.length = 0;
+  script.exportStatus = 200;
+  script.exportJsonError = null;
+  script.exportHtmlError = false;
+  script.deferred = null;
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <ExportMenu kind="aging" params={{ period: '2026-09' }} />
+        <ExportMenu kind="aging" params={{ period: "2026-09" }} />
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+  });
 }
 
 function buttonsNamed(name: string): HTMLButtonElement[] {
-  return [...document.querySelectorAll('button')].filter(
-    (b) => (b.textContent ?? '').trim() === name,
-  ) as HTMLButtonElement[]
+  return [...document.querySelectorAll("button")].filter(
+    (b) => (b.textContent ?? "").trim() === name,
+  ) as HTMLButtonElement[];
 }
 
 async function openMenu(): Promise<void> {
-  const triggers = buttonsNamed('Export')
-  assert.ok(triggers.length >= 1, 'the Export trigger must render')
+  const triggers = buttonsNamed("Export");
+  assert.ok(triggers.length >= 1, "the Export trigger must render");
   await act(async () => {
-    triggers[triggers.length - 1]!.click()
-    await tick()
-    await tick()
-  })
-  assert.ok(buttonsNamed('CSV').length >= 1, 'the CSV menu item must render')
+    triggers[triggers.length - 1]!.click();
+    await tick();
+    await tick();
+  });
+  assert.ok(buttonsNamed("CSV").length >= 1, "the CSV menu item must render");
 }
 
 async function clickCsv(): Promise<void> {
-  const items = buttonsNamed('CSV')
-  assert.ok(items.length >= 1, 'the CSV menu item must render')
+  const items = buttonsNamed("CSV");
+  assert.ok(items.length >= 1, "the CSV menu item must render");
   await act(async () => {
-    items[items.length - 1]!.click()
-    await tick()
-  })
+    items[items.length - 1]!.click();
+    await tick();
+  });
 }
 
-test('CSV success downloads the server file and announces it only after the bytes arrive', async (t) => {
-  await mountMenu(t)
-  script.deferred = { resolve: () => {} }
-  await openMenu()
-  await clickCsv()
-  await tick()
+test("CSV success downloads the server file and announces it only after the bytes arrive", async (t) => {
+  await mountMenu(t);
+  script.deferred = { resolve: () => {} };
+  await openMenu();
+  await clickCsv();
+  await tick();
   // While the fetch is in flight the item shows a busy state and nothing is
   // claimed: no download, no toast, no live-region status.
-  assert.match(document.body.textContent ?? '', /Exporting CSV/, 'the menu item must show a busy state')
-  assert.equal(script.clickedDownloads.length, 0, 'no download before the bytes arrive')
-  assert.equal(script.toasts.length, 0, 'no toast before the bytes arrive')
-  assert.equal(document.querySelector('[role="status"]'), null, 'no status before the bytes arrive')
+  assert.match(
+    document.body.textContent ?? "",
+    /Exporting CSV/,
+    "the menu item must show a busy state",
+  );
+  assert.equal(script.clickedDownloads.length, 0, "no download before the bytes arrive");
+  assert.equal(script.toasts.length, 0, "no toast before the bytes arrive");
+  assert.equal(
+    document.querySelector('[role="status"]'),
+    null,
+    "no status before the bytes arrive",
+  );
   // The bytes arrive: the download fires with the server filename and
   // completion names it in both the toast and the live region.
   await act(async () => {
-    script.deferred!.resolve(buildExportResponse())
-    await tick()
-    await tick()
-  })
-  await tick()
-  assert.deepEqual(script.clickedDownloads, ['aging-2026-09-23.csv'], 'the real file must download')
-  const status = document.querySelector('[role="status"]')
-  assert.ok(status, 'completion must render a live-region status, not just a toast')
-  assert.match(status.textContent ?? '', /aging-2026-09-23\.csv/, 'completion must name the actual filename')
+    script.deferred!.resolve(buildExportResponse());
+    await tick();
+    await tick();
+  });
+  await tick();
+  assert.deepEqual(
+    script.clickedDownloads,
+    ["aging-2026-09-23.csv"],
+    "the real file must download",
+  );
+  const status = document.querySelector('[role="status"]');
+  assert.ok(status, "completion must render a live-region status, not just a toast");
+  assert.match(
+    status.textContent ?? "",
+    /aging-2026-09-23\.csv/,
+    "completion must name the actual filename",
+  );
   assert.ok(
-    script.toasts.some((toast) => toast.kind === 'success' && /aging-2026-09-23\.csv/.test(toast.message)),
-    'completion must toast the actual filename',
-  )
-})
+    script.toasts.some(
+      (toast) => toast.kind === "success" && /aging-2026-09-23\.csv/.test(toast.message),
+    ),
+    "completion must toast the actual filename",
+  );
+});
 
-test('a 422 JSON refusal shows its named message and downloads nothing', async (t) => {
-  await mountMenu(t)
-  script.exportStatus = 422
-  script.exportJsonError = 'unknown statement'
-  await openMenu()
-  await clickCsv()
+test("a 422 JSON refusal shows its named message and downloads nothing", async (t) => {
+  await mountMenu(t);
+  script.exportStatus = 422;
+  script.exportJsonError = "unknown statement";
+  await openMenu();
+  await clickCsv();
   await act(async () => {
-    await tick()
-    await tick()
-  })
-  await tick()
-  assert.deepEqual(script.clickedDownloads, [], 'a refusal must download nothing')
-  assert.equal(document.querySelector('[role="status"]'), null, 'a refusal must not render completion')
+    await tick();
+    await tick();
+  });
+  await tick();
+  assert.deepEqual(script.clickedDownloads, [], "a refusal must download nothing");
+  assert.equal(
+    document.querySelector('[role="status"]'),
+    null,
+    "a refusal must not render completion",
+  );
   assert.ok(
-    script.toasts.some((toast) => toast.kind === 'error' && /unknown statement/.test(toast.message)),
-    'a refusal must surface the server message by name',
-  )
-})
+    script.toasts.some(
+      (toast) => toast.kind === "error" && /unknown statement/.test(toast.message),
+    ),
+    "a refusal must surface the server message by name",
+  );
+});
 
-test('a PDF print refusal shows the server message instead of a generic failure', async (t) => {
-  await mountMenu(t)
-  script.exportStatus = 422
-  script.exportJsonError = 'unknown statement'
-  await openMenu()
-  const print = buttonsNamed('Print').at(-1)
-  assert.ok(print, 'the Print menu item must render')
+test("a PDF print refusal shows the server message instead of a generic failure", async (t) => {
+  await mountMenu(t);
+  script.exportStatus = 422;
+  script.exportJsonError = "unknown statement";
+  await openMenu();
+  const print = buttonsNamed("Print").at(-1);
+  assert.ok(print, "the Print menu item must render");
   await act(async () => {
-    print.click()
-    await tick()
-    await tick()
-  })
-  await tick()
-  assert.deepEqual(script.clickedDownloads, [], 'a failure must download nothing')
-  assert.equal(document.querySelector('[role="status"]'), null, 'a failure must not render completion')
+    print.click();
+    await tick();
+    await tick();
+  });
+  await tick();
+  assert.deepEqual(script.clickedDownloads, [], "a failure must download nothing");
+  assert.equal(
+    document.querySelector('[role="status"]'),
+    null,
+    "a failure must not render completion",
+  );
   assert.ok(
-    script.toasts.some((toast) => toast.kind === 'error' && /unknown statement/.test(toast.message)),
+    script.toasts.some(
+      (toast) => toast.kind === "error" && /unknown statement/.test(toast.message),
+    ),
     `a print refusal must surface the server message by name; saw ${JSON.stringify(script.toasts)}`,
-  )
-})
+  );
+});

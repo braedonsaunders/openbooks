@@ -8,7 +8,7 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db,  withOrgContext } from "../../platform/db.ts";
+import { db, withOrgContext } from "../../platform/db.ts";
 import { fromUnits, toUnits } from "../../money/money.ts";
 import { applyInventoryIssuesForInvoice } from "../../inventory/documents-sales.ts";
 import { applyInventoryReceiptsForBill } from "../../inventory/documents-purchasing.ts";
@@ -421,8 +421,7 @@ export const INVENTORY_CASES: readonly ConformanceCase[] = [
         standard: "IAS 2",
         reference: "IAS 2.9",
         kind: "requirement",
-        requirement:
-          "Inventories are measured at the lower of cost and net realisable value.",
+        requirement: "Inventories are measured at the lower of cost and net realisable value.",
       },
       {
         standard: "IAS 2",
@@ -693,7 +692,15 @@ export const INVENTORY_CASES: readonly ConformanceCase[] = [
       "Six assemblies remain at 60.00 and component stock stands at its unbuilt balance plus the forty returned.",
     ],
     expected: {
-      entries: [{ step: "disassembly", lines: [{ role: "inventory", amount: "40.0000" }, { role: "finishedGoodsInventory", amount: "-40.0000" }] }],
+      entries: [
+        {
+          step: "disassembly",
+          lines: [
+            { role: "inventory", amount: "40.0000" },
+            { role: "finishedGoodsInventory", amount: "-40.0000" },
+          ],
+        },
+      ],
       values: {
         componentsReturned: "8.0000",
         componentsValueReturned: "40.0000",
@@ -701,22 +708,52 @@ export const INVENTORY_CASES: readonly ConformanceCase[] = [
         assembliesValueRemaining: "60.0000",
       },
     },
-    run: async ctx => {
+    run: async (ctx) => {
       const ledger = ctx.ledger!;
       await withOrgContext(ledger.orgId, async () => {
-        await db.execute(sql`update item_inventory_profiles set asset_account_id=${ctx.roles.finishedGoodsInventory} where org_id=${ledger.orgId} and item_id=${ledger.items.assembly}`);
-        await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values (${ledger.orgId},${ledger.actorId},'items.post','grant')`);
+        await db.execute(
+          sql`update item_inventory_profiles set asset_account_id=${ctx.roles.finishedGoodsInventory} where org_id=${ledger.orgId} and item_id=${ledger.items.assembly}`,
+        );
+        await db.execute(
+          sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values (${ledger.orgId},${ledger.actorId},'items.post','grant')`,
+        );
       });
-      return withOrgContext(ledger.orgId,async () => {
-        await receiveViaBill(ctx,{number:'CONF-COMPONENTS',itemId:ledger.items.component,quantity:'100',unitCost:'5',amount:'500'});
-        const built = await buildAssembly(ledger.orgId,ledger.actorId,{assemblyItemId:ledger.items.assembly,quantity:'10',stockLocationId:ledger.stockLocationId,subsidiaryId:ledger.subsidiaryId,date:ledger.date});
-        let returned: {quantity:string;value:string}[] = [];
-        const entry = await capture(ctx,'disassembly',async () => {
-          const result = await disassembleAssembly(ledger.orgId,ledger.actorId,{buildMovementId:built.movementId,quantity:'4',date:ledger.date,reason:'Recover service-spares components',idempotencyKey:randomUUID()});
+      return withOrgContext(ledger.orgId, async () => {
+        await receiveViaBill(ctx, {
+          number: "CONF-COMPONENTS",
+          itemId: ledger.items.component,
+          quantity: "100",
+          unitCost: "5",
+          amount: "500",
+        });
+        const built = await buildAssembly(ledger.orgId, ledger.actorId, {
+          assemblyItemId: ledger.items.assembly,
+          quantity: "10",
+          stockLocationId: ledger.stockLocationId,
+          subsidiaryId: ledger.subsidiaryId,
+          date: ledger.date,
+        });
+        let returned: { quantity: string; value: string }[] = [];
+        const entry = await capture(ctx, "disassembly", async () => {
+          const result = await disassembleAssembly(ledger.orgId, ledger.actorId, {
+            buildMovementId: built.movementId,
+            quantity: "4",
+            date: ledger.date,
+            reason: "Recover service-spares components",
+            idempotencyKey: randomUUID(),
+          });
           returned = result.value.components;
         });
-        const stock = await getOnHand(ledger.orgId,ledger.items.assembly,ledger.stockLocationId);
-        return {entries:[entry],values:{componentsReturned:returned[0]!.quantity,componentsValueReturned:returned[0]!.value,assembliesRemaining:stock.quantity,assembliesValueRemaining:stock.value}};
+        const stock = await getOnHand(ledger.orgId, ledger.items.assembly, ledger.stockLocationId);
+        return {
+          entries: [entry],
+          values: {
+            componentsReturned: returned[0]!.quantity,
+            componentsValueReturned: returned[0]!.value,
+            assembliesRemaining: stock.quantity,
+            assembliesValueRemaining: stock.value,
+          },
+        };
       });
     },
   },

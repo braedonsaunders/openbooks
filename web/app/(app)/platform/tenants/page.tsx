@@ -1,16 +1,16 @@
-import { platformListSources } from '../../../../lib/list/platform-sources'
-import { TenantsList } from './sections'
+import { platformListSources } from "../../../../lib/list/platform-sources";
+import { TenantsList } from "./sections";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export default async function PlatformTenantsPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const source = platformListSources.tenants
-  const { params, filter: environment, result } = await source.read(sp)
+  const sp = await searchParams;
+  const source = platformListSources.tenants;
+  const { params, filter: environment, result } = await source.read(sp);
   return (
     <TenantsList
       rows={result.rows}
@@ -24,5 +24,5 @@ export default async function PlatformTenantsPage({
       basePath={source.basePath}
       currentParams={sp}
     />
-  )
+  );
 }

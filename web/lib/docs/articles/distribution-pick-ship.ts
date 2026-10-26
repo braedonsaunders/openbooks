@@ -1,18 +1,30 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const distributionPickShip: DocArticle = {
-  slug: 'distribution-pick-ship',
-  title: 'Pick Lists and Shipments',
-  category: 'transactions',
+  slug: "distribution-pick-ship",
+  title: "Pick Lists and Shipments",
+  category: "transactions",
   order: 9,
   summary:
-    'Reserve bin stock for an issued sales order on a pick list, pack it onto a shipment with a carrier and tracking number, and complete the shipment to record the sales fulfilment.',
-  updated: '2026-09-27',
+    "Reserve bin stock for an issued sales order on a pick list, pack it onto a shipment with a carrier and tracking number, and complete the shipment to record the sales fulfilment.",
+  updated: "2026-09-27",
   keywords: [
-    'pick', 'pick list', 'picking', 'shipment', 'ship', 'carrier', 'service level', 'tracking number',
-    'tracking link', 'carton', 'bin', 'reservation', 'fulfillment', 'distribution',
+    "pick",
+    "pick list",
+    "picking",
+    "shipment",
+    "ship",
+    "carrier",
+    "service level",
+    "tracking number",
+    "tracking link",
+    "carton",
+    "bin",
+    "reservation",
+    "fulfillment",
+    "distribution",
   ],
-  related: ['sales-workflow', 'distribution-warehouses', 'distribution-backorders'],
+  related: ["sales-workflow", "distribution-warehouses", "distribution-backorders"],
   body: `# Pick Lists and Shipments
 
 Pick lists and shipments carry an issued sales order from the warehouse shelf
@@ -175,4 +187,4 @@ lists, shipments, carriers, the fulfilments already recorded and the audit
 history stay exactly as they were, and reappear when the feature is turned
 back on.
 `,
-}
+};

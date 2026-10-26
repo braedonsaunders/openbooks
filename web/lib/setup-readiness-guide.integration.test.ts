@@ -1,9 +1,9 @@
-import { registerHooks } from 'node:module'
-import { resolveAppModule } from './test-module-hooks'
-import { pathToFileURL } from 'node:url'
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { stubModules } from '../testing/stub-modules.ts'
+import { registerHooks } from "node:module";
+import { resolveAppModule } from "./test-module-hooks";
+import { pathToFileURL } from "node:url";
+import assert from "node:assert/strict";
+import test from "node:test";
+import { stubModules } from "../testing/stub-modules.ts";
 
 /**
  * The readiness go-live guide rendered fully English in fr/es
@@ -14,55 +14,98 @@ import { stubModules } from '../testing/stub-modules.ts'
  * translator and asserts every emitted copy string is a guide key lookup —
  * no hardcoded English can survive here without failing.
  */
-const repo = process.cwd()
-const root = pathToFileURL(repo + '/').href
-const state: { user: import('./auth').SessionUser | null } = { user: null }
-stubModules({ navigation: false, intl: 'export async function getTranslations(){const t=(key)=>`t:${key}`;return t;};export async function getLocale(){return "en"}', authz: false, features: false });
+const repo = process.cwd();
+const root = pathToFileURL(repo + "/").href;
+const state: { user: import("./auth").SessionUser | null } = { user: null };
+stubModules({
+  navigation: false,
+  intl: 'export async function getTranslations(){const t=(key)=>`t:${key}`;return t;};export async function getLocale(){return "en"}',
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(s, c, next) {
-    if ((s === './auth' || s.endsWith('/lib/auth')) && c.parentURL?.includes('/web/') && !c.parentURL.includes('/web/lib/auth.ts')) {
+    if (
+      (s === "./auth" || s.endsWith("/lib/auth")) &&
+      c.parentURL?.includes("/web/") &&
+      !c.parentURL.includes("/web/lib/auth.ts")
+    ) {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,' + encodeURIComponent(
-          `export * from ${JSON.stringify(root + 'web/lib/auth.ts')};export async function currentUser(){return globalThis.__readinessGuideState.user;}`,
-        ),
-      }
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export * from ${JSON.stringify(root + "web/lib/auth.ts")};export async function currentUser(){return globalThis.__readinessGuideState.user;}`,
+          ),
+      };
     }
-    const app = resolveAppModule(s, c, next, root)
-    if (app) return app
-    return next(s, c)
+    const app = resolveAppModule(s, c, next, root);
+    if (app) return app;
+    return next(s, c);
   },
-})
-Object.assign(globalThis, { __readinessGuideState: state })
+});
+Object.assign(globalThis, { __readinessGuideState: state });
 
-const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
-const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
-const { loadSetupReadiness } = (await import(root + 'web/app/(app)/admin/setup/readiness/view.ts')) as typeof import('../app/(app)/admin/setup/readiness/view')
+const { db, withBypassContext, withOrgContext } =
+  (await import("@openbooks/engine/platform/db")) as typeof import("@openbooks/engine/platform/db");
+const { sql } = await import(root + "node_modules/drizzle-orm/index.js");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  (await import("@openbooks/engine/testing/fixtures")) as typeof import("@openbooks/engine/testing/fixtures");
+const { loadSetupReadiness } = (await import(
+  root + "web/app/(app)/admin/setup/readiness/view.ts"
+)) as typeof import("../app/(app)/admin/setup/readiness/view");
 
-test('readiness guide copy resolves through admin.setup.guide, never hardcoded', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => createScratchOrg())
-  try {
-    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Guide operator', 'admin'))
-    await withBypassContext(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`))
-    state.user = { id: actor, orgId: org.orgId, isSuperAdmin: false, name: 'Guide operator', email: 'guide@scratch.test',
-      roles: [], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
-    const data = await withOrgContext(org.orgId, () => loadSetupReadiness())
-    assert.equal(data.checks.length, 7, 'seven guide areas')
-    const echoed: string[] = [
-      data.hero.kicker, data.hero.title, data.hero.description,
-      data.hero.badgeLabel, data.hero.progressLabel, data.hero.progressOf,
-    ]
-    for (const check of data.checks) {
-      echoed.push(check.title, check.description, check.action, check.stateLabel)
+test(
+  "readiness guide copy resolves through admin.setup.guide, never hardcoded",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actor = await withBypassContext(() =>
+        createScratchUser(org.orgId, "Guide operator", "admin"),
+      );
+      await withBypassContext(() =>
+        db.execute(
+          sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`,
+        ),
+      );
+      state.user = {
+        id: actor,
+        orgId: org.orgId,
+        isSuperAdmin: false,
+        name: "Guide operator",
+        email: "guide@scratch.test",
+        roles: [],
+        envKind: "production",
+        productionOrgId: org.orgId,
+        homeOrgId: org.orgId,
+        homeUserId: actor,
+      };
+      const data = await withOrgContext(org.orgId, () => loadSetupReadiness());
+      assert.equal(data.checks.length, 7, "seven guide areas");
+      const echoed: string[] = [
+        data.hero.kicker,
+        data.hero.title,
+        data.hero.description,
+        data.hero.badgeLabel,
+        data.hero.progressLabel,
+        data.hero.progressOf,
+      ];
+      for (const check of data.checks) {
+        echoed.push(check.title, check.description, check.action, check.stateLabel);
+      }
+      assert.equal(echoed.length, 6 + 7 * 4);
+      for (const copy of echoed) {
+        assert.match(
+          copy,
+          /^t:setup\.guide\./,
+          `guide copy must be a catalog lookup, got ${JSON.stringify(copy)}`,
+        );
+      }
+    } finally {
+      state.user = null;
+      await withBypassContext(() => dropScratchOrg(org.orgId));
     }
-    assert.equal(echoed.length, 6 + 7 * 4)
-    for (const copy of echoed) {
-      assert.match(copy, /^t:setup\.guide\./, `guide copy must be a catalog lookup, got ${JSON.stringify(copy)}`)
-    }
-  } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
+  },
+);

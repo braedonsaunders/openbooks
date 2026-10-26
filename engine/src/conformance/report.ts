@@ -47,16 +47,21 @@ function byStandard(results: readonly CaseResult[]): Map<string, CaseResult[]> {
 /** Report each executed partition separately so a computation-only run cannot
  * be mistaken for ledger evidence. Declared gaps retain their partition. */
 function partitionTotals(report: CorpusReport) {
-  return Object.fromEntries((["computation", "ledger"] as const).map((tier) => {
-    const selected = report.results.filter((result) => result.case.tier === tier);
-    return [tier, {
-      total: selected.length,
-      pass: selected.filter((result) => result.status === "pass").length,
-      fail: selected.filter((result) => result.status === "fail").length,
-      gap: selected.filter((result) => result.status === "gap").length,
-      skipped: selected.filter((result) => result.status === "skipped").length,
-    }];
-  }));
+  return Object.fromEntries(
+    (["computation", "ledger"] as const).map((tier) => {
+      const selected = report.results.filter((result) => result.case.tier === tier);
+      return [
+        tier,
+        {
+          total: selected.length,
+          pass: selected.filter((result) => result.status === "pass").length,
+          fail: selected.filter((result) => result.status === "fail").length,
+          gap: selected.filter((result) => result.status === "gap").length,
+          skipped: selected.filter((result) => result.status === "skipped").length,
+        },
+      ];
+    }),
+  );
 }
 
 export function renderMarkdown(report: CorpusReport): string {
@@ -103,7 +108,9 @@ export function renderMarkdown(report: CorpusReport): string {
       // IFRS-style references already carry their standard ("IAS 16.63");
       // Codification-style ones do not ("360-10-35-17"). Do not repeat it.
       const citations = result.case.citations
-        .map((c) => (c.reference.startsWith(c.standard) ? c.reference : `${c.standard} ${c.reference}`))
+        .map((c) =>
+          c.reference.startsWith(c.standard) ? c.reference : `${c.standard} ${c.reference}`,
+        )
         .join("<br>");
       out.push(
         `| **${result.case.title}**<br><sub>${result.case.assertion}</sub> | ${citations} | ` +
@@ -113,7 +120,8 @@ export function renderMarkdown(report: CorpusReport): string {
     out.push("");
 
     const notable = results.filter(
-      (r) => r.case.support === "partial" || r.case.support === "not-implemented" || r.status === "fail",
+      (r) =>
+        r.case.support === "partial" || r.case.support === "not-implemented" || r.status === "fail",
     );
     if (notable.length > 0) {
       out.push(`### ${standard} — shortfalls`);
@@ -130,7 +138,9 @@ export function renderMarkdown(report: CorpusReport): string {
           }
           for (const difference of result.differences) {
             out.push("");
-            out.push(`- ${difference.at}: expected \`${difference.expected}\`, got \`${difference.actual}\``);
+            out.push(
+              `- ${difference.at}: expected \`${difference.expected}\`, got \`${difference.actual}\``,
+            );
           }
         }
         out.push("");
@@ -197,7 +207,13 @@ export function renderJson(report: CorpusReport): string {
 export function renderConsole(report: CorpusReport): string {
   const lines = report.results.map((result) => {
     const mark =
-      result.status === "pass" ? "ok  " : result.status === "fail" ? "FAIL" : result.status === "gap" ? "gap " : "skip";
+      result.status === "pass"
+        ? "ok  "
+        : result.status === "fail"
+          ? "FAIL"
+          : result.status === "gap"
+            ? "gap "
+            : "skip";
     return `  ${mark}  ${result.case.id.padEnd(46)} ${result.case.citations[0]!.standard} ${result.case.citations[0]!.reference}`;
   });
   const { totals } = report;

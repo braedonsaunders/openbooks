@@ -2,21 +2,23 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 
-import { NextResponse } from 'next/server'
-import { decideGate } from '@openbooks/engine/flows/module'
-import { guardSubsidiaryScope } from '../../../../../lib/authz'
-import { isUuid } from '../../../../../lib/list-params'
-import { loadGateHeader } from '../../_lib'
-import { MAX_BULK_ITEMS } from './bulk-limit'
+import { NextResponse } from "next/server";
+import { decideGate } from "@openbooks/engine/flows/module";
+import { guardSubsidiaryScope } from "../../../../../lib/authz";
+import { isUuid } from "../../../../../lib/list-params";
+import { loadGateHeader } from "../../_lib";
+import { MAX_BULK_ITEMS } from "./bulk-limit";
 
 const requestBodySchema = z.object({
-  items: z.array(z.object({ gateId: uuidString() })).min(1).max(MAX_BULK_ITEMS, { error: `too many items (max ${MAX_BULK_ITEMS})` }),
+  items: z
+    .array(z.object({ gateId: uuidString() }))
+    .min(1)
+    .max(MAX_BULK_ITEMS, { error: `too many items (max ${MAX_BULK_ITEMS})` }),
   decision: z.enum(["approved", "rejected"]),
   comment: z.string().trim().max(2000).optional(),
 });
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Bulk approve/reject for the approvals worklist. Accepts a list of flow gates:
@@ -35,41 +37,43 @@ export const POST = defineRoute({
   body: requestBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ body, authz: routeAuthz }) => {
-
-    const authz = routeAuthz
-
-
-
-
+    const authz = routeAuthz;
 
     if (
       !Array.isArray(body.items) ||
       body.items.length === 0 ||
-      !['approved', 'rejected'].includes(body.decision ?? '')
+      !["approved", "rejected"].includes(body.decision ?? "")
     ) {
-      return NextResponse.json({ error: 'items and decision required' }, { status: 400 })
+      return NextResponse.json({ error: "items and decision required" }, { status: 400 });
     }
     if (body.items.length > MAX_BULK_ITEMS) {
-      return NextResponse.json({ error: `too many items (max ${MAX_BULK_ITEMS})` }, { status: 400 })
+      return NextResponse.json(
+        { error: `too many items (max ${MAX_BULK_ITEMS})` },
+        { status: 400 },
+      );
     }
-    const decision = body.decision as 'approved' | 'rejected'
-    const comment = body.comment?.trim() || undefined
+    const decision = body.decision as "approved" | "rejected";
+    const comment = body.comment?.trim() || undefined;
 
-    const results: { ok: boolean; error?: string }[] = []
+    const results: { ok: boolean; error?: string }[] = [];
     for (const item of body.items) {
       try {
         if (!item.gateId) {
-          results.push({ ok: false, error: 'invalid item' })
-          continue
+          results.push({ ok: false, error: "invalid item" });
+          continue;
         }
-        if (!isUuid(item.gateId)) throw new Error('invalid gateId')
-        const gate = await loadGateHeader(item.gateId, authz.user.orgId, authz.allowedSubsidiaryIds)
-        if (!gate) throw new Error('approval not found')
+        if (!isUuid(item.gateId)) throw new Error("invalid gateId");
+        const gate = await loadGateHeader(
+          item.gateId,
+          authz.user.orgId,
+          authz.allowedSubsidiaryIds,
+        );
+        if (!gate) throw new Error("approval not found");
         // A gate assignment is not a grant to every legal entity — the same
         // direct-record subsidiary boundary the single decide route enforces,
         // per item, before the engine resumes a consequential branch.
-        if (guardSubsidiaryScope(authz, gate.subsidiary_id)) throw new Error('approval not found')
-        if (gate.status !== 'pending') throw new Error('this approval was already resolved')
+        if (guardSubsidiaryScope(authz, gate.subsidiary_id)) throw new Error("approval not found");
+        if (gate.status !== "pending") throw new Error("this approval was already resolved");
         // decideGate is the single authority (assignee / admin / delegate).
         // The caller's scope rides along so the engine re-checks the boundary
         // at its own write authority. A thrown decision failure (any post-flip
@@ -82,14 +86,15 @@ export const POST = defineRoute({
           userId: authz.user.id,
           allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
           comment,
-        })
-        results.push({ ok: true })
+        });
+        results.push({ ok: true });
       } catch (e) {
-        results.push({ ok: false, error: e instanceof Error ? e.message : 'failed' })
+        results.push({ ok: false, error: e instanceof Error ? e.message : "failed" });
       }
     }
 
-    return NextResponse.json({ results })
+    return NextResponse.json({ results });
   },
 
-  feature: "flows",});
+  feature: "flows",
+});

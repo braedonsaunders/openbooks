@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 
 /** Customer-specific previews share the directory's organization and legal-entity fence. */
 export async function isPricingCustomerVisible(
@@ -10,45 +10,48 @@ export async function isPricingCustomerVisible(
   customerId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<boolean> {
-  const result = await db.execute<{ id: string }>(sql`
+  const result = await db.execute<{ id: string }>(
+    sql`
     select p.id from parties p
      where p.org_id = ${orgId} and p.id = ${customerId}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-  `, 'objects')
-  return result.length > 0
+  `,
+    "objects",
+  );
+  return result.length > 0;
 }
 
 export interface ResolvedItemPrice {
-  unitPrice: string
-  currency: string
+  unitPrice: string;
+  currency: string;
   source:
-    | 'customer_item'
-    | 'customer_family'
-    | 'customer_level'
-    | 'family_level'
-    | 'base_level'
-    | 'family_base_level'
-    | 'simple'
-    | 'family_base'
-  scheduleId: string | null
-  priceLevelId: string | null
-  priceLevelName: string | null
-  minimumQuantity: string
-  quantityBasis: 'line_quantity' | 'overall_item_quantity'
+    | "customer_item"
+    | "customer_family"
+    | "customer_level"
+    | "family_level"
+    | "base_level"
+    | "family_base_level"
+    | "simple"
+    | "family_base";
+  scheduleId: string | null;
+  priceLevelId: string | null;
+  priceLevelName: string | null;
+  minimumQuantity: string;
+  quantityBasis: "line_quantity" | "overall_item_quantity";
   /**
    * Lineage for the priced line's recorded basis (0336): the assignment row
    * this price resolved from (either level source), and the instant the
    * resolution ran. Replay reads the recorded basis, never a re-resolution.
    */
-  assignmentId: string | null
-  resolvedAt: string
+  assignmentId: string | null;
+  resolvedAt: string;
   /**
    * The family a family-scoped price was inherited from, so the drawer can
    * name it ("Inherited from family T-Shirt"). Null for item-own prices.
    */
-  familyId: string | null
-  familyCode: string | null
-  familyName: string | null
+  familyId: string | null;
+  familyCode: string | null;
+  familyName: string | null;
 }
 
 /**
@@ -62,42 +65,43 @@ export interface ResolvedItemPrice {
  * row, so non-variant resolution is unchanged.
  */
 export async function resolveItemPrice(input: {
-  orgId: string
-  itemId: string
-  customerId?: string | null
-  currency: string
-  lineQuantity: string
-  overallItemQuantity?: string | null
-  onDate: string
+  orgId: string;
+  itemId: string;
+  customerId?: string | null;
+  currency: string;
+  lineQuantity: string;
+  overallItemQuantity?: string | null;
+  onDate: string;
   /**
    * The instant the lookup runs as of (ISO-8601). Defaults to now: a row
    * revoked at instant T reads as inactive for lookups at or after T, so a
    * same-date revoke ends pricing from its instant while earlier instants
    * still resolve what was offered then (RESIDUAL).
    */
-  asOf?: string | null
+  asOf?: string | null;
 }): Promise<ResolvedItemPrice | null> {
-  const currency = input.currency.trim().toUpperCase()
-  const overallQuantity = input.overallItemQuantity ?? input.lineQuantity
+  const currency = input.currency.trim().toUpperCase();
+  const overallQuantity = input.overallItemQuantity ?? input.lineQuantity;
   const result = await db.execute<{
-    schedule_id: string
-    price_level_id: string | null
-    price_level_name: string | null
-    unit_price: string
-    minimum_quantity: string
-    quantity_basis: 'line_quantity' | 'overall_item_quantity'
+    schedule_id: string;
+    price_level_id: string | null;
+    price_level_name: string | null;
+    unit_price: string;
+    minimum_quantity: string;
+    quantity_basis: "line_quantity" | "overall_item_quantity";
     source:
-      | 'customer_item'
-      | 'customer_family'
-      | 'customer_level'
-      | 'family_level'
-      | 'base_level'
-      | 'family_base_level'
-    assignment_id: string | null
-    family_id: string | null
-    family_code: string | null
-    family_name: string | null
-  }>(sql`
+      | "customer_item"
+      | "customer_family"
+      | "customer_level"
+      | "family_level"
+      | "base_level"
+      | "family_base_level";
+    assignment_id: string | null;
+    family_id: string | null;
+    family_code: string | null;
+    family_name: string | null;
+  }>(
+    sql`
     with subject as (
       -- The variant's family, if any. A NULL family makes every family_id
       -- comparison below fail, so standalone items resolve exactly as before.
@@ -210,9 +214,11 @@ export async function resolveItemPrice(input: {
      where candidate.precedence < 99
      order by candidate.precedence
      limit 1
-  `, 'objects')
-  const winner = result[0]
-  const resolvedAt = new Date().toISOString()
+  `,
+    "objects",
+  );
+  const winner = result[0];
+  const resolvedAt = new Date().toISOString();
   if (winner) {
     return {
       unitPrice: winner.unit_price,
@@ -223,22 +229,26 @@ export async function resolveItemPrice(input: {
       priceLevelName: winner.price_level_name,
       minimumQuantity: winner.minimum_quantity,
       quantityBasis: winner.quantity_basis,
-      assignmentId: winner.source === 'customer_level' || winner.source === 'family_level' ? winner.assignment_id : null,
+      assignmentId:
+        winner.source === "customer_level" || winner.source === "family_level"
+          ? winner.assignment_id
+          : null,
       resolvedAt,
       familyId: winner.family_id,
       familyCode: winner.family_code,
       familyName: winner.family_name,
-    }
+    };
   }
 
   const fallback = await db.execute<{
-    default_rate: string | null
-    base_currency: string
-    family_rate: string | null
-    family_id: string | null
-    family_code: string | null
-    family_name: string | null
-  }>(sql`
+    default_rate: string | null;
+    base_currency: string;
+    family_rate: string | null;
+    family_id: string | null;
+    family_code: string | null;
+    family_name: string | null;
+  }>(
+    sql`
     select item.default_rate::text, org.base_currency,
            family.default_rate::text as family_rate,
            family.id as family_id, family.code as family_code, family.name as family_name
@@ -246,27 +256,29 @@ export async function resolveItemPrice(input: {
       join orgs org on org.id = item.org_id
       left join item_families family on family.org_id = item.org_id and family.id = item.family_id
      where item.org_id = ${input.orgId} and item.id = ${input.itemId}
-  `, 'objects')
-  const simple = fallback[0]
-  if (!simple || simple.base_currency !== currency) return null
+  `,
+    "objects",
+  );
+  const simple = fallback[0];
+  if (!simple || simple.base_currency !== currency) return null;
   // The variant's own base price wins; the family base price (the family
   // row's default rate) prices variants that carry no rate of their own.
-  const familyPrice = !simple.default_rate ? simple.family_rate : null
-  if (!simple.default_rate && !familyPrice) return null
-  const inherited = familyPrice !== null
+  const familyPrice = !simple.default_rate ? simple.family_rate : null;
+  if (!simple.default_rate && !familyPrice) return null;
+  const inherited = familyPrice !== null;
   return {
     unitPrice: (inherited ? familyPrice : simple.default_rate) as string,
     currency,
-    source: inherited ? 'family_base' : 'simple',
+    source: inherited ? "family_base" : "simple",
     scheduleId: null,
     priceLevelId: null,
     priceLevelName: null,
-    minimumQuantity: '1.0000',
-    quantityBasis: 'line_quantity',
+    minimumQuantity: "1.0000",
+    quantityBasis: "line_quantity",
     assignmentId: null,
     resolvedAt,
     familyId: inherited ? simple.family_id : null,
     familyCode: inherited ? simple.family_code : null,
     familyName: inherited ? simple.family_name : null,
-  }
+  };
 }

@@ -1,36 +1,43 @@
-import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { randomUUID } from 'node:crypto'
-import { createTranslator, type AbstractIntlMessages } from 'next-intl'
-import messages from '../../../../../messages/en/index.ts'
+import { registerHooks } from "node:module";
+import { pathToFileURL } from "node:url";
+import assert from "node:assert/strict";
+import test from "node:test";
+import { randomUUID } from "node:crypto";
+import { createTranslator, type AbstractIntlMessages } from "next-intl";
+import messages from "../../../../../messages/en/index.ts";
 
-Object.assign(globalThis, { __internalReportTranslations: (input: string | { namespace?: string }) =>
-  createTranslator({ locale: 'en', messages: messages as unknown as AbstractIntlMessages, namespace: typeof input === 'string' ? input : input?.namespace }) })
+Object.assign(globalThis, {
+  __internalReportTranslations: (input: string | { namespace?: string }) =>
+    createTranslator({
+      locale: "en",
+      messages: messages as unknown as AbstractIntlMessages,
+      namespace: typeof input === "string" ? input : input?.namespace,
+    }),
+});
 
-const repo = process.cwd()
-const root = pathToFileURL(repo + '/').href
+const repo = process.cwd();
+const root = pathToFileURL(repo + "/").href;
 registerHooks({
   resolve(s, c, next) {
-    if (s === 'next-intl/server')
+    if (s === "next-intl/server")
       return {
         shortCircuit: true,
         url:
-          'data:text/javascript,' +
+          "data:text/javascript," +
           encodeURIComponent(
-            'export async function getTranslations(input){return globalThis.__internalReportTranslations(input)}' +
+            "export async function getTranslations(input){return globalThis.__internalReportTranslations(input)}" +
               'export async function getLocale(){return "en";}',
           ),
-      }
-    return next(s, c)
+      };
+    return next(s, c);
   },
-})
+});
 
-const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { GET } = await import(root + 'web/app/api/internal/reports/render/route.ts')
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import(root + "node_modules/drizzle-orm/index.js");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { GET } = await import(root + "web/app/api/internal/reports/render/route.ts");
 
 /**
  * Close-package renders through the internal render endpoint (C-50).
@@ -39,16 +46,16 @@ const { GET } = await import(root + 'web/app/api/internal/reports/render/route.t
  * under close authority — the publish path under the sender's close.run,
  * re-resolved at render time. Scheduled renders keep their own principal.
  */
-const TOKEN = 'close-route-test-token'
+const TOKEN = "close-route-test-token";
 
 async function seedDefinition(orgId: string): Promise<string> {
-  const definitionId = randomUUID()
+  const definitionId = randomUUID();
   await db.execute(sql`
     insert into report_definitions (id, org_id, kind, report_type, system, slug, name, description, query, statement)
     values (${definitionId}, ${orgId}, 'built_in', 'statement', true, 'trial-balance', 'Trial Balance',
             'Debit and credit balances for every account, as of a date.', null,
-            '{"kind":"trial-balance"}'::jsonb)`)
-  return definitionId
+            '{"kind":"trial-balance"}'::jsonb)`);
+  return definitionId;
 }
 
 async function mintCloseRun(
@@ -58,13 +65,13 @@ async function mintCloseRun(
   closeRunId: string | null,
   packageId: string,
 ): Promise<string> {
-  const runId = randomUUID()
+  const runId = randomUUID();
   await db.execute(sql`
     insert into report_runs (id, org_id, definition_id, trigger, status, recipient_emails, filters,
                              authorization_snapshot, created_by)
     values (${runId}, ${orgId}, ${definitionId}, 'close-package', 'running', '[]'::jsonb,
             ${JSON.stringify({
-              statementParams: { period: 'custom', from: '2026-07-01', to: '2026-07-31' },
+              statementParams: { period: "custom", from: "2026-07-01", to: "2026-07-31" },
               closePackage: { packageId, runId: closeRunId },
             })}::jsonb,
             ${JSON.stringify({
@@ -72,79 +79,83 @@ async function mintCloseRun(
               userId: senderId,
               allowedSubsidiaryIds: null,
               definition: {
-                report_type: 'statement',
+                report_type: "statement",
                 query: null,
-                statement: { kind: 'trial-balance' },
-                name: 'Trial Balance',
-                slug: 'trial-balance',
-                kind: 'built_in',
+                statement: { kind: "trial-balance" },
+                name: "Trial Balance",
+                slug: "trial-balance",
+                kind: "built_in",
               },
-            })}::jsonb, ${senderId})`)
-  return runId
+            })}::jsonb, ${senderId})`);
+  return runId;
 }
 
 function renderRequest(orgId: string, definitionId: string, runId: string | null): Request {
-  const params = new URLSearchParams({ orgId, definitionId })
-  if (runId !== null) params.set('runId', runId)
-  params.set('period', 'custom')
-  params.set('from', '2026-07-01')
-  params.set('to', '2026-07-31')
+  const params = new URLSearchParams({ orgId, definitionId });
+  if (runId !== null) params.set("runId", runId);
+  params.set("period", "custom");
+  params.set("from", "2026-07-01");
+  params.set("to", "2026-07-31");
   return new Request(`http://test.local/api/internal/reports/render?${params.toString()}`, {
-    headers: { 'x-internal-token': TOKEN },
-  })
+    headers: { "x-internal-token": TOKEN },
+  });
 }
 
-test('close-package run renders under the sender close.run grant', async () => {
-  process.env.OPENBOOKS_INTERNAL_TOKEN = TOKEN
-  const org = await withBypassContext(() => createScratchOrg())
+test("close-package run renders under the sender close.run grant", async () => {
+  process.env.OPENBOOKS_INTERNAL_TOKEN = TOKEN;
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const sender = await withBypassContext(() => createScratchUser(org.orgId, 'Close sender', 'close_sender'))
+    const sender = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Close sender", "close_sender"),
+    );
     // A trial balance reads the general ledger, so the sender also holds gl.read
     // (statement content grants are enforced on every render path).
     await db.execute(sql`
       update app_roles set permissions = '["close.run","gl.read","reports.read","reports.schedule"]'::jsonb,
                            subsidiary_restriction = '{"mode":"all"}'::jsonb
-       where org_id = ${org.orgId} and key = 'close_sender'`)
-    const definitionId = await seedDefinition(org.orgId)
-    const packageId = randomUUID()
-    const closeRunId = randomUUID()
-    const runId = await mintCloseRun(org.orgId, definitionId, sender, closeRunId, packageId)
+       where org_id = ${org.orgId} and key = 'close_sender'`);
+    const definitionId = await seedDefinition(org.orgId);
+    const packageId = randomUUID();
+    const closeRunId = randomUUID();
+    const runId = await mintCloseRun(org.orgId, definitionId, sender, closeRunId, packageId);
 
-    const res = await GET(renderRequest(org.orgId, definitionId, runId))
-    assert.equal(res.status, 200, await res.clone().text())
-    assert.match(res.headers.get('content-type') ?? '', /application\/pdf/)
-    const bytes = Buffer.from(await res.arrayBuffer())
-    assert.ok(bytes.length > 100, 'the render must return real PDF bytes')
-    assert.ok(bytes.subarray(0, 5).toString() === '%PDF-', 'the body must be a PDF document')
+    const res = await GET(renderRequest(org.orgId, definitionId, runId));
+    assert.equal(res.status, 200, await res.clone().text());
+    assert.match(res.headers.get("content-type") ?? "", /application\/pdf/);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    assert.ok(bytes.length > 100, "the render must return real PDF bytes");
+    assert.ok(bytes.subarray(0, 5).toString() === "%PDF-", "the body must be a PDF document");
 
     // The sender loses close.run: the same run refuses by name with the
     // remedy instead of rendering.
     await db.execute(sql`
       update app_roles set permissions = '["gl.read","reports.read","reports.schedule"]'::jsonb
-       where org_id = ${org.orgId} and key = 'close_sender'`)
-    const refused = await GET(renderRequest(org.orgId, definitionId, runId))
-    assert.equal(refused.status, 422)
-    const body = (await refused.json()) as { error: string }
-    assert.match(body.error, /no longer holds close\.run — re-send the package/)
+       where org_id = ${org.orgId} and key = 'close_sender'`);
+    const refused = await GET(renderRequest(org.orgId, definitionId, runId));
+    assert.equal(refused.status, 422);
+    const body = (await refused.json()) as { error: string };
+    assert.match(body.error, /no longer holds close\.run — re-send the package/);
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('a scheduled run lacking requiredPermissions renders and records them once', async () => {
+test("a scheduled run lacking requiredPermissions renders and records them once", async () => {
   // RENDER-STAMP: the 0340 write-once transition. The schedule snapshot
   // predates recording; the render completes and the content-derived key
   // lands exactly once.
-  process.env.OPENBOOKS_INTERNAL_TOKEN = TOKEN
-  const org = await withBypassContext(() => createScratchOrg())
+  process.env.OPENBOOKS_INTERNAL_TOKEN = TOKEN;
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const sender = await withBypassContext(() => createScratchUser(org.orgId, 'Scheduler', 'scheduler'))
+    const sender = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Scheduler", "scheduler"),
+    );
     await db.execute(sql`
       update app_roles set permissions = '["gl.read","reports.read","reports.schedule"]'::jsonb,
                            subsidiary_restriction = '{"mode":"all"}'::jsonb
-       where org_id = ${org.orgId} and key = 'scheduler'`)
-    const definitionId = await seedDefinition(org.orgId)
-    const runId = randomUUID()
+       where org_id = ${org.orgId} and key = 'scheduler'`);
+    const definitionId = await seedDefinition(org.orgId);
+    const runId = randomUUID();
     await db.execute(sql`
       insert into report_runs (id, org_id, definition_id, trigger, status, recipient_emails, filters,
                                authorization_snapshot, created_by)
@@ -155,35 +166,44 @@ test('a scheduled run lacking requiredPermissions renders and records them once'
                 userId: sender,
                 allowedSubsidiaryIds: null,
                 definition: {
-                  report_type: 'statement',
+                  report_type: "statement",
                   query: null,
-                  statement: { kind: 'trial-balance' },
-                  name: 'Trial Balance',
-                  slug: 'trial-balance',
-                  kind: 'built_in',
+                  statement: { kind: "trial-balance" },
+                  name: "Trial Balance",
+                  slug: "trial-balance",
+                  kind: "built_in",
                 },
-              })}::jsonb, ${sender})`)
-    const res = await GET(renderRequest(org.orgId, definitionId, runId))
-    assert.equal(res.status, 200, await res.clone().text())
-    const snapshot = (await db.execute(sql`
-        select authorization_snapshot as snapshot from report_runs where id = ${runId}`, 'objects'))[0]?.snapshot as { requiredPermissions?: unknown } | undefined
-    assert.deepEqual(snapshot?.requiredPermissions, [], 'the render records the content key exactly once')
+              })}::jsonb, ${sender})`);
+    const res = await GET(renderRequest(org.orgId, definitionId, runId));
+    assert.equal(res.status, 200, await res.clone().text());
+    const snapshot = (
+      await db.execute(
+        sql`
+        select authorization_snapshot as snapshot from report_runs where id = ${runId}`,
+        "objects",
+      )
+    )[0]?.snapshot as { requiredPermissions?: unknown } | undefined;
+    assert.deepEqual(
+      snapshot?.requiredPermissions,
+      [],
+      "the render records the content key exactly once",
+    );
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('close-package render without a run id or row refuses', async () => {
-  process.env.OPENBOOKS_INTERNAL_TOKEN = TOKEN
-  const org = await withBypassContext(() => createScratchOrg())
+test("close-package render without a run id or row refuses", async () => {
+  process.env.OPENBOOKS_INTERNAL_TOKEN = TOKEN;
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const definitionId = await seedDefinition(org.orgId)
-    const missing = await GET(renderRequest(org.orgId, definitionId, null))
-    assert.equal(missing.status, 422)
-    assert.match(((await missing.json()) as { error: string }).error, /runId is required/)
-    const unknown = await GET(renderRequest(org.orgId, definitionId, randomUUID()))
-    assert.equal(unknown.status, 404)
+    const definitionId = await seedDefinition(org.orgId);
+    const missing = await GET(renderRequest(org.orgId, definitionId, null));
+    assert.equal(missing.status, 422);
+    assert.match(((await missing.json()) as { error: string }).error, /runId is required/);
+    const unknown = await GET(renderRequest(org.orgId, definitionId, randomUUID()));
+    assert.equal(unknown.status, 404);
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});

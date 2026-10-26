@@ -65,20 +65,26 @@ function gatePlan(assignees: EmailTarget[]): AutomationPlan {
   return {
     actions: [],
     actionNodes: [],
-    gates: [
-      { nodeId: "gate_1", gate: { title: "Void approval", assignees, mode: "any" } },
-    ],
+    gates: [{ nodeId: "gate_1", gate: { title: "Void approval", assignees, mode: "any" } }],
   };
 }
 
 async function createRun(
   orgId: string,
   submitterId: string,
-  plan: AutomationPlan = {actions:[],actionNodes:[],gates:[]},
+  plan: AutomationPlan = { actions: [], actionNodes: [], gates: [] },
 ): Promise<{ runId: string; flowId: string; subjectId: string }> {
   const flowId = randomUUID();
   const subjectId = await seedDraftDocument(orgId, { kind: "vendor_bill", createdBy: submitterId });
-  const graph={schemaVersion:1,nodes:plan.gates.map(({nodeId,gate})=>({id:nodeId,position:{x:0,y:0},data:{kind:"gate",gate}})),edges:[]};
+  const graph = {
+    schemaVersion: 1,
+    nodes: plan.gates.map(({ nodeId, gate }) => ({
+      id: nodeId,
+      position: { x: 0, y: 0 },
+      data: { kind: "gate", gate },
+    })),
+    edges: [],
+  };
   await db.execute(sql`insert into flows(id,org_id,name,subject_kind,enabled,graph)
     values(${flowId},${orgId},'Effect transaction coverage','vendor_bill',true,${JSON.stringify(graph)}::jsonb)`);
   const [run] = await db
@@ -90,14 +96,16 @@ async function createRun(
       subjectId,
       trigger: "before_void",
       status: "running",
-      createdBy:submitterId,
-      context: {submissionPolicy:{flowId,graph}},
+      createdBy: submitterId,
+      context: { submissionPolicy: { flowId, graph } },
     })
     .returning({ id: schema.flowRuns.id });
   return { runId: run!.id, flowId, subjectId };
 }
 
-async function withOrgFixture(fn: (org: ScratchOrg, actors: FlowActors) => Promise<void>): Promise<void> {
+async function withOrgFixture(
+  fn: (org: ScratchOrg, actors: FlowActors) => Promise<void>,
+): Promise<void> {
   const org = await createScratchOrg();
   try {
     const actors = await seedFlowActors(org.orgId);
@@ -108,11 +116,14 @@ async function withOrgFixture(fn: (org: ScratchOrg, actors: FlowActors) => Promi
 }
 
 const outboxForRun = (runId: string) =>
-  db.execute<{ id: string; status: string; payload: unknown }>(sql`
+  db.execute<{ id: string; status: string; payload: unknown }>(
+    sql`
     select id, status, payload from scheduler_outbox
      where kind = 'flow_email' and subject_id = ${runId}
      order by created_at
-  `, "objects");
+  `,
+    "objects",
+  );
 
 test("a rolled-back transactional flow leaves no pending email behind", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
@@ -146,9 +157,14 @@ test("a rolled-back transactional flow leaves no pending email behind", { skip: 
       "no flow email may survive the rolled-back unit",
     );
     assert.equal(
-      await db.execute<{ n: number }>(sql`
+      await db
+        .execute<{ n: number }>(
+          sql`
         select count(*) as n from flow_run_effects where run_id = ${run.runId}
-      `, "objects").then((r) => Number(r[0]!.n)),
+      `,
+          "objects",
+        )
+        .then((r) => Number(r[0]!.n)),
       0,
       "effect checkpoints roll back with the unit",
     );
@@ -225,8 +241,11 @@ test("committed flow emails drain through the outbox exactly once", { skip: !DB 
 
 test("gate approval requests defer per assignee through the outbox", { skip: !DB }, async () => {
   await withOrgFixture(async (org, actors) => {
-    const plan=gatePlan([{type:"user",userId:actors.approver1Id},{type:"user",userId:actors.approver2Id}]);
-    const run = await createRun(org.orgId, actors.submitterId,plan);
+    const plan = gatePlan([
+      { type: "user", userId: actors.approver1Id },
+      { type: "user", userId: actors.approver2Id },
+    ]);
+    const run = await createRun(org.orgId, actors.submitterId, plan);
     const res = await executeFlowPlan({ orgId: org.orgId }, adapter, {
       flow: { id: run.flowId, name: "Gate deferral probe", subjectKind: "vendor_bill", graph: {} },
       runId: run.runId,
@@ -245,17 +264,23 @@ test("gate approval requests defer per assignee through the outbox", { skip: !DB
     }
     assert.notEqual(rows[0]!.id, rows[1]!.id);
 
-    const gateRows = await db.execute<{ id: string }>(sql`
+    const gateRows = await db.execute<{ id: string }>(
+      sql`
       select id from flow_gates where run_id = ${run.runId} order by created_at
-    `, "objects");
+    `,
+      "objects",
+    );
     // gatesCreated is pinned to 2 above: every created gate persisted a row,
     // so the per-row email check below cannot pass over an empty set.
     assert.equal(gateRows.length, res.gatesCreated);
-    const keys = await db.execute<{ occurrence_key: string }>(sql`
+    const keys = await db.execute<{ occurrence_key: string }>(
+      sql`
       select occurrence_key from scheduler_outbox
        where kind = 'flow_email' and subject_id = ${run.runId}
        order by occurrence_key
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const gate of gateRows) {
       assert.ok(
         keys.some((k) => k.occurrence_key === `${run.runId}:gate-email:${gate.id}`),
@@ -265,37 +290,48 @@ test("gate approval requests defer per assignee through the outbox", { skip: !DB
   });
 });
 
-test("enqueueFlowEmail rejects malformed deliveries before they become durable", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const runId = randomUUID();
-    await assert.rejects(
-      enqueueFlowEmail({
-        orgId: org.orgId,
-        runId,
-        occurrenceKey: `${runId}:bad`,
-        payload: { to: [], subject: "x", html: "", text: "" },
-      }),
-      /malformed/,
-    );
-    await assert.rejects(
-      enqueueFlowEmail({
-        orgId: org.orgId,
-        runId,
-        occurrenceKey: `${runId}:bad`,
-        payload: { to: ["not-an-email"], subject: "x", html: "", text: "" },
-      }),
-      /malformed/,
-    );
-    assert.equal(
-      Number((await db.execute<{ n: number }>(sql`
+test(
+  "enqueueFlowEmail rejects malformed deliveries before they become durable",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const runId = randomUUID();
+      await assert.rejects(
+        enqueueFlowEmail({
+          orgId: org.orgId,
+          runId,
+          occurrenceKey: `${runId}:bad`,
+          payload: { to: [], subject: "x", html: "", text: "" },
+        }),
+        /malformed/,
+      );
+      await assert.rejects(
+        enqueueFlowEmail({
+          orgId: org.orgId,
+          runId,
+          occurrenceKey: `${runId}:bad`,
+          payload: { to: ["not-an-email"], subject: "x", html: "", text: "" },
+        }),
+        /malformed/,
+      );
+      assert.equal(
+        Number(
+          (
+            await db.execute<{ n: number }>(
+              sql`
         select count(*) as n from scheduler_outbox
          where kind = 'flow_email' and subject_id = ${runId}
-      `, "objects"))[0]!.n),
-      0,
-      "no malformed delivery may reach storage",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      `,
+              "objects",
+            )
+          )[0]!.n,
+        ),
+        0,
+        "no malformed delivery may reach storage",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

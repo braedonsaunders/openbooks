@@ -16,7 +16,10 @@ test("a later attempt generation mints a new queue identity", () => {
   // reprocess after a completed or failed run must never collapse onto a
   // retained completed job and be silently skipped.
   assert.notEqual(apCaptureReprocessJobId(ITEM, 3), apCaptureReprocessJobId(ITEM, 4));
-  assert.notEqual(apCaptureReprocessJobId(ITEM, 0), apCaptureReprocessJobId("01904632-9c9a-7b1e-8f2a-1c3d5e7f9000", 0));
+  assert.notEqual(
+    apCaptureReprocessJobId(ITEM, 0),
+    apCaptureReprocessJobId("01904632-9c9a-7b1e-8f2a-1c3d5e7f9000", 0),
+  );
 });
 
 test("reprocess queue identity carries no wall-clock component", () => {

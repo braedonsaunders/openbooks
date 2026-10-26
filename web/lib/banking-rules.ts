@@ -1,18 +1,28 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db, schema, withOrgTransaction, withTransactionSavepoint } from '@openbooks/engine/platform/db'
-import { fromUnits, toUnits } from '@openbooks/engine/money/money'
-import { PostingError } from '@openbooks/engine/journal/contracts'
-import { typedRefusal } from './api/error-response'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import {
+  db,
+  schema,
+  withOrgTransaction,
+  withTransactionSavepoint,
+} from "@openbooks/engine/platform/db";
+import { fromUnits, toUnits } from "@openbooks/engine/money/money";
+import { PostingError } from "@openbooks/engine/journal/contracts";
+import { typedRefusal } from "./api/error-response";
 import { postDocument } from "@openbooks/engine/ledger/posting-document";
-import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
-import { startReconciliation, createMatchWithJournal, excludeStatementLine, statementComparisonSign } from '@openbooks/engine/banking/banking'
-import { ScopeNotFoundError, subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
+import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
+import {
+  startReconciliation,
+  createMatchWithJournal,
+  excludeStatementLine,
+  statementComparisonSign,
+} from "@openbooks/engine/banking/banking";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "@openbooks/engine/organization/scope";
 import { controlDeps } from "@openbooks/engine/ledger/document-service";
 import { can, resolveAuthzByUserId } from "./authz";
 import { nextDocumentNumber } from "./bills.ts";
-import { lockBankMatchRuleSet } from './banking-rule-set-lock'
+import { lockBankMatchRuleSet } from "./banking-rule-set-lock";
 import {
   BankRuleRefusal,
   type RuleCriteria,
@@ -25,7 +35,7 @@ import {
   lineMatchesRule,
   resolveSplitAmounts,
   ruleAppliesToAccount,
-} from './banking-rules-core'
+} from "./banking-rules-core";
 
 /**
  * Reconciliation rules — the engine behind the `bank_match_rules` table. A rule
@@ -39,7 +49,7 @@ import {
  */
 
 // Re-export the pure model + logic so existing importers keep one entry point.
-export * from './banking-rules-core'
+export * from "./banking-rules-core";
 
 // ---------------------------------------------------------------------------
 // Reconciliation container
@@ -50,13 +60,22 @@ export * from './banking-rules-core'
  * resolve null here so each caller keeps its own not-found contract; scope
  * denials always refuse the uniform not-found.
  */
-async function bankAccountSubsidiary(orgId: string, accountId: string, lock = false): Promise<string | null | undefined> {
-  const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
+async function bankAccountSubsidiary(
+  orgId: string,
+  accountId: string,
+  lock = false,
+): Promise<string | null | undefined> {
+  const row = (
+    await db.execute<{ subsidiaryId: string | null }>(
+      sql`
     select subsidiary_id as "subsidiaryId" from accounts
      where id = ${accountId} and org_id = ${orgId}
      ${lock ? sql`for share` : sql``}
-  `, 'objects'))[0]
-  return row?.subsidiaryId
+  `,
+      "objects",
+    )
+  )[0];
+  return row?.subsidiaryId;
 }
 
 /**
@@ -70,7 +89,7 @@ function requireBankAccountInScope(
   opts: { orgWideNull?: boolean } = {},
 ): void {
   if (!subsidiaryScopeAllows(scope, subsidiaryId ?? null, opts)) {
-    throw new ScopeNotFoundError()
+    throw new ScopeNotFoundError();
   }
 }
 
@@ -85,27 +104,33 @@ export async function ensureOpenReconciliation(
   accountId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<string> {
-  requireBankAccountInScope(await bankAccountSubsidiary(orgId, accountId), scope)
-  const open = (await db.execute<{ id: string }>(sql`
+  requireBankAccountInScope(await bankAccountSubsidiary(orgId, accountId), scope);
+  const open = await db.execute<{ id: string }>(
+    sql`
     select id from reconciliations
      where org_id = ${orgId} and account_id = ${accountId} and status <> 'signed_off'
      order by created_at desc limit 1
-  `, 'objects'))
-  if (open[0]) return open[0].id
-  const latest = (await db.execute<{ through_date: string | null; closing: string | null }>(sql`
+  `,
+    "objects",
+  );
+  if (open[0]) return open[0].id;
+  const latest = await db.execute<{ through_date: string | null; closing: string | null }>(
+    sql`
     select max(statement_date) as through_date,
            (select closing_balance from bank_statements
              where account_id = ${accountId} and org_id = ${orgId}
              order by statement_date desc, imported_at desc limit 1) as closing
       from bank_statements where account_id = ${accountId} and org_id = ${orgId}
-  `, 'objects'))
-  const throughDate = latest[0]?.through_date ?? await businessToday(orgId)
-  const statementBalance = latest[0]?.closing ?? '0'
+  `,
+    "objects",
+  );
+  const throughDate = latest[0]?.through_date ?? (await businessToday(orgId));
+  const statementBalance = latest[0]?.closing ?? "0";
   const rec = await startReconciliation(
     { accountId, throughDate, statementBalance },
     { orgId, userId, allowedSubsidiaryIds: scope },
-  )
-  return rec.id
+  );
+  return rec.id;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,17 +138,17 @@ export async function ensureOpenReconciliation(
 // ---------------------------------------------------------------------------
 
 export interface ApplyResult {
-  matched: number
-  excluded: number
-  categorized: number
-  suggested: number
-  scanned: number
+  matched: number;
+  excluded: number;
+  categorized: number;
+  suggested: number;
+  scanned: number;
   /**
    * Lines a matching rule could not act on, each with the refusal that names
    * its remedy. A refused line is left unmatched and untouched; the rest of
    * the run still applies.
    */
-  refused: { lineId: string; ruleId: string; ruleName: string; reason: string }[]
+  refused: { lineId: string; ruleId: string; ruleName: string; reason: string }[];
 }
 
 /**
@@ -132,39 +157,50 @@ export interface ApplyResult {
  * which is about the applier rather than any one line.
  */
 function lineRefusalReason(error: unknown): string | null {
-  if (error instanceof JournalPostingDeniedError) return null
-  if (error instanceof PostingError) return error.message
-  return typedRefusal(error) ? error.message : null
+  if (error instanceof JournalPostingDeniedError) return null;
+  if (error instanceof PostingError) return error.message;
+  return typedRefusal(error) ? error.message : null;
 }
 
 async function loadActiveRules(orgId: string): Promise<RuleRow[]> {
-  const res = (await db.execute<RuleRow>(sql`
+  const res = await db.execute<RuleRow>(
+    sql`
     select id, name, criteria, outcome, priority, is_active
       from bank_match_rules
      where org_id = ${orgId} and is_active
      order by priority asc, created_at asc
-  `, 'objects'))
-  return res
+  `,
+    "objects",
+  );
+  return res;
 }
 
-async function loadLines(orgId: string, accountId: string, status: 'unmatched' | 'any', windowDays?: number): Promise<BankLine[]> {
-  const today = await businessToday(orgId)
-  const statusClause = status === 'unmatched' ? sql` and l.match_status = 'unmatched'` : sql``
+async function loadLines(
+  orgId: string,
+  accountId: string,
+  status: "unmatched" | "any",
+  windowDays?: number,
+): Promise<BankLine[]> {
+  const today = await businessToday(orgId);
+  const statusClause = status === "unmatched" ? sql` and l.match_status = 'unmatched'` : sql``;
   const windowClause =
-    typeof windowDays === 'number'
+    typeof windowDays === "number"
       ? sql` and l.posted_on >= (${today}::date - ${windowDays}::int)`
-      : sql``
-  const res = (await db.execute<BankLine>(sql`
+      : sql``;
+  const res = await db.execute<BankLine>(
+    sql`
     select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref, l.currency, s.source
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
      where s.account_id = ${accountId} and s.org_id = ${orgId}${statusClause}${windowClause}
      order by l.posted_on desc, l.line_number
-  `, 'objects'))
-  return res
+  `,
+    "objects",
+  );
+  return res;
 }
 
-type RuleApplyOutcome = 'excluded' | 'categorized' | 'suggested' | null
+type RuleApplyOutcome = "excluded" | "categorized" | "suggested" | null;
 
 /**
  * Re-read the rule at the moment a bulk scan is about to use it. The read
@@ -191,31 +227,40 @@ async function applyRuleIfStillCurrent(
     // The rule-set advisory lock serializes product-path edits against bulk
     // scans. The re-read below is lock-free on purpose (see
     // above): locking the row would pin it for the whole outer transaction.
-    await lockBankMatchRuleSet(db, orgId)
-    const current = (await db.execute<RuleRow>(sql`
+    await lockBankMatchRuleSet(db, orgId);
+    const current = (
+      await db.execute<RuleRow>(
+        sql`
       select id, name, criteria, outcome, priority, is_active
         from bank_match_rules
        where id = ${scannedRule.id} and org_id = ${orgId}
-    `, 'objects'))[0]
-    if (!current?.is_active) return null
-    if (!ruleAppliesToAccount(current.criteria, accountId) || !lineMatchesRule(line, current.criteria)) return null
+    `,
+        "objects",
+      )
+    )[0];
+    if (!current?.is_active) return null;
+    if (
+      !ruleAppliesToAccount(current.criteria, accountId) ||
+      !lineMatchesRule(line, current.criteria)
+    )
+      return null;
 
-    if (current.outcome.action === 'exclude') {
+    if (current.outcome.action === "exclude") {
       await excludeStatementLine(
         line.id,
         `Excluded automatically by bank rule "${current.name}" (${current.id})`,
         ctx,
-      )
-      return 'excluded'
+      );
+      return "excluded";
     }
-    if (isCategorizeOutcome(current.outcome) && current.outcome.mode === 'suggest') {
-      return 'suggested'
+    if (isCategorizeOutcome(current.outcome) && current.outcome.mode === "suggest") {
+      return "suggested";
     }
-    if (isCategorizeOutcome(current.outcome)) assertUntaxedSplits(current.outcome.lines)
-    const recId = await ensureReconciliation()
-    await postCategorizeForLine(orgId, userId, ctx, recId, accountId, line, current)
-    return 'categorized'
-  })
+    if (isCategorizeOutcome(current.outcome)) assertUntaxedSplits(current.outcome.lines);
+    const recId = await ensureReconciliation();
+    await postCategorizeForLine(orgId, userId, ctx, recId, accountId, line, current);
+    return "categorized";
+  });
 }
 
 /**
@@ -230,55 +275,63 @@ export async function applyRulesToAccount(
   accountId: string,
   scope: ReadonlySet<string> | null,
 ): Promise<ApplyResult> {
-  const ctx = { orgId, userId, allowedSubsidiaryIds: scope }
-  const result: ApplyResult = { matched: 0, excluded: 0, categorized: 0, suggested: 0, scanned: 0, refused: [] }
+  const ctx = { orgId, userId, allowedSubsidiaryIds: scope };
+  const result: ApplyResult = {
+    matched: 0,
+    excluded: 0,
+    categorized: 0,
+    suggested: 0,
+    scanned: 0,
+    refused: [],
+  };
   return withOrgTransaction(orgId, async () => {
     // Rule create/edit/delete takes this same tenant lock. Keep it from the
     // candidate snapshot through the final line so a new higher-priority rule
     // cannot appear between scan and apply.
-    await lockBankMatchRuleSet(db, orgId)
-    requireBankAccountInScope(await bankAccountSubsidiary(orgId, accountId), scope)
-    const rules = await loadActiveRules(orgId)
-    if (rules.length === 0) return result
-    const lines = await loadLines(orgId, accountId, 'unmatched')
-    result.scanned = lines.length
-    if (lines.length === 0) return result
-    let reconciliationId: string | null = null
+    await lockBankMatchRuleSet(db, orgId);
+    requireBankAccountInScope(await bankAccountSubsidiary(orgId, accountId), scope);
+    const rules = await loadActiveRules(orgId);
+    if (rules.length === 0) return result;
+    const lines = await loadLines(orgId, accountId, "unmatched");
+    result.scanned = lines.length;
+    if (lines.length === 0) return result;
+    let reconciliationId: string | null = null;
     const ensureReconciliation = async (): Promise<string> => {
-      if (!reconciliationId) reconciliationId = await ensureOpenReconciliation(orgId, userId, accountId, scope)
-      return reconciliationId
-    }
+      if (!reconciliationId)
+        reconciliationId = await ensureOpenReconciliation(orgId, userId, accountId, scope);
+      return reconciliationId;
+    };
     for (const line of lines) {
-      const rule = firstMatchingRule(line, accountId, rules)
-      if (!rule) continue
+      const rule = firstMatchingRule(line, accountId, rules);
+      if (!rule) continue;
       // Each line applies inside its own savepoint: a refusal on one line
       // (an unpostable split, a closed period, an approval-gated journal)
       // rolls back that line's writes only and is reported by line, so one
       // ineligible line never aborts the whole run. Unexpected failures still
       // abort it. A reconciliation opened inside a rolled-back savepoint is
       // gone, so its cached id is forgotten with it.
-      const reconciliationBefore: string | null = reconciliationId
-      let applied: RuleApplyOutcome
+      const reconciliationBefore: string | null = reconciliationId;
+      let applied: RuleApplyOutcome;
       try {
-        applied = await withTransactionSavepoint(db, () => applyRuleIfStillCurrent(
-          orgId, userId, accountId, line, rule, ctx, ensureReconciliation,
-        ))
+        applied = await withTransactionSavepoint(db, () =>
+          applyRuleIfStillCurrent(orgId, userId, accountId, line, rule, ctx, ensureReconciliation),
+        );
       } catch (error) {
-        const reason = lineRefusalReason(error)
-        if (reason === null) throw error
-        reconciliationId = reconciliationBefore
-        result.refused.push({ lineId: line.id, ruleId: rule.id, ruleName: rule.name, reason })
-        continue
+        const reason = lineRefusalReason(error);
+        if (reason === null) throw error;
+        reconciliationId = reconciliationBefore;
+        result.refused.push({ lineId: line.id, ruleId: rule.id, ruleName: rule.name, reason });
+        continue;
       }
-      if (applied === 'excluded') result.excluded++
-      if (applied === 'categorized') {
-        result.categorized++
-        result.matched++
+      if (applied === "excluded") result.excluded++;
+      if (applied === "categorized") {
+        result.categorized++;
+        result.matched++;
       }
-      if (applied === 'suggested') result.suggested++
+      if (applied === "suggested") result.suggested++;
     }
-    return result
-  })
+    return result;
+  });
 }
 
 /**
@@ -291,38 +344,50 @@ export async function applyRuleToLine(
   opts: { statementLineId: string; ruleId: string; reconciliationId?: string },
   scope: ReadonlySet<string> | null,
 ): Promise<void> {
-  const ctx = { orgId, userId, allowedSubsidiaryIds: scope }
-  const ruleRes = (await db.execute<RuleRow>(sql`
+  const ctx = { orgId, userId, allowedSubsidiaryIds: scope };
+  const ruleRes = await db.execute<RuleRow>(
+    sql`
     select id, name, criteria, outcome, priority, is_active
       from bank_match_rules where id = ${opts.ruleId} and org_id = ${orgId}
-  `, 'objects'))
-  const rule = ruleRes[0]
-  if (!rule) throw new BankRuleRefusal('Rule not found', 404)
+  `,
+    "objects",
+  );
+  const rule = ruleRes[0];
+  if (!rule) throw new BankRuleRefusal("Rule not found", 404);
   // A disabled rule must never post: without this, deactivation is enforced
   // only by the UI hiding the rule while the API still fires it.
-  if (!rule.is_active) throw new BankRuleRefusal(`Rule "${rule.name}" is not active; activate it on the Rules page before applying it`, 409)
-  const lineRes = (await db.execute<(BankLine & { account_id: string; subsidiaryId: string | null })>(sql`
+  if (!rule.is_active)
+    throw new BankRuleRefusal(
+      `Rule "${rule.name}" is not active; activate it on the Rules page before applying it`,
+      409,
+    );
+  const lineRes = await db.execute<BankLine & { account_id: string; subsidiaryId: string | null }>(
+    sql`
     select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref, l.currency, s.source, s.account_id,
            a.subsidiary_id as "subsidiaryId"
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.id = ${opts.statementLineId} and l.org_id = ${orgId} and l.match_status = 'unmatched'
-  `, 'objects'))
-  const line = lineRes[0]
-  if (!line) throw new BankRuleRefusal('Statement line not found or already matched; refresh Match Bank Data and pick an unmatched line', 409)
-  requireBankAccountInScope(line.subsidiaryId, scope)
-  if (rule.outcome.action === 'exclude') {
-    await excludeStatementLine(
-      line.id,
-      `Excluded by bank rule "${rule.name}" (${rule.id})`,
-      ctx,
-    )
-    return
+  `,
+    "objects",
+  );
+  const line = lineRes[0];
+  if (!line)
+    throw new BankRuleRefusal(
+      "Statement line not found or already matched; refresh Match Bank Data and pick an unmatched line",
+      409,
+    );
+  requireBankAccountInScope(line.subsidiaryId, scope);
+  if (rule.outcome.action === "exclude") {
+    await excludeStatementLine(line.id, `Excluded by bank rule "${rule.name}" (${rule.id})`, ctx);
+    return;
   }
-  if (isCategorizeOutcome(rule.outcome)) assertUntaxedSplits(rule.outcome.lines)
-  const recId = opts.reconciliationId ?? (await ensureOpenReconciliation(orgId, userId, line.account_id, scope))
-  await postCategorizeForLine(orgId, userId, ctx, recId, line.account_id, line, rule)
+  if (isCategorizeOutcome(rule.outcome)) assertUntaxedSplits(rule.outcome.lines);
+  const recId =
+    opts.reconciliationId ??
+    (await ensureOpenReconciliation(orgId, userId, line.account_id, scope));
+  await postCategorizeForLine(orgId, userId, ctx, recId, line.account_id, line, rule);
 }
 
 /**
@@ -338,15 +403,22 @@ export async function bankLegAmountInGlTerms(
   reconciliationId: string,
   statementAmount: string,
 ): Promise<string> {
-  const sessionRes = (await db.execute<{ statement_balance: string }>(sql`
+  const sessionRes = await db.execute<{ statement_balance: string }>(
+    sql`
     select statement_balance from reconciliations
      where id = ${reconciliationId} and org_id = ${orgId} and account_id = ${accountId}
-  `, 'objects'))
-  const sessionBalance = sessionRes[0]?.statement_balance
-  if (!sessionBalance) throw new BankRuleRefusal('Reconciliation session not found for this line; refresh and pick a session on the line’s account', 409)
+  `,
+    "objects",
+  );
+  const sessionBalance = sessionRes[0]?.statement_balance;
+  if (!sessionBalance)
+    throw new BankRuleRefusal(
+      "Reconciliation session not found for this line; refresh and pick a session on the line’s account",
+      409,
+    );
   return statementComparisonSign(accountType) === -1 && toUnits(sessionBalance) >= 0n
     ? fromUnits(-toUnits(statementAmount))
-    : statementAmount
+    : statementAmount;
 }
 
 /** Post the categorizing journal for one line under one rule, then match it. */
@@ -359,60 +431,73 @@ async function postCategorizeForLine(
   line: BankLine,
   rule: RuleRow,
 ): Promise<void> {
-  const outcome = rule.outcome
-  if (outcome.action !== 'categorize') return
-  const splits: RuleSplitLine[] = outcome.lines
-  const headerParty = outcome.partyId ?? null
-  const memo = outcome.memo ?? line.description ?? rule.name
-  const accountType = (await db.execute<{ type: string }>(sql`
+  const outcome = rule.outcome;
+  if (outcome.action !== "categorize") return;
+  const splits: RuleSplitLine[] = outcome.lines;
+  const headerParty = outcome.partyId ?? null;
+  const memo = outcome.memo ?? line.description ?? rule.name;
+  const accountType =
+    (
+      await db.execute<{ type: string }>(
+        sql`
     select type from accounts where id = ${bankAccountId} and org_id = ${orgId}
-  `, 'objects'))[0]?.type ?? ''
+  `,
+        "objects",
+      )
+    )[0]?.type ?? "";
 
   await createMatchWithJournal(
     {
       reconciliationId,
       statementLineIds: [line.id],
-      matchedBy: 'rule',
+      matchedBy: "rule",
       additionalAccountIds: splits.map((split) => split.accountId),
-      createJournal: async () => createCategorizingJournal(orgId, userId, {
-        bankAccountId,
-        splits,
-        headerPartyId: headerParty,
-        amount: await bankLegAmountInGlTerms(orgId, bankAccountId, accountType, reconciliationId, line.amount),
-        date: line.posted_on,
-        memo,
-        currency: line.currency,
-      }),
+      createJournal: async () =>
+        createCategorizingJournal(orgId, userId, {
+          bankAccountId,
+          splits,
+          headerPartyId: headerParty,
+          amount: await bankLegAmountInGlTerms(
+            orgId,
+            bankAccountId,
+            accountType,
+            reconciliationId,
+            line.amount,
+          ),
+          date: line.posted_on,
+          memo,
+          currency: line.currency,
+        }),
     },
     ctx,
-  )
+  );
 }
 
 export interface PreviewMatch {
-  lineId: string
-  posted_on: string
-  amount: string
-  description: string | null
-  counterparty_ref: string | null
-  currency: string
-  ruleId: string | null
-  ruleName: string | null
+  lineId: string;
+  posted_on: string;
+  amount: string;
+  description: string | null;
+  counterparty_ref: string | null;
+  currency: string;
+  ruleId: string | null;
+  ruleName: string | null;
   /** The matching rule's action + posture (aggregate preview only). */
-  action?: 'exclude' | 'categorize'
-  ruleMode?: 'auto' | 'suggest' | null
+  action?: "exclude" | "categorize";
+  ruleMode?: "auto" | "suggest" | null;
   /** True when a higher-priority rule than the one under test claims this line. */
-  stolenBy?: string | null
+  stolenBy?: string | null;
   /** Resolved split preview (categorize outcomes only). */
-  splitPreview?: { accountId: string; amount: string }[]
+  splitPreview?: { accountId: string; amount: string }[];
   /** Why the rule's split cannot post on this line, when it cannot. */
-  splitRefusal?: string
+  splitRefusal?: string;
 }
 
 export interface PreviewResult {
-  scanned: number
-  matched: number
-  conflicts: number
-  matches: PreviewMatch[]
+  scanned: number;
+  matched: number;
+  conflicts: number;
+  matches: PreviewMatch[];
 }
 
 /**
@@ -427,16 +512,16 @@ export async function previewRules(
   accountId: string,
   opts: {
     /** A single unsaved rule to test; when omitted, previews all active rules. */
-    draftRule?: { criteria: RuleCriteria; outcome: RuleOutcome; priority?: number; id?: string }
+    draftRule?: { criteria: RuleCriteria; outcome: RuleOutcome; priority?: number; id?: string };
     /** Look back this many days (default 90); use 'unmatched' status when false. */
-    windowDays?: number
-    onlyUnmatched?: boolean
-    limit?: number
+    windowDays?: number;
+    onlyUnmatched?: boolean;
+    limit?: number;
     /**
      * Canonical scope, required from every caller: restricted callers
      * preview only their own subsidiaries' accounts.
      */
-    allowedSubsidiaryIds: ReadonlySet<string> | null
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
   } = { allowedSubsidiaryIds: null },
 ): Promise<PreviewResult> {
   return withOrgTransaction(orgId, async () => {
@@ -445,38 +530,43 @@ export async function previewRules(
     requireBankAccountInScope(
       await bankAccountSubsidiary(orgId, accountId, true),
       opts.allowedSubsidiaryIds ?? null,
-    )
-    const windowDays = opts.windowDays ?? 90
-    const lines = await loadLines(orgId, accountId, opts.onlyUnmatched ? 'unmatched' : 'any', windowDays)
-    const saved = await loadActiveRules(orgId)
+    );
+    const windowDays = opts.windowDays ?? 90;
+    const lines = await loadLines(
+      orgId,
+      accountId,
+      opts.onlyUnmatched ? "unmatched" : "any",
+      windowDays,
+    );
+    const saved = await loadActiveRules(orgId);
 
-    const matches: PreviewMatch[] = []
-    let conflicts = 0
+    const matches: PreviewMatch[] = [];
+    let conflicts = 0;
 
     for (const line of lines) {
       if (opts.draftRule) {
-        const applies = ruleAppliesToAccount(opts.draftRule.criteria, accountId)
-        if (!applies || !lineMatchesRule(line, opts.draftRule.criteria)) continue
+        const applies = ruleAppliesToAccount(opts.draftRule.criteria, accountId);
+        if (!applies || !lineMatchesRule(line, opts.draftRule.criteria)) continue;
         // Would a higher-priority saved rule claim it first?
-        const draftPriority = opts.draftRule.priority ?? 100
+        const draftPriority = opts.draftRule.priority ?? 100;
         const stealer = saved.find(
           (r) =>
             r.id !== opts.draftRule?.id &&
             r.priority <= draftPriority &&
             ruleAppliesToAccount(r.criteria, accountId) &&
             lineMatchesRule(line, r.criteria),
-        )
-        if (stealer) conflicts++
+        );
+        if (stealer) conflicts++;
         matches.push({
           ...toPreviewLine(line),
           ruleId: opts.draftRule.id ?? null,
           ruleName: null,
           stolenBy: stealer?.name ?? null,
           ...previewSplit(line, opts.draftRule.outcome),
-        })
+        });
       } else {
-        const rule = firstMatchingRule(line, accountId, saved)
-        if (!rule) continue
+        const rule = firstMatchingRule(line, accountId, saved);
+        if (!rule) continue;
         matches.push({
           ...toPreviewLine(line),
           ruleId: rule.id,
@@ -484,16 +574,16 @@ export async function previewRules(
           action: rule.outcome.action,
           ruleMode: isCategorizeOutcome(rule.outcome) ? rule.outcome.mode : null,
           ...previewSplit(line, rule.outcome),
-        })
+        });
       }
-      if (opts.limit && matches.length >= opts.limit) break
+      if (opts.limit && matches.length >= opts.limit) break;
     }
 
-    return { scanned: lines.length, matched: matches.length, conflicts, matches }
-  })
+    return { scanned: lines.length, matched: matches.length, conflicts, matches };
+  });
 }
 
-function toPreviewLine(line: BankLine): Omit<PreviewMatch, 'ruleId' | 'ruleName'> {
+function toPreviewLine(line: BankLine): Omit<PreviewMatch, "ruleId" | "ruleName"> {
   return {
     lineId: line.id,
     posted_on: line.posted_on,
@@ -501,7 +591,7 @@ function toPreviewLine(line: BankLine): Omit<PreviewMatch, 'ruleId' | 'ruleName'
     description: line.description,
     counterparty_ref: line.counterparty_ref,
     currency: line.currency,
-  }
+  };
 }
 
 /**
@@ -509,14 +599,22 @@ function toPreviewLine(line: BankLine): Omit<PreviewMatch, 'ruleId' | 'ruleName'
  * reported on that line (`splitRefusal`) instead of failing the whole preview,
  * so one misconfigured rule does not hide every other rule's matches.
  */
-function previewSplit(line: BankLine, outcome: RuleOutcome): Pick<PreviewMatch, 'splitPreview' | 'splitRefusal'> {
-  if (outcome.action !== 'categorize') return {}
+function previewSplit(
+  line: BankLine,
+  outcome: RuleOutcome,
+): Pick<PreviewMatch, "splitPreview" | "splitRefusal"> {
+  if (outcome.action !== "categorize") return {};
   try {
-    assertUntaxedSplits(outcome.lines)
-    return { splitPreview: resolveSplitAmounts(line.amount, outcome.lines).map((r) => ({ accountId: r.line.accountId, amount: r.amount })) }
+    assertUntaxedSplits(outcome.lines);
+    return {
+      splitPreview: resolveSplitAmounts(line.amount, outcome.lines).map((r) => ({
+        accountId: r.line.accountId,
+        amount: r.amount,
+      })),
+    };
   } catch (error) {
-    if (error instanceof BankRuleRefusal) return { splitRefusal: error.message }
-    throw error
+    if (error instanceof BankRuleRefusal) return { splitRefusal: error.message };
+    throw error;
   }
 }
 
@@ -539,17 +637,17 @@ function previewSplit(line: BankLine, outcome: RuleOutcome): Pick<PreviewMatch, 
  * refusal lands before any document, line, submission, or posting write.
  */
 export class JournalPostingDeniedError extends Error {
-  override readonly name = 'JournalPostingDeniedError'
-  readonly status = 403
+  override readonly name = "JournalPostingDeniedError";
+  readonly status = 403;
 }
 
 /** Bank-rule journals do not calculate tax; reject legacy/configured tax lines before posting. */
 function assertUntaxedSplits(splits: RuleSplitLine[]): void {
   if (splits.some((split) => split.taxCodeId)) {
     throw new BankRuleRefusal(
-      'bank-rule journals cannot calculate tax; edit the rule and clear tax codes from its split lines, or create a tax-aware journal in Journals and match it in Match Bank Data',
+      "bank-rule journals cannot calculate tax; edit the rule and clear tax codes from its split lines, or create a tax-aware journal in Journals and match it in Match Bank Data",
       422,
-    )
+    );
   }
 }
 
@@ -557,49 +655,55 @@ export async function createCategorizingJournal(
   orgId: string,
   userId: string,
   opts: {
-    bankAccountId: string
-    splits: RuleSplitLine[]
-    headerPartyId?: string | null
-    amount: string
-    date: string
-    memo: string | null
-    currency: string
+    bankAccountId: string;
+    splits: RuleSplitLine[];
+    headerPartyId?: string | null;
+    amount: string;
+    date: string;
+    memo: string | null;
+    currency: string;
   },
 ): Promise<string> {
-  assertUntaxedSplits(opts.splits)
-  const poster = await resolveAuthzByUserId(orgId, userId)
-  if (poster === null || !can(poster, 'gl.post')) {
+  assertUntaxedSplits(opts.splits);
+  const poster = await resolveAuthzByUserId(orgId, userId);
+  if (poster === null || !can(poster, "gl.post")) {
     throw new JournalPostingDeniedError(
-      'missing permission: gl.post — categorizing journals post to the ledger; leave the line unmatched for a gl.post holder',
-    )
+      "missing permission: gl.post — categorizing journals post to the ledger; leave the line unmatched for a gl.post holder",
+    );
   }
-  const subsidiaryId = await bankAccountSubsidiary(orgId, opts.bankAccountId, true)
+  const subsidiaryId = await bankAccountSubsidiary(orgId, opts.bankAccountId, true);
   if (subsidiaryId === undefined) {
-    throw new BankRuleRefusal('Bank account not found; refresh Match Bank Data and select an active bank account', 404)
+    throw new BankRuleRefusal(
+      "Bank account not found; refresh Match Bank Data and select an active bank account",
+      404,
+    );
   }
   if (subsidiaryId === null) {
-    throw new BankRuleRefusal('The bank account has no legal entity; assign its legal entity in Chart of Accounts before applying categorizing rules', 422)
+    throw new BankRuleRefusal(
+      "The bank account has no legal entity; assign its legal entity in Chart of Accounts before applying categorizing rules",
+      422,
+    );
   }
-  const documentNumber = await nextDocumentNumber(orgId, 'journal', 'JE-')
+  const documentNumber = await nextDocumentNumber(orgId, "journal", "JE-");
   const [doc] = await db
     .insert(schema.documents)
     .values({
       orgId,
-      kind: 'journal',
+      kind: "journal",
       subsidiaryId,
       documentNumber,
       documentDate: opts.date,
       currency: opts.currency,
-      subtotal: '0',
-      taxTotal: '0',
-      total: '0',
+      subtotal: "0",
+      taxTotal: "0",
+      total: "0",
       memo: opts.memo,
       partyId: opts.headerPartyId ?? null,
       createdBy: userId,
     })
-    .returning({ id: schema.documents.id })
+    .returning({ id: schema.documents.id });
 
-  const resolved = resolveSplitAmounts(opts.amount, opts.splits)
+  const resolved = resolveSplitAmounts(opts.amount, opts.splits);
   const offsetLines = resolved.map((r, i) => ({
     orgId,
     documentId: doc!.id,
@@ -613,7 +717,7 @@ export async function createCategorizingJournal(
     projectId: r.line.projectId ?? null,
     locationId: r.line.locationId ?? null,
     classId: r.line.classId ?? null,
-  }))
+  }));
 
   await db.insert(schema.documentLines).values([
     {
@@ -626,19 +730,21 @@ export async function createCategorizingJournal(
       description: opts.memo,
     },
     ...offsetLines,
-  ])
+  ]);
 
-  const deps = await controlDeps(orgId)
+  const deps = await controlDeps(orgId);
   // The submission runs in this transaction so a refused routing throws
   // inside it: without the wrapper the submission's own transaction would
   // commit its before_submit script effects before the error propagates.
   const submission = await withOrgTransaction(orgId, async () => {
-    const inner = await submitAndReleaseIfUngated('journal', doc!.id, userId)
+    const inner = await submitAndReleaseIfUngated("journal", doc!.id, userId);
     if (inner.flowError) {
-      throw new BankRuleRefusal(`the categorizing journal's approval could not be routed: ${inner.flowError}`)
+      throw new BankRuleRefusal(
+        `the categorizing journal's approval could not be routed: ${inner.flowError}`,
+      );
     }
-    return inner
-  })
+    return inner;
+  });
   // An approval-gated journal cannot be posted and matched in this one
   // step, and this whole unit (journal included) rolls back on refusal, so
   // nothing is left pending. The remedy is the manual path that exists:
@@ -646,19 +752,22 @@ export async function createCategorizingJournal(
   // line in Match Bank Data.
   if (submission.gated) {
     throw new BankRuleRefusal(
-      'journal entries require approval in this organization, so this line cannot be categorized automatically and nothing was posted; record the journal from Journals, and once it is approved and posted, match it to this line in Match Bank Data',
+      "journal entries require approval in this organization, so this line cannot be categorized automatically and nothing was posted; record the journal from Journals, and once it is approved and posted, match it to this line in Match Bank Data",
       409,
-    )
+    );
   }
-  const entryId = await postDocument(doc!.id, deps)
+  const entryId = await postDocument(doc!.id, deps);
 
-  const jl = (await db.execute<{ id: string }>(sql`
+  const jl = await db.execute<{ id: string }>(
+    sql`
     select id from journal_lines
      where entry_id = ${entryId} and account_id = ${opts.bankAccountId} and org_id = ${orgId}
      limit 1
-  `, 'objects'))
-  if (!jl[0]) throw new Error('categorizing journal did not post a bank line')
-  return jl[0].id
+  `,
+    "objects",
+  );
+  if (!jl[0]) throw new Error("categorizing journal did not post a bank line");
+  return jl[0].id;
 }
 
 /**
@@ -672,8 +781,17 @@ export async function addJournalMatchFromLine(
   opts: { statementLineId: string; offsetAccountId: string; reconciliationId: string },
   scope: ReadonlySet<string> | null,
 ): Promise<void> {
-  const ctx = { orgId, userId, allowedSubsidiaryIds: scope }
-  const lineRes = (await db.execute<{ posted_on: string; amount: string; description: string | null; currency: string; account_id: string; accountType: string; subsidiaryId: string | null }>(sql`
+  const ctx = { orgId, userId, allowedSubsidiaryIds: scope };
+  const lineRes = await db.execute<{
+    posted_on: string;
+    amount: string;
+    description: string | null;
+    currency: string;
+    account_id: string;
+    accountType: string;
+    subsidiaryId: string | null;
+  }>(
+    sql`
     select l.posted_on, l.amount, l.description, l.currency, s.account_id,
            a.type as "accountType",
            a.subsidiary_id as "subsidiaryId"
@@ -681,14 +799,26 @@ export async function addJournalMatchFromLine(
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.id = ${opts.statementLineId} and l.org_id = ${orgId} and l.match_status = 'unmatched'
-  `, 'objects'))
-  const line = lineRes[0]
-  if (!line) throw new BankRuleRefusal('Statement line not found or already matched; refresh Match Bank Data and pick an unmatched line', 409)
-  const bankLegAmount = await bankLegAmountInGlTerms(orgId, line.account_id, line.accountType, opts.reconciliationId, line.amount)
+  `,
+    "objects",
+  );
+  const line = lineRes[0];
+  if (!line)
+    throw new BankRuleRefusal(
+      "Statement line not found or already matched; refresh Match Bank Data and pick an unmatched line",
+      409,
+    );
+  const bankLegAmount = await bankLegAmountInGlTerms(
+    orgId,
+    line.account_id,
+    line.accountType,
+    opts.reconciliationId,
+    line.amount,
+  );
   // Both legs stay inside the caller's boundary: the bank leg's account and
   // the chosen offset account. The session itself is gated again inside
   // createMatchWithJournal.
-  requireBankAccountInScope(line.subsidiaryId, scope)
+  requireBankAccountInScope(line.subsidiaryId, scope);
   // The contra leg follows the shared-account policy: the offset picker
   // offers the caller's own subsidiaries' accounts plus org-wide shared
   // accounts (listScopedAccountOptions with orgWideNull), and journal
@@ -697,24 +827,25 @@ export async function addJournalMatchFromLine(
   // splits with no per-split gate above. Another subsidiary's account stays
   // refused here. A missing account is still uniform not-found: without the
   // explicit check it would resolve null and pass as shared.
-  const offsetSubsidiary = await bankAccountSubsidiary(orgId, opts.offsetAccountId)
-  if (offsetSubsidiary === undefined) throw new ScopeNotFoundError()
-  requireBankAccountInScope(offsetSubsidiary, scope, { orgWideNull: true })
+  const offsetSubsidiary = await bankAccountSubsidiary(orgId, opts.offsetAccountId);
+  if (offsetSubsidiary === undefined) throw new ScopeNotFoundError();
+  requireBankAccountInScope(offsetSubsidiary, scope, { orgWideNull: true });
   await createMatchWithJournal(
     {
       reconciliationId: opts.reconciliationId,
       statementLineIds: [opts.statementLineId],
-      matchedBy: 'manual',
+      matchedBy: "manual",
       additionalAccountIds: [opts.offsetAccountId],
-      createJournal: async () => createCategorizingJournal(orgId, userId, {
-        bankAccountId: line.account_id,
-        splits: [{ accountId: opts.offsetAccountId, portion: { kind: 'remainder' } }],
-        amount: bankLegAmount,
-        date: line.posted_on,
-        memo: line.description,
-        currency: line.currency,
-      }),
+      createJournal: async () =>
+        createCategorizingJournal(orgId, userId, {
+          bankAccountId: line.account_id,
+          splits: [{ accountId: opts.offsetAccountId, portion: { kind: "remainder" } }],
+          amount: bankLegAmount,
+          date: line.posted_on,
+          memo: line.description,
+          currency: line.currency,
+        }),
     },
     ctx,
-  )
+  );
 }

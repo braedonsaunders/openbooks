@@ -86,7 +86,8 @@ type FieldTicketRow = {
 };
 
 async function loadTicket(subjectId: string): Promise<FieldTicketRow | null> {
-  const result = await db.execute<FieldTicketRow>(sql`
+  const result = await db.execute<FieldTicketRow>(
+    sql`
     select d.id, d.org_id, d.document_number, d.status, d.project_id,
            p.code as project_code, p.name as project_name,
            d.party_id, customer.display_name as customer_name,
@@ -113,25 +114,27 @@ async function loadTicket(subjectId: string): Promise<FieldTicketRow | null> {
       left join projects p on p.id = d.project_id and p.org_id = d.org_id
       left join parties customer on customer.id = d.party_id and customer.org_id = d.org_id
      where d.id = ${subjectId} and d.kind = 'field_ticket'
-  `, "objects");
+  `,
+    "objects",
+  );
   return result[0] ?? null;
 }
 
-export const fieldTicketsFlowAdapter: FlowSubjectAdapter =
-  defineTableSubjectAdapter({
-    subjectKind: FIELD_TICKET_SUBJECT_KIND,
-    // Field tickets are documents.
-    permissions: documentKindPermissions(FIELD_TICKET_SUBJECT_KIND),
-    scope: { via: "document" },
-    profile: fieldTicketSubjectProfile,
-    // releaseApproval below delegates to the registered handler: this kind
-    // needs a handler registered at web boot (see handlerReleasedSubjectKinds).
-    releaseViaHandler: true,
+export const fieldTicketsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
+  subjectKind: FIELD_TICKET_SUBJECT_KIND,
+  // Field tickets are documents.
+  permissions: documentKindPermissions(FIELD_TICKET_SUBJECT_KIND),
+  scope: { via: "document" },
+  profile: fieldTicketSubjectProfile,
+  // releaseApproval below delegates to the registered handler: this kind
+  // needs a handler registered at web boot (see handlerReleasedSubjectKinds).
+  releaseViaHandler: true,
 
-    async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
-      const ticket = await loadTicket(subjectId);
-      if (!ticket) return null;
-      const entries = await db.execute<Record<string, unknown>>(sql`
+  async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
+    const ticket = await loadTicket(subjectId);
+    if (!ticket) return null;
+    const entries = await db.execute<Record<string, unknown>>(
+      sql`
       select te.employee_party_id as "employeePartyId",
              te.worked_on::text as "workedOn", te.hours::text,
              te.time_type_id as "timeTypeId", te.item_id as "itemId",
@@ -139,76 +142,75 @@ export const fieldTicketsFlowAdapter: FlowSubjectAdapter =
         from time_entries te
        where te.org_id = ${ticket.org_id} and te.field_ticket_id = ${ticket.id}
        order by te.worked_on, te.employee_party_id, te.id
-    `, "objects");
-      const crewUsers = await db.execute<{
-          id: string;
-        }>(sql`select distinct u.id from users u join time_entries e
+    `,
+      "objects",
+    );
+    const crewUsers = await db.execute<{
+      id: string;
+    }>(
+      sql`select distinct u.id from users u join time_entries e
       on e.org_id=u.org_id and e.employee_party_id=u.party_id
-      where e.org_id=${ticket.org_id} and e.field_ticket_id=${ticket.id}`, "objects");
-      return {
-        values: {
-          id: ticket.id,
-          documentNumber: ticket.document_number,
-          status: ticket.status,
-          projectId: ticket.project_id,
-          projectCode: ticket.project_code,
-          projectName: ticket.project_name,
-          customerId: ticket.party_id,
-          customerName: ticket.customer_name,
-          period: ticket.period,
-          periodStart: ticket.period_start,
-          periodEnd: ticket.period_end,
-          totalHours: ticket.total_hours,
-          crewCount: ticket.crew_count,
-          lineCount: ticket.line_count,
-          itemTotal: ticket.subtotal,
-          customerSigned: ticket.customer_signed,
-          foremanSigned: ticket.foreman_signed,
-          createdBy: ticket.submitted_by ?? ticket.created_by,
-        },
-        rows: { timeEntries: entries },
-        submitterUserId: ticket.submitted_by ?? ticket.created_by,
-        makerUserId: ticket.created_by,
-        makerUserIds: crewUsers.map((user) => user.id),
-      };
-    },
+      where e.org_id=${ticket.org_id} and e.field_ticket_id=${ticket.id}`,
+      "objects",
+    );
+    return {
+      values: {
+        id: ticket.id,
+        documentNumber: ticket.document_number,
+        status: ticket.status,
+        projectId: ticket.project_id,
+        projectCode: ticket.project_code,
+        projectName: ticket.project_name,
+        customerId: ticket.party_id,
+        customerName: ticket.customer_name,
+        period: ticket.period,
+        periodStart: ticket.period_start,
+        periodEnd: ticket.period_end,
+        totalHours: ticket.total_hours,
+        crewCount: ticket.crew_count,
+        lineCount: ticket.line_count,
+        itemTotal: ticket.subtotal,
+        customerSigned: ticket.customer_signed,
+        foremanSigned: ticket.foreman_signed,
+        createdBy: ticket.submitted_by ?? ticket.created_by,
+      },
+      rows: { timeEntries: entries },
+      submitterUserId: ticket.submitted_by ?? ticket.created_by,
+      makerUserId: ticket.created_by,
+      makerUserIds: crewUsers.map((user) => user.id),
+    };
+  },
 
-    label(subjectId: string, values: Record<string, unknown>): string {
-      const number = String(values.documentNumber ?? subjectId);
-      const project = values.projectName
-        ? ` — ${String(values.projectName)}`
-        : "";
-      return `Field ticket ${number}${project}`;
-    },
+  label(subjectId: string, values: Record<string, unknown>): string {
+    const number = String(values.documentNumber ?? subjectId);
+    const project = values.projectName ? ` — ${String(values.projectName)}` : "";
+    return `Field ticket ${number}${project}`;
+  },
 
-    deepLink(subjectId: string): string {
-      return `/field-tickets?ticket=${subjectId}`;
-    },
+  deepLink(subjectId: string): string {
+    return `/field-tickets?ticket=${subjectId}`;
+  },
 
-    async getStatus(subjectId: string): Promise<string | null> {
-      return (await loadTicket(subjectId))?.status ?? null;
-    },
+  async getStatus(subjectId: string): Promise<string | null> {
+    return (await loadTicket(subjectId))?.status ?? null;
+  },
 
-    async changeStatus(): Promise<void> {
-      throw new Error(
-        "field-ticket lifecycle is released by the approval engine, not a flow action",
-      );
-    },
+  async changeStatus(): Promise<void> {
+    throw new Error("field-ticket lifecycle is released by the approval engine, not a flow action");
+  },
 
-    async releaseApproval(subjectId, outcome, ctx, detail, run): Promise<void> {
-      await releaseFlowApproval({
-        subjectKind: FIELD_TICKET_SUBJECT_KIND,
-        subjectId,
-        outcome,
-        comment: detail?.comment,
-        approvalRunId: run?.id,
-        ctx,
-      });
-    },
+  async releaseApproval(subjectId, outcome, ctx, detail, run): Promise<void> {
+    await releaseFlowApproval({
+      subjectKind: FIELD_TICKET_SUBJECT_KIND,
+      subjectId,
+      outcome,
+      comment: detail?.comment,
+      approvalRunId: run?.id,
+      ctx,
+    });
+  },
 
-    async setField(): Promise<void> {
-      throw new Error(
-        "field-ticket fields are not writable by flows; edit the draft ticket",
-      );
-    },
-  });
+  async setField(): Promise<void> {
+    throw new Error("field-ticket fields are not writable by flows; edit the draft ticket");
+  },
+});

@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -49,7 +49,9 @@ export function UnlinkExternalLinkButton({
         body: JSON.stringify({ action: "unlink", objectType, externalId, reason }),
       });
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t("links.toast.unlinkFailed", { status: res.status })));
+        toast.error(
+          await readApiErrorMessage(res, t("links.toast.unlinkFailed", { status: res.status })),
+        );
         return;
       }
       toast.success(t("links.toast.unlinked"));

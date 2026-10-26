@@ -2,7 +2,10 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/platform/db";
-import { permissionSetCovers, resolveEffectivePermissions } from "@openbooks/engine/organization/permissions";
+import {
+  permissionSetCovers,
+  resolveEffectivePermissions,
+} from "@openbooks/engine/organization/permissions";
 import { pgTextArrayLiteral } from "./pg-array";
 
 /**
@@ -45,7 +48,12 @@ export interface AccessibleOrg {
 }
 
 type OrgNameSqlRow = { name: string };
-type AccessibleOrgSqlRow = { orgId: string; actingUserId: string; name: string; envKind: "production" | "preview" };
+type AccessibleOrgSqlRow = {
+  orgId: string;
+  actingUserId: string;
+  name: string;
+  envKind: "production" | "preview";
+};
 /** One candidate environment with every fact its admission depends on. */
 type EnvironmentSqlRow = {
   id: string;
@@ -92,7 +100,8 @@ export function rebaseUuid(oldId: string, seed: string): string {
  * Callers run under bypass because candidates span organizations.
  */
 async function environmentRows(home: HomeUser, scope: SQL): Promise<EnvironmentSqlRow[]> {
-  const result = await db.execute<EnvironmentSqlRow>(sql`
+  const result = await db.execute<EnvironmentSqlRow>(
+    sql`
     select o.id, o.name, o.env_kind as "envKind", o.sandbox_of as "sandboxOf",
            source.user_id as "sourceUserId",
            sb.name as "sandboxName", sb.status as "sandboxStatus", sb.tier as "sandboxTier",
@@ -126,7 +135,9 @@ async function environmentRows(home: HomeUser, scope: SQL): Promise<EnvironmentS
          where m.id = ob_rebase(source.user_id, o.sandbox_seed) and m.org_id = o.id and m.is_active
       ) member on o.env_kind = 'sandbox'
      where ${scope}
-     order by sb.created_at, o.id`, "objects");
+     order by sb.created_at, o.id`,
+    "objects",
+  );
   return result;
 }
 
@@ -137,8 +148,9 @@ async function environmentRows(home: HomeUser, scope: SQL): Promise<EnvironmentS
  */
 function sourceUserHolds(row: EnvironmentSqlRow, permission: string): boolean {
   const effective = resolveEffectivePermissions({
-    rolePermissionSets: (Array.isArray(row.rolePermissions) ? row.rolePermissions : []).map((set: unknown) =>
-      Array.isArray(set) ? set.filter((p): p is string => typeof p === "string") : [],
+    rolePermissionSets: (Array.isArray(row.rolePermissions) ? row.rolePermissions : []).map(
+      (set: unknown) =>
+        Array.isArray(set) ? set.filter((p): p is string => typeof p === "string") : [],
     ),
     overrides: row.overrides ?? [],
   });
@@ -158,7 +170,12 @@ function admittedEnvironment(home: HomeUser, row: EnvironmentSqlRow): ResolvedEn
     // this resolver also runs per request from currentUser(), so revoking
     // the permission ejects a member already inside on their next request.
     if (!home.isSuperAdmin && !sourceUserHolds(row, "admin.sandboxes.manage")) return null;
-    if (row.sandboxProductionOrgId !== row.sandboxOf || row.sandboxStatus !== "ready" || row.sandboxName === null) return null;
+    if (
+      row.sandboxProductionOrgId !== row.sandboxOf ||
+      row.sandboxStatus !== "ready" ||
+      row.sandboxName === null
+    )
+      return null;
     if (!row.sandboxUserId) return null;
     return {
       orgId: row.id,
@@ -173,7 +190,8 @@ function admittedEnvironment(home: HomeUser, row: EnvironmentSqlRow): ResolvedEn
   // A super administrator may inspect any production tenant using the platform
   // identity. Preview/sample companies still require an explicit mapped user:
   // their copied tenant data must never inherit a cross-tenant user identity.
-  const acting = row.sourceUserId ?? (home.isSuperAdmin && row.envKind === "production" ? home.id : null);
+  const acting =
+    row.sourceUserId ?? (home.isSuperAdmin && row.envKind === "production" ? home.id : null);
   if (!acting) return null;
   return {
     orgId: row.id,
@@ -202,17 +220,23 @@ export async function accessibleProductionOrgs(home: HomeUser): Promise<Accessib
   return withBypassContext(async () => {
     if (home.isSuperAdmin) {
       const [orgs, previews] = await Promise.all([
-        db.execute<{ id: string; name: string }>(sql`
+        db.execute<{ id: string; name: string }>(
+          sql`
           select id, name from orgs
            where env_kind = 'production'
              and not coalesce((settings->'sampleTemplate'->>'enabled')::boolean, false)
-           order by name`, "objects"),
-        db.execute<AccessibleOrgSqlRow>(sql`
+           order by name`,
+          "objects",
+        ),
+        db.execute<AccessibleOrgSqlRow>(
+          sql`
           select a.org_id as "orgId", a.acting_user_id as "actingUserId", o.name
             from user_org_access a join orgs o on o.id = a.org_id
             join users u on u.id = a.acting_user_id and u.org_id = a.org_id and u.is_active
            where a.member_user_id = ${home.id} and a.is_active and o.env_kind = 'preview'
-           order by o.name`, "objects"),
+           order by o.name`,
+          "objects",
+        ),
       ]);
       return [
         ...orgs.map((o): AccessibleOrg => ({
@@ -226,14 +250,17 @@ export async function accessibleProductionOrgs(home: HomeUser): Promise<Accessib
     }
     const [homeRow, grants] = await Promise.all([
       db.execute<OrgNameSqlRow>(sql`select name from orgs where id = ${home.orgId}`, "objects"),
-      db.execute<AccessibleOrgSqlRow>(sql`
+      db.execute<AccessibleOrgSqlRow>(
+        sql`
         select a.org_id as "orgId", a.acting_user_id as "actingUserId", o.name,
                o.env_kind as "envKind"
           from user_org_access a join orgs o on o.id = a.org_id
             join users u on u.id = a.acting_user_id and u.org_id = a.org_id and u.is_active
          where a.member_user_id = ${home.id} and a.is_active
            and o.env_kind in ('production', 'preview')
-         order by o.name`, "objects"),
+         order by o.name`,
+        "objects",
+      ),
     ]);
     const out: AccessibleOrg[] = [
       {
@@ -262,20 +289,30 @@ export async function accessibleProductionOrgs(home: HomeUser): Promise<Accessib
  * per-request admission rules, so the switcher never advertises an
  * environment the request resolver would refuse.
  */
-export async function enterableSandboxes(home: HomeUser, productionOrgIds: readonly string[]): Promise<EnterableSandbox[]> {
+export async function enterableSandboxes(
+  home: HomeUser,
+  productionOrgIds: readonly string[],
+): Promise<EnterableSandbox[]> {
   if (productionOrgIds.length === 0) return [];
   // bypass: user-keyed-lookup — the environment switcher lists sandboxes of every organization this person can reach.
   return withBypassContext(async () => {
-    const rows = await environmentRows(home, sql`o.env_kind = 'sandbox' and sb.production_org_id = any(${pgTextArrayLiteral(productionOrgIds)}::uuid[])`);
-    return rows.flatMap((row) => admittedEnvironment(home, row) && row.sandboxProductionOrgId !== null
-      ? [{
-          orgId: row.id,
-          productionOrgId: row.sandboxProductionOrgId,
-          name: row.sandboxName!,
-          status: row.sandboxStatus!,
-          tier: row.sandboxTier!,
-        }]
-      : []);
+    const rows = await environmentRows(
+      home,
+      sql`o.env_kind = 'sandbox' and sb.production_org_id = any(${pgTextArrayLiteral(productionOrgIds)}::uuid[])`,
+    );
+    return rows.flatMap((row) =>
+      admittedEnvironment(home, row) && row.sandboxProductionOrgId !== null
+        ? [
+            {
+              orgId: row.id,
+              productionOrgId: row.sandboxProductionOrgId,
+              name: row.sandboxName!,
+              status: row.sandboxStatus!,
+              tier: row.sandboxTier!,
+            },
+          ]
+        : [],
+    );
   });
 }
 
@@ -287,7 +324,10 @@ export async function resolveActiveEnv(
   // bypass: identity-bootstrap — resolves which organization the caller acts in before any organization scope exists.
   return withBypassContext(async () => {
     if (!activeOrgId || activeOrgId === home.orgId) {
-      const o = await db.execute<OrgNameSqlRow>(sql`select name from orgs where id = ${home.orgId}`, "objects");
+      const o = await db.execute<OrgNameSqlRow>(
+        sql`select name from orgs where id = ${home.orgId}`,
+        "objects",
+      );
       return homeEnvironment(home, o[0]?.name);
     }
     const [row] = await environmentRows(home, sql`o.id = ${activeOrgId}`);

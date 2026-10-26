@@ -1,10 +1,9 @@
-import 'server-only'
-import { reportBookSelection } from '../../../../lib/report-books'
-import { resolveOrgId } from '../../../../lib/org-scope'
+import "server-only";
+import { reportBookSelection } from "../../../../lib/report-books";
+import { resolveOrgId } from "../../../../lib/org-scope";
 
-
-import { getLocale, getTranslations } from 'next-intl/server'
-import { civilDateParams } from '../../../../lib/format'
+import { getLocale, getTranslations } from "next-intl/server";
+import { civilDateParams } from "../../../../lib/format";
 import {
   column,
   drill,
@@ -23,20 +22,25 @@ import {
   widgetCell,
   type PageSpec,
   type TableSpanRow,
-} from '@braedonsaunders/appkit-viewspec'
-import { getMoneyFormatter } from '@/lib/money-server'
-import { getAuthz, can } from '@/lib/authz'
-import { dimensionOptions, partyRegister, type AgingSide } from '../../../../lib/reports'
-import { orgInfo } from '../../../../lib/data'
-import { MissingRatesError, reportSubsidiaryView, type CurrencyBasisNotice, type RatesBlockedNotice } from '../../../../lib/consolidation'
-import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
-import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery, toSearchParams } from '../../../../lib/report-filters'
-import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
-import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
-import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
-import { dimensionOptionsScope } from '../../../../lib/reports/filters'
-import type { ReportDrillTarget } from '../../../../lib/report-drill'
+} from "@braedonsaunders/appkit-viewspec";
+import { getMoneyFormatter } from "@/lib/money-server";
+import { getAuthz, can } from "@/lib/authz";
+import { dimensionOptions, partyRegister, type AgingSide } from "../../../../lib/reports";
+import { orgInfo } from "../../../../lib/data";
+import {
+  MissingRatesError,
+  reportSubsidiaryView,
+  type CurrencyBasisNotice,
+  type RatesBlockedNotice,
+} from "../../../../lib/consolidation";
+import { ReportCurrencyBasisError } from "../../../../lib/reports/currency-basis";
+import { resolvePeriod } from "../../../../lib/periods";
+import { parseReportQuery, toSearchParams } from "../../../../lib/report-filters";
+import { reportScheduleAnchor, scheduleParamsFrom } from "../../../../lib/report-schedule-anchor";
+import { decimalCmp, decimalIsZero } from "../../../../lib/statement-format";
+import { statementReportSpec, stringReportParams } from "@/lib/reports/statement-report-spec";
+import { dimensionOptionsScope } from "../../../../lib/reports/filters";
+import type { ReportDrillTarget } from "../../../../lib/report-drill";
 
 /**
  * Party registers (AR / AP), split into a loader and a spec.
@@ -47,100 +51,107 @@ import type { ReportDrillTarget } from '../../../../lib/report-drill'
  * toggles, which is a house idiom rather than a page detail.
  */
 
-type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>
-type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>['picker']
+type DimensionOptions = Awaited<ReturnType<typeof dimensionOptions>>;
+type SubsidiaryPicker = Awaited<ReturnType<typeof reportSubsidiaryView>>["picker"];
 
 interface TxnTarget {
-  kind: 'transaction'
-  entryId: string
-  docKind: string | null
-  docId: string | null
+  kind: "transaction";
+  entryId: string;
+  docKind: string | null;
+  docId: string | null;
 }
 
 export interface RegisterLine {
-  key: string
-  date: string
-  entryId: string
-  entryNumber: string | null
-  docKind: string | null
-  docId: string | null
-  memo: string | null
-  debit: string
-  credit: string
-  balance: string
-  balanceTone: 'default' | 'negative'
-  txn: TxnTarget
+  key: string;
+  date: string;
+  entryId: string;
+  entryNumber: string | null;
+  docKind: string | null;
+  docId: string | null;
+  memo: string | null;
+  debit: string;
+  credit: string;
+  balance: string;
+  balanceTone: "default" | "negative";
+  txn: TxnTarget;
 }
 
 export interface RegisterParty {
-  key: string
-  partyId: string | null
-  partyName: string
-  statementHref: string
-  opening: string
-  openingDrill: ReportDrillTarget
-  closing: string
-  closingDrill: ReportDrillTarget
-  lines: RegisterLine[]
+  key: string;
+  partyId: string | null;
+  partyName: string;
+  statementHref: string;
+  opening: string;
+  openingDrill: ReportDrillTarget;
+  closing: string;
+  closingDrill: ReportDrillTarget;
+  lines: RegisterLine[];
 }
 
 export interface RegistersData {
-  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
-  title: string
-  backHref: string
-  backLabel: string
-  company: string
-  periodPhrase: string
-  truncated: boolean
+  primaryFilter: {
+    paramKey: string;
+    label: string;
+    value: string;
+    options: { value: string; label: string }[];
+  } | null;
+  title: string;
+  backHref: string;
+  backLabel: string;
+  company: string;
+  periodPhrase: string;
+  truncated: boolean;
   /** One page of whole party sections; each section's balance is exact. */
-  paged: boolean
-  page: number
-  perPage: number
-  partyCount: number
-  truncatedLabel: string
-  emptyLabel: string
-  openingLabel: string
-  closingLabel: string
-  receivablesHref: string
-  payablesHref: string
-  receivablesLabel: string
-  payablesLabel: string
-  isReceivable: boolean
-  isPayable: boolean
-  columnDate: string
-  columnEntry: string
-  columnMemo: string
-  columnDebits: string
-  columnCredits: string
-  columnBalance: string
+  paged: boolean;
+  page: number;
+  perPage: number;
+  partyCount: number;
+  truncatedLabel: string;
+  emptyLabel: string;
+  openingLabel: string;
+  closingLabel: string;
+  receivablesHref: string;
+  payablesHref: string;
+  receivablesLabel: string;
+  payablesLabel: string;
+  isReceivable: boolean;
+  isPayable: boolean;
+  columnDate: string;
+  columnEntry: string;
+  columnMemo: string;
+  columnDebits: string;
+  columnCredits: string;
+  columnBalance: string;
   /** Set when underived consolidated rates block the report:
    * the page renders a typed banner with a derive link instead of numbers. */
-  ratesBlocked: RatesBlockedNotice | null
+  ratesBlocked: RatesBlockedNotice | null;
   /** Set when the viewed set spans more than one functional currency: the
    * page renders the named refusal (whose remedy is the subsidiary picker
    * beside it) instead of numbers or a generic error page. */
-  currencyBasisBlocked: CurrencyBasisNotice | null
+  currencyBasisBlocked: CurrencyBasisNotice | null;
   /** False when either refusal is set; the paper hides with either. */
-  ratesReady: boolean
-  parties: RegisterParty[]
-  dimensions: DimensionOptions
-  subsidiaries: SubsidiaryPicker
-  scheduleDefId: string | null
-  scheduleParams: Record<string, string>
-  exportParams: Record<string, string>
+  ratesReady: boolean;
+  parties: RegisterParty[];
+  dimensions: DimensionOptions;
+  subsidiaries: SubsidiaryPicker;
+  scheduleDefId: string | null;
+  scheduleParams: Record<string, string>;
+  exportParams: Record<string, string>;
 }
 
-export async function loadRegisters(sp: Record<string, string | undefined>): Promise<RegistersData> {
-  const { money: formatMoney } = await getMoneyFormatter()
-  const t = await getTranslations('reports')
-  const locale = await getLocale()
-  const tc = await getTranslations('common')
-  const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
-  const scheduleDefId = await reportScheduleAnchor('registers', { side })
-  const tb = await getTranslations('budgets')
-  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
-  const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+export async function loadRegisters(
+  sp: Record<string, string | undefined>,
+): Promise<RegistersData> {
+  const { money: formatMoney } = await getMoneyFormatter();
+  const t = await getTranslations("reports");
+  const locale = await getLocale();
+  const tc = await getTranslations("common");
+  const side: AgingSide = sp.side === "ap" ? "ap" : "ar";
+  const scheduleDefId = await reportScheduleAnchor("registers", { side });
+  const tb = await getTranslations("budgets");
+  const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book);
+  const q = parseReportQuery(sp);
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to });
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
@@ -150,102 +161,103 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
   // subsidiary picker as its remedy. Anything else is a real defect and
   // still throws. The register runs only with a resolved subsidiary scope
   // — never scope-less.
-  const authz = await getAuthz()
-  const canSeePayroll = !!authz && can(authz, 'payroll.read')
-  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
-  let ratesBlocked: RatesBlockedNotice | null = null
-  let currencyBasisBlocked: CurrencyBasisNotice | null = null
-  let reg: Awaited<ReturnType<typeof partyRegister>> | null = null
+  const authz = await getAuthz();
+  const canSeePayroll = !!authz && can(authz, "payroll.read");
+  let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined;
+  let ratesBlocked: RatesBlockedNotice | null = null;
+  let currencyBasisBlocked: CurrencyBasisNotice | null = null;
+  let reg: Awaited<ReturnType<typeof partyRegister>> | null = null;
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id);
     reg = await partyRegister(side, {
       bookId: selectedBook.id,
       from: period.from,
       to: period.to,
       dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
       canSeePayroll,
-      page: Number.parseInt(sp[REGISTER_PAGE_PARAM] ?? '1', 10) || 1,
+      page: Number.parseInt(sp[REGISTER_PAGE_PARAM] ?? "1", 10) || 1,
       pageSize: REGISTER_PAGE_SIZE,
-    })
+    });
   } catch (e) {
     if (e instanceof ReportCurrencyBasisError) {
       currencyBasisBlocked = {
-        code: 'multi-currency-basis',
-        title: t('statement.currencyBasisBlockedTitle'),
+        code: "multi-currency-basis",
+        title: t("statement.currencyBasisBlockedTitle"),
         description: e.message,
-      }
+      };
     } else {
-      if (!(e instanceof MissingRatesError)) throw e
+      if (!(e instanceof MissingRatesError)) throw e;
       ratesBlocked = {
-        code: 'rates-not-derived',
-        title: t('statement.ratesBlockedTitle'),
+        code: "rates-not-derived",
+        title: t("statement.ratesBlockedTitle"),
         description: (e as Error).message,
-        deriveLabel: t('statement.ratesBlockedAction'),
-        deriveHref: '/close',
-      }
+        deriveLabel: t("statement.ratesBlockedAction"),
+        deriveHref: "/close",
+      };
     }
   }
-  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
-  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds)
+  const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids };
+  const optionScope = dimensionOptionsScope(dims.subsidiaryIds, authz?.allowedSubsidiaryIds);
   const [opts, org] = await Promise.all([
     dimensionOptions(undefined, undefined, optionScope),
     orgInfo(),
-  ])
+  ]);
   // Figures present in the VIEW's currency (the context node's functional
   // currency), not the org base — a foreign-functional subsidiary view
   // states its own money. Mirrors the P&L and balance sheet.
-  const m = (v: string) => formatMoney(v, { currency: subView?.currency ?? org?.base_currency })
-  const keepParams = toSearchParams(q)
-  keepParams.set('book', selectedBook.id)
-  const keep = keepParams.toString()
-  const accountTypes = [side === 'ap' ? 'liability_payable' : 'asset_receivable']
-  const openingTo = new Date(`${period.from}T00:00:00Z`)
-  openingTo.setUTCDate(openingTo.getUTCDate() - 1)
-  const openingDate = openingTo.toISOString().slice(0, 10)
-  const noParty = t('aging.noParty')
-  const openingLabel = t('generalLedger.opening')
+  const m = (v: string) => formatMoney(v, { currency: subView?.currency ?? org?.base_currency });
+  const keepParams = toSearchParams(q);
+  keepParams.set("book", selectedBook.id);
+  const keep = keepParams.toString();
+  const accountTypes = [side === "ap" ? "liability_payable" : "asset_receivable"];
+  const openingTo = new Date(`${period.from}T00:00:00Z`);
+  openingTo.setUTCDate(openingTo.getUTCDate() - 1);
+  const openingDate = openingTo.toISOString().slice(0, 10);
+  const noParty = t("aging.noParty");
+  const openingLabel = t("generalLedger.opening");
 
   return {
-    title: side === 'ap' ? t('registers.apTitle') : t('registers.arTitle'),
-    backHref: '/reports',
-    backLabel: t('hub.title'),
-    company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale))}`,
+    title: side === "ap" ? t("registers.apTitle") : t("registers.arTitle"),
+    backHref: "/reports",
+    backLabel: t("hub.title"),
+    company: org?.name ?? "",
+    periodPhrase: `${selectedBook.name} · ${t("pnl.dateRange", civilDateParams({ from: period.from, to: period.to }, locale))}`,
     truncated: reg?.truncated ?? false,
     paged: (reg?.paging?.partyCount ?? 0) > REGISTER_PAGE_SIZE,
     page: reg?.paging?.page ?? 1,
     perPage: reg?.paging?.pageSize ?? REGISTER_PAGE_SIZE,
     partyCount: reg?.paging?.partyCount ?? 0,
-    truncatedLabel: t('registers.truncated'),
-    emptyLabel: t('registers.empty'),
+    truncatedLabel: t("registers.truncated"),
+    emptyLabel: t("registers.empty"),
     openingLabel,
-    closingLabel: t('registers.closing'),
+    closingLabel: t("registers.closing"),
     receivablesHref: `/reports/registers?side=ar&${keep}`,
     payablesHref: `/reports/registers?side=ap&${keep}`,
-    receivablesLabel: t('registers.receivables'),
-    payablesLabel: t('registers.payables'),
-    isReceivable: side === 'ar',
-    isPayable: side === 'ap',
-    columnDate: t('generalLedger.columns.date'),
-    columnEntry: t('generalLedger.columns.entry'),
-    columnMemo: tc('labels.memo'),
-    columnDebits: t('trialBalance.columns.debits'),
-    columnCredits: t('trialBalance.columns.credits'),
-    columnBalance: tc('labels.balance'),
+    receivablesLabel: t("registers.receivables"),
+    payablesLabel: t("registers.payables"),
+    isReceivable: side === "ar",
+    isPayable: side === "ap",
+    columnDate: t("generalLedger.columns.date"),
+    columnEntry: t("generalLedger.columns.entry"),
+    columnMemo: tc("labels.memo"),
+    columnDebits: t("trialBalance.columns.debits"),
+    columnCredits: t("trialBalance.columns.credits"),
+    columnBalance: tc("labels.balance"),
     ratesBlocked,
     currencyBasisBlocked,
     ratesReady: ratesBlocked === null && currencyBasisBlocked === null,
     parties: (reg?.parties ?? []).map((pt) => {
-      const name = pt.partyName ?? noParty
-      const partyIds = pt.partyId ? [pt.partyId] : undefined
+      const name = pt.partyName ?? noParty;
+      const partyIds = pt.partyId ? [pt.partyId] : undefined;
       return {
-        key: pt.partyId ?? 'none',
+        key: pt.partyId ?? "none",
         partyId: pt.partyId,
         partyName: name,
         statementHref: `/reports/statements/${pt.partyId}?side=${side}&${keep}`,
         opening: m(pt.opening),
         openingDrill: {
-          kind: 'ledger', bookId: selectedBook.id,
+          kind: "ledger",
+          bookId: selectedBook.id,
           label: `${name} · ${openingLabel}`,
           accountTypes,
           // The partyless section drills to exactly its lines: an absent
@@ -253,19 +265,20 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
           partyIds,
           unassignedParty: pt.partyId ? undefined : true,
           to: openingDate,
-          mode: 'balance',
+          mode: "balance",
           dims,
           includePeriodEndJournals: true,
         },
         closing: m(pt.closing),
         closingDrill: {
-          kind: 'ledger', bookId: selectedBook.id,
+          kind: "ledger",
+          bookId: selectedBook.id,
           label: name,
           accountTypes,
           partyIds,
           unassignedParty: pt.partyId ? undefined : true,
           to: period.to,
-          mode: 'balance',
+          mode: "balance",
           dims,
           includePeriodEndJournals: true,
         },
@@ -277,148 +290,166 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
           docKind: l.docKind,
           docId: l.docId,
           memo: l.memo,
-          debit: decimalIsZero(l.debit) ? '' : m(l.debit),
-          credit: decimalIsZero(l.credit) ? '' : m(l.credit),
+          debit: decimalIsZero(l.debit) ? "" : m(l.debit),
+          credit: decimalIsZero(l.credit) ? "" : m(l.credit),
           balance: m(l.balance),
-          balanceTone: decimalCmp(l.balance, '0') < 0 ? 'negative' : 'default',
-          txn: { kind: 'transaction', entryId: l.entryId, docKind: l.docKind, docId: l.docId },
+          balanceTone: decimalCmp(l.balance, "0") < 0 ? "negative" : "default",
+          txn: { kind: "transaction", entryId: l.entryId, docKind: l.docKind, docId: l.docId },
         })),
-      }
+      };
     }),
     dimensions: opts,
     subsidiaries: subView?.picker ?? [],
-    primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
+    primaryFilter:
+      books.length > 1
+        ? {
+            paramKey: "book",
+            label: tb("list.bookFilter"),
+            value: selectedBook.id,
+            options: books.map((book) => ({ value: book.id, label: book.name })),
+          }
+        : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: stringReportParams(sp),
-  }
+  };
 }
 
 /** Party sections per screen; exports and schedules read every section. */
-const REGISTER_PAGE_SIZE = 50
-const REGISTER_PAGE_PARAM = 'registerPage'
+const REGISTER_PAGE_SIZE = 50;
+const REGISTER_PAGE_PARAM = "registerPage";
 
-const f = ref<RegistersData>()
-const item = field
-const rootF = rootRef<RegistersData>()
+const f = ref<RegistersData>();
+const item = field;
+const rootF = rootRef<RegistersData>();
 
 const openingRow: TableSpanRow = {
-  label: rootF('openingLabel'),
+  label: rootF("openingLabel"),
   labelColSpan: 5,
-  labelClassName: 'text-xs font-medium text-slate-500 dark:text-slate-400',
+  labelClassName: "text-xs font-medium text-slate-500 dark:text-slate-400",
   cells: [
     {
-      cell: drill(item('openingDrill'), money(item('opening'))),
-      align: 'right',
-      className: 'font-medium tabular-nums',
+      cell: drill(item("openingDrill"), money(item("opening"))),
+      align: "right",
+      className: "font-medium tabular-nums",
     },
   ],
-}
+};
 
 export function registersSpec(data: RegistersData): PageSpec {
   return statementReportSpec({
-    route: '/reports/registers',
-    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
-    filters: [{
-      controls: { period: true, dimensions: true, subsidiary: true },
-      options: {
-        leading: {
-          ...toggleLinks([
-            { href: f('receivablesHref'), label: f('receivablesLabel'), activeWhen: f('isReceivable') },
-            { href: f('payablesHref'), label: f('payablesLabel'), activeWhen: f('isPayable') },
-          ]),
-          divider: true,
+    route: "/reports/registers",
+    header: { title: f("title"), back: { href: f("backHref"), label: f("backLabel") } },
+    filters: [
+      {
+        controls: { period: true, dimensions: true, subsidiary: true },
+        options: {
+          leading: {
+            ...toggleLinks([
+              {
+                href: f("receivablesHref"),
+                label: f("receivablesLabel"),
+                activeWhen: f("isReceivable"),
+              },
+              { href: f("payablesHref"), label: f("payablesLabel"), activeWhen: f("isPayable") },
+            ]),
+            divider: true,
+          },
+          dimensions: f("dimensions"),
+          subsidiaries: f("subsidiaries"),
+          primaryFilter: f("primaryFilter"),
         },
-        dimensions: f('dimensions'),
-        subsidiaries: f('subsidiaries'),
-        primaryFilter: f('primaryFilter'),
       },
-    }],
+    ],
     schedule: {
-      definitionId: data.scheduleDefId ?? '',
+      definitionId: data.scheduleDefId ?? "",
       statementParams: data.scheduleParams,
-      when: f('scheduleDefId'),
+      when: f("scheduleDefId"),
     },
-    exportMenu: { kind: 'registers', params: data.exportParams },
-    headerAfterFilters: [textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') })],
+    exportMenu: { kind: "registers", params: data.exportParams },
+    headerAfterFilters: [textBlock(f("truncatedLabel"), { tone: "warning", when: f("truncated") })],
     bodyBeforePaper: [
       {
-        ...widgetBlock('empty-state', {
-          title: data.ratesBlocked?.title ?? '',
+        ...widgetBlock("empty-state", {
+          title: data.ratesBlocked?.title ?? "",
           description: data.ratesBlocked?.description,
-          action: 'link-button',
+          action: "link-button",
           actionProps: {
-            href: data.ratesBlocked?.deriveHref ?? '/close',
-            label: data.ratesBlocked?.deriveLabel ?? '',
+            href: data.ratesBlocked?.deriveHref ?? "/close",
+            label: data.ratesBlocked?.deriveLabel ?? "",
           },
         }),
-        when: f('ratesBlocked'),
+        when: f("ratesBlocked"),
       },
       // The multi-currency refusal renders without an action: the remedy is
       // the subsidiary picker in the filter bar above, not a link.
       ...(data.currencyBasisBlocked
         ? [
             {
-              ...widgetBlock('empty-state', {
-                title: data.currencyBasisBlocked?.title ?? '',
+              ...widgetBlock("empty-state", {
+                title: data.currencyBasisBlocked?.title ?? "",
                 description: data.currencyBasisBlocked?.description,
               }),
-              when: f('currencyBasisBlocked'),
+              when: f("currencyBasisBlocked"),
             },
           ]
         : []),
     ],
     paper: {
-      company: f('company'),
-      title: f('title'),
-      periodPhrase: f('periodPhrase'),
+      company: f("company"),
+      title: f("title"),
+      periodPhrase: f("periodPhrase"),
       wide: true,
-      when: f('ratesReady'),
+      when: f("ratesReady"),
     },
     blocks: [
       repeat({
-        items: f('parties'),
-        itemKey: item('key'),
-        className: 'space-y-8',
-        empty: { text: f('emptyLabel'), className: 'py-8 text-center text-slate-400 italic' },
+        items: f("parties"),
+        itemKey: item("key"),
+        className: "space-y-8",
+        empty: { text: f("emptyLabel"), className: "py-8 text-center text-slate-400 italic" },
         blocks: [
-          widgetBlock('party-heading', {
-            partyId: item('partyId'),
-            partyName: item('partyName'),
-            statementHref: item('statementHref'),
-            closingLabel: rootF('closingLabel'),
-            closing: item('closing'),
-            closingDrill: item('closingDrill'),
+          widgetBlock("party-heading", {
+            partyId: item("partyId"),
+            partyName: item("partyName"),
+            statementHref: item("statementHref"),
+            closingLabel: rootF("closingLabel"),
+            closing: item("closing"),
+            closingDrill: item("closingDrill"),
           }),
           table({
-            variant: 'report',
-            rows: item('lines'),
-            rowKey: item('key'),
+            variant: "report",
+            rows: item("lines"),
+            rowKey: item("key"),
             leading: [openingRow],
             columns: [
-              column(rootF('columnDate'), text(item('date')), {
-                headerClassName: 'w-28',
-                className: 'tabular-nums',
+              column(rootF("columnDate"), text(item("date")), {
+                headerClassName: "w-28",
+                className: "tabular-nums",
               }),
               column(
-                rootF('columnEntry'),
-                widgetCell('entry-cell', {
-                  entryId: item('entryId'),
-                  docKind: item('docKind'),
-                  docId: item('docId'),
-                  entryNumber: item('entryNumber'),
+                rootF("columnEntry"),
+                widgetCell("entry-cell", {
+                  entryId: item("entryId"),
+                  docKind: item("docKind"),
+                  docId: item("docId"),
+                  entryNumber: item("entryNumber"),
                 }),
-                { headerClassName: 'w-24' },
+                { headerClassName: "w-24" },
               ),
-              column(rootF('columnMemo'), text(item('memo')), {
-                className: 'text-slate-600 dark:text-slate-300',
+              column(rootF("columnMemo"), text(item("memo")), {
+                className: "text-slate-600 dark:text-slate-300",
               }),
-              column(rootF('columnDebits'), txn(item('txn'), money(item('debit'))), { align: 'right' }),
-              column(rootF('columnCredits'), txn(item('txn'), money(item('credit'))), { align: 'right' }),
+              column(rootF("columnDebits"), txn(item("txn"), money(item("debit"))), {
+                align: "right",
+              }),
+              column(rootF("columnCredits"), txn(item("txn"), money(item("credit"))), {
+                align: "right",
+              }),
               column(
-                rootF('columnBalance'),
-                txn(item('txn'), money(item('balance'), { tone: item('balanceTone') })),
-                { align: 'right' },
+                rootF("columnBalance"),
+                txn(item("txn"), money(item("balance"), { tone: item("balanceTone") })),
+                { align: "right" },
               ),
             ],
           }),
@@ -426,14 +457,14 @@ export function registersSpec(data: RegistersData): PageSpec {
       }),
       {
         ...pagination({
-          basePath: '/reports/registers',
-          total: f('partyCount'),
-          page: f('page'),
-          perPage: f('perPage'),
+          basePath: "/reports/registers",
+          total: f("partyCount"),
+          page: f("page"),
+          perPage: f("perPage"),
           pageParamKey: REGISTER_PAGE_PARAM,
         }),
-        when: f('paged'),
+        when: f("paged"),
       },
     ],
-  })
+  });
 }

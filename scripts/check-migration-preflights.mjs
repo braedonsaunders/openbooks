@@ -302,8 +302,15 @@ export function scanPreflightSql(filename, content) {
   // (scripts/migration-preflight.ts PREFLIGHT_CODE_PATTERN plus the ordinal).
   const ordinal = String(filename).match(/^(\d{4})_/)?.[1];
   for (const match of statement.matchAll(/'([^']*)'(?:::text)?\s+as\s+code\b/gi)) {
-    if (!/^\d{4}\.[a-z][a-z0-9_]*$/.test(match[1]) || (ordinal && !match[1].startsWith(`${ordinal}.`))) {
-      findings.push({ file: filename, kind: "preflight-code-format", value: `code '${match[1]}' must be '${ordinal ?? "<ordinal>"}.<snake_reason>'` });
+    if (
+      !/^\d{4}\.[a-z][a-z0-9_]*$/.test(match[1]) ||
+      (ordinal && !match[1].startsWith(`${ordinal}.`))
+    ) {
+      findings.push({
+        file: filename,
+        kind: "preflight-code-format",
+        value: `code '${match[1]}' must be '${ordinal ?? "<ordinal>"}.<snake_reason>'`,
+      });
     }
   }
   const code = blankQuotedSpans(stripSqlComments(statement));
@@ -363,9 +370,7 @@ export function scanTree(generatedDir = GENERATED_DIR, preflightDir = PREFLIGHT_
   const preflightMissing = decisionsRaw === null && nonesRaw === null;
   const sqlSet = new Set(decisions ?? []);
   const noneSet = new Set(nones ?? []);
-  const migrationStems = new Set(
-    generated.map((file) => file.replace(/\.sql$/, "")),
-  );
+  const migrationStems = new Set(generated.map((file) => file.replace(/\.sql$/, "")));
 
   for (const file of generated) {
     if (ordinalOf(file) === null) continue;
@@ -417,7 +422,9 @@ export function scanTree(generatedDir = GENERATED_DIR, preflightDir = PREFLIGHT_
   return findings;
 }
 
-const invoked = process.argv[1] ? process.argv[1].endsWith("check-migration-preflights.mjs") : false;
+const invoked = process.argv[1]
+  ? process.argv[1].endsWith("check-migration-preflights.mjs")
+  : false;
 if (invoked) {
   const findings = scanTree();
   for (const finding of findings) {

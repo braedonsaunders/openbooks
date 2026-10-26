@@ -25,10 +25,13 @@ export const POST = defineRoute({
     if (outOfScope) return outOfScope;
     try {
       return NextResponse.json(
-        await pushItemToShopify(gate.user.orgId, gate.user.id, id, body.itemId, { fields: body.fields }),
+        await pushItemToShopify(gate.user.orgId, gate.user.id, id, body.itemId, {
+          fields: body.fields,
+        }),
       );
     } catch (error) {
-      if (error instanceof CommerceError && error.code === "channel_not_found") return notFound("channel");
+      if (error instanceof CommerceError && error.code === "channel_not_found")
+        return notFound("channel");
       throw error;
     }
   },

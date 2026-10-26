@@ -9,12 +9,32 @@ import {
   type CashSaleDraft,
   type ResolvedOrder,
 } from "./order-posting.ts";
-import { claimPendingRefundEvents, postDueRefundBatchesForOrg, postRefundBatchDocument } from "./refunds.ts";
-import { governedSalesOrderRef, loadChannelOrder, markOrderException, markOrderSummarized, maybeCloseGoverningOrder, parkPendingChannelOrders } from "./orders.ts";
+import {
+  claimPendingRefundEvents,
+  postDueRefundBatchesForOrg,
+  postRefundBatchDocument,
+} from "./refunds.ts";
+import {
+  governedSalesOrderRef,
+  loadChannelOrder,
+  markOrderException,
+  markOrderSummarized,
+  maybeCloseGoverningOrder,
+  parkPendingChannelOrders,
+} from "./orders.ts";
 import { getPostingPolicy } from "./posting-policies.ts";
 import { CommerceError, pgCause } from "./errors.ts";
-import { db, withBypassContext, withOrg, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import {
+  db,
+  withBypassContext,
+  withOrg,
+  withOrgTransaction,
+  withTransactionSavepoint,
+} from "../platform/db.ts";
+import {
+  acquireOrgFeatureGateLock,
+  lockAndCheckOrgFeature,
+} from "../organization/org-feature-lock.ts";
 import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
 
 interface SummaryGroup {
@@ -68,14 +88,18 @@ export function aggregateSummaryDraft(
   const giftIssues: CashSaleDraft["giftIssues"] = [];
   let merchantTaxMinor = 0n;
   let merchantTotalMinor = 0n;
-  if (resolved.length === 0) throw new Error("Summary aggregation needs at least one resolved order");
+  if (resolved.length === 0)
+    throw new Error("Summary aggregation needs at least one resolved order");
   for (const order of resolved) {
     merchantTaxMinor += order.merchantTaxMinor;
     merchantTotalMinor += order.merchantTotalMinor;
     for (const issue of order.giftIssues) giftIssues.push(issue);
     for (const line of order.lines) {
       const taxKey = line.taxes
-        .map((tax) => `${tax.taxCodeId}:${tax.ratePercent}:${tax.collectedBy}:${tax.facilitatorName ?? ""}`)
+        .map(
+          (tax) =>
+            `${tax.taxCodeId}:${tax.ratePercent}:${tax.collectedBy}:${tax.facilitatorName ?? ""}`,
+        )
         .sort()
         .join("|");
       const key = `${line.kind}:${line.itemId ?? ""}:${line.accountId}:${line.unitPrice}:${line.promotionId ?? ""}:${taxKey}:${line.title}`;
@@ -154,10 +178,18 @@ export async function postSummaryBatch(
     const outcome = await withOrgTransaction(orgId, async () => {
       await acquireOrgFeatureGateLock(db, orgId);
       if (!(await lockAndCheckOrgFeature(db, orgId, "salesChannels"))) {
-        throw new CommerceError("feature_off", "Sales Channels is turned off for this organization.", "Enable Sales Channels in Company Settings → Features.");
+        throw new CommerceError(
+          "feature_off",
+          "Sales Channels is turned off for this organization.",
+          "Enable Sales Channels in Company Settings → Features.",
+        );
       }
       if (!(await lockAndCheckOrgFeature(db, orgId, "cashSales"))) {
-        throw new CommerceError("feature_off", "Cash sales is turned off for this organization.", "Enable Cash sales in Company Settings → Features.");
+        throw new CommerceError(
+          "feature_off",
+          "Cash sales is turned off for this organization.",
+          "Enable Cash sales in Company Settings → Features.",
+        );
       }
       const resolved: ResolvedOrder[] = [];
       const resolvedIds: string[] = [];
@@ -173,7 +205,11 @@ export async function postSummaryBatch(
           resolvedIds.push(orderId);
         } catch (error) {
           if (error instanceof OrderPostException) {
-            await markOrderException(orgId, orderId, actor, { code: error.code, reason: error.message, remedy: error.remedy });
+            await markOrderException(orgId, orderId, actor, {
+              code: error.code,
+              reason: error.message,
+              remedy: error.remedy,
+            });
             parked += 1;
             continue;
           }
@@ -184,17 +220,34 @@ export async function postSummaryBatch(
       // refund document without a sales batch. The claim skips rows another
       // worker holds, and each event stays individually idempotent.
       if (resolved.length === 0) {
-        const refundIds = await claimPendingRefundEvents(orgId, group.channelId, group.day, group.currency, group.cutoffTz);
+        const refundIds = await claimPendingRefundEvents(
+          orgId,
+          group.channelId,
+          group.day,
+          group.currency,
+          group.cutoffTz,
+        );
         if (refundIds.length === 0) {
-          return { status: "empty", documentId: null as string | null, summarized: 0, parked, effectsDocumentId: null as string | null };
+          return {
+            status: "empty",
+            documentId: null as string | null,
+            summarized: 0,
+            parked,
+            effectsDocumentId: null as string | null,
+          };
         }
-        const refunds = await postRefundBatchDocument(orgId, actor, {
-          channelId: group.channelId,
-          provider: group.provider,
-          day: group.day,
-          currency: group.currency,
-          subsidiaryId: group.subsidiaryId,
-        }, refundIds);
+        const refunds = await postRefundBatchDocument(
+          orgId,
+          actor,
+          {
+            channelId: group.channelId,
+            provider: group.provider,
+            day: group.day,
+            currency: group.currency,
+            subsidiaryId: group.subsidiaryId,
+          },
+          refundIds,
+        );
         return {
           status: refunds.status,
           documentId: refunds.documentId,
@@ -206,20 +259,40 @@ export async function postSummaryBatch(
       // The batch row is the idempotency key: a replayed cut-off observes
       // the open row instead of double-counting its orders. The conflict is
       // expected on replay, so re-read the winner.
-      const inserted = await db.execute<{ id: string; status: string; posting_document_id: string | null }>(sql`
+      const inserted = await db.execute<{
+        id: string;
+        status: string;
+        posting_document_id: string | null;
+      }>(
+        sql`
         insert into channel_daily_summaries
           (org_id, channel_id, summary_date, stock_location_id, currency, created_by, updated_by)
         values (${orgId}, ${group.channelId}, ${group.day}, ${group.stockLocationId}, ${group.currency}, ${actor}, ${actor})
         -- A cutoff replay reuses the existing batch selected below and checks its posting state.
         on conflict (org_id, channel_id, summary_date, stock_location_id, currency) do nothing
-        returning id, status, posting_document_id`, "objects");
-      const batch = inserted[0] ?? (await db.execute<SummaryDbRow>(sql`
+        returning id, status, posting_document_id`,
+        "objects",
+      );
+      const batch =
+        inserted[0] ??
+        (
+          await db.execute<SummaryDbRow>(
+            sql`
         select id, status, posting_document_id from channel_daily_summaries
          where org_id = ${orgId} and channel_id = ${group.channelId} and summary_date = ${group.day}
-           and stock_location_id = ${group.stockLocationId} and currency = ${group.currency}`, "objects"))[0];
+           and stock_location_id = ${group.stockLocationId} and currency = ${group.currency}`,
+            "objects",
+          )
+        )[0];
       if (!batch) throw new Error("Summary batch store returned no row; the batch was lost");
       if (batch.status === "posted" && batch.posting_document_id) {
-        return { status: "posted", documentId: batch.posting_document_id, summarized: 0, parked, effectsDocumentId: null as string | null };
+        return {
+          status: "posted",
+          documentId: batch.posting_document_id,
+          summarized: 0,
+          parked,
+          effectsDocumentId: null as string | null,
+        };
       }
       const { draft, scope } = aggregateSummaryDraft(group, resolved);
       draft.externalRef = `channel-summary:${batch.id}`;
@@ -232,14 +305,32 @@ export async function postSummaryBatch(
       if (group.fulfilledBy === "storefront") {
         for (const one of resolved) {
           governIds.push(
-            (await buildSalesOrderDraft(orgId, actor, one, governedSalesOrderRef(one.order.externalId))).documentId,
+            (
+              await buildSalesOrderDraft(
+                orgId,
+                actor,
+                one,
+                governedSalesOrderRef(one.order.externalId),
+              )
+            ).documentId,
           );
         }
       }
-      const built = await postCashSaleDraft(orgId, actor, draft, scope,
-        governIds.length > 0 ? { governFromSalesOrderIds: governIds } : undefined);
+      const built = await postCashSaleDraft(
+        orgId,
+        actor,
+        draft,
+        scope,
+        governIds.length > 0 ? { governFromSalesOrderIds: governIds } : undefined,
+      );
       if (!built.journalEntryId) {
-        return { status: "pending", documentId: built.documentId, summarized: 0, parked, effectsDocumentId: null as string | null };
+        return {
+          status: "pending",
+          documentId: built.documentId,
+          summarized: 0,
+          parked,
+          effectsDocumentId: null as string | null,
+        };
       }
       let subtotalMinor = 0n;
       let taxMinor = 0n;
@@ -280,30 +371,55 @@ export async function postSummaryBatch(
         select ${orgId}, o.id, 'daily summary posted'
           from channel_orders o
          where o.org_id = ${orgId}
-           and o.id in (${sql.join(resolvedIds.map((orderId) => sql`${orderId}::uuid`), sql`, `)})
+           and o.id in (${sql.join(
+             resolvedIds.map((orderId) => sql`${orderId}::uuid`),
+             sql`, `,
+           )})
         -- The existing order mark already requires a full margin restatement; another mark adds no work.
         on conflict (org_id, order_id) do nothing`);
       // Tonight's refunds join the batch they belong to: one refund document
       // beside the sales document, each event on its own lines. The batch
       // unit is still open, so the refund effects run inside it — a rollback
       // retracts the documents with their effects, and the sweep replays.
-      const refundIds = await claimPendingRefundEvents(orgId, group.channelId, group.day, group.currency, group.cutoffTz);
+      const refundIds = await claimPendingRefundEvents(
+        orgId,
+        group.channelId,
+        group.day,
+        group.currency,
+        group.cutoffTz,
+      );
       if (refundIds.length > 0) {
-        const refunds = await postRefundBatchDocument(orgId, actor, {
-          channelId: group.channelId,
-          provider: group.provider,
-          day: group.day,
-          currency: group.currency,
-          subsidiaryId: group.subsidiaryId,
-        }, refundIds);
+        const refunds = await postRefundBatchDocument(
+          orgId,
+          actor,
+          {
+            channelId: group.channelId,
+            provider: group.provider,
+            day: group.day,
+            currency: group.currency,
+            subsidiaryId: group.subsidiaryId,
+          },
+          refundIds,
+        );
         parked += refunds.parked;
       }
-      return { status: "posted", documentId: built.documentId, summarized: resolved.length, parked, effectsDocumentId: built.documentId };
+      return {
+        status: "posted",
+        documentId: built.documentId,
+        summarized: resolved.length,
+        parked,
+        effectsDocumentId: built.documentId,
+      };
     });
     if (outcome.effectsDocumentId) {
       await runPostDocumentEffects(outcome.effectsDocumentId, "draft", { actorId: actor });
     }
-    return { status: outcome.status, documentId: outcome.documentId, summarized: outcome.summarized, parked: outcome.parked };
+    return {
+      status: outcome.status,
+      documentId: outcome.documentId,
+      summarized: outcome.summarized,
+      parked: outcome.parked,
+    };
   });
 }
 
@@ -325,21 +441,30 @@ interface DueChannel {
 export async function postDueDailySummaries(): Promise<{ posted: number; parked: number }> {
   // bypass: scheduler-tick — the summary cut-off scans pending orders
   // across organizations before each row's organization is known.
-  const orgs = await withBypassContext(() => db.execute<{ org_id: string }>(sql`
-    select distinct org_id from channel_orders where posting_status = 'pending' limit 50`, "objects"));
+  const orgs = await withBypassContext(() =>
+    db.execute<{ org_id: string }>(
+      sql`
+    select distinct org_id from channel_orders where posting_status = 'pending' limit 50`,
+      "objects",
+    ),
+  );
   let posted = 0;
   let parked = 0;
   const failures: string[] = [];
   for (const org of orgs) {
     try {
-      const outcome = await withOrg(org.org_id, () => postDueDailySummariesForOrg(org.org_id, null));
+      const outcome = await withOrg(org.org_id, () =>
+        postDueDailySummariesForOrg(org.org_id, null),
+      );
       posted += outcome.posted;
       parked += outcome.parked;
     } catch (error) {
-      failures.push(`Organization ${org.org_id}: ${error instanceof Error ? error.message : String(error)}`);
+      failures.push(
+        `Organization ${org.org_id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
-  if (failures.length) throw new Error(`Daily summary scan failed: ${failures.join('; ')}`);
+  if (failures.length) throw new Error(`Daily summary scan failed: ${failures.join("; ")}`);
   return { posted, parked };
 }
 
@@ -356,16 +481,26 @@ async function postDueDailySummariesForOrgIn(
 ): Promise<{ posted: number; parked: number }> {
   let posted = 0;
   let parked = 0;
-  const channels = await db.execute<{ channel_id: string }>(sql`
+  const channels = await db.execute<{ channel_id: string }>(
+    sql`
     select distinct channel_id from channel_orders
-     where org_id = ${orgId} and posting_status = 'pending'`, "objects");
+     where org_id = ${orgId} and posting_status = 'pending'`,
+    "objects",
+  );
   for (const channel of channels) {
-    const meta = (await db.execute<{ kind: string; subsidiary_id: string | null }>(sql`
-      select kind, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channel.channel_id}`, "objects"))[0];
+    const meta = (
+      await db.execute<{ kind: string; subsidiary_id: string | null }>(
+        sql`
+      select kind, subsidiary_id from sales_channels where org_id = ${orgId} and id = ${channel.channel_id}`,
+        "objects",
+      )
+    )[0];
     if (!meta) throw new Error(`Pending orders reference missing channel ${channel.channel_id}`);
     let policy: { mode: string; cutoffTz: string };
     try {
-      const today = (await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects"))[0]!.today;
+      const today = (
+        await db.execute<{ today: string }>(sql`select current_date::text as today`, "objects")
+      )[0]!.today;
       policy = await getPostingPolicy(orgId, channel.channel_id, today);
     } catch (error) {
       if (!(error instanceof CommerceError)) throw error;
@@ -375,49 +510,85 @@ async function postDueDailySummariesForOrgIn(
     if (policy.mode !== "daily_summary") continue;
     let shopToday: string;
     try {
-      shopToday = await withTransactionSavepoint(db, async () => (await db.execute<{ day: string }>(sql`
-        select ((now() at time zone ${policy.cutoffTz})::date)::text as day`, "objects"))[0]!.day);
+      shopToday = await withTransactionSavepoint(
+        db,
+        async () =>
+          (
+            await db.execute<{ day: string }>(
+              sql`
+        select ((now() at time zone ${policy.cutoffTz})::date)::text as day`,
+              "objects",
+            )
+          )[0]!.day,
+      );
     } catch (error) {
-      if (pgCause(error)?.code !== '22023') throw error;
-      parked += await parkPendingChannelOrders(orgId, channel.channel_id, actor, new CommerceError(
-        'channel_policy_timezone_unknown', `Cut-off time zone "${policy.cutoffTz}" is not a known time zone.`,
-        'Set an IANA cut-off time zone, for example America/Toronto, in the channel posting policy, then replay the exceptions.',
-        { field: 'cutoffTz' }));
+      if (pgCause(error)?.code !== "22023") throw error;
+      parked += await parkPendingChannelOrders(
+        orgId,
+        channel.channel_id,
+        actor,
+        new CommerceError(
+          "channel_policy_timezone_unknown",
+          `Cut-off time zone "${policy.cutoffTz}" is not a known time zone.`,
+          "Set an IANA cut-off time zone, for example America/Toronto, in the channel posting policy, then replay the exceptions.",
+          { field: "cutoffTz" },
+        ),
+      );
       continue;
     }
-    const due: DueChannel = { channelId: channel.channel_id, provider: meta.kind, subsidiaryId: meta.subsidiary_id, cutoffTz: policy.cutoffTz };
+    const due: DueChannel = {
+      channelId: channel.channel_id,
+      provider: meta.kind,
+      subsidiaryId: meta.subsidiary_id,
+      cutoffTz: policy.cutoffTz,
+    };
     // The batch shelf mirrors sale resolution: the fulfilment shelf when
     // OpenBooks fulfils, else the single mapped 3PL shelf. Anything else
     // (no shelf, or several) posts per order and parks with the Locations
     // remedy at resolution.
-    const locationLinks = await db.execute<{ stock_location_id: string | null; fulfils_orders: boolean }>(sql`
+    const locationLinks = await db.execute<{
+      stock_location_id: string | null;
+      fulfils_orders: boolean;
+    }>(
+      sql`
       select stock_location_id, fulfils_orders from sales_channel_locations
-       where org_id = ${orgId} and channel_id = ${channel.channel_id} and stock_location_id is not null`, "objects");
+       where org_id = ${orgId} and channel_id = ${channel.channel_id} and stock_location_id is not null`,
+      "objects",
+    );
     const fulfilShelves = locationLinks
       .filter((link) => link.fulfils_orders && link.stock_location_id)
       .map((link) => link.stock_location_id!);
     const mappedShelves = locationLinks
       .map((link) => link.stock_location_id)
       .filter((id): id is string => !!id);
-    const groupShelf = fulfilShelves.length === 1
-      ? { stockLocationId: fulfilShelves[0]!, fulfilledBy: "openbooks" as const }
-      : fulfilShelves.length === 0 && mappedShelves.length === 1
-        ? { stockLocationId: mappedShelves[0]!, fulfilledBy: "storefront" as const }
-        : null;
-    const groups = await db.execute<{ day: string; currency: string; order_ids: string[] }>(sql`
+    const groupShelf =
+      fulfilShelves.length === 1
+        ? { stockLocationId: fulfilShelves[0]!, fulfilledBy: "openbooks" as const }
+        : fulfilShelves.length === 0 && mappedShelves.length === 1
+          ? { stockLocationId: mappedShelves[0]!, fulfilledBy: "storefront" as const }
+          : null;
+    const groups = await db.execute<{ day: string; currency: string; order_ids: string[] }>(
+      sql`
       select ((ordered_at at time zone ${policy.cutoffTz})::date)::text as day,
              shop_currency as currency,
              array_agg(id order by ordered_at) as order_ids
         from channel_orders
        where org_id = ${orgId} and channel_id = ${channel.channel_id} and posting_status = 'pending'
-       group by 1, 2`, "objects");
+       group by 1, 2`,
+      "objects",
+    );
     for (const group of groups) {
       if (group.day >= shopToday) continue;
-      const postedSummary = (await db.execute<{ id: string }>(sql`
+      const postedSummary = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from channel_daily_summaries
          where org_id = ${orgId} and channel_id = ${due.channelId}
            and summary_date = ${group.day} and currency = ${group.currency} and status = 'posted'
-         limit 1`, "objects"))[0];
+         limit 1`,
+          "objects",
+        )
+      )[0];
       if (postedSummary) {
         for (const orderId of group.order_ids) {
           const outcome = await postChannelOrder(orgId, actor, orderId, { forcePerOrder: true });
@@ -433,16 +604,21 @@ async function postDueDailySummariesForOrgIn(
         }
         continue;
       }
-      const outcome = await postSummaryBatch(orgId, actor, {
-        channelId: due.channelId,
-        provider: due.provider,
-        day: group.day,
-        stockLocationId: groupShelf.stockLocationId,
-        fulfilledBy: groupShelf.fulfilledBy,
-        currency: group.currency,
-        subsidiaryId: due.subsidiaryId,
-        cutoffTz: due.cutoffTz,
-      }, group.order_ids);
+      const outcome = await postSummaryBatch(
+        orgId,
+        actor,
+        {
+          channelId: due.channelId,
+          provider: due.provider,
+          day: group.day,
+          stockLocationId: groupShelf.stockLocationId,
+          fulfilledBy: groupShelf.fulfilledBy,
+          currency: group.currency,
+          subsidiaryId: due.subsidiaryId,
+          cutoffTz: due.cutoffTz,
+        },
+        group.order_ids,
+      );
       if (outcome.status === "posted") posted += outcome.summarized;
       parked += outcome.parked;
     }

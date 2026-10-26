@@ -61,13 +61,13 @@ export interface EntityStream {
 
 /** A party photo reference, read independently of employee update watermarks. */
 export interface SourcePartyPhoto {
-  partyRef: string
-  fileRef: string | null
+  partyRef: string;
+  fileRef: string | null;
 }
 
 export interface SourcePhotoFile {
-  filename: string
-  bytes: Buffer
+  filename: string;
+  bytes: Buffer;
 }
 
 // --- Native transaction stream ------------------------------------------------
@@ -271,12 +271,7 @@ export interface SourceTimeEntryBillingState {
 export interface SourceProjectCommercialState {
   sourceRef: string;
   /** Connector-normalized project-type key when the source exposes one. */
-  billingMethod:
-    | "time_and_materials"
-    | "fixed_price"
-    | "cost_plus"
-    | "not_to_exceed"
-    | null;
+  billingMethod: "time_and_materials" | "fixed_price" | "cost_plus" | "not_to_exceed" | null;
   /** Source contract/ceiling amount; null means the source has no such fact. */
   contractValue: string | null;
 }
@@ -305,7 +300,11 @@ export interface MigrationSource {
   /** All exposed entities and their normalized source/native field contracts. */
   readonly entityMappingMetadata?: readonly EntityMappingMetadata[];
   mappingSourceFields?(entity: string): Promise<EntityMappingMetadata["sourceFields"]>;
-  mappingSourceValues?(entity: string, fields: readonly string[], refs: readonly string[]): Promise<Map<string, Record<string, unknown>>>;
+  mappingSourceValues?(
+    entity: string,
+    fields: readonly string[],
+    refs: readonly string[],
+  ): Promise<Map<string, Record<string, unknown>>>;
   /**
    * Unique key under which this adapter's source ids live in each row's
    * `custom` JSON. Party and project identity is resolved only through this
@@ -327,7 +326,10 @@ export interface MigrationSource {
   /** Recheck source evidence immediately before financial reconciliation. */
   revalidateSettlementObservation?(observation: SettlementObservation): Promise<void>;
   /** Confirm the source still posts payers whose admitted allocations would be released. */
-  confirmSettlementReleases?(observation: SettlementObservation, paymentRefs: string[]): Promise<void>;
+  confirmSettlementReleases?(
+    observation: SettlementObservation,
+    paymentRefs: string[],
+  ): Promise<void>;
 
   /**
    * Source fiscal periods normalized into posting-period rows plus per-module
@@ -345,7 +347,9 @@ export interface MigrationSource {
    * resolves these refs to openbooks ids and writes org.settings.controlAccounts
    * so the posting rules route AR/AP/bank/tax exactly like the source did.
    */
-  controlAccounts?(): Promise<Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>>;
+  controlAccounts?(): Promise<
+    Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>
+  >;
 
   /**
    * Master data, in dependency order (accounts, dimensions, parties, items…).
@@ -368,7 +372,12 @@ export interface MigrationSource {
   mappingOptions?(field: string, parent?: string): Promise<{ value: string; label: string }[]>;
 
   /** Native operational registers exposed by this connector, with explicit feature exclusions. */
-  syncOperationalRecords?(options: { orgId: string; connectionId: string; actorId: string | null; populations?: { crm: boolean; fixedAssets: boolean } }): Promise<SourceOperationalSyncResult>;
+  syncOperationalRecords?(options: {
+    orgId: string;
+    connectionId: string;
+    actorId: string | null;
+    populations?: { crm: boolean; fixedAssets: boolean };
+  }): Promise<SourceOperationalSyncResult>;
 
   /** Bounded employee identity/role refresh through the normal source projection. */
   employeeEntities?(refs: readonly string[]): Promise<EntityStream[]>;
@@ -378,7 +387,6 @@ export interface MigrationSource {
   partyPhotoContent?(fileRef: string): Promise<SourcePhotoFile>;
   /** Account identity verified by the adapter before photo references are read. */
   readonly photoSourceAccount?: string;
-
 
   /**
    * Small reference-data streams required to interpret a bounded transaction
@@ -410,10 +418,7 @@ export interface MigrationSource {
    * cursor from this operation and still runs every financial verification
    * gate after rematerialization.
    */
-  nativeChangesByRefs?(
-    sourceRefs: string[],
-    ctx: NativeContext,
-  ): Promise<NativeChanges>;
+  nativeChangesByRefs?(sourceRefs: string[], ctx: NativeContext): Promise<NativeChanges>;
 
   /** Live per-account trial balance for verification after sync. */
   trialBalance(): Promise<SourceTrialBalanceRow[]>;

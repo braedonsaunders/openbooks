@@ -21,7 +21,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   import { NextResponse } from 'next/server';
@@ -61,7 +61,10 @@ const hooks = registerHooks({
     if (specifier === "@/lib/information-return-pdf") {
       return { url: "mock:ir-copies-pdf", shortCircuit: true };
     }
-    if (context.parentURL?.startsWith("mock:") && (specifier.startsWith("@openbooks/") || specifier === "next/server")) {
+    if (
+      context.parentURL?.startsWith("mock:") &&
+      (specifier.startsWith("@openbooks/") || specifier === "next/server")
+    ) {
       return nextResolve(specifier, { ...context, parentURL: import.meta.url });
     }
     return nextResolve(specifier, context);
@@ -81,11 +84,8 @@ const routeUrl = "./route.ts?ir-copies-furnish-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const {
-  ensureFiling,
-  finalizeFiling,
-  recomputeFiling,
-} = await import("@openbooks/engine/compliance/information-returns");
+const { ensureFiling, finalizeFiling, recomputeFiling } =
+  await import("@openbooks/engine/compliance/information-returns");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
 type Org = Awaited<ReturnType<typeof createScratchOrg>>;
@@ -175,7 +175,13 @@ async function seedFinalizedFiling(
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb),
         '{features,informationReturns}', 'true'::jsonb, true)
        where id = ${org.orgId}`);
-    const filing = await ensureFiling({ orgId: org.orgId, taxYear, formType: "1099-NEC", currency: "USD", actorId });
+    const filing = await ensureFiling({
+      orgId: org.orgId,
+      taxYear,
+      formType: "1099-NEC",
+      currency: "USD",
+      actorId,
+    });
     for (let i = 0; i < 2; i++) {
       const partyId = randomUUID();
       await db.execute(sql`
@@ -194,29 +200,38 @@ async function seedFinalizedFiling(
     }
     await recomputeFiling({ orgId: org.orgId, filingId: filing.id, actorId });
     await finalizeFiling({ orgId: org.orgId, filingId: filing.id, actorId });
-    const recipients = await db.execute<{ id: string }>(sql`
+    const recipients = await db.execute<{ id: string }>(
+      sql`
       select id from information_return_recipients
        where org_id = ${org.orgId} and filing_id = ${filing.id}
-       order by party_id`, "objects");
+       order by party_id`,
+      "objects",
+    );
     return { filingId: filing.id, recipientIds: recipients.map((row) => row.id) };
   });
 }
 
 async function printedAts(orgId: string, filingId: string): Promise<(string | null)[]> {
   const rows = await withBypassContext(() =>
-    db.execute<{ printed_at: string | null }>(sql`
+    db.execute<{ printed_at: string | null }>(
+      sql`
       select printed_at::text as printed_at from information_return_recipients
-       where org_id = ${orgId} and filing_id = ${filingId} order by party_id`, "objects"),
+       where org_id = ${orgId} and filing_id = ${filingId} order by party_id`,
+      "objects",
+    ),
   );
   return rows.map((row) => row.printed_at);
 }
 
 async function auditCount(orgId: string, filingId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`
+    db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from audit_log
        where org_id = ${orgId} and table_name = 'information_return_recipients'
-         and row_id in (select id from information_return_recipients where filing_id = ${filingId})`, "objects"),
+         and row_id in (select id from information_return_recipients where filing_id = ${filingId})`,
+      "objects",
+    ),
   );
   return rows[0]!.n;
 }
@@ -244,10 +259,14 @@ const postFurnished = (filingId: string, body: unknown) =>
   );
 
 test("a read-only GET renders without marking copies furnished", async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = randomUUID();
-    routeState.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["compliance.read"]), allowedSubsidiaryIds: null };
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(["compliance.read"]),
+      allowedSubsidiaryIds: null,
+    };
     const { filingId, recipientIds } = await seedFinalizedFiling(org, actorId, 2071);
     assert.equal(recipientIds.length, 2);
     const response = await getCopies(filingId);
@@ -260,10 +279,14 @@ test("a read-only GET renders without marking copies furnished", async () => {
 });
 
 test("the furnish POST without the manage grant is refused before any write", async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = randomUUID();
-    routeState.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["compliance.read"]), allowedSubsidiaryIds: null };
+    routeState.authz = {
+      user: { orgId: org.orgId, id: actorId },
+      permissions: new Set(["compliance.read"]),
+      allowedSubsidiaryIds: null,
+    };
     const { filingId } = await seedFinalizedFiling(org, actorId, 2072);
     const response = await postFurnished(filingId, {});
     assert.equal(response.status, 403, `expected 403, got ${response.status}`);
@@ -274,7 +297,7 @@ test("the furnish POST without the manage grant is refused before any write", as
 });
 
 test("the furnish POST with the manage grant stamps and audits both copies", async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = randomUUID();
     routeState.authz = {
@@ -296,7 +319,7 @@ test("the furnish POST with the manage grant stamps and audits both copies", asy
 });
 
 test("the furnish POST for one recipient stamps only that copy", async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = randomUUID();
     routeState.authz = {

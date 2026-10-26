@@ -1,7 +1,7 @@
-import { ModuleView } from '../../../../components/viewspec/module-view'
-import { loadSeparations, separationsSpec } from './view'
+import { ModuleView } from "../../../../components/viewspec/module-view";
+import { loadSeparations, separationsSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Separations cockpit — the home of SEPARATION filings (cadence
@@ -19,9 +19,9 @@ export const dynamic = 'force-dynamic'
 export default async function PayrollSeparationsPage({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadSeparations(sp)
-  return <ModuleView spec={separationsSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadSeparations(sp);
+  return <ModuleView spec={separationsSpec(data)} data={data} searchParams={sp} trusted />;
 }

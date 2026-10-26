@@ -39,9 +39,11 @@ export function GenealogySeedPicker({
       const params = new URLSearchParams({ kind, q: query });
       if (id) params.set("selected", id);
       try {
-        const response = await fetch(`/api/manufacturing/genealogy/seeds?${params}`, { signal: controller.signal });
+        const response = await fetch(`/api/manufacturing/genealogy/seeds?${params}`, {
+          signal: controller.signal,
+        });
         if (!response.ok) throw new Error("genealogy_seed_search_failed");
-        const rows = await response.json() as Seed[];
+        const rows = (await response.json()) as Seed[];
         setSeeds(rows);
       } catch {
         if (!controller.signal.aborted) {
@@ -73,7 +75,9 @@ export function GenealogySeedPicker({
   return (
     <div className="flex flex-wrap items-end gap-3" role="group" aria-label={t("title")}>
       <div className="min-w-36 space-y-1">
-        <FieldLabel htmlFor="genealogy-kind">{m("values.lot")}/{m("values.serial")}</FieldLabel>
+        <FieldLabel htmlFor="genealogy-kind">
+          {m("values.lot")}/{m("values.serial")}
+        </FieldLabel>
         <Select
           id="genealogy-kind"
           aria-label={`${m("values.lot")}/${m("values.serial")}`}
@@ -83,7 +87,11 @@ export function GenealogySeedPicker({
             navigate({ kind: event.target.value === "serial" ? "serial" : "lot" });
           }}
         >
-          {kindOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          {kindOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </Select>
       </div>
       <div className="min-w-64 flex-1 space-y-1">
@@ -123,7 +131,9 @@ export function GenealogySeedPicker({
           onChange={(event) => navigate({ maxDepth: Number(event.target.value) })}
         >
           {Array.from({ length: 32 }, (_, index) => index + 1).map((depth) => (
-            <option key={depth} value={depth}>{depth}</option>
+            <option key={depth} value={depth}>
+              {depth}
+            </option>
           ))}
         </Select>
       </div>

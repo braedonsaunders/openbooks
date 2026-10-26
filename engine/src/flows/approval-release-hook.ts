@@ -25,15 +25,10 @@ export interface FlowApprovalReleaseArgs {
   ctx: FlowExecCtx;
 }
 
-export type FlowApprovalReleaseHandler = (
-  args: FlowApprovalReleaseArgs,
-) => Promise<void>;
+export type FlowApprovalReleaseHandler = (args: FlowApprovalReleaseArgs) => Promise<void>;
 
 type HookRuntime = typeof globalThis & {
-  __openbooksFlowApprovalReleaseHandlers?: Map<
-    string,
-    FlowApprovalReleaseHandler
-  >;
+  __openbooksFlowApprovalReleaseHandlers?: Map<string, FlowApprovalReleaseHandler>;
 };
 
 const runtime = globalThis as HookRuntime;
@@ -51,9 +46,7 @@ export function hasFlowApprovalReleaseHandler(subjectKind: string): boolean {
   return handlers.has(subjectKind);
 }
 
-export async function releaseFlowApproval(
-  args: FlowApprovalReleaseArgs,
-): Promise<void> {
+export async function releaseFlowApproval(args: FlowApprovalReleaseArgs): Promise<void> {
   const handler = handlers.get(args.subjectKind);
   if (!handler) {
     throw new Error(
@@ -77,13 +70,10 @@ export type FlowSubmissionResumeHandler = (
   args: FlowSubmissionResumeArgs,
 ) => Promise<{ status: string }>;
 const submissionRuntime = globalThis as typeof globalThis & {
-  __openbooksFlowSubmissionResumeHandlers?: Map<
-    string,
-    FlowSubmissionResumeHandler
-  >;
+  __openbooksFlowSubmissionResumeHandlers?: Map<string, FlowSubmissionResumeHandler>;
 };
-const submissionHandlers =
-  (submissionRuntime.__openbooksFlowSubmissionResumeHandlers ??= new Map());
+const submissionHandlers = (submissionRuntime.__openbooksFlowSubmissionResumeHandlers ??=
+  new Map());
 
 export function registerFlowSubmissionResumeHandler(
   subjectKind: string,
@@ -106,12 +96,27 @@ export async function resumeFlowSubmission(
 }
 
 /** Native commands with a pending projection restore it when their submission is recalled. */
-type CommandWithdrawal = {orgId:string;actorId:string;subjectKind:string;subjectId:string;reason:string};
-const withdrawalRuntime=globalThis as typeof globalThis & {__openbooksFlowCommandWithdrawalHandlers?:Map<string,(input:CommandWithdrawal)=>Promise<void>>};
-const withdrawalHandlers=(withdrawalRuntime.__openbooksFlowCommandWithdrawalHandlers??=new Map());
-export function registerFlowCommandWithdrawalHandler(kind:string,handler:(input:CommandWithdrawal)=>Promise<void>):void{
-  withdrawalHandlers.set(kind,handler);
+type CommandWithdrawal = {
+  orgId: string;
+  actorId: string;
+  subjectKind: string;
+  subjectId: string;
+  reason: string;
+};
+const withdrawalRuntime = globalThis as typeof globalThis & {
+  __openbooksFlowCommandWithdrawalHandlers?: Map<
+    string,
+    (input: CommandWithdrawal) => Promise<void>
+  >;
+};
+const withdrawalHandlers = (withdrawalRuntime.__openbooksFlowCommandWithdrawalHandlers ??=
+  new Map());
+export function registerFlowCommandWithdrawalHandler(
+  kind: string,
+  handler: (input: CommandWithdrawal) => Promise<void>,
+): void {
+  withdrawalHandlers.set(kind, handler);
 }
-export async function withdrawFlowCommandSubject(input:CommandWithdrawal):Promise<void>{
+export async function withdrawFlowCommandSubject(input: CommandWithdrawal): Promise<void> {
   await withdrawalHandlers.get(input.subjectKind)?.(input);
 }

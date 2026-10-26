@@ -13,14 +13,18 @@ declare global {
 }
 
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/crm/activities?activity=act-1", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/crm/activities?activity=act-1",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
 stubModules({ navigation: { pathname: "/crm/activities" } });
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "sonner") {
       return {
         shortCircuit: true,
@@ -41,7 +45,8 @@ const { ActivityDrawer } = await import("./ActivityDrawer");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const TOKEN = "2026-09-17T12:00:00.000000Z";
-const REFUSAL = "This activity changed after you opened it; reload the activity and reapply your changes";
+const REFUSAL =
+  "This activity changed after you opened it; reload the activity and reapply your changes";
 
 function installFetch() {
   const prior = globalThis.fetch;
@@ -49,7 +54,9 @@ function installFetch() {
   globalThis.__activityToastErrors = [];
   globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === "PATCH") {
-      globalThis.__activityPatchBodies!.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+      globalThis.__activityPatchBodies!.push(
+        JSON.parse(String(init.body)) as Record<string, unknown>,
+      );
       const stub = globalThis.__activityPatchStatus ?? { status: 409, body: { error: REFUSAL } };
       return Response.json(stub.body, { status: stub.status });
     }

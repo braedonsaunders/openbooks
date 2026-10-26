@@ -3,11 +3,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { importStatement, listAccountStatements } from "./banking.ts";
 import { db } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -61,10 +57,17 @@ test(
         { sort: "date", dir: "desc", page: 1, perPage: 10 },
         ctx,
       );
-      assert.deepEqual(full.rows.map((row) => row.id), [...importedIds].reverse());
+      assert.deepEqual(
+        full.rows.map((row) => row.id),
+        [...importedIds].reverse(),
+      );
       for (const row of full.rows) {
         assert.equal(row.statement_date, org.date);
-        assert.equal(row.currency, "CAD", "the row derives currency from its imported statement lines");
+        assert.equal(
+          row.currency,
+          "CAD",
+          "the row derives currency from its imported statement lines",
+        );
         assert.equal(row.line_count, 1);
         assert.equal(row.unmatched_count, 1);
         assert.ok(row.imported_at, "each statement carries its import timestamp");

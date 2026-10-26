@@ -40,20 +40,30 @@ function rank(code: SQL, label: SQL, query: string): SQL {
     when lower(${label}) like ${`${escapeLike(exact)}%`} then 2 else 3 end`;
 }
 
-export function searchTargets(actor: ScheduleActor & { boardId: string; query: string; limit?: number }): Promise<BoardTarget[]> {
-  return withOrgTransaction(actor.orgId, () => findTargets(actor)).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
+export function searchTargets(
+  actor: ScheduleActor & { boardId: string; query: string; limit?: number },
+): Promise<BoardTarget[]> {
+  return withOrgTransaction(actor.orgId, () => findTargets(actor)).catch((error: unknown) => {
+    throw scheduleDatabaseRefusal(error);
+  });
 }
 
-async function findTargets(actor: ScheduleActor & { boardId: string; query: string; limit?: number }): Promise<BoardTarget[]> {
+async function findTargets(
+  actor: ScheduleActor & { boardId: string; query: string; limit?: number },
+): Promise<BoardTarget[]> {
   const board = await getBoard(actor, actor.boardId);
   const allowed = await boardAuthority(actor, board, "read");
   const query = actor.query.trim().slice(0, 80);
   const limit = Math.min(Math.max(actor.limit ?? 12, 1), 40);
   const pattern = `%${escapeLike(query.toLowerCase())}%`;
   const orgId = actor.orgId;
-  const match = (code: SQL, label: SQL) => query ? sql`(lower(coalesce(${code}, '')) like ${pattern} or lower(${label}) like ${pattern})` : sql`true`;
+  const match = (code: SQL, label: SQL) =>
+    query
+      ? sql`(lower(coalesce(${code}, '')) like ${pattern} or lower(${label}) like ${pattern})`
+      : sql`true`;
 
-  const rows = await db.execute<BoardTarget & { score: number }>(sql`
+  const rows = await db.execute<BoardTarget & { score: number }>(
+    sql`
     select * from (
       select 'code' as kind, sc.id, sc.code, sc.label, null::text as context, sc.color, sc.category = 'work' as counts,
              ${rank(sql`sc.code`, sql`sc.label`, query)} as score, 0 as family
@@ -78,7 +88,9 @@ async function findTargets(actor: ScheduleActor & { boardId: string; query: stri
          ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed, { orgWideNull: true })}
          and ${match(sql`l.code`, sql`l.name`)}
     ) found order by score, family, label limit ${limit}
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map(({ score: _score, ...target }) => target);
 }
 
@@ -88,20 +100,37 @@ export type ProjectTaskOption = {
   readonly name: string;
 };
 
-export function listProjectTaskOptions(actor: ScheduleActor & { boardId: string; projectId: string }): Promise<ProjectTaskOption[]> {
-  return withOrgTransaction(actor.orgId, () => readProjectTaskOptions(actor)).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
+export function listProjectTaskOptions(
+  actor: ScheduleActor & { boardId: string; projectId: string },
+): Promise<ProjectTaskOption[]> {
+  return withOrgTransaction(actor.orgId, () => readProjectTaskOptions(actor)).catch(
+    (error: unknown) => {
+      throw scheduleDatabaseRefusal(error);
+    },
+  );
 }
 
-async function readProjectTaskOptions(actor: ScheduleActor & { boardId: string; projectId: string }): Promise<ProjectTaskOption[]> {
+async function readProjectTaskOptions(
+  actor: ScheduleActor & { boardId: string; projectId: string },
+): Promise<ProjectTaskOption[]> {
   const board = await getBoard(actor, actor.boardId);
   const allowed = await boardAuthority(actor, board, "read");
-  if (!isUuid(actor.projectId)) throw new ScheduleError("Choose a project first.", { code: "schedule_invalid_target" });
-  const project = (await db.execute<{ id: string }>(sql`select id from projects where org_id = ${actor.orgId} and id = ${actor.projectId}
-    ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}`, "objects"))[0];
+  if (!isUuid(actor.projectId))
+    throw new ScheduleError("Choose a project first.", { code: "schedule_invalid_target" });
+  const project = (
+    await db.execute<{ id: string }>(
+      sql`select id from projects where org_id = ${actor.orgId} and id = ${actor.projectId}
+    ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}`,
+      "objects",
+    )
+  )[0];
   if (!project) return [];
-  return await db.execute<ProjectTaskOption>(sql`select id, code, name from project_tasks
+  return await db.execute<ProjectTaskOption>(
+    sql`select id, code, name from project_tasks
     where org_id = ${actor.orgId} and project_id = ${actor.projectId} and status = 'open'
-    order by schedule_order, code nulls last, name`, "objects");
+    order by schedule_order, code nulls last, name`,
+    "objects",
+  );
 }
 
 /**
@@ -117,50 +146,103 @@ export async function resolveTarget(
   projectTaskId: string | null,
 ): Promise<ResolvedTarget | null> {
   if (target === null) {
-    if (projectTaskId) throw new ScheduleError("A task needs its project.", { code: "schedule_invalid_target", remedy: "Pick the project, then the task." });
+    if (projectTaskId)
+      throw new ScheduleError("A task needs its project.", {
+        code: "schedule_invalid_target",
+        remedy: "Pick the project, then the task.",
+      });
     return null;
   }
   if (!KINDS.has(target.kind) || !isUuid(target.id)) {
-    throw new ScheduleError("The booking target is not recognized.", { code: "schedule_invalid_target", remedy: "Pick a customer, project, location or schedule code from the list." });
+    throw new ScheduleError("The booking target is not recognized.", {
+      code: "schedule_invalid_target",
+      remedy: "Pick a customer, project, location or schedule code from the list.",
+    });
   }
-  const unavailable = () => new ScheduleError("The booking target is not available.", {
-    code: "schedule_invalid_target",
-    remedy: "It may be inactive or outside your access; pick another target.",
-  });
-  const empty = { customerPartyId: null, projectId: null, projectTaskId: null, locationId: null, scheduleCodeId: null };
+  const unavailable = () =>
+    new ScheduleError("The booking target is not available.", {
+      code: "schedule_invalid_target",
+      remedy: "It may be inactive or outside your access; pick another target.",
+    });
+  const empty = {
+    customerPartyId: null,
+    projectId: null,
+    projectTaskId: null,
+    locationId: null,
+    scheduleCodeId: null,
+  };
   if (target.kind === "code") {
-    if (projectTaskId) throw new ScheduleError("Only project bookings name a task.", { code: "schedule_invalid_target" });
-    const row = (await executor.execute<{ label: string }>(sql`select label from schedule_codes
-      where org_id = ${orgId} and id = ${target.id} and is_active for share`, "objects"))[0];
+    if (projectTaskId)
+      throw new ScheduleError("Only project bookings name a task.", {
+        code: "schedule_invalid_target",
+      });
+    const row = (
+      await executor.execute<{ label: string }>(
+        sql`select label from schedule_codes
+      where org_id = ${orgId} and id = ${target.id} and is_active for share`,
+        "objects",
+      )
+    )[0];
     if (!row) throw unavailable();
     return { ...empty, kind: "code", scheduleCodeId: target.id, label: row.label };
   }
   if (target.kind === "customer") {
-    if (projectTaskId) throw new ScheduleError("Only project bookings name a task.", { code: "schedule_invalid_target" });
-    const row = (await executor.execute<{ label: string }>(sql`select p.display_name as label from parties p
+    if (projectTaskId)
+      throw new ScheduleError("Only project bookings name a task.", {
+        code: "schedule_invalid_target",
+      });
+    const row = (
+      await executor.execute<{ label: string }>(
+        sql`select p.display_name as label from parties p
       join customer_roles cr on cr.org_id = p.org_id and cr.party_id = p.id
       where p.org_id = ${orgId} and p.id = ${target.id} and p.is_active
-      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed, { orgWideNull: true })} for share of p`, "objects"))[0];
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed, { orgWideNull: true })} for share of p`,
+        "objects",
+      )
+    )[0];
     if (!row) throw unavailable();
     return { ...empty, kind: "customer", customerPartyId: target.id, label: row.label };
   }
   if (target.kind === "location") {
-    if (projectTaskId) throw new ScheduleError("Only project bookings name a task.", { code: "schedule_invalid_target" });
-    const row = (await executor.execute<{ label: string }>(sql`select name as label from locations
+    if (projectTaskId)
+      throw new ScheduleError("Only project bookings name a task.", {
+        code: "schedule_invalid_target",
+      });
+    const row = (
+      await executor.execute<{ label: string }>(
+        sql`select name as label from locations
       where org_id = ${orgId} and id = ${target.id} and is_active
-      ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })} for share`, "objects"))[0];
+      ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })} for share`,
+        "objects",
+      )
+    )[0];
     if (!row) throw unavailable();
     return { ...empty, kind: "location", locationId: target.id, label: row.label };
   }
-  const project = (await executor.execute<{ label: string }>(sql`select name as label from projects
+  const project = (
+    await executor.execute<{ label: string }>(
+      sql`select name as label from projects
     where org_id = ${orgId} and id = ${target.id} and is_active and status = 'active'
-    ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })} for share`, "objects"))[0];
+    ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })} for share`,
+      "objects",
+    )
+  )[0];
   if (!project) throw unavailable();
   if (projectTaskId) {
-    if (!isUuid(projectTaskId)) throw new ScheduleError("The task is not recognized.", { code: "schedule_invalid_target" });
-    const task = (await executor.execute(sql`select id from project_tasks where org_id = ${orgId} and project_id = ${target.id}
-      and id = ${projectTaskId} and status = 'open' for share`, "objects"))[0];
-    if (!task) throw new ScheduleError("The task is not open on this project.", { code: "schedule_invalid_target", remedy: "Pick an open task of the selected project." });
+    if (!isUuid(projectTaskId))
+      throw new ScheduleError("The task is not recognized.", { code: "schedule_invalid_target" });
+    const task = (
+      await executor.execute(
+        sql`select id from project_tasks where org_id = ${orgId} and project_id = ${target.id}
+      and id = ${projectTaskId} and status = 'open' for share`,
+        "objects",
+      )
+    )[0];
+    if (!task)
+      throw new ScheduleError("The task is not open on this project.", {
+        code: "schedule_invalid_target",
+        remedy: "Pick an open task of the selected project.",
+      });
   }
   return { ...empty, kind: "project", projectId: target.id, projectTaskId, label: project.label };
 }

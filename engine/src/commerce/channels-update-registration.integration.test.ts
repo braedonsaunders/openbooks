@@ -24,15 +24,26 @@ async function setup(
 ): Promise<void> {
   const org = await createScratchOrg();
   try {
-    const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Channel tester", "admin"));
+    const actor = await withOrgContext(org.orgId, () =>
+      createScratchUser(org.orgId, "Channel tester", "admin"),
+    );
     await withOrgContext(org.orgId, async () => {
-      const result = await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ salesChannels: true })}::jsonb, true) where id = ${org.orgId}`);
+      const result = await db.execute<never>(
+        sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ salesChannels: true })}::jsonb, true) where id = ${org.orgId}`,
+      );
       assert.equal(result.rowCount, 1);
     });
-    const channelId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+    const channelId = (
+      await withOrgContext(org.orgId, () =>
+        db.execute<{ id: string }>(
+          sql`
       insert into sales_channels (org_id, kind, name, status, currency, external_account, settings, created_by, updated_by)
       values (${org.orgId}, 'shopify', 'Cold Shop', 'draft', 'USD', 'cold.myshopify.com', '{}'::jsonb, ${actor}, ${actor})
-      returning id`, "objects")))[0]!.id;
+      returning id`,
+          "objects",
+        ),
+      )
+    )[0]!.id;
     await run(org, actor, channelId);
   } finally {
     await dropScratchOrgReporting(org.orgId);
@@ -46,8 +57,15 @@ test("a fresh process updates channel settings without a prior create", DB, asyn
       updateChannel(org.orgId, actor, channelId, { settings: { pushCatalog: true } }),
     );
     assert.equal(updated.settings.pushCatalog, true);
-    const reread = (await withOrgContext(org.orgId, () => db.execute<{ settings: { pushCatalog?: boolean } }>(sql`
-      select settings from sales_channels where org_id = ${org.orgId} and id = ${channelId}`, "objects")))[0]!;
+    const reread = (
+      await withOrgContext(org.orgId, () =>
+        db.execute<{ settings: { pushCatalog?: boolean } }>(
+          sql`
+      select settings from sales_channels where org_id = ${org.orgId} and id = ${channelId}`,
+          "objects",
+        ),
+      )
+    )[0]!;
     assert.equal(reread.settings.pushCatalog, true);
   });
 });

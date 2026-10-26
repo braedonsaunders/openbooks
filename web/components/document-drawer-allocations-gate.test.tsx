@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __allocGateRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -15,21 +15,41 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ap/bills", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__allocGateRouter}export function usePathname(){return \'/ap/bills\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__allocGateRouter}export function usePathname(){return '/ap/bills'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/link") {
-      return { shortCircuit: true, url: "data:text/javascript,export default function Link(p){return p.children}" };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export default function Link(p){return p.children}",
+      };
     }
     if (specifier === "sonner") {
-      return { shortCircuit: true, url: "data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}" };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}",
+      };
     }
     if (specifier === "@/lib/confirm" || specifier.endsWith("/lib/confirm")) {
-      return { shortCircuit: true, url: "data:text/javascript,export async function confirmDialog(){return true}" };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function confirmDialog(){return true}",
+      };
     }
     if (specifier === "@/lib/prompt" || specifier.endsWith("/lib/prompt")) {
-      return { shortCircuit: true, url: "data:text/javascript,export async function promptDialog(){return null}" };
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function promptDialog(){return null}",
+      };
     }
     return next(specifier, context);
   },
@@ -47,14 +67,19 @@ const { DOC_KINDS } = await import("../lib/document-kinds");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-async function candidateCalls(allocationsEntryEnabled: boolean | undefined, t: import("node:test").TestContext): Promise<number> {
+async function candidateCalls(
+  allocationsEntryEnabled: boolean | undefined,
+  t: import("node:test").TestContext,
+): Promise<number> {
   globalThis.__allocGateRouter = { push() {}, refresh() {} };
   const calls: string[] = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown) => {
     const url = String(input);
     calls.push(url);
-    return url.startsWith("/api/allocations/entry-candidates") ? Response.json({ rules: [] }) : Response.json({});
+    return url.startsWith("/api/allocations/entry-candidates")
+      ? Response.json({ rules: [] })
+      : Response.json({});
   }) as typeof fetch;
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -123,5 +148,5 @@ test("a host that does not state the Allocations gate fails closed", async (t) =
 });
 
 test("with entry distributions on the editor queries its candidates", async (t) => {
-  assert.ok(await candidateCalls(true, t) > 0);
+  assert.ok((await candidateCalls(true, t)) > 0);
 });

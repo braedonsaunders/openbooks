@@ -3,10 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import {
-  EmploymentReadError,
-  getEmploymentRecord,
-} from "@openbooks/engine/hrm/employment-read";
+import { EmploymentReadError, getEmploymentRecord } from "@openbooks/engine/hrm/employment-read";
 import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { TemporalError } from "@openbooks/engine/hrm/temporal";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
@@ -34,30 +31,20 @@ export const GET = defineRoute({
   public: "session",
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ request: req, params: routeParams }) => {
-    const employmentGate = await guardFeaturePermission(
-      "hrm.employment.read",
-      "hrm",
-    );
+    const employmentGate = await guardFeaturePermission("hrm.employment.read", "hrm");
     const gate =
       employmentGate instanceof NextResponse
         ? await guardFeaturePermission("hrm.self.read", "hrm")
         : employmentGate;
     if (gate instanceof NextResponse) return gate;
     const { id } = routeParams;
-    if (!isUuid(id))
-      return NextResponse.json(
-        { error: "invalid employment" },
-        { status: 422 },
-      );
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid employment" }, { status: 422 });
 
     const { searchParams } = new URL(req.url);
     const rawDate = searchParams.get("effectiveDate");
     const effectiveDate = rawDate ?? (await businessToday(gate.user.orgId));
     if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) {
-      return NextResponse.json(
-        { error: "effectiveDate must be YYYY-MM-DD" },
-        { status: 422 },
-      );
+      return NextResponse.json({ error: "effectiveDate must be YYYY-MM-DD" }, { status: 422 });
     }
 
     try {
@@ -77,10 +64,7 @@ export const GET = defineRoute({
       }
       // Computed domain refusals (gate off, malformed as-of, missing or
       // ambiguous revision) reach the caller with their code and remedy.
-      if (
-        error instanceof EmploymentReadError ||
-        error instanceof TemporalError
-      ) {
+      if (error instanceof EmploymentReadError || error instanceof TemporalError) {
         return apiErrorResponse(error, {
           safeStatus: 422,
           details: { code: error.name },

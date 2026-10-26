@@ -1,5 +1,5 @@
-import { SQL } from 'drizzle-orm';
-import { PgDialect } from 'drizzle-orm/pg-core';
+import { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 /**
  * GB computeStatutory wrapper tests — run with `node --import tsx
  * engine/src/payroll/gb/compute-statutory.test.ts`.
@@ -15,10 +15,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { db } from "../../platform/db.ts";
-import type {
-  PayrollStatutoryComputeContext,
-  PushStatutoryFn,
-} from "../statutory-context.ts";
+import type { PayrollStatutoryComputeContext, PushStatutoryFn } from "../statutory-context.ts";
 import { computeGbStatutory } from "./compute-statutory.ts";
 
 type Tx = Pick<typeof db, "execute">;
@@ -39,16 +36,22 @@ function refusingTx(): Tx {
   } as unknown as Tx;
 }
 
-function stubTx(rows: Record<string, unknown>,taxYear=2026): Tx {
+function stubTx(rows: Record<string, unknown>, taxYear = 2026): Tx {
   return {
-    execute: async (query:SQL, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
-      const text=new PgDialect().sqlToQuery(query).sql;
-      if(text.includes("d.kind='pay_run'"))return inMode({rows:[{subsidiaryId:'44444444-4444-4444-8444-444444444444',currency:'GBP',taxYear}]});
-      if(text.includes('select s.id from pay_stubs s'))return inMode({rows:[]});
-      if(text.includes('jsonb_array_elements_text'))return inMode({rows:[]});
-      if(text.includes('history_run_pay_date'))return inMode({rows:[rows]});
-      throw new Error('Unexpected database read outside the declared statutory history fixture');
+    execute: async (query: SQL, mode?: string) => {
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
+      const text = new PgDialect().sqlToQuery(query).sql;
+      if (text.includes("d.kind='pay_run'"))
+        return inMode({
+          rows: [
+            { subsidiaryId: "44444444-4444-4444-8444-444444444444", currency: "GBP", taxYear },
+          ],
+        });
+      if (text.includes("select s.id from pay_stubs s")) return inMode({ rows: [] });
+      if (text.includes("jsonb_array_elements_text")) return inMode({ rows: [] });
+      if (text.includes("history_run_pay_date")) return inMode({ rows: [rows] });
+      throw new Error("Unexpected database read outside the declared statutory history fixture");
     },
   } as unknown as Tx;
 }
@@ -65,11 +68,17 @@ function certificateForCodes(
   codes: Record<string, Record<string, string | null> | null>,
 ): PayrollStatutoryComputeContext["certificateFor"] {
   return ((key: string) => {
-    const answers = key === "gb_nic_category"
-      ? { category_letter: "A", director_status: "not_director", ...codes[key] }
-      : codes[key] ?? (key === "gb_workplace_pension"
-        ? { age_band: "under_16_or_other_exclusion", worker_status: "noneligible_jobholder", enrolment_status: "not_enrolled" }
-        : undefined);
+    const answers =
+      key === "gb_nic_category"
+        ? { category_letter: "A", director_status: "not_director", ...codes[key] }
+        : (codes[key] ??
+          (key === "gb_workplace_pension"
+            ? {
+                age_band: "under_16_or_other_exclusion",
+                worker_status: "noneligible_jobholder",
+                enrolment_status: "not_enrolled",
+              }
+            : undefined));
     if (!answers) return null;
     return {
       certificate: { key },
@@ -102,8 +111,12 @@ function gbContext(overrides: {
     pushed.push({ systemKey, kind, description, amount, sequence });
   }) as PushStatutoryFn;
   const ctx = {
-    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} },
+    supplementalTaxMethod: "per_run",
+    programBases: {},
+    pensionableNonPeriodic: "0",
+    insurableNonPeriodic: "0",
+    programNonPeriodicBases: {},
     tx: overrides.tx ?? refusingTx(),
     orgId: "11111111-1111-4111-8111-111111111111",
     documentId: "22222222-2222-4222-8222-222222222222",
@@ -159,16 +172,17 @@ test("a 2025/26 correction prices the 2025 tables end to end", async () => {
   const { ctx, pushed } = gbContext({
     payDate: "2025-04-06",
     taxYear: 2025,
-    tx: stubTx(EMPTY_YTD,2025),
+    tx: stubTx(EMPTY_YTD, 2025),
     income: "4000",
     pensionable: "4000",
     codes: NOTICE_1257L,
   });
   const factors = await computeGbStatutory(ctx);
   assert.equal(factors.GB_TAX, "590.2000");
-  assert.deepEqual(pushed.map((line) => line.amount), [
-    "590.2000", "236.1600", "0.0000", "0.0000", "537.4500",
-  ]);
+  assert.deepEqual(
+    pushed.map((line) => line.amount),
+    ["590.2000", "236.1600", "0.0000", "0.0000", "537.4500"],
+  );
 });
 
 test("a pay date is never priced from another year's tables", async () => {
@@ -244,9 +258,13 @@ test("a postgraduate loan is collected alongside the selected undergraduate plan
   assert.equal(factors.GB_STUDENT_LOAN, "49.0000");
   assert.equal(factors.GB_POSTGRADUATE_LOAN, "75.0000");
   assert.deepEqual(
-    pushed.filter((line) => line.systemKey === "student_loan" || line.systemKey === "postgraduate_loan")
+    pushed
+      .filter((line) => line.systemKey === "student_loan" || line.systemKey === "postgraduate_loan")
       .map((line) => [line.systemKey, line.amount]),
-    [["student_loan", "49.0000"], ["postgraduate_loan", "75.0000"]],
+    [
+      ["student_loan", "49.0000"],
+      ["postgraduate_loan", "75.0000"],
+    ],
   );
 });
 
@@ -280,7 +298,10 @@ test("missing postgraduate-loan status refuses instead of omitting a concurrent 
     income: "3000",
     pensionable: "3000",
   });
-  await assert.rejects(() => computeGbStatutory(ctx), /cannot calculate without postgraduate loan status/);
+  await assert.rejects(
+    () => computeGbStatutory(ctx),
+    /cannot calculate without postgraduate loan status/,
+  );
   assert.deepEqual(pushed, []);
 });
 
@@ -316,8 +337,19 @@ test("a valid non-A NIC category refuses rather than applying category-A bands",
     /cannot calculate National Insurance category C: this pack currently implements category A only/,
   );
   assert.deepEqual(pushed, []);
-  const { ctx: directorCtx } = gbContext({ codes: { gb_nic_category: { category_letter: "A", director_status: "director", directorship_start_date: "2026-04-06" } } });
-  await assert.rejects(() => computeGbStatutory(directorCtx), /CA44 requires cumulative annual or pro-rata/);
+  const { ctx: directorCtx } = gbContext({
+    codes: {
+      gb_nic_category: {
+        category_letter: "A",
+        director_status: "director",
+        directorship_start_date: "2026-04-06",
+      },
+    },
+  });
+  await assert.rejects(
+    () => computeGbStatutory(directorCtx),
+    /CA44 requires cumulative annual or pro-rata/,
+  );
 });
 
 // One assertion for the 223 minimums: a coherently enrolled worker prices
@@ -326,19 +358,39 @@ test("a valid non-A NIC category refuses rather than applying category-A bands",
 test("AE prices 5%/3% minimums on qualifying earnings; unassessed and unsupported schemes refuse", async () => {
   // Monthly £3,000: qualifying £2,480; 5% = £124, 3% = £74.40. Enrolled on both
   // certificates, so contributions price THROUGH the narrowed gates.
-  const active = { age_band: "22_to_state_pension_age", membership_status: "active_member", scheme_basis: "qualifying_earnings_minimum", deduction_method: "net_pay" };
+  const active = {
+    age_band: "22_to_state_pension_age",
+    membership_status: "active_member",
+    scheme_basis: "qualifying_earnings_minimum",
+    deduction_method: "net_pay",
+  };
   const aeCodes = (assessment: Record<string, string> | null) => ({
     ...NOTICE_1257L,
-    gb_workplace_pension: { age_band: "22_to_state_pension_age", worker_status: "eligible_jobholder", enrolment_status: "enrolled" },
+    gb_workplace_pension: {
+      age_band: "22_to_state_pension_age",
+      worker_status: "eligible_jobholder",
+      enrolment_status: "enrolled",
+    },
     gb_workplace_pension_assessment: assessment,
   });
-  const factors = await computeGbStatutory(gbContext({ tx: stubTx(EMPTY_YTD), codes: aeCodes(active), income: "3000", pensionable: "3000" }).ctx);
+  const factors = await computeGbStatutory(
+    gbContext({
+      tx: stubTx(EMPTY_YTD),
+      codes: aeCodes(active),
+      income: "3000",
+      pensionable: "3000",
+    }).ctx,
+  );
   assert.deepEqual([factors.GB_AE_EMPLOYEE, factors.GB_AE_EMPLOYER], ["124.0000", "74.4000"]);
   for (const [assessment, refusal] of [
     [null, /gb_ae_membership_status/],
     [{ ...active, scheme_basis: "other_basis" }, /another certified basis/],
     [{ ...active, deduction_method: "relief_at_source" }, /relief at source or salary sacrifice/],
-  ] as const) await assert.rejects(() => computeGbStatutory(gbContext({ codes: aeCodes(assessment) }).ctx), refusal);
+  ] as const)
+    await assert.rejects(
+      () => computeGbStatutory(gbContext({ codes: aeCodes(assessment) }).ctx),
+      refusal,
+    );
 });
 
 test("an S-code prices Scottish bands in any region; SBR is whole-pay 20%", async () => {
@@ -358,7 +410,15 @@ test("a missing coding notice is refused, naming the P6/P9", async () => {
 });
 
 test("enrolled workplace-pension contributions refuse instead of disappearing", async () => {
-  const { ctx } = gbContext({ codes: { gb_workplace_pension: { age_band: "22_to_state_pension_age", worker_status: "eligible_jobholder", enrolment_status: "enrolled" } } });
+  const { ctx } = gbContext({
+    codes: {
+      gb_workplace_pension: {
+        age_band: "22_to_state_pension_age",
+        worker_status: "eligible_jobholder",
+        enrolment_status: "enrolled",
+      },
+    },
+  });
   await assert.rejects(() => computeGbStatutory(ctx), /workplace-pension contributions are due/);
 });
 

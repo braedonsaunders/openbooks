@@ -5,9 +5,10 @@ import { NextResponse } from "next/server";
 import { HrmQualificationError } from "@openbooks/engine/hrm/qualifications/errors";
 import { pathToFileURL } from "node:url";
 
-
 interface RouteState {
-  gate: { user: { id: string; orgId: string }; allowedSubsidiaryIds?: ReadonlySet<string> | null } | { status: number };
+  gate:
+    | { user: { id: string; orgId: string }; allowedSubsidiaryIds?: ReadonlySet<string> | null }
+    | { status: number };
   perms: string[];
   featureOn: boolean;
   calls: Array<{ fn: string; args: unknown }>;
@@ -175,7 +176,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmQualificationsRouteNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmQualificationsRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["@/lib/features", "mock:features"],
@@ -194,7 +197,13 @@ const mockUrls = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
+    const mocked =
+      mockUrls.get(specifier) ??
+      (specifier === "@/lib/authz" || specifier === "./authz"
+        ? "mock:authz"
+        : specifier === "./features"
+          ? "mock:features"
+          : undefined);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier);
   },
@@ -206,14 +215,22 @@ registerHooks({
 });
 const ledgerRoute = (await import("./route.ts")) as typeof import("./route.ts");
 const checkRoute = (await import("./check/route.ts")) as typeof import("./check/route.ts");
-const requirementsRoute = (await import("../qualification-requirements/route.ts")) as typeof import("../qualification-requirements/route.ts");
-const verifyRoute = (await import("./[id]/verify/route.ts")) as typeof import("./[id]/verify/route.ts");
-const revokeRoute = (await import("./[id]/revoke/route.ts")) as typeof import("./[id]/revoke/route.ts");
-const renewRoute = (await import("./[id]/renew/route.ts")) as typeof import("./[id]/renew/route.ts");
-const evidenceRoute = (await import("./[id]/evidence/route.ts")) as typeof import("./[id]/evidence/route.ts");
-const typesRoute = (await import("../qualification-types/route.ts")) as typeof import("../qualification-types/route.ts");
-const typeDetailRoute = (await import("../qualification-types/[id]/route.ts")) as typeof import("../qualification-types/[id]/route.ts");
-const categoriesRoute = (await import("../qualification-types/categories/route.ts")) as typeof import("../qualification-types/categories/route.ts");
+const requirementsRoute =
+  (await import("../qualification-requirements/route.ts")) as typeof import("../qualification-requirements/route.ts");
+const verifyRoute =
+  (await import("./[id]/verify/route.ts")) as typeof import("./[id]/verify/route.ts");
+const revokeRoute =
+  (await import("./[id]/revoke/route.ts")) as typeof import("./[id]/revoke/route.ts");
+const renewRoute =
+  (await import("./[id]/renew/route.ts")) as typeof import("./[id]/renew/route.ts");
+const evidenceRoute =
+  (await import("./[id]/evidence/route.ts")) as typeof import("./[id]/evidence/route.ts");
+const typesRoute =
+  (await import("../qualification-types/route.ts")) as typeof import("../qualification-types/route.ts");
+const typeDetailRoute =
+  (await import("../qualification-types/[id]/route.ts")) as typeof import("../qualification-types/[id]/route.ts");
+const categoriesRoute =
+  (await import("../qualification-types/categories/route.ts")) as typeof import("../qualification-types/categories/route.ts");
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: null };
@@ -263,7 +280,13 @@ test("record carries the caller's org and actor into the service", async () => {
   assert.deepEqual(routeState.calls, [
     {
       fn: "record",
-      args: { orgId: "org-1", actorId: "user-1", employmentId: UUID, typeId: UUID2, issuedOn: "2026-09-21" },
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        employmentId: UUID,
+        typeId: UUID2,
+        issuedOn: "2026-09-21",
+      },
     },
   ]);
 });
@@ -284,7 +307,9 @@ test("record refuses an impossible issuedOn date before calling the service", as
 
 test("an engine refusal maps with its message intact", async () => {
   reset();
-  routeState.serviceThrow = new HrmQualificationError("expiry 2026-01-01 is before issue 2026-09-21 — fix the dates and record again.");
+  routeState.serviceThrow = new HrmQualificationError(
+    "expiry 2026-01-01 is before issue 2026-09-21 — fix the dates and record again.",
+  );
   const post = await ledgerRoute.POST(
     postRequest("http://openbooks.test/api/hrm/qualifications", {
       employmentId: UUID,
@@ -317,7 +342,16 @@ test("the gate check reads through with the caller's org", async () => {
   );
   assert.equal(post.status, 200);
   assert.deepEqual(routeState.calls, [
-    { fn: "check", args: { orgId: "org-1", actorId: "user-1", employmentId: UUID, subjectKind: "project", subjectId: UUID2 } },
+    {
+      fn: "check",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        employmentId: UUID,
+        subjectKind: "project",
+        subjectId: UUID2,
+      },
+    },
   ]);
 });
 
@@ -336,7 +370,10 @@ test("verify and revoke carry the path id into the service", async () => {
   assert.equal(revoke.status, 200);
   assert.deepEqual(routeState.calls, [
     { fn: "verify", args: { orgId: "org-1", actorId: "user-1", qualificationId: "q-9" } },
-    { fn: "revoke", args: { orgId: "org-1", actorId: "user-1", qualificationId: "q-9", reason: "fraud" } },
+    {
+      fn: "revoke",
+      args: { orgId: "org-1", actorId: "user-1", qualificationId: "q-9", reason: "fraud" },
+    },
   ]);
   const renew = await renewRoute.POST(
     postRequest("http://openbooks.test/api/hrm/qualifications/q-9/renew", {
@@ -356,7 +393,10 @@ test("evidence attach admits the holder through the self grant", async () => {
   );
   assert.equal(post.status, 200);
   assert.deepEqual(routeState.calls, [
-    { fn: "attach", args: { orgId: "org-1", actorId: "user-1", qualificationId: "q-9", fileId: UUID } },
+    {
+      fn: "attach",
+      args: { orgId: "org-1", actorId: "user-1", qualificationId: "q-9", fileId: UUID },
+    },
   ]);
 });
 
@@ -383,13 +423,32 @@ test("requirements set refuses an unreadable shape before the service", async ()
 
 test("type creation carries code and category into the service", async () => {
   reset();
-  routeState.gate = { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: new Set([UUID]) };
+  routeState.gate = {
+    user: { id: "user-1", orgId: "org-1" },
+    allowedSubsidiaryIds: new Set([UUID]),
+  };
   const denied = await Promise.all([
-    typesRoute.POST(postRequest("http://openbooks.test/api/hrm/qualification-types", { code: "A", name: "A", category: "other" })),
-    typeDetailRoute.PATCH(postRequest("http://openbooks.test/api/hrm/qualification-types/x", { name: "A" }), { params: Promise.resolve({ id: UUID }) }),
-    categoriesRoute.POST(postRequest("http://openbooks.test/api/hrm/qualification-types/categories", { category: "A" })),
+    typesRoute.POST(
+      postRequest("http://openbooks.test/api/hrm/qualification-types", {
+        code: "A",
+        name: "A",
+        category: "other",
+      }),
+    ),
+    typeDetailRoute.PATCH(
+      postRequest("http://openbooks.test/api/hrm/qualification-types/x", { name: "A" }),
+      { params: Promise.resolve({ id: UUID }) },
+    ),
+    categoriesRoute.POST(
+      postRequest("http://openbooks.test/api/hrm/qualification-types/categories", {
+        category: "A",
+      }),
+    ),
   ]);
-  assert.deepEqual(denied.map((response) => response.status), [403, 403, 403]);
+  assert.deepEqual(
+    denied.map((response) => response.status),
+    [403, 403, 403],
+  );
   assert.deepEqual(routeState.calls, []);
   routeState.gate = { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: null };
   const post = await typesRoute.POST(
@@ -401,7 +460,16 @@ test("type creation carries code and category into the service", async () => {
   );
   assert.equal(post.status, 201);
   assert.deepEqual(routeState.calls, [
-    { fn: "createType", args: { orgId: "org-1", actorId: "user-1", code: "OSHA30", name: "OSHA 30", category: "certification" } },
+    {
+      fn: "createType",
+      args: {
+        orgId: "org-1",
+        actorId: "user-1",
+        code: "OSHA30",
+        name: "OSHA 30",
+        category: "certification",
+      },
+    },
   ]);
 });
 

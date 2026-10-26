@@ -1,10 +1,14 @@
-import 'server-only'
-import { reportExpenseAccess } from './expense-access'
-import { reportEntityCatalog, validateCatalogReportQuery } from './custom-record-report-catalog'
-import { requireReportAuthz, snapshotReportAuthorization, withReportAuthz } from './report-execution-context'
-import { canRunReportEntity } from './report-authz'
-import { sql } from 'drizzle-orm'
-import { db, pool } from '@openbooks/engine/platform/db'
+import "server-only";
+import { reportExpenseAccess } from "./expense-access";
+import { reportEntityCatalog, validateCatalogReportQuery } from "./custom-record-report-catalog";
+import {
+  requireReportAuthz,
+  snapshotReportAuthorization,
+  withReportAuthz,
+} from "./report-execution-context";
+import { canRunReportEntity } from "./report-authz";
+import { sql } from "drizzle-orm";
+import { db, pool } from "@openbooks/engine/platform/db";
 import {
   POINT_IN_TIME_DEFAULT_PERIOD_PRESET,
   REPORT_ENTITY_MAP,
@@ -21,7 +25,7 @@ import {
   type ReportRuleGroup,
   type ReportRunLabels,
   type ReportRunResult,
-} from '@openbooks/reports'
+} from "@openbooks/reports";
 // The office wrapper applies the CSV formula-injection guard; never import the
 // raw serializer from @openbooks/reports for user-facing CSV.
 import {
@@ -33,18 +37,18 @@ import {
   type PagedCsvPageGroup,
   type StreamingXlsxGroup,
   type XlsxMoneyContext,
-} from '@openbooks/office'
-import { exportSummaryFooterRows } from './report-pdf'
-import { reportCsvOptions, reportRunLabels, type PagedExportLabels } from './report-labels'
-import { resolvePeriod } from './periods'
-import { parseReportQuery } from './report-filters'
-import { fiscalStartMonth } from './fiscal'
-import { isFeatureEnabled } from './features'
-import { reportEntityFeatureKey } from './report-authz'
-import { ensureReportDefinitions } from '@openbooks/engine/reports/ensure-report-definitions'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { can } from './authz'
-import { applyPayrollConfidentialityToReportResult } from './report-payroll-collapse'
+} from "@openbooks/office";
+import { exportSummaryFooterRows } from "./report-pdf";
+import { reportCsvOptions, reportRunLabels, type PagedExportLabels } from "./report-labels";
+import { resolvePeriod } from "./periods";
+import { parseReportQuery } from "./report-filters";
+import { fiscalStartMonth } from "./fiscal";
+import { isFeatureEnabled } from "./features";
+import { reportEntityFeatureKey } from "./report-authz";
+import { ensureReportDefinitions } from "@openbooks/engine/reports/ensure-report-definitions";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { can } from "./authz";
+import { applyPayrollConfidentialityToReportResult } from "./report-payroll-collapse";
 
 /**
  * Server helpers for the custom-report studio (list/builder/run/schedule). The
@@ -58,9 +62,15 @@ import { applyPayrollConfidentialityToReportResult } from './report-payroll-coll
  *  would claim to govern filters that can never exist (pinned by
  *  custom-reports.temporal-ops.test.ts). */
 export const TEMPORAL_OPS: ReadonlySet<string> = new Set([
-  'since_today', 'this_week', 'this_month', 'this_year', 'before_now',
-  'period_preset', 'gte', 'lte',
-])
+  "since_today",
+  "this_week",
+  "this_month",
+  "this_year",
+  "before_now",
+  "period_preset",
+  "gte",
+  "lte",
+]);
 
 /**
  * The date field a report's period filter governs: the first filter leaf with
@@ -69,39 +79,45 @@ export const TEMPORAL_OPS: ReadonlySet<string> = new Set([
  * implicit period (lot recall may filter expiry on purpose, but an unfiltered
  * recall must remain complete history rather than silently becoming fiscal).
  */
-export function reportPeriodField(query: ReportCustomQuery, entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP): string | null {
+export function reportPeriodField(
+  query: ReportCustomQuery,
+  entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP,
+): string | null {
   // A point-in-time field is read as of a date, never through a window.
-  const asOfField = entityMap[query.entity]?.asOfField ?? null
-  if (query.periodField !== undefined) return query.periodField === asOfField ? null : query.periodField
-  const entity = entityMap[query.entity]
-  if (!entity) return null
-  const dateColumns = new Set(
-    entity.columns.filter((c) => c.kind === 'date').map((c) => c.key),
-  )
-  let found: string | null = null
+  const asOfField = entityMap[query.entity]?.asOfField ?? null;
+  if (query.periodField !== undefined)
+    return query.periodField === asOfField ? null : query.periodField;
+  const entity = entityMap[query.entity];
+  if (!entity) return null;
+  const dateColumns = new Set(entity.columns.filter((c) => c.kind === "date").map((c) => c.key));
+  let found: string | null = null;
   const walk = (node: ReportRuleGroup | undefined) => {
     for (const r of node?.rules ?? []) {
-      if (found) return
-      if (r && typeof r === 'object' && Array.isArray((r as ReportRuleGroup).rules)) {
-        walk(r as ReportRuleGroup)
+      if (found) return;
+      if (r && typeof r === "object" && Array.isArray((r as ReportRuleGroup).rules)) {
+        walk(r as ReportRuleGroup);
       } else {
-        const leaf = r as ReportRule
-        if (dateColumns.has(leaf.field) && leaf.field !== asOfField && TEMPORAL_OPS.has(leaf.op)) found = leaf.field
+        const leaf = r as ReportRule;
+        if (dateColumns.has(leaf.field) && leaf.field !== asOfField && TEMPORAL_OPS.has(leaf.op))
+          found = leaf.field;
       }
     }
-  }
-  walk(query.filters ?? undefined)
-  if (found) return found
-  if (asOfField || entity.defaultPeriodField === null) return null
+  };
+  walk(query.filters ?? undefined);
+  if (found) return found;
+  if (asOfField || entity.defaultPeriodField === null) return null;
   if (entity.defaultPeriodField !== undefined) {
-    return dateColumns.has(entity.defaultPeriodField) ? entity.defaultPeriodField : null
+    return dateColumns.has(entity.defaultPeriodField) ? entity.defaultPeriodField : null;
   }
-  return entity.columns.find((c) => c.kind === 'date')?.key ?? null
+  return entity.columns.find((c) => c.kind === "date")?.key ?? null;
 }
 
 /** The point-in-time field a report is read as of, or null for a period report. */
-export function reportAsOfField(query: ReportCustomQuery, entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP): string | null {
-  return entityMap[query.entity]?.asOfField ?? null
+export function reportAsOfField(
+  query: ReportCustomQuery,
+  entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP,
+): string | null {
+  return entityMap[query.entity]?.asOfField ?? null;
 }
 
 /**
@@ -109,9 +125,11 @@ export function reportAsOfField(query: ReportCustomQuery, entityMap: Record<stri
  * single-day preset or a custom date, today when nothing is chosen. The
  * report is read as of the selection's end.
  */
-export async function resolveReportAsOf(sp: Parameters<typeof parseReportQuery>[0]): Promise<Awaited<ReturnType<typeof resolvePeriod>>> {
-  const q = parseReportQuery(sp, { defaultPeriod: POINT_IN_TIME_DEFAULT_PERIOD_PRESET })
-  return resolvePeriod(q.period, { customFrom: q.from ?? q.to, customTo: q.to ?? q.from })
+export async function resolveReportAsOf(
+  sp: Parameters<typeof parseReportQuery>[0],
+): Promise<Awaited<ReturnType<typeof resolvePeriod>>> {
+  const q = parseReportQuery(sp, { defaultPeriod: POINT_IN_TIME_DEFAULT_PERIOD_PRESET });
+  return resolvePeriod(q.period, { customFrom: q.from ?? q.to, customTo: q.to ?? q.from });
 }
 
 /**
@@ -127,48 +145,48 @@ export function applyPeriodOverride(
     ...node,
     rules: (node.rules ?? [])
       .map((r) => {
-        if (r && typeof r === 'object' && Array.isArray((r as ReportRuleGroup).rules)) {
-          return strip(r as ReportRuleGroup)
+        if (r && typeof r === "object" && Array.isArray((r as ReportRuleGroup).rules)) {
+          return strip(r as ReportRuleGroup);
         }
-        const leaf = r as ReportRule
-        return leaf.field === field && TEMPORAL_OPS.has(leaf.op) ? null : leaf
+        const leaf = r as ReportRule;
+        return leaf.field === field && TEMPORAL_OPS.has(leaf.op) ? null : leaf;
       })
       .filter((r): r is ReportRule | ReportRuleGroup => r !== null),
-  })
-  const base = query.filters ? strip(query.filters) : { combinator: 'and' as const, rules: [] }
+  });
+  const base = query.filters ? strip(query.filters) : { combinator: "and" as const, rules: [] };
   return {
     ...query,
     filters: {
-      combinator: 'and',
+      combinator: "and",
       rules: [
         ...(base.rules.length ? [base] : []),
-        { field, op: 'gte', value: bounds.from },
-        { field, op: 'lte', value: bounds.to },
+        { field, op: "gte", value: bounds.from },
+        { field, op: "lte", value: bounds.to },
       ],
     },
-  }
+  };
 }
 /** Rows a studio live-preview fetches — small so the builder stays snappy. */
-export const REPORT_PREVIEW_ROWS = 200
+export const REPORT_PREVIEW_ROWS = 200;
 
 export type ReportDefinitionRow = {
-  id: string
-  org_id: string
-  kind: 'built_in' | 'custom'
+  id: string;
+  org_id: string;
+  kind: "built_in" | "custom";
   /** 'query' = entity-query report; 'statement' = seeded standard statement. */
-  report_type: 'query' | 'statement'
-  slug: string
-  name: string
-  description: string | null
+  report_type: "query" | "statement";
+  slug: string;
+  name: string;
+  description: string | null;
   /** NULL for statement definitions (which carry their spec in `statement`). */
-  query: ReportCustomQuery | null
+  query: ReportCustomQuery | null;
   /** Statement spec `{ kind, params? }` for report_type='statement', else null. */
-  statement: { kind?: string; params?: Record<string, string> } | null
-  system: boolean
-  layout: Record<string, unknown> | null
-  created_at: string
-  updated_at: string
-}
+  statement: { kind?: string; params?: Record<string, string> } | null;
+  system: boolean;
+  layout: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
 
 /**
  * The org's seeded statement definition for a report kind (+ discriminating
@@ -180,7 +198,8 @@ export async function statementDefinitionId(
   kind: string,
   match: Record<string, string> = {},
 ): Promise<string | null> {
-  const findDefinition = () => db.execute<{ id: string }>(sql`
+  const findDefinition = () =>
+    db.execute<{ id: string }>(sql`
     select id from report_definitions
      where org_id = ${orgId} and report_type = 'statement'
        and statement->>'kind' = ${kind}
@@ -188,13 +207,13 @@ export async function statementDefinitionId(
        and archived_at is null
      order by (kind = 'built_in') desc, created_at
      limit 1
-  `)
-  let r = await findDefinition()
+  `);
+  let r = await findDefinition();
   if (!r.rows[0]) {
-    await ensureReportDefinitions(orgId)
-    r = await findDefinition()
+    await ensureReportDefinitions(orgId);
+    r = await findDefinition();
   }
-  return r.rows[0]?.id ?? null
+  return r.rows[0]?.id ?? null;
 }
 
 /**
@@ -207,16 +226,19 @@ export async function builtInReportDefinitionId(
   orgId: string,
   slug: string,
 ): Promise<string | null> {
-  await ensureReportDefinitions(orgId)
-  const r = (await db.execute<{ id: string }>(sql`
+  await ensureReportDefinitions(orgId);
+  const r = await db.execute<{ id: string }>(
+    sql`
     select id from report_definitions
      where org_id = ${orgId}
        and kind = 'built_in'
        and coalesce(report_type, 'query') = 'query'
        and slug = ${slug}
      limit 1
-  `, 'objects'))
-  return r[0]?.id ?? null
+  `,
+    "objects",
+  );
+  return r[0]?.id ?? null;
 }
 
 /**
@@ -229,20 +251,28 @@ export async function builtInReportDefinitionIds(
   orgId: string,
   slugs: readonly string[],
 ): Promise<Map<string, string>> {
-  const wanted = [...new Set(slugs)]
-  if (wanted.length === 0) return new Map()
-  const read = async () => new Map((await db.execute<{ id: string; slug: string }>(sql`
+  const wanted = [...new Set(slugs)];
+  if (wanted.length === 0) return new Map();
+  const read = async () =>
+    new Map(
+      (
+        await db.execute<{ id: string; slug: string }>(
+          sql`
     select distinct on (slug) id, slug from report_definitions
      where org_id = ${orgId}
        and kind = 'built_in'
        and coalesce(report_type, 'query') = 'query'
-       and slug = any(${`{${wanted.join(',')}}`}::text[])
+       and slug = any(${`{${wanted.join(",")}}`}::text[])
      order by slug, id
-  `, 'objects')).map((row) => [row.slug, row.id]))
-  const found = await read()
-  if (wanted.every((slug) => found.has(slug))) return found
-  await ensureReportDefinitions(orgId)
-  return read()
+  `,
+          "objects",
+        )
+      ).map((row) => [row.slug, row.id]),
+    );
+  const found = await read();
+  if (wanted.every((slug) => found.has(slug))) return found;
+  await ensureReportDefinitions(orgId);
+  return read();
 }
 
 /**
@@ -255,13 +285,16 @@ export async function loadReportDefinition(
   orgId: string,
   id: string,
 ): Promise<ReportDefinitionRow | null> {
-  await ensureReportDefinitions(orgId)
-  const r = (await db.execute<ReportDefinitionRow>(sql`
+  await ensureReportDefinitions(orgId);
+  const r = await db.execute<ReportDefinitionRow>(
+    sql`
     select id, org_id, kind, report_type, slug, name, description, query, statement, system, layout, created_at, updated_at
       from report_definitions
      where id = ${id} and org_id = ${orgId} and archived_at is null
-  `, 'objects'))
-  return r[0] ?? null
+  `,
+    "objects",
+  );
+  return r[0] ?? null;
 }
 
 /**
@@ -274,13 +307,13 @@ export function mergeReportFilters(
   extra: ReportRuleGroup | null | undefined,
   entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP,
 ): ReportCustomQuery {
-  if (!extra || !Array.isArray(extra.rules) || extra.rules.length === 0) return base
-  const rules: NonNullable<ReportRuleGroup['rules']> = []
+  if (!extra || !Array.isArray(extra.rules) || extra.rules.length === 0) return base;
+  const rules: NonNullable<ReportRuleGroup["rules"]> = [];
   if (base.filters && Array.isArray(base.filters.rules) && base.filters.rules.length) {
-    rules.push(base.filters)
+    rules.push(base.filters);
   }
-  rules.push(extra)
-  return validateCustomQuery({ ...base, filters: { combinator: 'and', rules } }, entityMap)
+  rules.push(extra);
+  return validateCustomQuery({ ...base, filters: { combinator: "and", rules } }, entityMap);
 }
 
 /**
@@ -303,12 +336,12 @@ export async function executeReport(
   maxRows?: number,
   labels?: ReportRunLabels,
 ): Promise<ReportRunResult> {
-  const prepared = await prepareReportExecution(orgId, query, labels)
+  const prepared = await prepareReportExecution(orgId, query, labels);
   const result = await runCustomQuery(pool, prepared.query, {
     ...prepared.options,
     ...(maxRows === undefined ? {} : { maxRows }),
-  })
-  return applyPayrollConfidentiality(orgId, prepared, result)
+  });
+  return applyPayrollConfidentiality(orgId, prepared, result);
 }
 
 /** Execute one causally counted page for an entity that explicitly supports
@@ -320,12 +353,12 @@ export async function executeReportPage(
   page: ReportPageRequest,
   labels?: ReportRunLabels,
 ): Promise<ReportRunResult> {
-  const prepared = await prepareReportExecution(orgId, query, labels)
+  const prepared = await prepareReportExecution(orgId, query, labels);
   const result = await runCustomQuery(pool, prepared.query, {
     ...prepared.options,
     page,
-  })
-  return applyPayrollConfidentiality(orgId, prepared, result)
+  });
+  return applyPayrollConfidentiality(orgId, prepared, result);
 }
 
 /**
@@ -341,17 +374,17 @@ async function applyPayrollConfidentiality(
   prepared: Awaited<ReturnType<typeof prepareReportExecution>>,
   result: ReportRunResult,
 ): Promise<ReportRunResult> {
-  const authz = await requireReportAuthz(orgId)
-  const entity = prepared.options.entityMap[prepared.query.entity]
-  if (!entity) return result
+  const authz = await requireReportAuthz(orgId);
+  const entity = prepared.options.entityMap[prepared.query.entity];
+  if (!entity) return result;
   return applyPayrollConfidentialityToReportResult({
     orgId,
     query: prepared.query,
     entity,
     result,
     labels: prepared.options.labels,
-    restricted: !can(authz, 'payroll.read'),
-  })
+    restricted: !can(authz, "payroll.read"),
+  });
 }
 
 /**
@@ -368,51 +401,55 @@ export async function executeReportAllPages(
   query: ReportCustomQuery,
   labels?: ReportRunLabels,
 ): Promise<ReportRunResult> {
-  const entity = REPORT_ENTITY_MAP[query.entity]
-  if (query.mode !== 'rows' || !entity?.pagination) {
-    return executeReport(orgId, query, undefined, labels)
+  const entity = REPORT_ENTITY_MAP[query.entity];
+  if (query.mode !== "rows" || !entity?.pagination) {
+    return executeReport(orgId, query, undefined, labels);
   }
 
-  const prepared = await prepareReportExecution(orgId, query, labels)
-  const client = await pool.connect()
-  const pages: ReportRunResult[] = []
-  let expectedRows: number | null = null
-  let offset = 0
+  const prepared = await prepareReportExecution(orgId, query, labels);
+  const client = await pool.connect();
+  const pages: ReportRunResult[] = [];
+  let expectedRows: number | null = null;
+  let offset = 0;
   try {
-    await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+    await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
     do {
       const page = await runCustomQuery(client, prepared.query, {
         ...prepared.options,
         page: { offset, limit: entity.pagination.maxPageSize },
-      })
-      if (!page.pageInfo) throw new Error('Paged report result is missing page metadata')
-      if (expectedRows === null) expectedRows = page.pageInfo.totalRows
+      });
+      if (!page.pageInfo) throw new Error("Paged report result is missing page metadata");
+      if (expectedRows === null) expectedRows = page.pageInfo.totalRows;
       if (page.pageInfo.totalRows !== expectedRows) {
-        throw new Error('Paged report total changed inside a stable export snapshot')
+        throw new Error("Paged report total changed inside a stable export snapshot");
       }
-      pages.push(page)
-      offset += page.rowCount
+      pages.push(page);
+      offset += page.rowCount;
       if (offset < expectedRows && page.rowCount === 0) {
-        throw new Error('Paged report stopped before all rows were returned')
+        throw new Error("Paged report stopped before all rows were returned");
       }
-    } while (offset < (expectedRows ?? 0))
+    } while (offset < (expectedRows ?? 0));
     if (offset !== (expectedRows ?? 0)) {
-      throw new Error('Paged report returned an inconsistent row count')
+      throw new Error("Paged report returned an inconsistent row count");
     }
-    await client.query('COMMIT')
+    await client.query("COMMIT");
   } catch (error) {
     try {
-      await client.query('ROLLBACK')
+      await client.query("ROLLBACK");
     } catch {
       // Preserve the causal execution error; release() discards a poisoned
       // checked-out connection through the engine pool's protection wrapper.
     }
-    throw error
+    throw error;
   } finally {
-    client.release()
+    client.release();
   }
 
-  return applyPayrollConfidentiality(orgId, prepared, mergeReportPages(pages, expectedRows ?? 0, prepared.options.labels))
+  return applyPayrollConfidentiality(
+    orgId,
+    prepared,
+    mergeReportPages(pages, expectedRows ?? 0, prepared.options.labels),
+  );
 }
 
 /**
@@ -423,59 +460,61 @@ export async function executeReportAllPages(
  * engine row cap: ordinary recall exports never notice it; PERF-scale dumps
  * stop here instead of materialising gigabytes.
  */
-export const PAGED_EXPORT_ROW_CAP = 100_000
+export const PAGED_EXPORT_ROW_CAP = 100_000;
 
 export type PagedExportMeta = {
   /** Data rows emitted (at most the cap). */
-  rowCount: number
+  rowCount: number;
   /** Rows the export would hold uncapped (page-one total under the same filters). */
-  totalRows: number
-  truncated: boolean
-}
+  totalRows: number;
+  truncated: boolean;
+};
 
 export type PagedExportOptions = {
-  title: string
-  dateRangeLabel?: string
-  sectionHeader?: string
-  generatedAt?: Date
+  title: string;
+  dateRangeLabel?: string;
+  sectionHeader?: string;
+  generatedAt?: Date;
   /** Test seam for the cap (a cap-sized fixture is infeasible in-suite). */
-  rowCap?: number
-  labels?: ReportRunLabels
+  rowCap?: number;
+  labels?: ReportRunLabels;
   /** XLSX only: the currency and registry minor units money cells are formatted with (see xlsxMoneyContext). */
-  money?: XlsxMoneyContext | null
-}
+  money?: XlsxMoneyContext | null;
+};
 
 /** Merge identity for one page group — the same key mergeReportPages
  *  coalesces on, so streaming slots assemble exactly merged order. */
 function reportGroupMergeKey(source: {
-  kind: string
-  groupKey?: { field: string; value: string }
-  title: string
-  columns: string[]
+  kind: string;
+  groupKey?: { field: string; value: string };
+  title: string;
+  columns: string[];
 }): string {
   return source.groupKey
     ? `${source.kind}\u0000${source.groupKey.field}\u0000${source.groupKey.value}`
-    : `${source.kind}\u0000${source.title}\u0000${source.columns.join('\u0000')}`
+    : `${source.kind}\u0000${source.title}\u0000${source.columns.join("\u0000")}`;
 }
 
 type ExportPageSlot = {
-  key: string
-  title: string
-  columns: string[]
+  key: string;
+  title: string;
+  columns: string[];
   /** Per-column money flags and currencies from the first page that declared the slot. */
-  money?: boolean[]
-  moneyCurrencies?: ReportGroup['moneyCurrencies']
+  money?: boolean[];
+  moneyCurrencies?: ReportGroup["moneyCurrencies"];
   /** Per-column quantity typing from the first page that declared the slot. */
-  numberFormats?: ReportGroup['numberFormats']
+  numberFormats?: ReportGroup["numberFormats"];
   /** Emitted-prefix row count (drives subtitles and width sampling). */
-  count: number
+  count: number;
   /** Per-column max display length over the header + first 400 prefix rows. */
-  widths: number[]
-}
+  widths: number[];
+};
 
 function exportTruncatedNotice(labels: ReportRunLabels, shown: number, total: number): string {
-  return (labels as PagedExportLabels).exportTruncated?.(shown, total)
-    ?? `Showing the first ${shown} of ${total} rows — narrow the period or add filters to see everything.`
+  return (
+    (labels as PagedExportLabels).exportTruncated?.(shown, total) ??
+    `Showing the first ${shown} of ${total} rows — narrow the period or add filters to see everything.`
+  );
 }
 
 /**
@@ -491,64 +530,64 @@ export async function streamPagedReportCsv(
   query: ReportCustomQuery,
   opts: PagedExportOptions,
 ): Promise<{ csv: string } & PagedExportMeta> {
-  const entity = REPORT_ENTITY_MAP[query.entity]
-  if (query.mode !== 'rows' || !entity?.pagination) {
-    throw new Error('Streaming export needs a paged rows-mode entity')
+  const entity = REPORT_ENTITY_MAP[query.entity];
+  if (query.mode !== "rows" || !entity?.pagination) {
+    throw new Error("Streaming export needs a paged rows-mode entity");
   }
-  const prepared = await prepareReportExecution(orgId, query, opts.labels)
-  const pageSize = entity.pagination.maxPageSize
-  const cap = opts.rowCap ?? PAGED_EXPORT_ROW_CAP
-  const stream = createPagedCsvStream({ sectionHeader: opts.sectionHeader })
-  const slots: ExportPageSlot[] = []
-  const byKey = new Map<string, number>()
-  let expectedTotal: number | null = null
-  let offset = 0
-  let emitted = 0
-  let summary: ReportRunResult['summary'] = []
+  const prepared = await prepareReportExecution(orgId, query, opts.labels);
+  const pageSize = entity.pagination.maxPageSize;
+  const cap = opts.rowCap ?? PAGED_EXPORT_ROW_CAP;
+  const stream = createPagedCsvStream({ sectionHeader: opts.sectionHeader });
+  const slots: ExportPageSlot[] = [];
+  const byKey = new Map<string, number>();
+  let expectedTotal: number | null = null;
+  let offset = 0;
+  let emitted = 0;
+  let summary: ReportRunResult["summary"] = [];
 
   for (;;) {
     const page = await runCustomQuery(pool, prepared.query, {
       ...prepared.options,
       page: { offset, limit: pageSize },
-    })
-    if (!page.pageInfo) throw new Error('Paged report result is missing page metadata')
+    });
+    if (!page.pageInfo) throw new Error("Paged report result is missing page metadata");
     if (expectedTotal === null) {
-      expectedTotal = page.pageInfo.totalRows
-      summary = page.summary
+      expectedTotal = page.pageInfo.totalRows;
+      summary = page.summary;
     }
     if (page.pageInfo.totalRows !== expectedTotal) {
-      throw new Error('Paged report total changed during streaming export')
+      throw new Error("Paged report total changed during streaming export");
     }
     // Register unseen groups first so the quota below allocates in merged
     // (slot) order: the emitted prefix is the first `cap` rows of the order
     // the uncapped file would show, never a page-order jumble.
-    const order: { slot: number; rows: (string | number | null | undefined)[][] }[] = []
+    const order: { slot: number; rows: (string | number | null | undefined)[][] }[] = [];
     for (const group of page.groups) {
-      const key = reportGroupMergeKey(group)
-      let slot = byKey.get(key)
+      const key = reportGroupMergeKey(group);
+      let slot = byKey.get(key);
       if (slot === undefined) {
-        slot = slots.length
-        byKey.set(key, slot)
-        slots.push({ key, title: group.title, columns: group.columns, count: 0, widths: [] })
+        slot = slots.length;
+        byKey.set(key, slot);
+        slots.push({ key, title: group.title, columns: group.columns, count: 0, widths: [] });
       }
-      order.push({ slot, rows: group.rows })
+      order.push({ slot, rows: group.rows });
     }
-    order.sort((a, b) => a.slot - b.slot)
-    const chunk: PagedCsvPageGroup[] = []
+    order.sort((a, b) => a.slot - b.slot);
+    const chunk: PagedCsvPageGroup[] = [];
     for (const { slot, rows } of order) {
-      const take = Math.min(rows.length, cap - emitted)
-      const target = slots[slot]!
-      target.count += take
+      const take = Math.min(rows.length, cap - emitted);
+      const target = slots[slot]!;
+      target.count += take;
       // Always file the slot (even rowless) so an empty result still carries
       // its header — mergeReportPages keeps the empty group too.
-      chunk.push({ slot, title: target.title, columns: target.columns, rows: rows.slice(0, take) })
-      emitted += take
-      if (emitted >= cap) break
+      chunk.push({ slot, title: target.title, columns: target.columns, rows: rows.slice(0, take) });
+      emitted += take;
+      if (emitted >= cap) break;
     }
-    stream.pushPage(chunk)
-    offset += page.rowCount
+    stream.pushPage(chunk);
+    offset += page.rowCount;
     if (offset < expectedTotal && page.rowCount === 0) {
-      throw new Error('Paged report stopped before all rows were returned')
+      throw new Error("Paged report stopped before all rows were returned");
     }
     // Fetching continues past the row cap: pages beyond the cap file zero
     // rows but still REGISTER their groups, so trailing sections the cap cut
@@ -558,24 +597,35 @@ export async function streamPagedReportCsv(
     // last section (the buffered mergeReportPages path keeps every group).
     // Only output bytes stay bounded by the cap; pages are released as they
     // are filed.
-    if (offset >= expectedTotal) break
+    if (offset >= expectedTotal) break;
   }
-  const totalRows = expectedTotal ?? 0
+  const totalRows = expectedTotal ?? 0;
   if (emitted < totalRows && emitted < cap) {
-    throw new Error('Paged report returned an inconsistent row count')
+    throw new Error("Paged report returned an inconsistent row count");
   }
-  const truncated = emitted < totalRows
-  const finalSummary = summary.map((item, index) => (
-    index === 0 ? { ...item, value: totalRows } : item
-  ))
-  if (truncated) finalSummary.push({ label: exportTruncatedNotice(prepared.options.labels, emitted, totalRows), value: '' })
+  const truncated = emitted < totalRows;
+  const finalSummary = summary.map((item, index) =>
+    index === 0 ? { ...item, value: totalRows } : item,
+  );
+  if (truncated)
+    finalSummary.push({
+      label: exportTruncatedNotice(prepared.options.labels, emitted, totalRows),
+      value: "",
+    });
   // Declare every merged group to the stream — including trailing sections
   // the row cap cut before any of their rows were filed. Without this the
   // stream drops those zero-row groups, so the section column and the footer
   // prefix attribute to the surviving prefix instead of the whole report
   // (the buffered mergeReportPages path keeps every group).
-  stream.pushPage(slots.map((target, slot) => ({ slot, title: target.title, columns: target.columns, rows: [] })))
-  return { csv: stream.finish(exportSummaryFooterRows(finalSummary)), rowCount: emitted, totalRows, truncated }
+  stream.pushPage(
+    slots.map((target, slot) => ({ slot, title: target.title, columns: target.columns, rows: [] })),
+  );
+  return {
+    csv: stream.finish(exportSummaryFooterRows(finalSummary)),
+    rowCount: emitted,
+    totalRows,
+    truncated,
+  };
 }
 
 /**
@@ -591,48 +641,48 @@ export async function streamPagedReportXlsx(
   query: ReportCustomQuery,
   opts: PagedExportOptions,
 ): Promise<{ xlsx: Buffer } & PagedExportMeta> {
-  const entity = REPORT_ENTITY_MAP[query.entity]
-  if (query.mode !== 'rows' || !entity?.pagination) {
-    throw new Error('Streaming export needs a paged rows-mode entity')
+  const entity = REPORT_ENTITY_MAP[query.entity];
+  if (query.mode !== "rows" || !entity?.pagination) {
+    throw new Error("Streaming export needs a paged rows-mode entity");
   }
-  const prepared = await prepareReportExecution(orgId, query, opts.labels)
-  const pageSize = entity.pagination.maxPageSize
-  const cap = opts.rowCap ?? PAGED_EXPORT_ROW_CAP
-  const labels = prepared.options.labels
+  const prepared = await prepareReportExecution(orgId, query, opts.labels);
+  const pageSize = entity.pagination.maxPageSize;
+  const cap = opts.rowCap ?? PAGED_EXPORT_ROW_CAP;
+  const labels = prepared.options.labels;
   // Merge keeps every page subtitle and rewrites it with the merged total;
   // the pre-pass counts are those totals, shaped by the same labels hook.
   const subtitles = (count: number): string | undefined =>
-    labels.rowCount?.(count) ?? `${count} row(s)`
+    labels.rowCount?.(count) ?? `${count} row(s)`;
 
   // Pre-pass: merged-order slots, prefix counts, width samples, base summary.
-  const slots: ExportPageSlot[] = []
-  const byKey = new Map<string, number>()
-  const pageKeys: string[][] = []
-  let expectedTotal: number | null = null
-  let summary: ReportRunResult['summary'] = []
-  let offset = 0
-  let counted = 0
+  const slots: ExportPageSlot[] = [];
+  const byKey = new Map<string, number>();
+  const pageKeys: string[][] = [];
+  let expectedTotal: number | null = null;
+  let summary: ReportRunResult["summary"] = [];
+  let offset = 0;
+  let counted = 0;
   for (;;) {
     const page = await runCustomQuery(pool, prepared.query, {
       ...prepared.options,
       page: { offset, limit: pageSize },
-    })
-    if (!page.pageInfo) throw new Error('Paged report result is missing page metadata')
+    });
+    if (!page.pageInfo) throw new Error("Paged report result is missing page metadata");
     if (expectedTotal === null) {
-      expectedTotal = page.pageInfo.totalRows
-      summary = page.summary
+      expectedTotal = page.pageInfo.totalRows;
+      summary = page.summary;
     }
     if (page.pageInfo.totalRows !== expectedTotal) {
-      throw new Error('Paged report total changed during streaming export')
+      throw new Error("Paged report total changed during streaming export");
     }
-    const keys: string[] = []
+    const keys: string[] = [];
     for (const group of page.groups) {
-      const key = reportGroupMergeKey(group)
-      keys.push(key)
-      let slot = byKey.get(key)
+      const key = reportGroupMergeKey(group);
+      keys.push(key);
+      let slot = byKey.get(key);
       if (slot === undefined) {
-        slot = slots.length
-        byKey.set(key, slot)
+        slot = slots.length;
+        byKey.set(key, slot);
         slots.push({
           key,
           title: group.title,
@@ -642,43 +692,44 @@ export async function streamPagedReportXlsx(
           numberFormats: group.numberFormats,
           count: 0,
           widths: group.columns.map((c) => xlsxExportCellLength(c)),
-        })
+        });
       }
-      const target = slots[slot]!
+      const target = slots[slot]!;
       // Past the cap rows are skipped but the group stays registered, so a
       // trailing section the cap cut still gets its sheet (same discipline
       // as the CSV path above).
       for (const row of group.rows) {
-        if (counted >= cap) break
+        if (counted >= cap) break;
         if (target.count < 400) {
           row.forEach((cell, i) => {
-            const len = xlsxExportCellLength(cell)
-            if (i < target.widths.length && len > target.widths[i]!) target.widths[i] = len
-          })
+            const len = xlsxExportCellLength(cell);
+            if (i < target.widths.length && len > target.widths[i]!) target.widths[i] = len;
+          });
         }
-        target.count++
-        counted++
+        target.count++;
+        counted++;
       }
     }
-    pageKeys.push(keys)
-    offset += page.rowCount
+    pageKeys.push(keys);
+    offset += page.rowCount;
     if (offset < (expectedTotal ?? 0) && page.rowCount === 0) {
-      throw new Error('Paged report stopped before all rows were returned')
+      throw new Error("Paged report stopped before all rows were returned");
     }
     // Like the CSV path, the pre-pass fetches every page: registration must
     // see trailing groups the cap cut, while counting and measuring stop at
     // the cap and the emit pass below stops emitting there.
-    if (offset >= (expectedTotal ?? 0)) break
+    if (offset >= (expectedTotal ?? 0)) break;
   }
-  const totalRows = expectedTotal ?? 0
+  const totalRows = expectedTotal ?? 0;
   if (counted < totalRows && counted < cap) {
-    throw new Error('Paged report returned an inconsistent row count')
+    throw new Error("Paged report returned an inconsistent row count");
   }
-  const truncated = counted < totalRows
-  const finalSummary = summary.map((item, index) => (
-    index === 0 ? { ...item, value: totalRows } : item
-  ))
-  if (truncated) finalSummary.push({ label: exportTruncatedNotice(labels, counted, totalRows), value: '' })
+  const truncated = counted < totalRows;
+  const finalSummary = summary.map((item, index) =>
+    index === 0 ? { ...item, value: totalRows } : item,
+  );
+  if (truncated)
+    finalSummary.push({ label: exportTruncatedNotice(labels, counted, totalRows), value: "" });
 
   const writer = createStreamingXlsxExport({
     reportName: opts.title,
@@ -694,53 +745,56 @@ export async function streamPagedReportXlsx(
       moneyCurrencies: slot.moneyCurrencies,
       numberFormats: slot.numberFormats,
     })),
-  })
+  });
 
   // Emit pass: same offsets, revalidated against the pre-pass.
-  offset = 0
-  let emitted = 0
-  let pageIndex = 0
+  offset = 0;
+  let emitted = 0;
+  let pageIndex = 0;
   for (;;) {
     const page = await runCustomQuery(pool, prepared.query, {
       ...prepared.options,
       page: { offset, limit: pageSize },
-    })
-    if (!page.pageInfo) throw new Error('Paged report result is missing page metadata')
+    });
+    if (!page.pageInfo) throw new Error("Paged report result is missing page metadata");
     if (page.pageInfo.totalRows !== totalRows) {
-      throw new Error('Paged report changed during streaming export')
+      throw new Error("Paged report changed during streaming export");
     }
-    const keys = page.groups.map((group) => reportGroupMergeKey(group))
-    const prior = pageKeys[pageIndex]
+    const keys = page.groups.map((group) => reportGroupMergeKey(group));
+    const prior = pageKeys[pageIndex];
     if (!prior || prior.length !== keys.length || prior.some((key, i) => key !== keys[i])) {
-      throw new Error('Paged report changed during streaming export')
+      throw new Error("Paged report changed during streaming export");
     }
     const order = page.groups
       .map((group) => ({ slot: byKey.get(reportGroupMergeKey(group))!, rows: group.rows }))
-      .sort((a, b) => a.slot - b.slot)
+      .sort((a, b) => a.slot - b.slot);
     for (const { slot, rows } of order) {
-      const take = Math.min(rows.length, cap - emitted)
-      if (take > 0) writer.appendRows(slot, rows.slice(0, take))
-      emitted += take
-      if (emitted >= cap) break
+      const take = Math.min(rows.length, cap - emitted);
+      if (take > 0) writer.appendRows(slot, rows.slice(0, take));
+      emitted += take;
+      if (emitted >= cap) break;
     }
-    offset += page.rowCount
-    pageIndex++
-    if (offset >= totalRows || emitted >= cap) break
+    offset += page.rowCount;
+    pageIndex++;
+    if (offset >= totalRows || emitted >= cap) break;
   }
   if (emitted !== counted) {
-    throw new Error('Paged report changed during streaming export')
+    throw new Error("Paged report changed during streaming export");
   }
-  const footers = exportSummaryFooterRows(finalSummary)
+  const footers = exportSummaryFooterRows(finalSummary);
   if (footers.length > 0) {
-    const last = slots.length - 1
+    const last = slots.length - 1;
     if (last >= 0) {
-      const target = slots[last]!
-      writer.appendRows(last, footers.map((cells) => cells.slice(0, target.columns.length)))
+      const target = slots[last]!;
+      writer.appendRows(
+        last,
+        footers.map((cells) => cells.slice(0, target.columns.length)),
+      );
     } else {
-      writer.appendRows(0, footers)
+      writer.appendRows(0, footers);
     }
   }
-  return { xlsx: await writer.finish(), rowCount: emitted, totalRows, truncated }
+  return { xlsx: await writer.finish(), rowCount: emitted, totalRows, truncated };
 }
 
 /**
@@ -765,19 +819,22 @@ export async function resolveCustomReportBookScope(
   orgId: string,
   query: ReportCustomQuery,
 ): Promise<readonly string[] | null | undefined> {
-  const entity = REPORT_ENTITY_MAP[query.entity]
-  if (!entity?.bookScope) return undefined
-  if (customQueryReferencesBook(query)) return null
-  const rows = await db.execute<{ id: string }>(sql`
+  const entity = REPORT_ENTITY_MAP[query.entity];
+  if (!entity?.bookScope) return undefined;
+  if (customQueryReferencesBook(query)) return null;
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id from accounting_books
      where org_id = ${orgId} and is_primary and is_active
-  `, 'objects')
+  `,
+    "objects",
+  );
   if (rows.length !== 1) {
     throw new ReportQueryValidationError(
-      'This report needs exactly one active primary accounting book. Choose a book filter to run it against a specific book instead.',
-    )
+      "This report needs exactly one active primary accounting book. Choose a book filter to run it against a specific book instead.",
+    );
   }
-  return [rows[0]!.id]
+  return [rows[0]!.id];
 }
 
 async function prepareReportExecution(
@@ -785,13 +842,14 @@ async function prepareReportExecution(
   query: ReportCustomQuery,
   labels?: ReportRunLabels,
 ) {
-  const authz = await requireReportAuthz(orgId)
-  const entityMap = await reportEntityCatalog(authz)
-  query = validateCatalogReportQuery(query, entityMap)
-  if (!(await canRunReportEntity(authz, query))) throw new ReportQueryValidationError('Report access denied')
-  const featureKey = reportEntityFeatureKey(query)
+  const authz = await requireReportAuthz(orgId);
+  const entityMap = await reportEntityCatalog(authz);
+  query = validateCatalogReportQuery(query, entityMap);
+  if (!(await canRunReportEntity(authz, query)))
+    throw new ReportQueryValidationError("Report access denied");
+  const featureKey = reportEntityFeatureKey(query);
   if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
-    throw new ReportQueryValidationError(`${featureKey} feature is disabled`)
+    throw new ReportQueryValidationError(`${featureKey} feature is disabled`);
   }
   const [resolved, startMonth, asOf, runLabels, allowedBookIds, expenseAccess] = await Promise.all([
     resolvePeriodPresets(query, orgId),
@@ -801,20 +859,21 @@ async function prepareReportExecution(
     resolveCustomReportBookScope(orgId, query),
     // Expense report rows reach only the reader's expense authority.
     reportExpenseAccess(authz),
-  ])
+  ]);
   return {
     query: resolved,
     options: {
       orgId,
       entityMap,
-      allowedSubsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds],
+      allowedSubsidiaryIds:
+        authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds],
       allowedBookIds,
       expenseAccess,
       fiscalStartMonth: startMonth,
       asOf,
       labels: runLabels,
     },
-  }
+  };
 }
 
 /** Merge page-shaped groups without dropping native cell metadata. Grouped
@@ -825,55 +884,53 @@ function mergeReportPages(
   totalRows: number,
   labels: ReportRunLabels,
 ): ReportRunResult {
-  const merged: ReportGroup[] = []
-  const byKey = new Map<string, ReportGroup>()
+  const merged: ReportGroup[] = [];
+  const byKey = new Map<string, ReportGroup>();
   for (const page of pages) {
     for (const source of page.groups) {
       const key = source.groupKey
         ? `${source.kind}\u0000${source.groupKey.field}\u0000${source.groupKey.value}`
-        : `${source.kind}\u0000${source.title}\u0000${source.columns.join('\u0000')}`
-      let target = byKey.get(key)
+        : `${source.kind}\u0000${source.title}\u0000${source.columns.join("\u0000")}`;
+      let target = byKey.get(key);
       if (!target) {
         target = {
           ...source,
           rows: [],
           ...(source.cellLinks ? { cellLinks: [] } : {}),
           isEmpty: true,
-        }
-        byKey.set(key, target)
-        merged.push(target)
+        };
+        byKey.set(key, target);
+        merged.push(target);
       }
-      const priorRowCount = target.rows.length
-      target.rows.push(...source.rows)
-      target.isEmpty = target.rows.length === 0
+      const priorRowCount = target.rows.length;
+      target.rows.push(...source.rows);
+      target.isEmpty = target.rows.length === 0;
       if (target.cellLinks || source.cellLinks) {
-        target.cellLinks ??= Array.from(
-          { length: priorRowCount },
-          () => target!.columns.map(() => null),
-        )
-        target.cellLinks.push(...(
-          source.cellLinks
-            ?? source.rows.map(() => source.columns.map(() => null))
-        ))
+        target.cellLinks ??= Array.from({ length: priorRowCount }, () =>
+          target!.columns.map(() => null),
+        );
+        target.cellLinks.push(
+          ...(source.cellLinks ?? source.rows.map(() => source.columns.map(() => null))),
+        );
       }
       if (source.totalRows?.length) {
         target.totalRows = [
           ...(target.totalRows ?? []),
           ...source.totalRows.map((index) => priorRowCount + index),
-        ]
+        ];
       }
     }
   }
 
   for (const group of merged) {
     if (group.subtitle !== undefined) {
-      group.subtitle = labels.rowCount?.(group.rows.length) ?? `${group.rows.length} row(s)`
+      group.subtitle = labels.rowCount?.(group.rows.length) ?? `${group.rows.length} row(s)`;
     }
   }
-  const summary = pages[0]?.summary.map((item, index) => (
-    index === 0 ? { ...item, value: totalRows } : item
-  )) ?? []
-  return { groups: merged, summary, rowCount: totalRows }
+  const summary =
+    pages[0]?.summary.map((item, index) => (index === 0 ? { ...item, value: totalRows } : item)) ??
+    [];
+  return { groups: merged, summary, rowCount: totalRows };
 }
 
 /**
@@ -890,9 +947,9 @@ async function resolvePeriodPresets(
   orgId?: string,
 ): Promise<ReportCustomQuery> {
   return resolvePeriodPresetLeaves(query, async (presetId) => {
-    const period = await resolvePeriod(presetId, { orgId })
-    return { from: period.from, to: period.to }
-  })
+    const period = await resolvePeriod(presetId, { orgId });
+    return { from: period.from, to: period.to };
+  });
 }
 
 /**
@@ -901,47 +958,56 @@ async function resolvePeriodPresets(
  * failure (with the error). Returns the finished run id and result.
  */
 export async function recordReportRun(args: {
-  orgId: string
-  userId: string
-  definitionId: string
-  query: ReportCustomQuery
-  trigger: 'manual' | 'scheduled'
-  scheduleId?: string | null
-  maxRows?: number
+  orgId: string;
+  userId: string;
+  definitionId: string;
+  query: ReportCustomQuery;
+  trigger: "manual" | "scheduled";
+  scheduleId?: string | null;
+  maxRows?: number;
 }): Promise<{ runId: string; result: ReportRunResult | null; error: string | null }> {
-  const authz = await requireReportAuthz(args.orgId)
-  if (authz.user.id !== args.userId || !(await canRunReportEntity(authz, args.query))) throw new Error('Report access denied')
-  const definition = await loadReportDefinition(args.orgId, args.definitionId)
-  if (!definition) throw new Error('Report not found')
-  const authorization_snapshot = snapshotReportAuthorization(authz, { ...definition, query: args.query as unknown as Record<string, unknown> })
-  const started = new Date().toISOString()
-  const inserted = (await db.execute<{ id: string }>(sql`
+  const authz = await requireReportAuthz(args.orgId);
+  if (authz.user.id !== args.userId || !(await canRunReportEntity(authz, args.query)))
+    throw new Error("Report access denied");
+  const definition = await loadReportDefinition(args.orgId, args.definitionId);
+  if (!definition) throw new Error("Report not found");
+  const authorization_snapshot = snapshotReportAuthorization(authz, {
+    ...definition,
+    query: args.query as unknown as Record<string, unknown>,
+  });
+  const started = new Date().toISOString();
+  const inserted = await db.execute<{ id: string }>(
+    sql`
     insert into report_runs (org_id, definition_id, schedule_id, trigger, status, started_at, created_by, authorization_snapshot)
     values (${args.orgId}, ${args.definitionId}, ${args.scheduleId ?? null}, ${args.trigger},
             'running', ${started}, ${args.userId}, ${JSON.stringify(authorization_snapshot)}::jsonb)
     returning id
-  `, 'objects'))
-  const runId = inserted[0]!.id
+  `,
+    "objects",
+  );
+  const runId = inserted[0]!.id;
 
   try {
-    const result = await withReportAuthz(authz, () => executeReport(args.orgId, args.query, args.maxRows))
+    const result = await withReportAuthz(authz, () =>
+      executeReport(args.orgId, args.query, args.maxRows),
+    );
     // The stored CSV artifact bakes the locale of whoever triggered the run.
-    const csv = reportResultToCsv(result, await reportCsvOptions())
+    const csv = reportResultToCsv(result, await reportCsvOptions());
     await db.execute(sql`
       update report_runs set status = 'succeeded', row_count = ${result.rowCount},
              result_csv = ${csv}, finished_at = now(), updated_at = now()
        where id = ${runId} and org_id = ${args.orgId}
-    `)
-    return { runId, result, error: null }
+    `);
+    return { runId, result, error: null };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Report run failed'
-    console.error(`[reports/run:${runId}] report execution failed`, err)
+    const message = err instanceof Error ? err.message : "Report run failed";
+    console.error(`[reports/run:${runId}] report execution failed`, err);
     await db.execute(sql`
       update report_runs set status = 'failed', error = ${message},
              finished_at = now(), updated_at = now()
        where id = ${runId} and org_id = ${args.orgId}
-    `)
-    return { runId, result: null, error: message }
+    `);
+    return { runId, result: null, error: message };
   }
 }
 
@@ -950,10 +1016,10 @@ export function slugifyReportName(name: string): string {
   const base = name
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80)
-  return base || 'report'
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return base || "report";
 }
 
 /**
@@ -966,16 +1032,19 @@ export async function uniqueReportSlug(
   desired: string,
   excludeId?: string,
 ): Promise<string> {
-  let slug = desired
+  let slug = desired;
   for (let n = 2; n < 1000; n++) {
-    const clash = (await db.execute(sql`
+    const clash = await db.execute(
+      sql`
       select 1 from report_definitions
        where org_id = ${orgId} and slug = ${slug}
          ${excludeId ? sql`and id <> ${excludeId}` : sql``}
        limit 1
-    `, 'objects'))
-    if (clash.length === 0) return slug
-    slug = `${desired}-${n}`
+    `,
+      "objects",
+    );
+    if (clash.length === 0) return slug;
+    slug = `${desired}-${n}`;
   }
-  return `${desired}-${Date.now()}`
+  return `${desired}-${Date.now()}`;
 }

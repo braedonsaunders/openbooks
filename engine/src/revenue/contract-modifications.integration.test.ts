@@ -40,9 +40,12 @@ async function fixture(fn: (f: Fixture) => Promise<void>, postJuly = true) {
     await db.execute(
       sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'ar.post','grant')`,
     );
-    const calendar = (await db.execute<{ id: string }>(
-        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, "objects",
-      ))[0]!.id;
+    const calendar = (
+      await db.execute<{ id: string }>(
+        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`,
+        "objects",
+      )
+    )[0]!.id;
     for (const [month, last] of [
       ["08", "31"],
       ["09", "30"],
@@ -55,12 +58,7 @@ async function fixture(fn: (f: Fixture) => Promise<void>, postJuly = true) {
    values(${contractId},${org.orgId},${org.subsidiaryId},${org.customerId},${`MOD-${contractId}`},'active','2026-07-01','2026-09-30','CAD',3000,${actors.submitterId},${actors.submitterId})`);
     await db.execute(sql`insert into performance_obligations(id,org_id,contract_id,description,recognition_rule_id,allocated_price,standalone_selling_price,recognition_starts_on,recognition_ends_on,deferred_account_id,recognized_account_id,status,created_by,updated_by)
    values(${obligationId},${org.orgId},${contractId},'Original service',${org.recognitionRuleId},3000,3000,'2026-07-01','2026-09-30',${org.accounts.deferred},${org.accounts.recognized},'open',${actors.submitterId},${actors.submitterId})`);
-    await buildRecognitionSchedule(
-      obligationId,
-      org.orgId,
-      actors.submitterId,
-      org.bookId,
-    );
+    await buildRecognitionSchedule(obligationId, org.orgId, actors.submitterId, org.bookId);
     if (postJuly) {
       const r = await runRevenueRecognition(
         org.orgId,
@@ -122,9 +120,12 @@ function proposal(
 }
 async function approve(f: Fixture, id: string) {
   await submitFinancialChange(f.org.orgId, id, f.actors.submitterId);
-  const gate = (await db.execute<{ id: string }>(
-      sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`, "objects",
-    ))[0];
+  const gate = (
+    await db.execute<{ id: string }>(
+      sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`,
+      "objects",
+    )
+  )[0];
   assert.ok(gate);
   await decideGate({
     gateId: gate.id,
@@ -133,9 +134,12 @@ async function approve(f: Fixture, id: string) {
   });
 }
 async function earned(f: Fixture) {
-  const row = (await db.execute<{ amount: string }>(
-      sql`select coalesce(-sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${f.org.orgId} and l.account_id=${f.org.accounts.recognized} and e.status in('posted','reversed')`, "objects",
-    ))[0]!;
+  const row = (
+    await db.execute<{ amount: string }>(
+      sql`select coalesce(-sum(l.amount),0)::text as amount from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id where l.org_id=${f.org.orgId} and l.account_id=${f.org.accounts.recognized} and e.status in('posted','reversed')`,
+      "objects",
+    )
+  )[0]!;
   return toUnits(row.amount);
 }
 test(
@@ -144,12 +148,13 @@ test(
   async () =>
     fixture(async (f) => {
       const old = await db.execute<{
-          id: string;
-          journal_entry_id: string | null;
-          planned_amount: string;
-        }>(
-          sql`select l.id,l.journal_entry_id,l.planned_amount::text from recognition_schedule_lines l join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id where s.org_id=${f.org.orgId} and s.obligation_id=${f.obligationId} order by sequence`, "objects",
-        );
+        id: string;
+        journal_entry_id: string | null;
+        planned_amount: string;
+      }>(
+        sql`select l.id,l.journal_entry_id,l.planned_amount::text from recognition_schedule_lines l join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id where s.org_id=${f.org.orgId} and s.obligation_id=${f.obligationId} order by sequence`,
+        "objects",
+      );
       const input = proposal(f),
         { changeId } = await proposeRevenueModification(
           f.org.orgId,
@@ -162,21 +167,18 @@ test(
         /approval policy/,
       );
       await approve(f, changeId);
-      const applied = await applyRevenueModification(
-        f.org.orgId,
-        changeId,
-        f.actors.submitterId,
-      );
+      const applied = await applyRevenueModification(f.org.orgId, changeId, f.actors.submitterId);
       assert.equal(applied.newTransactionPrice, "3600.0000");
       assert.equal(await earned(f), toUnits("1000"));
       const retained = await db.execute<{
-          id: string;
-          journal_entry_id: string | null;
-          planned_amount: string;
-          superseded_by_change_id: string | null;
-        }>(
-          sql`select id,journal_entry_id,planned_amount::text,superseded_by_change_id from recognition_schedule_lines where org_id=${f.org.orgId} and id in(select jsonb_array_elements_text(${JSON.stringify(old.map((r) => r.id))}::jsonb)::uuid) order by sequence`, "objects",
-        );
+        id: string;
+        journal_entry_id: string | null;
+        planned_amount: string;
+        superseded_by_change_id: string | null;
+      }>(
+        sql`select id,journal_entry_id,planned_amount::text,superseded_by_change_id from recognition_schedule_lines where org_id=${f.org.orgId} and id in(select jsonb_array_elements_text(${JSON.stringify(old.map((r) => r.id))}::jsonb)::uuid) order by sequence`,
+        "objects",
+      );
       assert.deepEqual(
         retained.map(({ id, journal_entry_id, planned_amount }) => ({
           id,
@@ -185,10 +187,7 @@ test(
         })),
         old,
       );
-      assert.equal(
-        retained.filter((r) => r.superseded_by_change_id === changeId).length,
-        2,
-      );
+      assert.equal(retained.filter((r) => r.superseded_by_change_id === changeId).length, 2);
       await buildRecognitionSchedule(
         f.obligationId,
         f.org.orgId,
@@ -206,22 +205,12 @@ test(
       assert.equal(posted.posted, 2);
       assert.equal(await earned(f), toUnits("3600"));
       assert.deepEqual(
-        await applyRevenueModification(
-          f.org.orgId,
-          changeId,
-          f.actors.submitterId,
-        ),
+        await applyRevenueModification(f.org.orgId, changeId, f.actors.submitterId),
         applied,
       );
       assert.equal(
-        (
-          await proposeRevenueModification(
-            f.org.orgId,
-            f.contractId,
-            f.actors.submitterId,
-            input,
-          )
-        ).changeId,
+        (await proposeRevenueModification(f.org.orgId, f.contractId, f.actors.submitterId, input))
+          .changeId,
         changeId,
       );
       // Direct repricing stays locked once allocated; the typed refusal
@@ -261,15 +250,14 @@ for (const [delta, progress, expected] of [
           input,
         );
         await approve(f, changeId);
-        await applyRevenueModification(
-          f.org.orgId,
-          changeId,
-          f.actors.submitterId,
-        );
+        await applyRevenueModification(f.org.orgId, changeId, f.actors.submitterId);
         assert.equal(await earned(f), toUnits(expected!));
-        const dates = (await db.execute<{ posting_date: string }>(
-            sql`select posting_date::text from journal_entries where org_id=${f.org.orgId} and origin='revenue_recognition' order by posting_date`, "objects",
-          )).map((r) => r.posting_date);
+        const dates = (
+          await db.execute<{ posting_date: string }>(
+            sql`select posting_date::text from journal_entries where org_id=${f.org.orgId} and origin='revenue_recognition' order by posting_date`,
+            "objects",
+          )
+        ).map((r) => r.posting_date);
         assert.deepEqual(dates, ["2026-07-31", "2026-08-01"]);
         const r = await runRevenueRecognition(
           f.org.orgId,
@@ -278,10 +266,7 @@ for (const [delta, progress, expected] of [
           f.obligationId,
         );
         assert.deepEqual(r.problems, []);
-        assert.equal(
-          await earned(f),
-          toUnits(delta === "600" ? "3600" : "1500"),
-        );
+        assert.equal(await earned(f), toUnits(delta === "600" ? "3600" : "1500"));
       }),
   );
 test(
@@ -308,16 +293,15 @@ test(
         input,
       );
       await approve(f, changeId);
-      const r = await applyRevenueModification(
-        f.org.orgId,
-        changeId,
-        f.actors.submitterId,
-      );
+      const r = await applyRevenueModification(f.org.orgId, changeId, f.actors.submitterId);
       assert.equal(r.newTransactionPrice, "3000.0000");
       assert.equal((r.separateContractIds as string[]).length, 1);
-      const remaining = (await db.execute<{ amount: string }>(
-          sql`select sum(l.planned_amount)::text as amount from recognition_schedule_lines l join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id where s.org_id=${f.org.orgId} and s.obligation_id=${f.obligationId} and l.journal_entry_id is null and l.superseded_by_change_id is null`, "objects",
-        ))[0]!;
+      const remaining = (
+        await db.execute<{ amount: string }>(
+          sql`select sum(l.planned_amount)::text as amount from recognition_schedule_lines l join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id where s.org_id=${f.org.orgId} and s.obligation_id=${f.obligationId} and l.journal_entry_id is null and l.superseded_by_change_id is null`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(toUnits(remaining.amount), toUnits("2000"));
     }),
 );
@@ -335,11 +319,7 @@ test(
         input,
       );
       await approve(f, changeId);
-      await applyRevenueModification(
-        f.org.orgId,
-        changeId,
-        f.actors.submitterId,
-      );
+      await applyRevenueModification(f.org.orgId, changeId, f.actors.submitterId);
       assert.equal(await earned(f), toUnits("483.8710"));
       const r = await runRevenueRecognition(
         f.org.orgId,
@@ -371,12 +351,7 @@ test(
         /record changed/,
       );
       await assert.rejects(
-        proposeRevenueModification(
-          f.org.orgId,
-          f.contractId,
-          f.actors.outsiderId,
-          proposal(f),
-        ),
+        proposeRevenueModification(f.org.orgId, f.contractId, f.actors.outsiderId, proposal(f)),
         /ar.post/,
       );
       assert.equal(await earned(f), toUnits("1000"));
@@ -406,9 +381,12 @@ test(
         );
       });
       assert.equal(await earned(f), toUnits("1000"));
-      const c = (await db.execute<{ revision: number }>(
-          sql`select revision from revenue_contracts where org_id=${f.org.orgId} and id=${f.contractId}`, "objects",
-        ))[0]!;
+      const c = (
+        await db.execute<{ revision: number }>(
+          sql`select revision from revenue_contracts where org_id=${f.org.orgId} and id=${f.contractId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(c.revision, 1);
     }),
 );

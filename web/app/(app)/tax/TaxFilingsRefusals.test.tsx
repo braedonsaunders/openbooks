@@ -17,7 +17,7 @@ const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
 await bootJsdomEnvironment({ url: "http://localhost:4800/tax", matchMediaMatches: false });
 // The view's event interop needs the jsdom Event constructor identity, not
 // Node's native global: keep the unconditional pin the inline block had.
-;(globalThis as Record<string, unknown>).Event = window.Event;
+(globalThis as Record<string, unknown>).Event = window.Event;
 
 const { stubModules } = await import("../../../testing/stub-modules");
 stubModules({
@@ -61,7 +61,9 @@ const CHOOSE_ONE =
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -117,7 +119,8 @@ function errorToasts(): string[] {
 
 test("a refused compute toasts the server refusal, not a generic failure", async () => {
   const restoreFetch = scriptFetch((url) => {
-    if (url.startsWith("/api/tax/returns/")) return Response.json({ error: CHOOSE_ONE }, { status: 422 });
+    if (url.startsWith("/api/tax/returns/"))
+      return Response.json({ error: CHOOSE_ONE }, { status: 422 });
     return null;
   });
   const { unmount } = await mount();
@@ -135,18 +138,23 @@ test("changing filing forms resets edited dates to the current business month", 
   const nextForm = { ...FORM, code: "GB_VAT100", name: "VAT Return" };
   const { unmount } = await mount(true, [FORM, nextForm]);
   try {
-    const from = document.querySelector<HTMLInputElement>('#tax-from')!;
-    const to = document.querySelector<HTMLInputElement>('#tax-to')!;
-    const setDateValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+    const from = document.querySelector<HTMLInputElement>("#tax-from")!;
+    const to = document.querySelector<HTMLInputElement>("#tax-to")!;
+    const setDateValue = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
     setDateValue.call(from, "2026-03-04");
     setDateValue.call(to, "2026-03-20");
     await act(async () => {
       from.dispatchEvent(new window.Event("change", { bubbles: true }));
       to.dispatchEvent(new window.Event("change", { bubbles: true }));
     });
-    const form = document.querySelector<HTMLButtonElement>('#tax-form')!;
+    const form = document.querySelector<HTMLButtonElement>("#tax-form")!;
     await click(form);
-    const option = [...document.querySelectorAll('[role="option"]')].find((el) => el.textContent?.trim() === "VAT Return");
+    const option = [...document.querySelectorAll('[role="option"]')].find(
+      (el) => el.textContent?.trim() === "VAT Return",
+    );
     assert.ok(option, "the second return form must be offered");
     await click(option as HTMLButtonElement);
     assert.equal(from.value, "07/01/2026");
@@ -244,12 +252,14 @@ test("a refused save toasts the server refusal, not a generic failure", async ()
   }
 });
 
-
 async function enterInput(id: string, value: string) {
   const input = document.getElementById(id) as HTMLInputElement;
   assert.ok(input);
   await act(async () => {
-    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      value,
+    );
     input.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
 }
@@ -260,13 +270,29 @@ test("a refused adjustment preview removes the old totals and save action until 
   const restoreFetch = scriptFetch((url, init) => {
     if (url.startsWith("/api/tax/returns/")) {
       if (url.includes("adj_104=") && refuseAdjusted) {
-        return Response.json({ error: "The adjustment cannot be included in this return." }, { status: 422 });
+        return Response.json(
+          { error: "The adjustment cannot be included in this return." },
+          { status: 422 },
+        );
       }
       return Response.json({
-        formCode: "CA_GST34", formName: "GST/HST Return", from: "2026-07-01", to: "2026-07-31",
-        submissionChannel: "portal_manual", watermark: null, subsidiaryIds: [], registrationId: null, translation: null,
+        formCode: "CA_GST34",
+        formName: "GST/HST Return",
+        from: "2026-07-01",
+        to: "2026-07-31",
+        submissionChannel: "portal_manual",
+        watermark: null,
+        subsidiaryIds: [],
+        registrationId: null,
+        translation: null,
         boxes: [
-          { lineCode: "104", label: "Adjustments", value: url.includes("adj_104=") ? "3018.8400" : "0.0000", computed: false, editable: true },
+          {
+            lineCode: "104",
+            label: "Adjustments",
+            value: url.includes("adj_104=") ? "3018.8400" : "0.0000",
+            computed: false,
+            editable: true,
+          },
         ],
       });
     }
@@ -281,7 +307,7 @@ test("a refused adjustment preview removes the old totals and save action until 
     await click(buttonsNamed("Compute")[0]!);
     await enterInput("tax-adjustment-amount", "3018.84");
     await enterInput("tax-adjustment-reason", "Pre-conversion activity");
-    const form = document.querySelector<HTMLFormElement>('form');
+    const form = document.querySelector<HTMLFormElement>("form");
     assert.ok(form);
     await act(async () => {
       form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
@@ -295,10 +321,14 @@ test("a refused adjustment preview removes the old totals and save action until 
     await click(buttonsNamed("Compute")[0]!);
     assert.match(document.body.textContent ?? "", /3,018\.84/);
     await click(buttonsNamed("Save to history")[0]!);
-    assert.deepEqual(prepareBodies, [{
-      code: "CA_GST34", from: "2026-07-01", to: "2026-07-31",
-      adjustments: [{ lineCode: "104", amount: "3018.84", reason: "Pre-conversion activity" }],
-    }]);
+    assert.deepEqual(prepareBodies, [
+      {
+        code: "CA_GST34",
+        from: "2026-07-01",
+        to: "2026-07-31",
+        adjustments: [{ lineCode: "104", amount: "3018.84", reason: "Pre-conversion activity" }],
+      },
+    ]);
   } finally {
     await unmount();
     restoreFetch();

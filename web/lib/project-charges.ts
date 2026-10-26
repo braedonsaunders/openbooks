@@ -1,25 +1,25 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { inDbTransaction, withOrgTransaction } from '@openbooks/engine/platform/db'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { inDbTransaction, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   lockEquipmentProjectScope,
   lockProjectForScope,
   ScopeNotFoundError,
-} from '@openbooks/engine/organization/scope'
+} from "@openbooks/engine/organization/scope";
 import { postDocument } from "@openbooks/engine/ledger/posting-document";
-import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
-import { cmp, div, isZero, mul, normalizeMoney, sum } from '@openbooks/engine/money/money'
+import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
+import { cmp, div, isZero, mul, normalizeMoney, sum } from "@openbooks/engine/money/money";
 import { nextDocumentNumber } from "./bills.ts";
 import { controlDeps } from "@openbooks/engine/ledger/document-service";
-import { resolveItemRate } from './item-rates'
-import type { RatePrice } from '@openbooks/engine/sales/item-rate-pricing'
-import { canonicalDecimal } from './exact-decimal'
-import { acquireFeatureGateLock, isFeatureEnabled } from './features'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { isUuid } from './list-params'
+import { resolveItemRate } from "./item-rates";
+import type { RatePrice } from "@openbooks/engine/sales/item-rate-pricing";
+import { canonicalDecimal } from "./exact-decimal";
+import { acquireFeatureGateLock, isFeatureEnabled } from "./features";
+import { lockAndCheckOrgFeature } from "@openbooks/engine/organization/org-feature-lock";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { isUuid } from "./list-params";
 
-const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 /**
  * Project charges / resource usage. A project_charge allocates a pooled,
@@ -31,10 +31,10 @@ const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
  */
 
 export interface ChargeLineInput {
-  itemId: string
+  itemId: string;
   /** Usage in the item's configured base unit. */
-  quantity: string
-  equipmentUnitId?: string | null
+  quantity: string;
+  equipmentUnitId?: string | null;
   /**
    * The OPERATOR who ran the unit (→ parties, the same identity payroll uses).
    *
@@ -45,42 +45,42 @@ export interface ChargeLineInput {
    * share of what this line billed, so the answer has to be recorded at the
    * moment somebody knows it.
    */
-  employeeId?: string | null
+  employeeId?: string | null;
   /** Cost per unit (job cost). Defaults to the item's default_cost. */
-  costRate?: string | null
+  costRate?: string | null;
   /** Bill rate per unit (T&M price). Defaults to the item's default_rate. */
-  billRate?: string | null
-  description?: string | null
+  billRate?: string | null;
+  description?: string | null;
   /** Project task the line's cost is attributed to; must belong to the charge's project. */
-  projectTaskId?: string | null
+  projectTaskId?: string | null;
   /** Target project-COGS account (debit). Defaults to the item's expense account. */
-  accountId?: string | null
-  isBillable?: boolean
+  accountId?: string | null;
+  isBillable?: boolean;
   /** Previously resolved immutable rate snapshot (for example from a field
    * ticket). Keeps its package-tier decomposition through approval. */
   rateSnapshot?: {
-    rateVersionId: string | null
-    baseUnit: string
+    rateVersionId: string | null;
+    baseUnit: string;
     /** Normalized usage and the package unit entered on the source line. */
-    baseQuantity?: string
-    transactionUnitCode?: string | null
-    invoicePresentation: 'summary' | 'rate_components'
-    cost: RatePrice
-    bill: RatePrice
-  } | null
+    baseQuantity?: string;
+    transactionUnitCode?: string | null;
+    invoicePresentation: "summary" | "rate_components";
+    cost: RatePrice;
+    bill: RatePrice;
+  } | null;
 }
 
 export interface ChargeInput {
-  projectId: string
+  projectId: string;
   /** Field Ticket that authorized and originated this charge. */
-  fieldTicketId?: string | null
-  referenceNumber?: string | null
-  documentDate?: string | null
-  lines: ChargeLineInput[]
+  fieldTicketId?: string | null;
+  referenceNumber?: string | null;
+  documentDate?: string | null;
+  lines: ChargeLineInput[];
 }
 
 export class ChargeError extends Error {
-  override readonly name: string = 'ChargeError'
+  override readonly name: string = "ChargeError";
 }
 
 /**
@@ -89,11 +89,11 @@ export class ChargeError extends Error {
  * pre-read. Answers exactly like the route's own 404, never a 422.
  */
 export class ChargeNotFoundError extends ChargeError {
-  override readonly name = 'ChargeNotFoundError'
-  readonly status = 404
+  override readonly name = "ChargeNotFoundError";
+  readonly status = 404;
 }
 
-export type ChargeCommittedStage = 'approval-routing' | 'posting'
+export type ChargeCommittedStage = "approval-routing" | "posting";
 
 /**
  * The charge header committed before its approval/posting lifecycle failed.
@@ -108,7 +108,7 @@ export type ChargeCommittedStage = 'approval-routing' | 'posting'
  * unexpected fault's text surfaces here as-is.
  */
 export class ChargeCommittedError extends Error {
-  override readonly name = 'ChargeCommittedError'
+  override readonly name = "ChargeCommittedError";
 
   constructor(
     readonly chargeId: string,
@@ -116,8 +116,10 @@ export class ChargeCommittedError extends Error {
     readonly stage: ChargeCommittedStage,
     readonly cause: unknown,
   ) {
-    const reason = cause instanceof Error ? cause.message : String(cause)
-    super(`project charge ${documentNumber} (${chargeId}) was committed but ${stage} failed: ${reason}`)
+    const reason = cause instanceof Error ? cause.message : String(cause);
+    super(
+      `project charge ${documentNumber} (${chargeId}) was committed but ${stage} failed: ${reason}`,
+    );
   }
 }
 
@@ -144,24 +146,24 @@ export function chargeCommittedDetails(e: ChargeCommittedError): {
 
 /** Quantity columns are numeric(28,8); do not force ledger money scale. */
 function exactQuantity(value: unknown, label: string): string {
-  const exact = canonicalDecimal(value, 8)
-  if (exact === null) throw new ChargeError(`${label} must be an exact decimal`)
-  return exact
+  const exact = canonicalDecimal(value, 8);
+  if (exact === null) throw new ChargeError(`${label} must be an exact decimal`);
+  return exact;
 }
 
 function exactMoney(value: unknown, label: string): string {
-  const exact = canonicalDecimal(value, 4)
-  if (exact === null) throw new ChargeError(`${label} must be an exact decimal`)
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) throw new ChargeError(`${label} must be an exact decimal`);
   try {
-    return normalizeMoney(exact)
+    return normalizeMoney(exact);
   } catch {
-    throw new ChargeError(`${label} must be an exact decimal`)
+    throw new ChargeError(`${label} must be an exact decimal`);
   }
 }
 
 function exactMoneyOrNull(value: unknown, label: string): string | null {
-  if (value == null || value === '') return null
-  return exactMoney(value, label)
+  if (value == null || value === "") return null;
+  return exactMoney(value, label);
 }
 
 function exactPrice(price: RatePrice, label: string): RatePrice {
@@ -173,7 +175,7 @@ function exactPrice(price: RatePrice, label: string): RatePrice {
       rate: exactMoney(component.rate, `${label} component rate`),
       amount: exactMoney(component.amount, `${label} component amount`),
     })),
-  }
+  };
 }
 
 export async function createProjectCharge(
@@ -182,38 +184,45 @@ export async function createProjectCharge(
   input: ChargeInput,
   opts: { post?: boolean; allowedSubsidiaryIds: ReadonlySet<string> | null },
 ): Promise<{ id: string; documentNumber: string; approvalPending: boolean }> {
-  if (!(await isFeatureEnabled(orgId, 'projects'))) throw new ChargeError('Projects feature is disabled')
-  if (!input.lines?.length) throw new ChargeError('A charge needs at least one line')
+  if (!(await isFeatureEnabled(orgId, "projects")))
+    throw new ChargeError("Projects feature is disabled");
+  if (!input.lines?.length) throw new ChargeError("A charge needs at least one line");
 
   const created = await inDbTransaction(async (tx) => {
     // Fenced recheck inside the write transaction: the entry check above may
     // be stale by the time this write lands, and a Projects disable racing
     // this insert must refuse one side or the other.
-    await acquireFeatureGateLock(orgId, tx)
-    if (!(await lockAndCheckOrgFeature(tx, orgId, 'projects'))) {
-      throw new ChargeError('Projects feature is disabled')
+    await acquireFeatureGateLock(orgId, tx);
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+      throw new ChargeError("Projects feature is disabled");
     }
     // Equipment and Inventory gate individual lines below. Read both under
     // the same fence: the entry reads used to be unlocked, so a disable
     // racing this insert landed gated lines after the capability was gone.
     // Sequential: the transaction shares one pinned client that must never
     // receive overlapping queries.
-    const equipmentOn = await lockAndCheckOrgFeature(tx, orgId, 'equipment')
-    const inventoryOn = await lockAndCheckOrgFeature(tx, orgId, 'inventory')
+    const equipmentOn = await lockAndCheckOrgFeature(tx, orgId, "equipment");
+    const inventoryOn = await lockAndCheckOrgFeature(tx, orgId, "inventory");
     // Lock the project and recheck scope inside the write transaction: the
     // route's pre-read may be stale by the time this insert lands, and a
     // concurrent rehome must refuse here rather than stamp the charge with
     // another subsidiary. Missing, cross-org, and out-of-scope share one
     // not-found answer.
-    let lockedProject: { id: string; subsidiaryId: string | null }
+    let lockedProject: { id: string; subsidiaryId: string | null };
     try {
-      lockedProject = await lockProjectForScope(tx, orgId, input.projectId, opts.allowedSubsidiaryIds)
+      lockedProject = await lockProjectForScope(
+        tx,
+        orgId,
+        input.projectId,
+        opts.allowedSubsidiaryIds,
+      );
     } catch (error) {
-      if (error instanceof ScopeNotFoundError) throw new ChargeNotFoundError('not found')
-      throw error
+      if (error instanceof ScopeNotFoundError) throw new ChargeNotFoundError("not found");
+      throw error;
     }
     if (input.fieldTicketId) {
-      const ticket = (await tx.execute<{ id: string }>(sql`
+      const ticket = await tx.execute<{ id: string }>(
+        sql`
         select id
           from documents
          where id = ${input.fieldTicketId}
@@ -221,189 +230,297 @@ export async function createProjectCharge(
            and project_id = ${input.projectId}
            and kind = 'field_ticket'
          for update
-      `, 'objects'))
+      `,
+        "objects",
+      );
       if (!ticket[0]) {
-        throw new ChargeError('The source Field Ticket does not belong to this project')
+        throw new ChargeError("The source Field Ticket does not belong to this project");
       }
     }
-    const subsidiaryId = lockedProject.subsidiaryId
-    const org = (await tx.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`, 'objects'))
-    const currency = org[0]?.base_currency ?? 'CAD'
-    const documentNumber = await nextDocumentNumber(orgId, 'project_charge', 'CHG-', subsidiaryId ?? undefined)
-    const docDate = input.documentDate ?? await businessToday(orgId)
+    const subsidiaryId = lockedProject.subsidiaryId;
+    const org = await tx.execute<{ base_currency: string }>(
+      sql`select base_currency from orgs where id = ${orgId}`,
+      "objects",
+    );
+    const currency = org[0]?.base_currency ?? "CAD";
+    const documentNumber = await nextDocumentNumber(
+      orgId,
+      "project_charge",
+      "CHG-",
+      subsidiaryId ?? undefined,
+    );
+    const docDate = input.documentDate ?? (await businessToday(orgId));
 
-    const doc = (await tx.execute<{ id: string }>(sql`
+    const doc = (
+      await tx.execute<{ id: string }>(
+        sql`
       insert into documents (org_id, kind, document_number, document_date, currency, status, project_id,
                              subsidiary_id, reference_number, subtotal, tax_total, total, created_by)
       values (${orgId}, 'project_charge', ${documentNumber}, ${docDate}, ${currency}, 'draft', ${input.projectId},
               ${subsidiaryId}, ${input.referenceNumber ?? null}, '0', '0', '0', ${userId})
       returning id
-    `, 'objects'))[0]!
-    const docId = doc.id
+    `,
+        "objects",
+      )
+    )[0]!;
+    const docId = doc.id;
 
-    const amounts: string[] = []
-    let lineNo = 1
+    const amounts: string[] = [];
+    let lineNo = 1;
     for (const line of input.lines) {
-      const quantity = exactQuantity(line.quantity, 'Charge quantity')
-      if (cmp(quantity, '0') <= 0) throw new ChargeError('Charge quantity must be greater than zero')
-      const enteredCostRate = exactMoneyOrNull(line.costRate, 'Cost rate')
-      const enteredBillRate = exactMoneyOrNull(line.billRate, 'Bill rate')
-      const rateSnapshot = line.rateSnapshot == null ? null : {
-        ...line.rateSnapshot,
-        baseQuantity: line.rateSnapshot.baseQuantity == null
-          ? line.rateSnapshot.baseQuantity
-          : exactQuantity(line.rateSnapshot.baseQuantity, 'Base quantity'),
-        cost: exactPrice(line.rateSnapshot.cost, 'Cost'),
-        bill: exactPrice(line.rateSnapshot.bill, 'Bill'),
-      }
-      const item = (await tx.execute(sql`
+      const quantity = exactQuantity(line.quantity, "Charge quantity");
+      if (cmp(quantity, "0") <= 0)
+        throw new ChargeError("Charge quantity must be greater than zero");
+      const enteredCostRate = exactMoneyOrNull(line.costRate, "Cost rate");
+      const enteredBillRate = exactMoneyOrNull(line.billRate, "Bill rate");
+      const rateSnapshot =
+        line.rateSnapshot == null
+          ? null
+          : {
+              ...line.rateSnapshot,
+              baseQuantity:
+                line.rateSnapshot.baseQuantity == null
+                  ? line.rateSnapshot.baseQuantity
+                  : exactQuantity(line.rateSnapshot.baseQuantity, "Base quantity"),
+              cost: exactPrice(line.rateSnapshot.cost, "Cost"),
+              bill: exactPrice(line.rateSnapshot.bill, "Bill"),
+            };
+      const item = await tx.execute(
+        sql`
         select kind, default_cost, default_rate, expense_account_id, cost_recovery_account_id, tax_code_id, name, unit
           from items where id = ${line.itemId} and org_id = ${orgId}
-      `, 'objects'))
-      const it = item[0]
-      if (!it) throw new ChargeError('Item not found')
+      `,
+        "objects",
+      );
+      const it = item[0];
+      if (!it) throw new ChargeError("Item not found");
       // The charge picker already hides these kinds. Turning Inventory off
       // must also refuse a new inventory / assembly / kit line so a crafted
       // POST cannot write one. Charges that already carry those items stay.
       if (INVENTORY_ITEM_KINDS.has(String(it.kind)) && !inventoryOn) {
-        throw new ChargeError('Inventory is disabled')
+        throw new ChargeError("Inventory is disabled");
       }
       // The charge picker already hides this kind. Turning Equipment off
       // must also refuse a new equipment_charge line so a crafted POST
       // cannot write one. Charges that already carry those items stay.
-      if (String(it.kind) === 'equipment_charge' && !equipmentOn) {
-        throw new ChargeError('Equipment is disabled')
+      if (String(it.kind) === "equipment_charge" && !equipmentOn) {
+        throw new ChargeError("Equipment is disabled");
       }
       if (line.equipmentUnitId) {
         // Equipment attribution is a Features-gated write. Turning Equipment
         // off must stop new unit links without touching posted charges.
         if (!equipmentOn) {
-          throw new ChargeError('Equipment feature is disabled')
+          throw new ChargeError("Equipment feature is disabled");
         }
         // Lock the unit against the locked project anchor: the unlocked
         // read below races a unit rehome otherwise.
         try {
-          await lockEquipmentProjectScope(tx, orgId, input.projectId, [line.equipmentUnitId], opts.allowedSubsidiaryIds, 'update')
+          await lockEquipmentProjectScope(
+            tx,
+            orgId,
+            input.projectId,
+            [line.equipmentUnitId],
+            opts.allowedSubsidiaryIds,
+            "update",
+          );
         } catch (error) {
-          if (error instanceof ScopeNotFoundError) throw new ChargeNotFoundError('not found')
-          throw error
+          if (error instanceof ScopeNotFoundError) throw new ChargeNotFoundError("not found");
+          throw error;
         }
-        const unit = (await tx.execute<{ charge_item_id: string; status: string; subsidiary_id: string }>(sql`
+        const unit = await tx.execute<{
+          charge_item_id: string;
+          status: string;
+          subsidiary_id: string;
+        }>(
+          sql`
           select charge_item_id, status, subsidiary_id from equipment_units
            where id = ${line.equipmentUnitId} and org_id = ${orgId}
-        `, 'objects'))
-        if (!unit[0]) throw new ChargeError('Equipment unit not found')
-        if (unit[0].status !== 'active') throw new ChargeError('Equipment unit is not active')
-        if (unit[0].charge_item_id !== line.itemId) throw new ChargeError('Equipment unit does not use the selected charge item')
-        if (unit[0].subsidiary_id !== subsidiaryId) throw new ChargeError('Equipment and project must use the same subsidiary')
+        `,
+          "objects",
+        );
+        if (!unit[0]) throw new ChargeError("Equipment unit not found");
+        if (unit[0].status !== "active") throw new ChargeError("Equipment unit is not active");
+        if (unit[0].charge_item_id !== line.itemId)
+          throw new ChargeError("Equipment unit does not use the selected charge item");
+        if (unit[0].subsidiary_id !== subsidiaryId)
+          throw new ChargeError("Equipment and project must use the same subsidiary");
       }
       if (line.employeeId) {
         // Validated at the service boundary, not just in the picker: this
         // column feeds a payroll rule, so a bad id must fail here rather than
         // become an equipment charge nobody can ever be paid for.
-        const operator = (await tx.execute(sql`
+        const operator = await tx.execute(
+          sql`
           select 1 from employee_roles
            where party_id = ${line.employeeId} and org_id = ${orgId}
-        `, 'objects'))
-        if (!operator[0]) throw new ChargeError('The operator must be an employee of this organization')
+        `,
+          "objects",
+        );
+        if (!operator[0])
+          throw new ChargeError("The operator must be an employee of this organization");
         if (!line.equipmentUnitId) {
           // An operator on a material or service charge would look like an
           // equipment attribution to every reader and to the incentive rule,
           // which keys on the unit.
-          throw new ChargeError('Only an equipment charge line can record an operator')
+          throw new ChargeError("Only an equipment charge line can record an operator");
         }
       }
 
       // A resolution refusal (e.g. the selected rate card lacks FX cover)
       // is a business refusal, not a server fault: wrap it so the route
       // maps it to 422 with the remedy instead of a 500.
-      let resolved: typeof rateSnapshot
+      let resolved: typeof rateSnapshot;
       try {
-        resolved = rateSnapshot ?? (enteredCostRate == null && enteredBillRate == null
-          ? await resolveItemRate({
-              orgId, projectId: input.projectId, itemId: line.itemId,
-              equipmentUnitId: line.equipmentUnitId, onDate: docDate, baseQuantity: quantity,
-            })
-          : null)
+        resolved =
+          rateSnapshot ??
+          (enteredCostRate == null && enteredBillRate == null
+            ? await resolveItemRate({
+                orgId,
+                projectId: input.projectId,
+                itemId: line.itemId,
+                equipmentUnitId: line.equipmentUnitId,
+                onDate: docDate,
+                baseQuantity: quantity,
+              })
+            : null);
       } catch (error) {
-        throw new ChargeError(error instanceof Error ? error.message : 'Could not resolve item rate')
+        throw new ChargeError(
+          error instanceof Error ? error.message : "Could not resolve item rate",
+        );
       }
-      const fallbackCostRate = exactMoney(enteredCostRate ?? it.default_cost ?? '0', 'Cost rate')
-      const fallbackBillRate = exactMoney(enteredBillRate ?? it.default_rate ?? fallbackCostRate, 'Bill rate')
-      const costAmount = exactMoney(resolved?.cost.amount ?? mul(quantity, fallbackCostRate), 'Cost amount')
-      const billAmount = exactMoney(resolved?.bill.amount ?? mul(quantity, fallbackBillRate), 'Bill amount')
+      const fallbackCostRate = exactMoney(enteredCostRate ?? it.default_cost ?? "0", "Cost rate");
+      const fallbackBillRate = exactMoney(
+        enteredBillRate ?? it.default_rate ?? fallbackCostRate,
+        "Bill rate",
+      );
+      const costAmount = exactMoney(
+        resolved?.cost.amount ?? mul(quantity, fallbackCostRate),
+        "Cost amount",
+      );
+      const billAmount = exactMoney(
+        resolved?.bill.amount ?? mul(quantity, fallbackBillRate),
+        "Bill amount",
+      );
       // Unit rate back out of a resolved amount. A zero-quantity line has no
       // unit rate to derive, so fall back to the entered rate rather than
       // dividing by zero — which divRate reported as an invalid FX rate.
-      const canDerive = resolved != null && !isZero(quantity)
-      const costRate = exactMoney(canDerive ? div(costAmount, quantity) : fallbackCostRate, 'Cost rate')
-      const billRate = exactMoney(canDerive ? div(billAmount, quantity) : fallbackBillRate, 'Bill rate')
-      const accountId = line.accountId ?? it.expense_account_id
-      if (!accountId) throw new ChargeError(`Item "${it.name}" needs an expense/COGS account to charge to a project`)
-      if (typeof accountId !== 'string' || !isUuid(accountId)) {
-        throw new ChargeError(`Item "${it.name}" must use a valid expense/COGS account`)
+      const canDerive = resolved != null && !isZero(quantity);
+      const costRate = exactMoney(
+        canDerive ? div(costAmount, quantity) : fallbackCostRate,
+        "Cost rate",
+      );
+      const billRate = exactMoney(
+        canDerive ? div(billAmount, quantity) : fallbackBillRate,
+        "Bill rate",
+      );
+      const accountId = line.accountId ?? it.expense_account_id;
+      if (!accountId)
+        throw new ChargeError(
+          `Item "${it.name}" needs an expense/COGS account to charge to a project`,
+        );
+      if (typeof accountId !== "string" || !isUuid(accountId)) {
+        throw new ChargeError(`Item "${it.name}" must use a valid expense/COGS account`);
       }
-      const account = (await tx.execute(sql`
+      const account = await tx.execute(
+        sql`
         select 1 from accounts
          where org_id = ${orgId} and id = ${accountId}
            and type in ('expense', 'cogs', 'expense_other', 'expense_deferred')
            and is_active and not is_summary
-      `, 'objects'))
+      `,
+        "objects",
+      );
       if (!account.length) {
-        throw new ChargeError(`Item "${it.name}" must use an active, non-summary expense/COGS account in this organization`)
+        throw new ChargeError(
+          `Item "${it.name}" must use an active, non-summary expense/COGS account in this organization`,
+        );
       }
       if (!isZero(costAmount) && !it.cost_recovery_account_id) {
-        throw new ChargeError(`Item "${it.name}" needs a cost recovery account for a nonzero cost charge`)
+        throw new ChargeError(
+          `Item "${it.name}" needs a cost recovery account for a nonzero cost charge`,
+        );
       }
       if (!isZero(costAmount) && it.cost_recovery_account_id === accountId) {
-        throw new ChargeError(`Item "${it.name}" must use different cost and recovery accounts`)
+        throw new ChargeError(`Item "${it.name}" must use different cost and recovery accounts`);
       }
       if (line.projectTaskId) {
-        const task = (await tx.execute(sql`
+        const task = (
+          await tx.execute(
+            sql`
           select 1 from project_tasks
            where id = ${line.projectTaskId} and org_id = ${orgId} and project_id = ${input.projectId}
-        `, 'objects'))[0]
-        if (!task) throw new ChargeError('The line task must belong to the charge’s project')
+        `,
+            "objects",
+          )
+        )[0];
+        if (!task) throw new ChargeError("The line task must belong to the charge’s project");
       }
-      const isBillable = line.isBillable ?? true
-      const [insertedLine] = (await tx.execute(sql`
+      const isBillable = line.isBillable ?? true;
+      const [insertedLine] = (await tx.execute(
+        sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, is_billable, project_id, equipment_unit_id, employee_id, rate_version_id,
               rate_presentation, base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount,
               recovery_account_id, field_ticket_id, project_task_id, created_by)
         values (${orgId}, ${docId}, ${lineNo}, ${line.itemId}, ${accountId}, ${line.description ?? it.name},
               ${quantity}, ${resolved?.transactionUnitCode ?? resolved?.baseUnit ?? it.unit ?? null}, ${costRate}, ${costAmount}, ${isBillable}, ${input.projectId},
-              ${line.equipmentUnitId ?? null}, ${line.employeeId ?? null}, ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'},
-              ${resolved?.baseQuantity != null ? exactQuantity(resolved.baseQuantity, 'Base quantity') : quantity}, ${resolved?.baseUnit ?? it.unit ?? null},
+              ${line.equipmentUnitId ?? null}, ${line.employeeId ?? null}, ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? "summary"},
+              ${resolved?.baseQuantity != null ? exactQuantity(resolved.baseQuantity, "Base quantity") : quantity}, ${resolved?.baseUnit ?? it.unit ?? null},
               ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${it.cost_recovery_account_id ?? null},
               ${input.fieldTicketId ?? null}, ${line.projectTaskId ?? null}, ${userId})
         returning id
-      `, 'objects')) as { id: string }[]
+      `,
+        "objects",
+      )) as { id: string }[];
 
       const componentRows = [
-        ...(resolved?.cost.components ?? [{ rateLineId: null, unitCode: resolved?.baseUnit ?? it.unit ?? 'unit', unitName: resolved?.baseUnit ?? it.unit ?? 'Unit', quantity, rate: costRate, amount: costAmount }]).map((c) => ({ ...c, role: 'cost' })),
-        ...(resolved?.bill.components ?? [{ rateLineId: null, unitCode: resolved?.baseUnit ?? it.unit ?? 'unit', unitName: resolved?.baseUnit ?? it.unit ?? 'Unit', quantity, rate: billRate, amount: billAmount }]).map((c) => ({ ...c, role: 'bill' })),
-      ]
-      let componentSequence = 1
+        ...(
+          resolved?.cost.components ?? [
+            {
+              rateLineId: null,
+              unitCode: resolved?.baseUnit ?? it.unit ?? "unit",
+              unitName: resolved?.baseUnit ?? it.unit ?? "Unit",
+              quantity,
+              rate: costRate,
+              amount: costAmount,
+            },
+          ]
+        ).map((c) => ({ ...c, role: "cost" })),
+        ...(
+          resolved?.bill.components ?? [
+            {
+              rateLineId: null,
+              unitCode: resolved?.baseUnit ?? it.unit ?? "unit",
+              unitName: resolved?.baseUnit ?? it.unit ?? "Unit",
+              quantity,
+              rate: billRate,
+              amount: billAmount,
+            },
+          ]
+        ).map((c) => ({ ...c, role: "bill" })),
+      ];
+      let componentSequence = 1;
       for (const c of componentRows) {
         await tx.execute(sql`
           insert into charge_rate_components (org_id, document_line_id, role, rate_line_id, unit_code, unit_name,
                                                quantity, rate, amount, sequence, created_by, quantity_ratio)
           values (${orgId}, ${insertedLine!.id}, ${c.role}, ${c.rateLineId}, ${c.unitCode}, ${c.unitName},
-                  ${exactQuantity(c.quantity, 'Component quantity')}, ${exactMoney(c.rate, 'Component rate')},
-                  ${exactMoney(c.amount, 'Component amount')}, ${componentSequence++}, ${userId}, ${'quantityRatio' in c && c.quantityRatio ? JSON.stringify(c.quantityRatio) : null}::jsonb)
-        `)
+                  ${exactQuantity(c.quantity, "Component quantity")}, ${exactMoney(c.rate, "Component rate")},
+                  ${exactMoney(c.amount, "Component amount")}, ${componentSequence++}, ${userId}, ${"quantityRatio" in c && c.quantityRatio ? JSON.stringify(c.quantityRatio) : null}::jsonb)
+        `);
       }
-      amounts.push(costAmount)
-      lineNo++
+      amounts.push(costAmount);
+      lineNo++;
     }
-    const subtotal = sum(amounts)
-    await tx.execute(sql`update documents set subtotal = ${subtotal}, total = ${subtotal} where id = ${docId} and org_id = ${orgId}`)
-    return { id: docId, documentNumber, totalCost: subtotal }
-  })
+    const subtotal = sum(amounts);
+    await tx.execute(
+      sql`update documents set subtotal = ${subtotal}, total = ${subtotal} where id = ${docId} and org_id = ${orgId}`,
+    );
+    return { id: docId, documentNumber, totalCost: subtotal };
+  });
 
-  let approvalPending = false
-  let stage: ChargeCommittedStage = 'approval-routing'
+  let approvalPending = false;
+  let stage: ChargeCommittedStage = "approval-routing";
   try {
     if (opts.post !== false) {
       // The submission runs in this transaction so a refused routing throws
@@ -412,23 +529,23 @@ export async function createProjectCharge(
       // reports the failure. The created charge itself stays committed by
       // design — ChargeCommittedError carries its id for recovery.
       const submission = await withOrgTransaction(orgId, async () => {
-        const inner = await submitAndReleaseIfUngated('project_charge', created.id, userId)
+        const inner = await submitAndReleaseIfUngated("project_charge", created.id, userId);
         if (inner.flowError) {
-          throw new ChargeError(`approval could not be routed: ${inner.flowError}`)
+          throw new ChargeError(`approval could not be routed: ${inner.flowError}`);
         }
-        return inner
-      })
-      approvalPending = submission.gated
+        return inner;
+      });
+      approvalPending = submission.gated;
     }
 
     // Post outside the create transaction (postDocument runs on the shared pool).
     if (opts.post !== false && !approvalPending && !isZero(created.totalCost)) {
-      stage = 'posting'
-      const deps = await controlDeps(orgId)
-      await postDocument(created.id, deps)
+      stage = "posting";
+      const deps = await controlDeps(orgId);
+      await postDocument(created.id, deps);
     }
   } catch (cause) {
-    throw new ChargeCommittedError(created.id, created.documentNumber, stage, cause)
+    throw new ChargeCommittedError(created.id, created.documentNumber, stage, cause);
   }
-  return { id: created.id, documentNumber: created.documentNumber, approvalPending }
+  return { id: created.id, documentNumber: created.documentNumber, approvalPending };
 }

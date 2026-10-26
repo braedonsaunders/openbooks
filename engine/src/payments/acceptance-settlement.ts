@@ -6,7 +6,10 @@ import { add, cmp, fromUnits, toUnits } from "../money/money.ts";
 import { finalizePaymentAcceptanceForDocument } from "../payments-core/acceptance-effect.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
-import { validateAcceptanceBankAccount, validateSurchargeIncomeAccount } from "./acceptance-surcharge.ts";
+import {
+  validateAcceptanceBankAccount,
+  validateSurchargeIncomeAccount,
+} from "./acceptance-surcharge.ts";
 import {
   type AcceptanceProvider,
   PaymentAcceptanceError,
@@ -64,13 +67,23 @@ export async function settleAttempt(
   orgId: string,
   attemptId: string,
 ): Promise<"posted" | "gated" | { discrepancy: PaymentAcceptanceError }> {
-  const rows = (await db.execute<{
-      id: string; provider: AcceptanceProvider; external_ref: string; amount: string | null; surcharge_amount: string | null;
-      payment_document_id: string | null;
-      event_payload: { feeIncomeAccountId?: string } | null;
-      link_id: string; document_id: string; party_id: string; subsidiary_id: string; bank_account_id: string; currency: string;
-      link_created_by: string | null;
-    }>(sql`
+  const rows = await db.execute<{
+    id: string;
+    provider: AcceptanceProvider;
+    external_ref: string;
+    amount: string | null;
+    surcharge_amount: string | null;
+    payment_document_id: string | null;
+    event_payload: { feeIncomeAccountId?: string } | null;
+    link_id: string;
+    document_id: string;
+    party_id: string;
+    subsidiary_id: string;
+    bank_account_id: string;
+    currency: string;
+    link_created_by: string | null;
+  }>(
+    sql`
     select a.id, a.provider, a.external_ref, coalesce(a.amount, l.amount) as amount,
            coalesce(a.surcharge_amount, l.surcharge_amount) as surcharge_amount,
            a.payment_document_id, a.event_payload,
@@ -78,7 +91,9 @@ export async function settleAttempt(
       from payment_attempts a
       join payment_links l on l.id = a.link_id and l.org_id = a.org_id
      where a.org_id = ${orgId} and a.id = ${attemptId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const a = rows[0];
   if (!a) throw new PaymentAcceptanceError("attempt not found");
   // Validate every accounting reference before reserving a receipt document.
@@ -90,10 +105,13 @@ export async function settleAttempt(
     await validateSurchargeIncomeAccount(orgId, configuredFeeAccountId);
   }
 
-  const doc = (await db.execute<{ id: string; document_number: string; open_balance: string }>(sql`
+  const doc = await db.execute<{ id: string; document_number: string; open_balance: string }>(
+    sql`
     select id, document_number, open_balance from documents where id = ${a.document_id} and org_id = ${orgId}
      for update
-  `, "objects"));
+  `,
+    "objects",
+  );
   const invoice = doc[0];
   if (!invoice) throw new PaymentAcceptanceError("invoice not found");
   // If another channel cleared the invoice after checkout, the provider's
@@ -134,7 +152,8 @@ export async function settleAttempt(
     const item = openItems.find((i) => i.documentId === invoice.id);
     if (!item) throw new PaymentAcceptanceError("invoice open item not found");
     const collected = a.amount ?? invoice.open_balance;
-    const invoicePortion = cmp(collected, invoice.open_balance) < 0 ? collected : invoice.open_balance;
+    const invoicePortion =
+      cmp(collected, invoice.open_balance) < 0 ? collected : invoice.open_balance;
     onAccountAmount = fromUnits(toUnits(collected) - toUnits(invoicePortion));
     allocations = [sameCurrencyAllocation(item.lineId, invoicePortion)];
   }
@@ -144,9 +163,12 @@ export async function settleAttempt(
   let paymentId = a.payment_document_id;
   let resumedApproved = false;
   if (paymentId) {
-    const existing = (await db.execute<{ status: string }>(sql`
+    const existing = await db.execute<{ status: string }>(
+      sql`
       select status from documents where id = ${paymentId} and org_id = ${orgId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const reservedStatus = existing[0]?.status;
     if (reservedStatus === "posted") {
       // Posted earlier but the closing bookkeeping never ran (interrupted
@@ -156,7 +178,9 @@ export async function settleAttempt(
     }
     if (reservedStatus === "pending_approval") return "gated";
     if (reservedStatus !== "draft" && reservedStatus !== "approved") {
-      throw new PaymentAcceptanceError(`reserved receipt is ${reservedStatus}; refusing to settle over it`);
+      throw new PaymentAcceptanceError(
+        `reserved receipt is ${reservedStatus}; refusing to settle over it`,
+      );
     }
     resumedApproved = reservedStatus === "approved";
   } else {
@@ -194,8 +218,11 @@ export async function settleAttempt(
       // collected invoice amount (plus its surcharge fee leg).
       const receiptAmount = a.amount ?? invoice.open_balance;
       const total = add(receiptAmount, feeAmount);
-      if (cmp(total, "0") <= 0) throw new PaymentAcceptanceError("provider receipt amount must be positive");
-      await db.execute(sql`delete from document_lines where document_id = ${paymentId} and org_id = ${orgId}`);
+      if (cmp(total, "0") <= 0)
+        throw new PaymentAcceptanceError("provider receipt amount must be positive");
+      await db.execute(
+        sql`delete from document_lines where document_id = ${paymentId} and org_id = ${orgId}`,
+      );
       await db.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount)
@@ -233,11 +260,7 @@ export async function settleAttempt(
         { allowedSubsidiaryIds: null },
       );
     }
-    const submission = await submitAndReleaseIfUngated(
-      "customer_payment",
-      paymentId,
-      actorId,
-    );
+    const submission = await submitAndReleaseIfUngated("customer_payment", paymentId, actorId);
     if (submission.flowError) {
       throw new PaymentAcceptanceError(
         `receipt approval could not be routed: ${submission.flowError}`,

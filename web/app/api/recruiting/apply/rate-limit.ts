@@ -2,7 +2,6 @@ const WINDOW_MS = 60_000;
 const MAX_PER_WINDOW = 5;
 const attempts = new Map<string, number[]>();
 
-
 export function rateLimited(ip: string, postingId: string): boolean {
   const key = `${ip}|${postingId}`;
   const now = Date.now();
@@ -21,4 +20,3 @@ export function rateLimited(ip: string, postingId: string): boolean {
 export function __resetApplyRateLimitForTests(): void {
   attempts.clear();
 }
-

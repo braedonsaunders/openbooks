@@ -22,41 +22,62 @@ async function weekCount(
   viewFilters: Filter[] = [],
   adhocFilters: Record<string, string> = {},
 ): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from timesheet_weeks tw
-      where ${timesheetWeekWhere({ ...defaultListView("timesheet_week"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`, "objects");
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from timesheet_weeks tw
+      where ${timesheetWeekWhere({ ...defaultListView("timesheet_week"), filters: viewFilters as never }, { filters: adhocFilters }, orgId, null)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
-test("malformed timesheet-week filters match nothing instead of throwing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const employeeId = randomUUID();
-    await db.execute(sql`insert into parties (id,org_id,kind,display_name,is_active)
+test(
+  "malformed timesheet-week filters match nothing instead of throwing",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const employeeId = randomUUID();
+      await db.execute(sql`insert into parties (id,org_id,kind,display_name,is_active)
       values (${employeeId},${org.orgId},'person','Timesheet filter employee',true)`);
-    await db.execute(sql`insert into employee_roles(org_id,party_id,hired_on,is_active)
+      await db.execute(sql`insert into employee_roles(org_id,party_id,hired_on,is_active)
       values (${org.orgId},${employeeId},'2026-01-01',true)`);
-    await db.execute(sql`insert into timesheet_weeks(org_id,employee_party_id,week_start,status)
+      await db.execute(sql`insert into timesheet_weeks(org_id,employee_party_id,week_start,status)
       values (${org.orgId},${employeeId},'2026-07-12','draft')`);
-    assert.equal(await weekCount(org.orgId), 1, "the unfiltered register contains the native week");
-    assert.equal(await weekCount(org.orgId, [], { employee_party_id: employeeId }), 1, "a valid employee filter retains the week");
-    assert.equal(
-      await weekCount(org.orgId, [{ key: "employee_party_id", operator: "eq", value: "not-a-uuid" }]),
-      0,
-      "malformed employee filter matches nothing",
-    );
-    assert.equal(
-      await weekCount(org.orgId, [], { employee_party_id: "not-a-uuid" }),
-      0,
-      "malformed employee quick filter matches nothing",
-    );
-    assert.equal(
-      await weekCount(org.orgId, [
-        { key: "employee_party_id", operator: "eq", value: "00000000-0000-4000-8000-000000000000" },
-      ]),
-      0,
-      "well-formed unknown employee stays empty without throwing",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      assert.equal(
+        await weekCount(org.orgId),
+        1,
+        "the unfiltered register contains the native week",
+      );
+      assert.equal(
+        await weekCount(org.orgId, [], { employee_party_id: employeeId }),
+        1,
+        "a valid employee filter retains the week",
+      );
+      assert.equal(
+        await weekCount(org.orgId, [
+          { key: "employee_party_id", operator: "eq", value: "not-a-uuid" },
+        ]),
+        0,
+        "malformed employee filter matches nothing",
+      );
+      assert.equal(
+        await weekCount(org.orgId, [], { employee_party_id: "not-a-uuid" }),
+        0,
+        "malformed employee quick filter matches nothing",
+      );
+      assert.equal(
+        await weekCount(org.orgId, [
+          {
+            key: "employee_party_id",
+            operator: "eq",
+            value: "00000000-0000-4000-8000-000000000000",
+          },
+        ]),
+        0,
+        "well-formed unknown employee stays empty without throwing",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

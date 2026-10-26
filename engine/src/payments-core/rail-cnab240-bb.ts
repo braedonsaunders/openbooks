@@ -126,10 +126,19 @@ export interface Cnab240BbSettings {
 }
 
 const CNAB240BB_REQUIRED: (keyof Cnab240BbSettings)[] = [
-  "cnpjEmpresa", "convenio", "agencia", "agenciaDv", "conta", "contaDv", "nomeEmpresa", "versaoLayoutArquivo",
+  "cnpjEmpresa",
+  "convenio",
+  "agencia",
+  "agenciaDv",
+  "conta",
+  "contaDv",
+  "nomeEmpresa",
+  "versaoLayoutArquivo",
 ];
 
-export function validateCnab240BbSettings(raw: Partial<Cnab240BbSettings> | null): { ok: true; settings: Cnab240BbSettings } | { ok: false; missing: string[] } {
+export function validateCnab240BbSettings(
+  raw: Partial<Cnab240BbSettings> | null,
+): { ok: true; settings: Cnab240BbSettings } | { ok: false; missing: string[] } {
   const s = raw ?? {};
   const missing: string[] = CNAB240BB_REQUIRED.filter((k) => {
     const v = s[k];
@@ -160,7 +169,9 @@ export function validateCnab240BbSettings(raw: Partial<Cnab240BbSettings> | null
   // This writer emits lote 045, so accepting another three-digit version
   // would produce a syntactically valid but internally mismatched file.
   if (!missing.includes("versaoLayoutArquivo") && s.versaoLayoutArquivo!.trim() !== "087") {
-    missing.push("versaoLayoutArquivo (087 is the FEBRABAN arquivo version paired with lote 045 for the supported BB payment layout)");
+    missing.push(
+      "versaoLayoutArquivo (087 is the FEBRABAN arquivo version paired with lote 045 for the supported BB payment layout)",
+    );
   }
   if (missing.length) return { ok: false, missing: [...new Set(missing)] };
   return {
@@ -323,7 +334,9 @@ export interface Cnab240BbRun {
 export function buildCnab240BbFile(run: Cnab240BbRun): string {
   const checked = validateCnab240BbSettings(run.settings);
   if (!checked.ok) {
-    throw new PaymentError(`CNAB 240 originator settings are invalid: ${checked.missing.join(", ")}`);
+    throw new PaymentError(
+      `CNAB 240 originator settings are invalid: ${checked.missing.join(", ")}`,
+    );
   }
   const s = checked.settings;
   if (run.payments.length === 0) throw new PaymentError("run has no payments to export");
@@ -337,12 +350,19 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
   // a space — mirroring the channel rather than letting the bank mangle names
   // unpredictably. Lengths are the published field widths; over-length text
   // is cut to the field, never shifting the fields after it.
-  const text = (value: string, len: number, what: string, remedy: string, allowBlank = false): string => {
+  const text = (
+    value: string,
+    len: number,
+    what: string,
+    remedy: string,
+    allowBlank = false,
+  ): string => {
     const mapped = asciiRailText(value, "CNAB 240", what, remedy)
       .toUpperCase()
       .replace(/[^A-Z0-9 .,/&+\-:;()?]/g, " ")
       .slice(0, len);
-    if (!allowBlank && mapped.trim() === "") throw new PaymentError(`CNAB 240 ${what} must not be blank`);
+    if (!allowBlank && mapped.trim() === "")
+      throw new PaymentError(`CNAB 240 ${what} must not be blank`);
     if (value.trim() !== "" && mapped.trim() === "") {
       throw new PaymentError(`CNAB 240 ${what} has no representable characters`);
     }
@@ -352,7 +372,9 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
     const raw = String(value);
     if (!/^\d+$/.test(raw)) throw new PaymentError(`CNAB 240 ${what} "${raw}" must be numeric`);
     if (raw.length > len) {
-      throw new PaymentError(`CNAB 240 ${what} ${raw} does not fit in ${len} digits — split the pay run`);
+      throw new PaymentError(
+        `CNAB 240 ${what} ${raw} does not fit in ${len} digits — split the pay run`,
+      );
     }
     return raw.padStart(len, "0");
   };
@@ -398,16 +420,19 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
   };
   const agencia = (value: string, what: string): string => {
     const normal = normalizeAgencia(value);
-    if (!normal) throw new PaymentError(`CNAB 240 ${what} "${value}" is not an agência (up to 5 digits)`);
+    if (!normal)
+      throw new PaymentError(`CNAB 240 ${what} "${value}" is not an agência (up to 5 digits)`);
     return normal;
   };
   const conta = (value: string, what: string): string => {
     const normal = normalizeContaNumero(value);
-    if (!normal) throw new PaymentError(`CNAB 240 ${what} "${value}" is not a conta (up to 12 digits)`);
+    if (!normal)
+      throw new PaymentError(`CNAB 240 ${what} "${value}" is not a conta (up to 12 digits)`);
     return normal;
   };
   const dv = (value: string, what: string): string => {
-    if (!isValidContaDv(value)) throw new PaymentError(`CNAB 240 ${what} must be a single check-digit character`);
+    if (!isValidContaDv(value))
+      throw new PaymentError(`CNAB 240 ${what} must be a single check-digit character`);
     return value.trim().toUpperCase();
   };
 
@@ -417,7 +442,8 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
   const empresaContaDv = dv(s.contaDv, "debit conta DV");
   const nomeEmpresa = text(s.nomeEmpresa, 30, "company name", ORIGINATOR_REMEDY);
   const cnpj = normalizeCpfCnpj(s.cnpjEmpresa);
-  if (cnpj?.length !== 14) throw new PaymentError("CNAB 240 employer inscription must be a 14-digit CNPJ");
+  if (cnpj?.length !== 14)
+    throw new PaymentError("CNAB 240 employer inscription must be a 14-digit CNPJ");
 
   // -- header de arquivo (tipo 0, lote 0000) ---------------------------------
   // (1) p.14; (3)/(5) BB rows: convênio(9) + '0126' + 5 + 2 blanks; NSA at
@@ -452,7 +478,8 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
     " ".repeat(20) + // 172–191 reservado banco
     " ".repeat(20) + // 192–211 reservado empresa
     " ".repeat(29); // 212–240 uso exclusivo FEBRABAN
-  if (headerArquivo.length !== 240) throw new PaymentError("internal error: CNAB 240 header de arquivo is not 240 characters");
+  if (headerArquivo.length !== 240)
+    throw new PaymentError("internal error: CNAB 240 header de arquivo is not 240 characters");
 
   // -- lotes: forma 01 (crédito em conta BB) and forma 41 (TED) ----------------
   // One lote per forma — forma is lote-level, so mixing would misdescribe
@@ -510,7 +537,8 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
       " ".repeat(80) + // 143–222 endereço da empresa: optional, blank
       " ".repeat(8) + // 223–230 blank on the BB variant (see above)
       " ".repeat(10); // 231–240 ocorrências (retorno)
-    if (headerLote.length !== 240) throw new PaymentError("internal error: CNAB 240 header de lote is not 240 characters");
+    if (headerLote.length !== 240)
+      throw new PaymentError("internal error: CNAB 240 header de lote is not 240 characters");
     records.push(headerLote);
 
     // -- Segmentos A + B -------------------------------------------------------
@@ -518,15 +546,20 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
     let loteTotal = 0n;
     for (const p of group.payments) {
       seq += 1;
-      if (seq > 99999) throw new PaymentError("CNAB 240 lote holds at most 99999 records — split the pay run");
+      if (seq > 99999)
+        throw new PaymentError("CNAB 240 lote holds at most 99999 records — split the pay run");
       const seqA = digits(seq, 5, "record sequence");
       const inscricao = normalizeCpfCnpj(p.inscricaoNumero);
       if (!inscricao) {
-        throw new PaymentError(`CNAB 240 inscription "${p.inscricaoNumero}" is not a valid CPF/CNPJ`);
+        throw new PaymentError(
+          `CNAB 240 inscription "${p.inscricaoNumero}" is not a valid CPF/CNPJ`,
+        );
       }
       const tipo = inscricaoTipoFor(inscricao);
       if (tipo !== p.inscricaoTipo) {
-        throw new PaymentError("internal error: CNAB 240 inscription type does not match its length");
+        throw new PaymentError(
+          "internal error: CNAB 240 inscription type does not match its length",
+        );
       }
       // -- Segmento A: the credit (1) pp.23–24; (2) pp.13–14; (3)–(5) ---------
       const segmentoA =
@@ -545,7 +578,13 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
         dv(p.contaDv, "favorecido conta DV") + // 42 DV conta
         (p.dac == null || p.dac === "" ? " " : dv(p.dac, "favorecido DAC")) + // 43 DAC: blank for BB accounts (3); second DV carried verbatim for TED
         text(p.favorecidoNome, 30, "favorecido name", PAYEE_NAME_REMEDY) + // 44–73 nome do favorecido
-        text(p.seuNumero, 20, "seu número", "Edit the reference to Latin letters without that character, then generate the file again.", true) + // 74–93 seu número (G064): blank acceptable per (2)
+        text(
+          p.seuNumero,
+          20,
+          "seu número",
+          "Edit the reference to Latin letters without that character, then generate the file again.",
+          true,
+        ) + // 74–93 seu número (G064): blank acceptable per (2)
         ddmmaaaa(run.paymentDate, "payment date") + // 94–101 data do pagamento
         "BRL" + // 102–104 tipo da moeda: (2) kills the SISPAG-'009' reading for this variant
         "0".repeat(15) + // 105–119 quantidade da moeda: zeros for reais (1)(2)(3)
@@ -560,12 +599,14 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
         " ".repeat(3) + // 227–229 uso exclusivo FEBRABAN
         "0" + // 230 aviso: '0' não emite (1)(4)(5); (3) sends blank for same-bank — noted, '0' is the documented value
         " ".repeat(10); // 231–240 ocorrências (retorno)
-      if (segmentoA.length !== 240) throw new PaymentError("internal error: CNAB 240 Segmento A is not 240 characters");
+      if (segmentoA.length !== 240)
+        throw new PaymentError("internal error: CNAB 240 Segmento A is not 240 characters");
       records.push(segmentoA);
       loteTotal += p.amountCents;
 
       seq += 1;
-      if (seq > 99999) throw new PaymentError("CNAB 240 lote holds at most 99999 records — split the pay run");
+      if (seq > 99999)
+        throw new PaymentError("CNAB 240 lote holds at most 99999 records — split the pay run");
       // -- Segmento B: the inscription (1) p.24 OBRIGATÓRIO; (3) -------------
       // Address block 33–225 blank: (3)'s BB transcription blanks all 193
       // (no per-employee address needed); (4) fills the employer's address,
@@ -584,7 +625,8 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
         "0" + // 226 aviso: '0' (3)
         " ".repeat(6) + // 227–232 blank on the BB variant ((1)'s P012/SIAPE and (2)'s ISPB live here on other flavors)
         " ".repeat(8); // 233–240 blank on remessa (ocorrências on return)
-      if (segmentoB.length !== 240) throw new PaymentError("internal error: CNAB 240 Segmento B is not 240 characters");
+      if (segmentoB.length !== 240)
+        throw new PaymentError("internal error: CNAB 240 Segmento B is not 240 characters");
       records.push(segmentoB);
     }
 
@@ -605,7 +647,8 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
       " ".repeat(6) + // 60–65 número aviso débito: blank on the BB variant
       " ".repeat(165) + // 66–230 uso exclusivo FEBRABAN
       " ".repeat(10); // 231–240 ocorrências (retorno)
-    if (trailerLote.length !== 240) throw new PaymentError("internal error: CNAB 240 trailer de lote is not 240 characters");
+    if (trailerLote.length !== 240)
+      throw new PaymentError("internal error: CNAB 240 trailer de lote is not 240 characters");
     records.push(trailerLote);
   }
 
@@ -621,7 +664,8 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
     digits(records.length + 1, 6, "file record count") + // 24–29 qtde de registros (incl. this trailer)
     "0".repeat(6) + // 30–35 qtde de contas conciliação
     " ".repeat(205); // 36–240 uso exclusivo FEBRABAN
-  if (trailerArquivo.length !== 240) throw new PaymentError("internal error: CNAB 240 trailer de arquivo is not 240 characters");
+  if (trailerArquivo.length !== 240)
+    throw new PaymentError("internal error: CNAB 240 trailer de arquivo is not 240 characters");
   records.push(trailerArquivo);
 
   return records.join("\r\n") + "\r\n";

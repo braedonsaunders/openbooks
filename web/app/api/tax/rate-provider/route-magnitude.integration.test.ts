@@ -1,142 +1,191 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Quote POST validates taxableAmount to 4dp but never bounds its magnitude,
 // and passes quotedOn to the evidence insert raw — so a pasted 20-digit
 // amount or a shape-valid non-day such as February 30 sails through and dies
 // in Postgres as a raw numeric/DATE failure (HTTP 500 — the verb only maps
 // TaxRateProviderError to 422) instead of failing closed with a named 422.
-const state: { orgId: string; actorId: string; allowed: Set<string> | null } = { orgId: '', actorId: '', allowed: null }
-Object.assign(globalThis, { __taxQuoteMagnitudeState: state })
-const engineRoot = new URL('../../../../../engine/', import.meta.url).href
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string; allowed: Set<string> | null } = {
+  orgId: "",
+  actorId: "",
+  allowed: null,
+};
+Object.assign(globalThis, { __taxQuoteMagnitudeState: state });
+const engineRoot = new URL("../../../../../engine/", import.meta.url).href;
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 // The test session both the route and the factory authenticate against.
 const sessionSource = `
   export async function guardPermission() {
     const s = globalThis.__taxQuoteMagnitudeState;
     return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: s.allowed };
   }
-`
-const sessionUrl = virtual(sessionSource).url
+`;
+const sessionUrl = virtual(sessionSource).url;
 registerHooks({
   resolve(specifier, context, next) {
     // Bare @openbooks/engine/* resolves cross-checkout to main; pin the
     // engine graph to the worktree copy carrying the persistTaxQuote guard.
-    if (specifier.startsWith('@openbooks/engine/')) {
-      return next(new URL(specifier.slice('@openbooks/engine/'.length), engineRoot).href, context)
+    if (specifier.startsWith("@openbooks/engine/")) {
+      return next(new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href, context);
     }
-    if (specifier === '../../../../lib/authz') return virtual(`
+    if (specifier === "../../../../lib/authz")
+      return virtual(`
       ${sessionSource}
       export function guardUnrestrictedScope(authz) {
         if (authz.allowedSubsidiaryIds === null) return null;
         return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 });
       }
-    `)
+    `);
     // The route factory authenticates through the `@/lib/authz` alias, which
     // the relative-only condition above never matches: without this edge the
     // factory loads the real cookie session instead of the test session.
-    if (specifier === '@/lib/authz' && (context.parentURL ?? '').includes('/lib/api/route')) {
-      return { shortCircuit: true, url: sessionUrl }
+    if (specifier === "@/lib/authz" && (context.parentURL ?? "").includes("/lib/api/route")) {
+      return { shortCircuit: true, url: sessionUrl };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { POST, PUT } = await import('./route.ts')
+});
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { POST, PUT } = await import("./route.ts");
 
 async function fixture() {
-  const org = await createScratchOrg()
-  state.orgId = org.orgId
-  state.actorId = randomUUID()
+  const org = await createScratchOrg();
+  state.orgId = org.orgId;
+  state.actorId = randomUUID();
   await db.execute(sql`
     insert into tax_rate_provider_configs (org_id, provider, display_name, is_enabled, settings, created_by, updated_by)
-    values (${org.orgId}, 'manual', 'Manual', true, '{"defaultRatePercent": 5}'::jsonb, ${state.actorId}, ${state.actorId})`)
-  return { org }
+    values (${org.orgId}, 'manual', 'Manual', true, '{"defaultRatePercent": 5}'::jsonb, ${state.actorId}, ${state.actorId})`);
+  return { org };
 }
 
 async function post(body: unknown): Promise<{ status: number; json: unknown }> {
   try {
-    const response = await withOrgContext(state.orgId, () => POST(
-      new Request('http://tax.test/api/tax/rate-provider', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      }),
-    ))
-    return { status: response.status, json: await response.json().catch(() => null) }
+    const response = await withOrgContext(state.orgId, () =>
+      POST(
+        new Request("http://tax.test/api/tax/rate-provider", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      ),
+    );
+    return { status: response.status, json: await response.json().catch(() => null) };
   } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
+    return {
+      status: 500,
+      json: { thrown: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
 
 async function quoteCount(): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from tax_rate_quotes where org_id = ${state.orgId}`, 'objects')
-  return rows[0]!.n
+  const rows = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from tax_rate_quotes where org_id = ${state.orgId}`,
+    "objects",
+  );
+  return rows[0]!.n;
 }
 
-test('POST refuses a taxable amount wider than numeric(19,4) without writing evidence', async () => {
-  const { org } = await fixture()
+test("POST refuses a taxable amount wider than numeric(19,4) without writing evidence", async () => {
+  const { org } = await fixture();
   try {
     // The bodies below are provider-quote shaped (addresses, no rate); the
     // required action label restores the provider path they were written for.
-    const result = await post({ action: 'providerQuote', taxableAmount: '99999999999999999999', currency: 'CAD', shipFrom: {}, shipTo: {} })
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.equal(await quoteCount(), 0)
+    const result = await post({
+      action: "providerQuote",
+      taxableAmount: "99999999999999999999",
+      currency: "CAD",
+      shipFrom: {},
+      shipTo: {},
+    });
+    assert.equal(
+      result.status,
+      422,
+      `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
+    assert.equal(await quoteCount(), 0);
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('POST refuses an impossible quotedOn without writing evidence', async () => {
-  const { org } = await fixture()
+test("POST refuses an impossible quotedOn without writing evidence", async () => {
+  const { org } = await fixture();
   try {
-    const result = await post({ action: 'providerQuote', taxableAmount: '100', currency: 'CAD', shipFrom: {}, shipTo: {}, quotedOn: '2024-02-30' })
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.equal(await quoteCount(), 0)
+    const result = await post({
+      action: "providerQuote",
+      taxableAmount: "100",
+      currency: "CAD",
+      shipFrom: {},
+      shipTo: {},
+      quotedOn: "2024-02-30",
+    });
+    assert.equal(
+      result.status,
+      422,
+      `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
+    assert.equal(await quoteCount(), 0);
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('PUT by a subsidiary-restricted setup manager is refused with the provider untouched', async () => {
-  const { org } = await fixture()
-  state.allowed = new Set([randomUUID()])
+test("PUT by a subsidiary-restricted setup manager is refused with the provider untouched", async () => {
+  const { org } = await fixture();
+  state.allowed = new Set([randomUUID()]);
   try {
     const response = await PUT(
-      new Request('http://tax.test/api/tax/rate-provider', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ provider: 'taxjar', isEnabled: true }),
+      new Request("http://tax.test/api/tax/rate-provider", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: "taxjar", isEnabled: true }),
       }),
-    )
-    const body = (await response.json().catch(() => null)) as unknown
-    assert.equal(response.status, 403, JSON.stringify(body))
-    assert.deepEqual(body, { error: 'requires unrestricted subsidiary access' })
-    const rows = await db.execute<{ provider: string }>(sql`
-      select provider from tax_rate_provider_configs where org_id = ${state.orgId}`, 'objects')
-    assert.equal(rows[0]!.provider, 'manual')
+    );
+    const body = (await response.json().catch(() => null)) as unknown;
+    assert.equal(response.status, 403, JSON.stringify(body));
+    assert.deepEqual(body, { error: "requires unrestricted subsidiary access" });
+    const rows = await db.execute<{ provider: string }>(
+      sql`
+      select provider from tax_rate_provider_configs where org_id = ${state.orgId}`,
+      "objects",
+    );
+    assert.equal(rows[0]!.provider, "manual");
   } finally {
-    state.allowed = null
-    await dropScratchOrg(org.orgId)
+    state.allowed = null;
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('POST still quotes a column-maximum amount with identical read-back', async () => {
-  const { org } = await fixture()
+test("POST still quotes a column-maximum amount with identical read-back", async () => {
+  const { org } = await fixture();
   try {
-    const result = await post({ action: 'providerQuote', taxableAmount: '999999999999999.9999', currency: 'CAD', shipFrom: {}, shipTo: {} })
-    assert.equal(result.status, 200, JSON.stringify(result.json))
-    const rows = await db.execute<{ taxable_amount: string; tax_amount: string }>(sql`
+    const result = await post({
+      action: "providerQuote",
+      taxableAmount: "999999999999999.9999",
+      currency: "CAD",
+      shipFrom: {},
+      shipTo: {},
+    });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    const rows = await db.execute<{ taxable_amount: string; tax_amount: string }>(
+      sql`
       select taxable_amount::text as taxable_amount, tax_amount::text as tax_amount
-        from tax_rate_quotes where org_id = ${state.orgId}`, 'objects')
-    assert.equal(rows[0]!.taxable_amount, '999999999999999.9999')
-    assert.equal(rows[0]!.tax_amount, '50000000000000.0000')
+        from tax_rate_quotes where org_id = ${state.orgId}`,
+      "objects",
+    );
+    assert.equal(rows[0]!.taxable_amount, "999999999999999.9999");
+    assert.equal(rows[0]!.tax_amount, "50000000000000.0000");
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});

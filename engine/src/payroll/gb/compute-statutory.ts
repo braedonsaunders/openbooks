@@ -1,4 +1,8 @@
-import { resolveStatutoryHistoryScope,employerScopedStatutoryStubs,requireStatutoryHistoryFactors } from '../statutory-history-scope.ts';
+import {
+  resolveStatutoryHistoryScope,
+  employerScopedStatutoryStubs,
+  requireStatutoryHistoryFactors,
+} from "../statutory-history-scope.ts";
 /**
  * The GB pack's statutory pass: PAYE income tax, Class 1 National Insurance
  * (primary and secondary, category A), and student/postgraduate loan
@@ -72,29 +76,43 @@ export interface GbPriorPeriod {
  * (no migration carries one), so the completeness gate below refuses the
  * gapped cases by name instead of pricing them from zero.
  */
-export async function gbEmployeePriorPeriod(ctx: Pick<
-  PayrollStatutoryComputeContext,
-  "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId"
->): Promise<GbPriorPeriod> {
-  const { tx,employeePartyId } = ctx;
-  const scope=await resolveStatutoryHistoryScope(tx,{...ctx,country:'GB'});
-  await requireStatutoryHistoryFactors(tx,scope,{employeePartyId},['GB_TAXABLE','GB_ADDPAY','GB_TAX']);
-  const rows = (await tx.execute<{
-    taxable: string;
-    addpay: string;
-    tax: string;
-    stub_count: string;
-    first_pay: string | null;
-  }>(sql`
+export async function gbEmployeePriorPeriod(
+  ctx: Pick<
+    PayrollStatutoryComputeContext,
+    "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId"
+  >,
+): Promise<GbPriorPeriod> {
+  const { tx, employeePartyId } = ctx;
+  const scope = await resolveStatutoryHistoryScope(tx, { ...ctx, country: "GB" });
+  await requireStatutoryHistoryFactors(tx, scope, { employeePartyId }, [
+    "GB_TAXABLE",
+    "GB_ADDPAY",
+    "GB_TAX",
+  ]);
+  const rows = (
+    await tx.execute<{
+      taxable: string;
+      addpay: string;
+      tax: string;
+      stub_count: string;
+      first_pay: string | null;
+    }>(
+      sql`
     select
       coalesce(sum((s.factors->>'GB_TAXABLE')::numeric), 0) as taxable,
       coalesce(sum((s.factors->>'GB_ADDPAY')::numeric), 0) as addpay,
       coalesce(sum((s.factors->>'GB_TAX')::numeric), 0) as tax,
       count(*) as stub_count,
       min(s.history_run_pay_date) as first_pay
-    from ${employerScopedStatutoryStubs(scope,{employeePartyId})} s
-  `, "objects"))[0];
-  if(!rows)throw new PayrollPackError('GB committed statutory history did not return its required prior totals');
+    from ${employerScopedStatutoryStubs(scope, { employeePartyId })} s
+  `,
+      "objects",
+    )
+  )[0];
+  if (!rows)
+    throw new PayrollPackError(
+      "GB committed statutory history did not return its required prior totals",
+    );
   return {
     taxablePay: String(rows.taxable),
     addedPay: String(rows.addpay),
@@ -105,9 +123,9 @@ export async function gbEmployeePriorPeriod(ctx: Pick<
 }
 
 /** The starter declaration on file, or null when no checklist answers it. */
-function gbStarterDeclaration(ctx: Pick<
-  PayrollStatutoryComputeContext, "certificateFor"
->): GbStarterDeclaration {
+function gbStarterDeclaration(
+  ctx: Pick<PayrollStatutoryComputeContext, "certificateFor">,
+): GbStarterDeclaration {
   const answer = ctx.certificateFor("gb_starter_checklist")?.answers.starter_declaration;
   return answer === "A" || answer === "B" || answer === "C" ? answer : null;
 }
@@ -133,17 +151,26 @@ export async function computeGbStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
   const {
-    taxYear, region,
-    run, periodsPerYear: P, income, nonPeriodic, pensionable,
-    deduction, pushStatutory, certificateFor, bool, assertRegionSupported,
+    taxYear,
+    region,
+    run,
+    periodsPerYear: P,
+    income,
+    nonPeriodic,
+    pensionable,
+    deduction,
+    pushStatutory,
+    certificateFor,
+    bool,
+    assertRegionSupported,
   } = ctx;
 
   assertRegionSupported(region);
   if (!GB_COMPUTED_REGIONS.includes(region)) {
     throw new PayrollPackError(
-      `PAYE income tax withholding for ${region} is not implemented by the GB payroll pack: `
-      + "the engine computes England, Wales, Northern Ireland and Scotland end to end "
-      + "(see GB_REGIONS).",
+      `PAYE income tax withholding for ${region} is not implemented by the GB payroll pack: ` +
+        "the engine computes England, Wales, Northern Ireland and Scotland end to end " +
+        "(see GB_REGIONS).",
     );
   }
 
@@ -152,7 +179,7 @@ export async function computeGbStatutory(
   if (taxYear !== payYear) {
     throw new PayrollPackError(
       `GB payroll pack cannot price a pay date in ${payYear} against the run's tax year ${taxYear}: ` +
-      "a pay date is always priced from its own year's transcribed tables, never a neighbour's.",
+        "a pay date is always priced from its own year's transcribed tables, never a neighbour's.",
     );
   }
   const tables = gbTablesForTaxYear(taxYear);
@@ -161,10 +188,10 @@ export async function computeGbStatutory(
   const pensionAnswers = workplacePension?.answers;
   if (!workplacePension?.onFile || !pensionAnswers) {
     throw new PayrollPackError(
-      "GB workplace-pension assessment is required before payroll: record the worker's "
-      + "effective-dated automatic-enrolment age, worker category and enrolment status "
-      + "in gb_workplace_pension; an active member also needs scheme terms in "
-      + "gb_workplace_pension_assessment before minimum contributions can be priced.",
+      "GB workplace-pension assessment is required before payroll: record the worker's " +
+        "effective-dated automatic-enrolment age, worker category and enrolment status " +
+        "in gb_workplace_pension; an active member also needs scheme terms in " +
+        "gb_workplace_pension_assessment before minimum contributions can be priced.",
     );
   }
   // Scheme terms are read before the enrolled gate: an enrolled or opted-in
@@ -173,79 +200,120 @@ export async function computeGbStatutory(
   // enrolled case keeps this refusal. A missing terms assessment refuses here
   // by fact name, never as an enrolled worker priced at zero.
   const pensionAssessment = certificateFor("gb_workplace_pension_assessment");
-  const aeMembership = resolveEmployeeFact("GB", "gb_ae_membership_status", empFact("GB", {
-    gb_ae_membership_status: pensionAssessment?.answers.membership_status ?? null,
-  }, "gb_ae_membership_status"));
-  resolveEmployeeFact("GB", "gb_ae_age_band", empFact("GB", {
-    gb_ae_age_band: pensionAssessment?.answers.age_band ?? null,
-  }, "gb_ae_age_band"));
-  const aeBasis = resolveEmployeeFact("GB", "gb_ae_scheme_basis", empFact("GB", {
-    gb_ae_scheme_basis: pensionAssessment?.answers.scheme_basis ?? null,
-  }, "gb_ae_scheme_basis"));
-  const aeMethod = resolveEmployeeFact("GB", "gb_ae_deduction_method", empFact("GB", {
-    gb_ae_deduction_method: pensionAssessment?.answers.deduction_method ?? null,
-  }, "gb_ae_deduction_method"));
-  if (aeMembership !== "active_member"
-      && (pensionAnswers.enrolment_status === "enrolled" || pensionAnswers.enrolment_status === "opted_in")) {
+  const aeMembership = resolveEmployeeFact(
+    "GB",
+    "gb_ae_membership_status",
+    empFact(
+      "GB",
+      {
+        gb_ae_membership_status: pensionAssessment?.answers.membership_status ?? null,
+      },
+      "gb_ae_membership_status",
+    ),
+  );
+  resolveEmployeeFact(
+    "GB",
+    "gb_ae_age_band",
+    empFact(
+      "GB",
+      {
+        gb_ae_age_band: pensionAssessment?.answers.age_band ?? null,
+      },
+      "gb_ae_age_band",
+    ),
+  );
+  const aeBasis = resolveEmployeeFact(
+    "GB",
+    "gb_ae_scheme_basis",
+    empFact(
+      "GB",
+      {
+        gb_ae_scheme_basis: pensionAssessment?.answers.scheme_basis ?? null,
+      },
+      "gb_ae_scheme_basis",
+    ),
+  );
+  const aeMethod = resolveEmployeeFact(
+    "GB",
+    "gb_ae_deduction_method",
+    empFact(
+      "GB",
+      {
+        gb_ae_deduction_method: pensionAssessment?.answers.deduction_method ?? null,
+      },
+      "gb_ae_deduction_method",
+    ),
+  );
+  if (
+    aeMembership !== "active_member" &&
+    (pensionAnswers.enrolment_status === "enrolled" ||
+      pensionAnswers.enrolment_status === "opted_in")
+  ) {
     throw new PayrollPackError(
-      "GB workplace-pension contributions are due for this enrolled or opted-in worker, "
-      + "but the pack does not calculate employee and employer contributions on the "
-      + "scheme's pay-reference-period basis; use AE-capable payroll software and do not "
-      + "finalise this run without both amounts.",
+      "GB workplace-pension contributions are due for this enrolled or opted-in worker, " +
+        "but the pack does not calculate employee and employer contributions on the " +
+        "scheme's pay-reference-period basis; use AE-capable payroll software and do not " +
+        "finalise this run without both amounts.",
     );
   }
   // Enrolled and opted-in workers satisfy the duty this gate protects, so
   // they fall through to the minimums pricing when their scheme is priced
   // (and keep the enrolled refusal above when it is not).
-  if (pensionAnswers.worker_status === "eligible_jobholder"
-      && pensionAnswers.enrolment_status !== "opted_out"
-      && pensionAnswers.enrolment_status !== "enrolled"
-      && pensionAnswers.enrolment_status !== "opted_in") {
+  if (
+    pensionAnswers.worker_status === "eligible_jobholder" &&
+    pensionAnswers.enrolment_status !== "opted_out" &&
+    pensionAnswers.enrolment_status !== "enrolled" &&
+    pensionAnswers.enrolment_status !== "opted_in"
+  ) {
     throw new PayrollPackError(
-      "GB eligible jobholders must be enrolled in a qualifying workplace pension; "
-      + "this pack cannot calculate the required employee and employer contributions. "
-      + "Use AE-capable payroll software and do not finalise this run.",
+      "GB eligible jobholders must be enrolled in a qualifying workplace pension; " +
+        "this pack cannot calculate the required employee and employer contributions. " +
+        "Use AE-capable payroll software and do not finalise this run.",
     );
   }
   if (pensionAnswers.enrolment_status === "postponed") {
     throw new PayrollPackError(
-      "GB workplace-pension postponement dates and duties are not calculated by this pack; "
-      + "use AE-capable payroll software to assess this worker before finalising the run.",
+      "GB workplace-pension postponement dates and duties are not calculated by this pack; " +
+        "use AE-capable payroll software to assess this worker before finalising the run.",
     );
   }
 
   const nicCategoryCertificate = certificateFor("gb_nic_category");
-  const nicCategoryRaw = empFact("GB", {
-    gb_nic_category_letter: nicCategoryCertificate?.answers.category_letter ?? null,
-  }, "gb_nic_category_letter");
+  const nicCategoryRaw = empFact(
+    "GB",
+    {
+      gb_nic_category_letter: nicCategoryCertificate?.answers.category_letter ?? null,
+    },
+    "gb_nic_category_letter",
+  );
   const nicCategory = resolveEmployeeFact("GB", "gb_nic_category_letter", nicCategoryRaw);
   if (nicCategory !== "A") {
     throw new PayrollPackError(
-      `GB payroll cannot calculate National Insurance category ${nicCategory}: this pack currently `
-      + "implements category A only, and must not apply its employee or employer rates to another "
-      + "category. Use payroll software that supports this HMRC category until this pack adds its rules.",
+      `GB payroll cannot calculate National Insurance category ${nicCategory}: this pack currently ` +
+        "implements category A only, and must not apply its employee or employer rates to another " +
+        "category. Use payroll software that supports this HMRC category until this pack adds its rules.",
     );
   }
   const directorStatus = nicCategoryCertificate?.answers.director_status;
   if (directorStatus !== "director" && directorStatus !== "not_director") {
     throw new PayrollPackError(
-      "GB National Insurance needs an effective-dated director status in gb_nic_category; "
-      + "record whether the employee is a company director before calculating NIC.",
+      "GB National Insurance needs an effective-dated director status in gb_nic_category; " +
+        "record whether the employee is a company director before calculating NIC.",
     );
   }
   if (directorStatus === "director") {
     const startDate = nicCategoryCertificate?.answers.directorship_start_date;
     if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
       throw new PayrollPackError(
-        "GB director National Insurance needs the directorship start date (YYYY-MM-DD) "
-        + "in gb_nic_category to determine the annual or pro-rata earnings period.",
+        "GB director National Insurance needs the directorship start date (YYYY-MM-DD) " +
+          "in gb_nic_category to determine the annual or pro-rata earnings period.",
       );
     }
     throw new PayrollPackError(
-      "GB director National Insurance is not calculated: CA44 requires cumulative annual or "
-      + "pro-rata earnings-period employee and employer NIC less both shares already paid, "
-      + "and this pack cannot report the FPS director calculation method. Use payroll software "
-      + "that supports CA44 and FPS director reporting; do not finalise this run.",
+      "GB director National Insurance is not calculated: CA44 requires cumulative annual or " +
+        "pro-rata earnings-period employee and employer NIC less both shares already paid, " +
+        "and this pack cannot report the FPS director calculation method. Use payroll software " +
+        "that supports CA44 and FPS director reporting; do not finalise this run.",
     );
   }
 
@@ -253,25 +321,33 @@ export async function computeGbStatutory(
   const studentLoanPlan = resolveEmployeeFact(
     "GB",
     "gb_student_loan_plan",
-    empFact("GB", {
-      gb_student_loan_plan: starterChecklist?.answers.student_loan_plan ?? null,
-    }, "gb_student_loan_plan"),
+    empFact(
+      "GB",
+      {
+        gb_student_loan_plan: starterChecklist?.answers.student_loan_plan ?? null,
+      },
+      "gb_student_loan_plan",
+    ),
   );
   const postgraduateLoan = resolveEmployeeFact(
     "GB",
     "gb_postgraduate_loan",
-    empFact("GB", {
-      gb_postgraduate_loan: starterChecklist?.answers.student_loan_postgraduate ?? null,
-    }, "gb_postgraduate_loan"),
+    empFact(
+      "GB",
+      {
+        gb_postgraduate_loan: starterChecklist?.answers.student_loan_postgraduate ?? null,
+      },
+      "gb_postgraduate_loan",
+    ),
   );
 
   const notice = certificateFor("gb_tax_code_notice");
   const rawCode = notice?.onFile ? notice.answers.tax_code : null;
   if (!rawCode || !rawCode.trim()) {
     throw new PayrollPackError(
-      "GB PAYE needs the employee's tax code from the P6/P9 coding notice "
-      + "(gb_tax_code_notice): no notice is on file and this pack operates no emergency "
-      + "default — HMRC issues the code, the product does not invent it",
+      "GB PAYE needs the employee's tax code from the P6/P9 coding notice " +
+        "(gb_tax_code_notice): no notice is on file and this pack operates no emergency " +
+        "default — HMRC issues the code, the product does not invent it",
     );
   }
   let code = parseGbTaxCode(rawCode);
@@ -282,17 +358,17 @@ export async function computeGbStatutory(
   // refused by name. NT deducts nothing on any table and needs no gate.
   if (region === "SCT" && code.kind !== "none" && !code.scottish) {
     throw new PayrollPackError(
-      `Scottish income tax for SCT needs a Scottish S-prefix code on the P6/P9 coding notice: `
-      + `"${rawCode}" prices against the rUK bands and is refused by name for SCT — HMRC issues `
-      + "Scottish taxpayers an S-prefix code (S1257L, SBR, SD0, SD1, SD2, SD3), and the product "
-      + "does not fall an S-less code through to the wrong table (see GB_REGIONS).",
+      `Scottish income tax for SCT needs a Scottish S-prefix code on the P6/P9 coding notice: ` +
+        `"${rawCode}" prices against the rUK bands and is refused by name for SCT — HMRC issues ` +
+        "Scottish taxpayers an S-prefix code (S1257L, SBR, SD0, SD1, SD2, SD3), and the product " +
+        "does not fall an S-less code through to the wrong table (see GB_REGIONS).",
     );
   }
   if (bool(notice?.answers.non_cumulative)) {
     if (code.kind === "flat" || code.kind === "none") {
       throw new PayrollPackError(
-        `GB tax code "${rawCode}" contradicts its coding notice: a week-1/month-1 marker on a `
-        + "flat-rate or NT code is malformed input, not an operable code",
+        `GB tax code "${rawCode}" contradicts its coding notice: a week-1/month-1 marker on a ` +
+          "flat-rate or NT code is malformed input, not an operable code",
       );
     }
     code = { ...code, nonCumulative: true };
@@ -312,24 +388,24 @@ export async function computeGbStatutory(
   if (aeMembership === "active_member") {
     if (aeBasis !== "qualifying_earnings_minimum") {
       throw new PayrollPackError(
-        "GB workplace pension prices statutory minimum contributions on qualifying earnings only: "
-        + "this scheme uses another certified basis, which this pack does not price — use payroll "
-        + "software that supports the scheme until this pack adds its rules",
+        "GB workplace pension prices statutory minimum contributions on qualifying earnings only: " +
+          "this scheme uses another certified basis, which this pack does not price — use payroll " +
+          "software that supports the scheme until this pack adds its rules",
       );
     }
     if (aeMethod !== "net_pay") {
       throw new PayrollPackError(
-        "GB workplace pension prices the employee share as a net-pay deduction only: this scheme "
-        + "uses relief at source or salary sacrifice, which change withholding and tax treatment — "
-        + "use payroll software that supports the method until this pack adds its rules",
+        "GB workplace pension prices the employee share as a net-pay deduction only: this scheme " +
+          "uses relief at source or salary sacrifice, which change withholding and tax treatment — " +
+          "use payroll software that supports the method until this pack adds its rules",
       );
     }
     const thresholds = GB_AE_THRESHOLDS[P];
     if (!thresholds) {
       throw new PayrollPackError(
-        `GB workplace pension has no published pay-reference thresholds for ${P} periods per year: `
-        + "the Pensions Regulator publishes thresholds per frequency and this pack never divides an "
-        + "annual figure by a guessed frequency",
+        `GB workplace pension has no published pay-reference thresholds for ${P} periods per year: ` +
+          "the Pensions Regulator publishes thresholds per frequency and this pack never divides an " +
+          "annual figure by a guessed frequency",
       );
     }
     const grossUnits = U(sum([income, nonPeriodic]));
@@ -352,7 +428,11 @@ export async function computeGbStatutory(
   const cumulative = code.kind !== "flat" && code.kind !== "none" && !code.nonCumulative;
 
   let priors: GbPriorPeriod = {
-    taxablePay: "0.0000", addedPay: "0.0000", taxPaid: "0.0000", minPayDate: null, hasStubs: false,
+    taxablePay: "0.0000",
+    addedPay: "0.0000",
+    taxPaid: "0.0000",
+    minPayDate: null,
+    hasStubs: false,
   };
   if (cumulative) {
     priors = await gbEmployeePriorPeriod(ctx);
@@ -390,15 +470,31 @@ export async function computeGbStatutory(
   pushStatutory("paye", "deduction", "PAYE income tax", paye.tax, 110);
   pushStatutory("nic", "deduction", "National Insurance (employee, primary)", nic.employee, 120);
   pushStatutory("student_loan", "deduction", "Student loan repayment", loan.studentLoan, 130);
-  pushStatutory("postgraduate_loan", "deduction", "Postgraduate loan repayment", loan.postgraduateLoan, 140);
+  pushStatutory(
+    "postgraduate_loan",
+    "deduction",
+    "Postgraduate loan repayment",
+    loan.postgraduateLoan,
+    140,
+  );
   // Zero-amount shares push no line: every existing stub shape is
   // unchanged for workers with no contributions due.
   if (U(aeEmployee) > 0n || U(aeEmployer) > 0n) {
     pushStatutory("ae_employee", "deduction", "Workplace pension (employee)", aeEmployee, 150);
-    pushStatutory("ae_employer", "employer_contribution", "Workplace pension (employer)", aeEmployer, 220);
+    pushStatutory(
+      "ae_employer",
+      "employer_contribution",
+      "Workplace pension (employer)",
+      aeEmployer,
+      220,
+    );
   }
   pushStatutory(
-    "nic", "employer_contribution", "National Insurance (employer, secondary)", nic.employer, 210,
+    "nic",
+    "employer_contribution",
+    "National Insurance (employer, secondary)",
+    nic.employer,
+    210,
   );
   return {
     GB_TAXABLE: paye.periodTaxablePay,

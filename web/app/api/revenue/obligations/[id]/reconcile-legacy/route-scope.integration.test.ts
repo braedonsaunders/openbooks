@@ -53,9 +53,8 @@ registerHooks({
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { buildRecognitionSchedule } = await import("@openbooks/engine/revenue/recognition");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 const REASON =
@@ -80,26 +79,33 @@ async function legacyFixture() {
   const org = await withBypassContext(() => createScratchOrg());
   const adminId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   const subB = randomUUID();
-  await withBypassContext(
-    () => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`),
   );
-  const calId = (await withBypassContext(
-      () => db.execute<{ id: string }>(sql`
-        select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`, "objects"),
-    ))[0]!.id;
-  for (const [num, name, start, end] of MONTHS_2026.map(([name, start, end], i) => [i + 1, name, start, end] as const)) {
+  const calId = (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
+        select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
+  for (const [num, name, start, end] of MONTHS_2026.map(
+    ([name, start, end], i) => [i + 1, name, start, end] as const,
+  )) {
     if (num === 7) continue;
-    await withBypassContext(
-      () => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
         values (${randomUUID()}, ${org.orgId}, 2026, ${num}, ${name}, ${start}, ${end}, false, ${calId})`),
     );
   }
   const ruleId = randomUUID();
-  await withBypassContext(
-    () => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
       insert into recognition_rules
         (id, org_id, code, name, method, is_forecast, recognition_periods, start_date_source, end_date_source,
          period_offset, start_offset_days, initial_amount_percent, deferred_account_id, recognized_account_id, is_active)
@@ -110,31 +116,33 @@ async function legacyFixture() {
   const subs = { own: org.subsidiaryId, foreignDenied: subB, foreignAllowed: subB };
   for (const key of Object.keys(ids) as (keyof typeof ids)[]) {
     const contractId = randomUUID();
-    await withBypassContext(
-      () => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into revenue_contracts
           (id, org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, subsidiary_id, created_by, updated_by)
         values (${contractId}, ${org.orgId}, ${org.customerId}, ${`LEGACY-ROUTE-${key}`}, 'active', '2026-01-01',
                 'CAD', '12000', ${subs[key]}, ${adminId}, ${adminId})`),
     );
-    await withBypassContext(
-      () => db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into performance_obligations
           (id, org_id, contract_id, description, recognition_rule_id,
            booked_amount, allocated_price, recognition_starts_on, status, created_by, updated_by)
         values (${ids[key]}, ${org.orgId}, ${contractId}, ${`Legacy service ${key}`}, ${ruleId},
                 '12000', '12000', '2026-01-01', 'open', ${adminId}, ${adminId})`),
     );
-    const build = await withBypassContext(() => buildRecognitionSchedule(ids[key], org.orgId, adminId));
+    const build = await withBypassContext(() =>
+      buildRecognitionSchedule(ids[key], org.orgId, adminId),
+    );
     assert.equal(build.lineCount, 12);
   }
-  await withBypassContext(
-    () => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
       update recognition_rules set method = 'point_in_time', updated_at = now()
        where id = ${ruleId} and org_id = ${org.orgId}`),
   );
-  await withBypassContext(
-    () => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
       insert into upgrade_legacy_provenance (org_id, migration, table_name, row_id, note)
       values (${org.orgId}, '0297_recognition_rule_versions', 'recognition_rules', ${ruleId}, 'test mark')`),
   );
@@ -153,9 +161,14 @@ const post = (id: string) =>
 
 async function reconciledAt(orgId: string, obligationId: string): Promise<string | null> {
   return (
-    ((await db.execute<{ at: string | null }>(sql`
+    (
+      await db.execute<{ at: string | null }>(
+        sql`
       select legacy_reconciled_at::text as at from performance_obligations
-       where id = ${obligationId} and org_id = ${orgId}`, "objects"))[0]?.at ?? null)
+       where id = ${obligationId} and org_id = ${orgId}`,
+        "objects",
+      )
+    )[0]?.at ?? null
   );
 }
 

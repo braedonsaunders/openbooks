@@ -11,7 +11,11 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  type ScratchOrg,
+} from "@openbooks/engine/testing/fixtures";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -37,7 +41,11 @@ async function seedObligation(org: ScratchOrg, label: string): Promise<string> {
   return obligationId;
 }
 
-async function insertEvent(orgId: string, obligationId: string, sourceReference: string): Promise<string> {
+async function insertEvent(
+  orgId: string,
+  obligationId: string,
+  sourceReference: string,
+): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into recognition_events (id, org_id, obligation_id, period_month, amount, source_reference)
@@ -52,17 +60,21 @@ function refusedByForeignKey(scenario: string) {
   };
 }
 
-test("recognition events are tenant-coherent with their obligation and cascade within the tenant",
+test(
+  "recognition events are tenant-coherent with their obligation and cascade within the tenant",
   { skip: !DB, timeout: 60_000 },
   async () => {
     const first = await createScratchOrg();
     const second = await createScratchOrg();
     try {
-      const key = await db.execute<{ definition: string }>(sql`
+      const key = await db.execute<{ definition: string }>(
+        sql`
         select pg_get_constraintdef(oid) as definition
           from pg_constraint
          where conrelid = 'public.recognition_events'::regclass
-           and conname = 'recognition_events_obligation_id_fkey'`, 'objects');
+           and conname = 'recognition_events_obligation_id_fkey'`,
+        "objects",
+      );
       assert.equal(key.length, 1, "recognition_events_obligation_id_fkey must exist");
       assert.match(
         key[0]!.definition,
@@ -78,14 +90,19 @@ test("recognition events are tenant-coherent with their obligation and cascade w
       );
       const ownEvent = await insertEvent(first.orgId, firstObligation, "same-tenant");
       await assert.rejects(
-        db.execute(sql`update recognition_events set obligation_id = ${secondObligation} where id = ${ownEvent}`),
+        db.execute(
+          sql`update recognition_events set obligation_id = ${secondObligation} where id = ${ownEvent}`,
+        ),
         refusedByForeignKey("re-pointing an event across tenants is refused"),
       );
 
       const cascaded = await insertEvent(second.orgId, secondObligation, "cascade");
       await db.execute(sql`delete from performance_obligations where id = ${secondObligation}`);
-      const remaining = await db.execute<{ id: string }>(sql`
-        select id from recognition_events where id = ${cascaded}`, 'objects');
+      const remaining = await db.execute<{ id: string }>(
+        sql`
+        select id from recognition_events where id = ${cascaded}`,
+        "objects",
+      );
       assert.equal(remaining.length, 0, "same-tenant obligation deletion cascades its event");
     } finally {
       await dropScratchOrg(second.orgId);

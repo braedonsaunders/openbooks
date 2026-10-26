@@ -89,16 +89,17 @@ test(
       assert.equal(first.parties?.failed ?? -1, 0);
       const landed = await roleRows(org.orgId);
       assert.equal(landed.length, 3);
-      const stampedBefore = (await withOrg(org.orgId, () => db.execute<{ updated_at: string }>(sql`
-        select updated_at from parties where org_id = ${org.orgId} and custom->>'roleUpsertTest' = 'C-2427'`, "objects")))[0]!.updated_at;
-      assert.equal(
-        landed.find((r) => r.table === "customer")?.credit,
-        "1738300.0000",
-      );
-      assert.equal(
-        landed.find((r) => r.table === "employee")?.employeeNumber,
-        "E-2790",
-      );
+      const stampedBefore = (
+        await withOrg(org.orgId, () =>
+          db.execute<{ updated_at: string }>(
+            sql`
+        select updated_at from parties where org_id = ${org.orgId} and custom->>'roleUpsertTest' = 'C-2427'`,
+            "objects",
+          ),
+        )
+      )[0]!.updated_at;
+      assert.equal(landed.find((r) => r.table === "customer")?.credit, "1738300.0000");
+      assert.equal(landed.find((r) => r.table === "employee")?.employeeNumber, "E-2790");
 
       // Second pull hits the ON CONFLICT DO UPDATE branch for every role.
       const second = await withOrg(org.orgId, () =>
@@ -111,13 +112,17 @@ test(
       // The re-pull rewrites every party row: updated_at must move so an
       // optimistic-concurrency edit can see the sync touch (in particular a
       // rehome) instead of committing over it.
-      const stampedAfter = (await withOrg(org.orgId, () => db.execute<{ updated_at: string }>(sql`
-        select updated_at from parties where org_id = ${org.orgId} and custom->>'roleUpsertTest' = 'C-2427'`, "objects")))[0]!.updated_at;
+      const stampedAfter = (
+        await withOrg(org.orgId, () =>
+          db.execute<{ updated_at: string }>(
+            sql`
+        select updated_at from parties where org_id = ${org.orgId} and custom->>'roleUpsertTest' = 'C-2427'`,
+            "objects",
+          ),
+        )
+      )[0]!.updated_at;
       assert.notEqual(stampedAfter, stampedBefore);
-      assert.equal(
-        relanded.find((r) => r.table === "customer")?.credit,
-        "1800000.0000",
-      );
+      assert.equal(relanded.find((r) => r.table === "customer")?.credit, "1800000.0000");
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -154,20 +159,17 @@ test(
       const rolesB = await roleRows(orgB.orgId);
       assert.equal(rolesA.length, 3);
       assert.equal(rolesB.length, 3);
-      assert.equal(
-        rolesA.find((r) => r.table === "customer")?.credit,
-        "1738300.0000",
-      );
-      assert.equal(
-        rolesB.find((r) => r.table === "customer")?.credit,
-        "999.0000",
-      );
+      assert.equal(rolesA.find((r) => r.table === "customer")?.credit, "1738300.0000");
+      assert.equal(rolesB.find((r) => r.table === "customer")?.credit, "999.0000");
 
       // The shared sourceRef resolves to one party per org, never a shared row.
-      const parties = await db.execute<{ orgId: string; partyId: string }>(sql`
+      const parties = await db.execute<{ orgId: string; partyId: string }>(
+        sql`
         select org_id as "orgId", id as "partyId" from parties
          where custom->>'roleUpsertTest' = 'C-2427'
-           and org_id in (${orgA.orgId}, ${orgB.orgId})`, "objects");
+           and org_id in (${orgA.orgId}, ${orgB.orgId})`,
+        "objects",
+      );
       const byOrg = new Map(parties.map((r) => [r.orgId, r.partyId]));
       assert.equal(byOrg.size, 2);
       assert.ok(byOrg.has(orgA.orgId) && byOrg.has(orgB.orgId));

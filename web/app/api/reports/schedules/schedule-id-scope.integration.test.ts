@@ -29,7 +29,10 @@ registerHooks({
     // The route factory imports the same alias lazily at request time from
     // its own module URL, so it never matches the route-directory guard.
     // Match the alias exactly so the factory gate uses this test's session.
-    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/reports/schedules/"))) {
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/reports/schedules/"))
+    ) {
       return {
         shortCircuit: true,
         url:
@@ -85,7 +88,8 @@ test("schedule autosave and delete answer a malformed id with 404", async () => 
 test("hour/active PATCH keeps a restricted authorization_snapshot when the editor is org-unrestricted", async () => {
   const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
   const { sql } = await import(root + "node_modules/drizzle-orm/index.js");
-  const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+  const { createScratchOrg, createScratchUser, dropScratchOrg } =
+    await import("@openbooks/engine/testing/fixtures");
   const fixture = await withBypassContext(() => createScratchOrg());
   const oid = fixture.orgId;
   try {
@@ -129,9 +133,14 @@ test("hour/active PATCH keeps a restricted authorization_snapshot when the edito
     // holds, so it is treated as holding all of them: an editor (who could
     // redirect its delivery) needs org-wide expense read.
     gate.permissions = ["reports.schedule", "reports.read"];
-    const refused = await PATCH(json("PATCH", { hour: 9, reason: "move delivery" }), params(scheduleId));
+    const refused = await PATCH(
+      json("PATCH", { hour: 9, reason: "move delivery" }),
+      params(scheduleId),
+    );
     assert.equal(refused.status, 403);
-    assert.deepEqual(await refused.json(), { error: "this schedule's authorized report content requires expenses.read" });
+    assert.deepEqual(await refused.json(), {
+      error: "this schedule's authorized report content requires expenses.read",
+    });
     gate.permissions = ["reports.schedule", "reports.read", "expenses.read"];
 
     for (const [body, label] of [
@@ -141,10 +150,13 @@ test("hour/active PATCH keeps a restricted authorization_snapshot when the edito
       const patched = await PATCH(json("PATCH", body), params(scheduleId));
       assert.equal(patched.status, 200, `${label} PATCH: ${await patched.clone().text()}`);
       const stored = await withBypassContext(async () => {
-        const result = await db.execute(sql`
+        const result = await db.execute(
+          sql`
             select authorization_snapshot from report_schedules
              where id = ${scheduleId} and org_id = ${oid}
-          `, "objects");
+          `,
+          "objects",
+        );
         return result[0] as { authorization_snapshot: typeof pin } | undefined;
       });
       assert.ok(stored, `${label} PATCH left a schedule row`);

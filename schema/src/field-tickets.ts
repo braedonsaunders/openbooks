@@ -8,7 +8,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { auditColumns, currencyCode, id, orgRef } from "./helpers";
@@ -89,27 +89,15 @@ export const fieldTicketLaborLines = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("field_ticket_labor_lines_sequence").on(
-      t.orgId,
-      t.snapshotId,
-      t.sequence,
-    ),
-    uniqueIndex("field_ticket_labor_lines_time_entry").on(
-      t.orgId,
-      t.snapshotId,
-      t.timeEntryId,
-    ),
+    uniqueIndex("field_ticket_labor_lines_sequence").on(t.orgId, t.snapshotId, t.sequence),
+    uniqueIndex("field_ticket_labor_lines_time_entry").on(t.orgId, t.snapshotId, t.timeEntryId),
     uniqueIndex("field_ticket_labor_lines_source_ref").on(
       t.orgId,
       t.snapshotId,
       t.sourceSystem,
       t.sourceLineRef,
     ),
-    index("field_ticket_labor_lines_ticket").on(
-      t.orgId,
-      t.fieldTicketId,
-      t.workedOn,
-    ),
+    index("field_ticket_labor_lines_ticket").on(t.orgId, t.fieldTicketId, t.workedOn),
     index("field_ticket_labor_lines_time_entry_lookup").on(t.orgId, t.timeEntryId),
     check("field_ticket_labor_lines_sequence_positive", sql`${t.sequence} > 0`),
     check("field_ticket_labor_lines_hours_nonzero", sql`${t.hours} <> 0`),

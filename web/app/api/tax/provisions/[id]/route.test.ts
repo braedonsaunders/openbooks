@@ -16,11 +16,9 @@ interface RouteState {
 
 const stateKey = Symbol.for("openbooks.tax-provision-route-test");
 const routeState: RouteState = { scope: null, calls: [] };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksTaxProvisionNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksTaxProvisionNextResponse =
+  NextResponse;
 
 const authzStub = `
   const state = globalThis[Symbol.for('openbooks.tax-provision-route-test')]
@@ -34,7 +32,7 @@ const authzStub = `
   }
   export function guardRootSubsidiaryScope() { return null }
   export function guardUnrestrictedScope() { return null }
-`
+`;
 
 stubModules({
   navigation: false,
@@ -85,10 +83,9 @@ function reset(scope: Set<string> | null | undefined): void {
 }
 
 function get(): Promise<Response> {
-  return GET(
-    new Request(`http://openbooks.test/api/tax/provisions/${RUN_ID}`),
-    { params: Promise.resolve({ id: RUN_ID }) },
-  );
+  return GET(new Request(`http://openbooks.test/api/tax/provisions/${RUN_ID}`), {
+    params: Promise.resolve({ id: RUN_ID }),
+  });
 }
 
 test("GET forwards the caller's subsidiary scope to the provision detail service", async () => {
@@ -103,7 +100,10 @@ test("GET forwards the caller's subsidiary scope to the provision detail service
   assert.equal(routeState.calls[0]!.runId, RUN_ID);
   assert.equal(routeState.calls[0]!.allowedSubsidiaryIds, allowed);
   const body = (await response.json()) as { payload: { entities: { subsidiaryId: string }[] } };
-  assert.deepEqual(body.payload.entities.map((entity) => entity.subsidiaryId), [...allowed]);
+  assert.deepEqual(
+    body.payload.entities.map((entity) => entity.subsidiaryId),
+    [...allowed],
+  );
 });
 
 test("GET keeps an unrestricted scope explicit for organization-wide readers", async () => {
@@ -114,8 +114,8 @@ test("GET keeps an unrestricted scope explicit for organization-wide readers", a
   assert.equal(response.status, 200);
   assert.equal(routeState.calls[0]!.allowedSubsidiaryIds, null);
   const body = (await response.json()) as { payload: { entities: { subsidiaryId: string }[] } };
-  assert.deepEqual(body.payload.entities.map((entity) => entity.subsidiaryId), [
-    "00000000-0000-4000-8000-00000000b001",
-    "00000000-0000-4000-8000-00000000c001",
-  ]);
+  assert.deepEqual(
+    body.payload.entities.map((entity) => entity.subsidiaryId),
+    ["00000000-0000-4000-8000-00000000b001", "00000000-0000-4000-8000-00000000c001"],
+  );
 });

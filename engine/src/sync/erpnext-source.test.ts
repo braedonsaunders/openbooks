@@ -65,7 +65,10 @@ function source(): ErpNextSource {
 
 const ctx = {
   accountByRef: new Map([
-    ["Debtors - X", { id: "ob-debtors", number: "1100", name: "Debtors", type: "asset_receivable" }],
+    [
+      "Debtors - X",
+      { id: "ob-debtors", number: "1100", name: "Debtors", type: "asset_receivable" },
+    ],
     ["Bank - X", { id: "ob-bank", number: "1000", name: "Bank", type: "asset_bank" }],
   ]),
   partyByRef: new Map(),
@@ -123,17 +126,33 @@ function foreignSource(references: unknown[]): ErpNextSource {
 
 test("a foreign reference states the invoice exchange rate", async () => {
   const src = foreignSource([
-    { reference_doctype: "Sales Invoice", reference_name: "SI-EUR", allocated_amount: 1000, exchange_rate: 1.15 },
+    {
+      reference_doctype: "Sales Invoice",
+      reference_name: "SI-EUR",
+      allocated_amount: 1000,
+      exchange_rate: 1.15,
+    },
   ]);
   const changes = await src.nativeChanges(null, ctx);
   assert.deepEqual(changes.applications, [
-    { paymentRef: "PE-EUR", appliedRef: "SI-EUR", amount: "1000.00", currency: "EUR", rate: "1.15" },
+    {
+      paymentRef: "PE-EUR",
+      appliedRef: "SI-EUR",
+      amount: "1000.00",
+      currency: "EUR",
+      rate: "1.15",
+    },
   ]);
 });
 
 test("a zero reference rate states no rate", async () => {
   const src = foreignSource([
-    { reference_doctype: "Sales Invoice", reference_name: "SI-EUR", allocated_amount: 1000, exchange_rate: 0 },
+    {
+      reference_doctype: "Sales Invoice",
+      reference_name: "SI-EUR",
+      allocated_amount: 1000,
+      exchange_rate: 0,
+    },
   ]);
   const changes = await src.nativeChanges(null, ctx);
   assert.deepEqual(changes.applications, [
@@ -154,7 +173,12 @@ test("a misaligned reference currency states no rate", async () => {
     base_paid_amount: 1000,
     base_received_amount: 1000,
     references: [
-      { reference_doctype: "Sales Invoice", reference_name: "SI-X", allocated_amount: 1000, exchange_rate: 1.15 },
+      {
+        reference_doctype: "Sales Invoice",
+        reference_name: "SI-X",
+        allocated_amount: 1000,
+        exchange_rate: 1.15,
+      },
     ],
   };
   const client = {

@@ -79,7 +79,10 @@ function factorParts(factor: string, what: string): { num: bigint; den: bigint }
   const canonical = canonicalNonNegativeDecimal(factor, Infinity);
   if (canonical === null) fail(`${what} is not a factor: "${factor}"`);
   const [whole, frac = ""] = canonical.split(".");
-  return { num: BigInt(whole!) * 10n ** BigInt(frac.length) + BigInt(frac || "0"), den: 10n ** BigInt(frac.length) };
+  return {
+    num: BigInt(whole!) * 10n ** BigInt(frac.length) + BigInt(frac || "0"),
+    den: 10n ** BigInt(frac.length),
+  };
 }
 
 /** Truncate an exact rational of centavos toward zero (all inputs ≥ 0). */
@@ -108,14 +111,23 @@ export async function computeBrStatutoryWithRates(
   rates: BrEmployerRates,
 ): Promise<Record<string, string>> {
   const {
-    taxYear, region, run, income, nonPeriodic, pensionable, insurable,
-    periodsPerYear, pushStatutory, assertRegionSupported, emp,
+    taxYear,
+    region,
+    run,
+    income,
+    nonPeriodic,
+    pensionable,
+    insurable,
+    periodsPerYear,
+    pushStatutory,
+    assertRegionSupported,
+    emp,
   } = ctx;
   if (taxYear !== 2026 && taxYear !== 2025 && taxYear !== 2024) {
     fail(
-      `tax year ${taxYear} has not been transcribed — the BR payroll pack's transcribed years are `
-      + "calendar 2024, 2025 and 2026. "
-      + "This year is not yet supported by the BR pack; contact support.",
+      `tax year ${taxYear} has not been transcribed — the BR payroll pack's transcribed years are ` +
+        "calendar 2024, 2025 and 2026. " +
+        "This year is not yet supported by the BR pack; contact support.",
     );
   }
   // Every year prices through its own transcribed table bundle, selected by
@@ -123,8 +135,8 @@ export async function computeBrStatutoryWithRates(
   const payDate = run.pay_date;
   if (taxYear !== 2026 && (typeof payDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(payDate))) {
     fail(
-      `run pay_date "${payDate ?? "(missing)"}" does not name an ISO day in tax year ${taxYear} — `
-      + "prior-year tables are selected by pay month, so the run must carry its pay_date",
+      `run pay_date "${payDate ?? "(missing)"}" does not name an ISO day in tax year ${taxYear} — ` +
+        "prior-year tables are selected by pay month, so the run must carry its pay_date",
     );
   }
   const tables = brTablesForPayDate(
@@ -137,8 +149,8 @@ export async function computeBrStatutoryWithRates(
   }
   if (periodsPerYear !== 12) {
     fail(
-      `periodsPerYear ${periodsPerYear} is refused: the INSS teto and the IRRF monthly table are `
-      + "intrinsically monthly — monthly payroll only (13º/férias/rescisão are named refusals)",
+      `periodsPerYear ${periodsPerYear} is refused: the INSS teto and the IRRF monthly table are ` +
+        "intrinsically monthly — monthly payroll only (13º/férias/rescisão are named refusals)",
     );
   }
 
@@ -147,15 +159,15 @@ export async function computeBrStatutoryWithRates(
   const regime = empFact("BR", emp, "br_regime");
   if (regime !== undefined && regime !== null && regime !== "" && regime !== "clt") {
     fail(
-      `employee br_regime "${regime}" is not standard monthly CLT — aprendiz (2% FGTS), doméstico, `
-      + `temporário and other regimes price differently: see BR_REFUSED_${taxYear}`,
+      `employee br_regime "${regime}" is not standard monthly CLT — aprendiz (2% FGTS), doméstico, ` +
+        `temporário and other regimes price differently: see BR_REFUSED_${taxYear}`,
     );
   }
   const depRaw = empFact("BR", emp, "br_dependentes");
   if (depRaw === undefined || depRaw === null || depRaw === "") {
     fail(
-      'employee br_dependentes is missing: the R$ 189,59 dependent deduction needs the count — '
-      + "it is never defaulted",
+      "employee br_dependentes is missing: the R$ 189,59 dependent deduction needs the count — " +
+        "it is never defaulted",
     );
   }
   const dependentes = Number(depRaw);
@@ -163,17 +175,19 @@ export async function computeBrStatutoryWithRates(
     fail(`employee br_dependentes "${depRaw}" is not a non-negative integer`);
   }
   const pensaoRaw = empFact("BR", emp, "br_pensao_mensal");
-  const pensao = pensaoRaw === undefined || pensaoRaw === null || pensaoRaw === ""
-    ? "0.00"
-    : (() => {
-      const c = cents(pensaoRaw, "br_pensao_mensal");
-      return `${c / 100n}.${String(c % 100n).padStart(2, "0")}`;
-    })();
+  const pensao =
+    pensaoRaw === undefined || pensaoRaw === null || pensaoRaw === ""
+      ? "0.00"
+      : (() => {
+          const c = cents(pensaoRaw, "br_pensao_mensal");
+          return `${c / 100n}.${String(c % 100n).padStart(2, "0")}`;
+        })();
 
   // The month aggregates: every amount paid in the month joins both bases
   // (periodic treatment — IRRF is assessed on the month's accumulated
   // rendimentos, and the INSS salary-de-contribuição is monthly).
-  const rendimentos = cents(income, "income") + cents(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic");
+  const rendimentos =
+    cents(income, "income") + cents(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic");
   const salarioContribuicao = cents(pensionable, "pensionable");
   const remuneracao = cents(insurable === "" ? pensionable : insurable, "insurable");
   const fmtCents = (c: bigint): string => `${c / 100n}.${String(c % 100n).padStart(2, "0")}`;
@@ -210,13 +224,17 @@ export async function computeBrStatutoryWithRates(
   if (sfFilhos > 0) {
     if (taxYear !== 2026) {
       fail(
-        `salário-família for tax year ${taxYear} is not transcribed — only the 2026 quota and ceiling `
-        + "(R$ 67,54 / R$ 1.980,38, Portaria 13/2026) are modelled. "
-        + "This year is not yet supported by the BR pack; contact support.",
+        `salário-família for tax year ${taxYear} is not transcribed — only the 2026 quota and ceiling ` +
+          "(R$ 67,54 / R$ 1.980,38, Portaria 13/2026) are modelled. " +
+          "This year is not yet supported by the BR pack; contact support.",
       );
     }
-    if (salarioContribuicao <= cents(BR_2026_SALARIO_FAMILIA.limiteRemuneracao, "salário-família limite")) {
-      salarioFamilia = cents(BR_2026_SALARIO_FAMILIA.quota, "salário-família quota") * BigInt(sfFilhos);
+    if (
+      salarioContribuicao <=
+      cents(BR_2026_SALARIO_FAMILIA.limiteRemuneracao, "salário-família limite")
+    ) {
+      salarioFamilia =
+        cents(BR_2026_SALARIO_FAMILIA.quota, "salário-família quota") * BigInt(sfFilhos);
     }
   }
 
@@ -229,15 +247,15 @@ export async function computeBrStatutoryWithRates(
   const regimeTributario = rates.regimeTributario;
   if (regimeTributario == null || regimeTributario === "") {
     fail(
-      "the establishment br_regime_tributario is not declared — Simples Nacional annexes I, II, III and V "
-      + "pay employer CPP inside the monthly DAS while Annex IV and general-regime employers accrue it "
-      + "separately (LC 123/2006 art. 13 VI, art. 18 §5-C). Declare the regime in Payroll Setup → Employer facts",
+      "the establishment br_regime_tributario is not declared — Simples Nacional annexes I, II, III and V " +
+        "pay employer CPP inside the monthly DAS while Annex IV and general-regime employers accrue it " +
+        "separately (LC 123/2006 art. 13 VI, art. 18 §5-C). Declare the regime in Payroll Setup → Employer facts",
     );
   }
   if (!(BR_REGIME_TRIBUTARIO_CHOICES as readonly string[]).includes(regimeTributario)) {
     fail(
-      `establishment br_regime_tributario "${regimeTributario}" is not a declared regime — expected one of `
-      + `${BR_REGIME_TRIBUTARIO_CHOICES.join(", ")}`,
+      `establishment br_regime_tributario "${regimeTributario}" is not a declared regime — expected one of ` +
+        `${BR_REGIME_TRIBUTARIO_CHOICES.join(", ")}`,
     );
   }
   const cppInDas = BR_CPP_IN_DAS.has(regimeTributario);
@@ -247,14 +265,14 @@ export async function computeBrStatutoryWithRates(
   if (!cppInDas) {
     if (rates.ratPct === null) {
       fail(
-        "the br_rat statutory rate is not declared for this establishment — the CNAE risk class "
-        + "(1%/2%/3%) is tenant-entered on the eSocial CNPJ filing account, never table-supplied",
+        "the br_rat statutory rate is not declared for this establishment — the CNAE risk class " +
+          "(1%/2%/3%) is tenant-entered on the eSocial CNPJ filing account, never table-supplied",
       );
     }
     if (rates.fap === null) {
       fail(
-        "the br_fap statutory rate is not declared for this establishment — the FAP factor (0.5–2.0) "
-        + "is tenant-entered on the eSocial CNPJ filing account, never table-supplied",
+        "the br_fap statutory rate is not declared for this establishment — the FAP factor (0.5–2.0) " +
+          "is tenant-entered on the eSocial CNPJ filing account, never table-supplied",
       );
     }
     rat = percentParts(rates.ratPct, "br_rat aliquota");
@@ -270,8 +288,8 @@ export async function computeBrStatutoryWithRates(
   if (terceirosApplies) {
     if (rates.terceirosPct === null) {
       fail(
-        "the br_terceiros statutory rate is not declared for this establishment — the aggregate "
-        + "terceiros percent for its FPAS code is tenant-entered, never table-supplied",
+        "the br_terceiros statutory rate is not declared for this establishment — the aggregate " +
+          "terceiros percent for its FPAS code is tenant-entered, never table-supplied",
       );
     }
     terceiros = percentParts(rates.terceirosPct, "br_terceiros aliquota");
@@ -284,12 +302,20 @@ export async function computeBrStatutoryWithRates(
 
   const patronal = cppInDas ? 0n : truncCents(remuneracao * patronalRate.num, patronalRate.den);
   const ratEr = cppInDas ? 0n : truncCents(remuneracao * rat.num * fap.num, rat.den * fap.den);
-  const terceirosEr = !terceirosApplies ? 0n : truncCents(remuneracao * terceiros.num, terceiros.den);
+  const terceirosEr = !terceirosApplies
+    ? 0n
+    : truncCents(remuneracao * terceiros.num, terceiros.den);
   const fgts = truncCents(remuneracao * fgtsRate.num, fgtsRate.den);
 
   pushStatutory("irrf", "deduction", "IRRF", brl4(centsOf2dp(irrf.irrf)), 110);
   pushStatutory("inss", "deduction", "INSS (segurado)", brl4(centsOf2dp(inss.contribuicao)), 120);
-  pushStatutory("inss_patronal", "employer_contribution", "INSS patronal (20%)", brl4(patronal), 210);
+  pushStatutory(
+    "inss_patronal",
+    "employer_contribution",
+    "INSS patronal (20%)",
+    brl4(patronal),
+    210,
+  );
   pushStatutory("inss_rat", "employer_contribution", "RAT × FAP", brl4(ratEr), 211);
   pushStatutory("inss_terceiros", "employer_contribution", "Terceiros", brl4(terceirosEr), 212);
   pushStatutory("fgts", "employer_contribution", "FGTS (8%)", brl4(fgts), 220);
@@ -346,7 +372,9 @@ export const BR_FACTOR_LABELS: Readonly<Record<string, string>> = {
  * br_* row carries one (the schema forbids an account-scoped row without
  * it), so a lookup without it matches nothing and the whole pack refuses.
  * Exported so the unit partition can hold the wiring, not just the engine. */
-export function brRateLookupScope(ctx: Pick<PayrollStatutoryComputeContext, "region" | "filingAccountId">): {
+export function brRateLookupScope(
+  ctx: Pick<PayrollStatutoryComputeContext, "region" | "filingAccountId">,
+): {
   region: string | null;
   filingAccountId: string | null;
 } {
@@ -360,21 +388,33 @@ export async function computeBrStatutory(
 ): Promise<Record<string, string>> {
   if (ctx.taxYear !== 2026 && ctx.taxYear !== 2025 && ctx.taxYear !== 2024) {
     // Unknown regime (transcription-gap fallback): no Simples gate applies.
-    return computeBrStatutoryWithRates(ctx, { ratPct: null, fap: null, terceirosPct: null, regimeTributario: null });
+    return computeBrStatutoryWithRates(ctx, {
+      ratPct: null,
+      fap: null,
+      terceirosPct: null,
+      regimeTributario: null,
+    });
   }
-  const resolution = await resolveStatutoryRates(ctx.orgId, BR_PACK_RATES, ctx.taxYear, ctx.run.pay_date);
+  const resolution = await resolveStatutoryRates(
+    ctx.orgId,
+    BR_PACK_RATES,
+    ctx.taxYear,
+    ctx.run.pay_date,
+  );
   const at = brRateLookupScope(ctx);
   // The establishment's tax regime is an effective-dated employer fact, not
   // a rate: Simples annexes decide whether CPP accrues separately at all.
   if (!ctx.subsidiaryId) {
     fail(
-      "the establishment br_regime_tributario cannot resolve without the paying subsidiary — "
-      + "the Simples-vs-general CPP treatment is per establishment (LC 123/2006)",
+      "the establishment br_regime_tributario cannot resolve without the paying subsidiary — " +
+        "the Simples-vs-general CPP treatment is per establishment (LC 123/2006)",
     );
   }
   const payDate = ctx.run.pay_date;
   if (payDate === undefined || payDate === "") {
-    fail("the run has no pay date, so the establishment br_regime_tributario cannot resolve (effective-dated employer fact)");
+    fail(
+      "the run has no pay date, so the establishment br_regime_tributario cannot resolve (effective-dated employer fact)",
+    );
   }
   const regimeTributario = await resolveStoredEmployerFact({
     tx: ctx.tx,

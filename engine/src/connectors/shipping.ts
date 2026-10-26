@@ -128,7 +128,11 @@ export interface CarrierInboundEvent {
 export interface CarrierAdapter {
   readonly key: ShippingProviderKey;
   requestRates(ctx: CarrierContext, req: CarrierRateRequest): Promise<CarrierRateOption[]>;
-  buyLabel(ctx: CarrierContext, providerShipmentId: string, providerRateId: string): Promise<CarrierBoughtLabel>;
+  buyLabel(
+    ctx: CarrierContext,
+    providerShipmentId: string,
+    providerRateId: string,
+  ): Promise<CarrierBoughtLabel>;
   voidLabel(
     ctx: CarrierContext,
     ref: { providerShipmentId: string; providerLabelId: string | null },
@@ -159,9 +163,14 @@ function fail(what: string): never {
 
 /** Exact decimal string, no floats: "12.34" stays 12.34 through every conversion below. */
 export function assertDecimal(value: string, what: string): string {
-  if (typeof value !== "string" || !DECIMAL_RE.test(value.trim())) fail(`${what} must be a decimal number, got ${JSON.stringify(value)}`);
+  if (typeof value !== "string" || !DECIMAL_RE.test(value.trim()))
+    fail(`${what} must be a decimal number, got ${JSON.stringify(value)}`);
   const negative = value.trim().startsWith("-");
-  const unsigned = value.trim().replace(/^-/, "").replace(/^0+(?=\d)/, "") || "0";
+  const unsigned =
+    value
+      .trim()
+      .replace(/^-/, "")
+      .replace(/^0+(?=\d)/, "") || "0";
   return negative ? `-${unsigned}` : unsigned;
 }
 
@@ -202,9 +211,11 @@ export const kgToOz = (kg: string): string => mulDecimal(kg, "35.273962", 4);
  */
 export function decimalToMinorUnits(amount: string, minorUnits: number): bigint {
   const { neg, int, frac } = splitDecimal(amount);
-  if (minorUnits < 0 || minorUnits > 4 || !Number.isInteger(minorUnits)) fail(`unsupported currency precision ${minorUnits}`);
+  if (minorUnits < 0 || minorUnits > 4 || !Number.isInteger(minorUnits))
+    fail(`unsupported currency precision ${minorUnits}`);
   const kept = frac.slice(0, minorUnits).padEnd(minorUnits, "0");
-  let minor = BigInt(int === "" ? "0" : int) * 10n ** BigInt(minorUnits) + (kept === "" ? 0n : BigInt(kept));
+  let minor =
+    BigInt(int === "" ? "0" : int) * 10n ** BigInt(minorUnits) + (kept === "" ? 0n : BigInt(kept));
   // Half-up on the discarded fraction: a first dropped digit of 5 or more rounds up.
   if ((frac.slice(minorUnits)[0] ?? "0") >= "5") minor += 1n;
   return neg ? -minor : minor;
@@ -212,13 +223,15 @@ export function decimalToMinorUnits(amount: string, minorUnits: number): bigint 
 
 /** Minor units → ledger decimal string (at most 4 places, never floats). */
 export function minorUnitsToLedger(minor: bigint, minorUnits: number): string {
-  if (minorUnits < 0 || minorUnits > 4 || !Number.isInteger(minorUnits)) fail(`unsupported currency precision ${minorUnits}`);
+  if (minorUnits < 0 || minorUnits > 4 || !Number.isInteger(minorUnits))
+    fail(`unsupported currency precision ${minorUnits}`);
   const negative = minor < 0n;
   const abs = negative ? -minor : minor;
   const base = 10n ** BigInt(minorUnits);
   const int = abs / base;
   const frac = abs % base;
-  const text = minorUnits === 0 ? int.toString() : `${int}.${frac.toString().padStart(minorUnits, "0")}`;
+  const text =
+    minorUnits === 0 ? int.toString() : `${int}.${frac.toString().padStart(minorUnits, "0")}`;
   return negative ? `-${text}` : text;
 }
 
@@ -240,7 +253,10 @@ export async function readProviderJson(res: Response, describe: string): Promise
   }
 }
 
-export function providerHeaders(ctx: CarrierContext, extra: Record<string, string>): Record<string, string> {
+export function providerHeaders(
+  ctx: CarrierContext,
+  extra: Record<string, string>,
+): Record<string, string> {
   if (!ctx.apiKey) fail("the carrier account has no API key");
   return extra;
 }
@@ -270,7 +286,11 @@ export async function callProvider(
  * delivery is ALSO confirmed by re-reading the tracker over the sealed API
  * key before any state changes — a signature alone never moves a parcel.
  */
-export function verifyRelaySignature(rawBody: string, header: string | null, secret: string): boolean {
+export function verifyRelaySignature(
+  rawBody: string,
+  header: string | null,
+  secret: string,
+): boolean {
   if (!header || !secret) return false;
   const parts = Object.fromEntries(
     header.split(",").map((piece) => {

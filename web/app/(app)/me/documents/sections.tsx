@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
-import { Button, Input, Label, UrlDrawer } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Button, Input, Label, UrlDrawer } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
 
 /**
  * Me documents islands (0230, HR-19): per-row sign/acknowledge
@@ -16,15 +16,15 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
 
 async function post(url: string, body: unknown, failed: string): Promise<boolean> {
   const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
-  })
+  });
   if (!res.ok) {
-    toast.error(await readApiErrorMessage(res, failed))
-    return false
+    toast.error(await readApiErrorMessage(res, failed));
+    return false;
   }
-  return true
+  return true;
 }
 
 export function MeDocumentActions({
@@ -36,30 +36,31 @@ export function MeDocumentActions({
   acknowledgeLabel,
   actionFailed,
 }: {
-  documentId: string
-  signable: boolean
-  acknowledgeable: boolean
-  signLabel: string
-  signNameLabel: string
-  acknowledgeLabel: string
-  actionFailed: string
+  documentId: string;
+  signable: boolean;
+  acknowledgeable: boolean;
+  signLabel: string;
+  signNameLabel: string;
+  acknowledgeLabel: string;
+  actionFailed: string;
 }) {
-  const router = useRouter()
-  const [signing, setSigning] = useState(false)
-  const [name, setName] = useState('')
+  const router = useRouter();
+  const [signing, setSigning] = useState(false);
+  const [name, setName] = useState("");
 
   async function sign() {
     if (await post(`/api/hrm/documents/${documentId}/sign`, { name: name.trim() }, actionFailed)) {
-      setSigning(false)
-      router.refresh()
+      setSigning(false);
+      router.refresh();
     }
   }
 
   async function acknowledge() {
-    if (await post(`/api/hrm/documents/${documentId}/acknowledge`, {}, actionFailed)) router.refresh()
+    if (await post(`/api/hrm/documents/${documentId}/acknowledge`, {}, actionFailed))
+      router.refresh();
   }
 
-  if (!signable && !acknowledgeable) return null
+  if (!signable && !acknowledgeable) return null;
   return (
     <span className="flex flex-wrap gap-2">
       {signable && !signing && (
@@ -87,7 +88,7 @@ export function MeDocumentActions({
         </Button>
       )}
     </span>
-  )
+  );
 }
 
 export function MeExportDownload({
@@ -95,16 +96,16 @@ export function MeExportDownload({
   href,
   label,
 }: {
-  downloadable: boolean
-  href: string
-  label: string
+  downloadable: boolean;
+  href: string;
+  label: string;
 }) {
-  if (!downloadable) return null
+  if (!downloadable) return null;
   return (
     <a href={href} className="text-sm text-teal-700 underline dark:text-teal-300">
       {label}
     </a>
-  )
+  );
 }
 
 export function MeExportDialog({
@@ -113,27 +114,27 @@ export function MeExportDialog({
   requestExportDone,
   actionFailed,
 }: {
-  partyId: string
-  requestExportLabel: string
-  requestExportDone: string
-  actionFailed: string
+  partyId: string;
+  requestExportLabel: string;
+  requestExportDone: string;
+  actionFailed: string;
 }) {
-  const router = useRouter()
-  const [done, setDone] = useState(false)
-  const [failed, setFailed] = useState<string | null>(null)
+  const router = useRouter();
+  const [done, setDone] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
 
   async function request() {
-    setFailed(null)
-    const res = await fetch('/api/hrm/data-subject-exports', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    setFailed(null);
+    const res = await fetch("/api/hrm/data-subject-exports", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify({ partyId }),
-    })
+    });
     if (!res.ok) {
-      setFailed(await readApiErrorMessage(res, actionFailed))
-      return
+      setFailed(await readApiErrorMessage(res, actionFailed));
+      return;
     }
-    setDone(true)
+    setDone(true);
   }
 
   return (
@@ -146,7 +147,7 @@ export function MeExportDialog({
           {failed && <p className="text-sm text-red-600">{failed}</p>}
           <Button
             onClick={() => {
-              request().then(() => router.refresh())
+              request().then(() => router.refresh());
             }}
           >
             {requestExportLabel}
@@ -154,5 +155,5 @@ export function MeExportDialog({
         </div>
       )}
     </UrlDrawer>
-  )
+  );
 }

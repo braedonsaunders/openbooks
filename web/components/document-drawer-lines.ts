@@ -1,7 +1,7 @@
-import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue } from '../lib/segment-assignments'
-import { add, cmp, fromUnits, normalizeMoney, roundDiv, sum } from '@openbooks/engine/money/money'
-import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/tax/tax'
-import type { CustomFieldDefClient } from './custom-field-inputs'
+import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue } from "../lib/segment-assignments";
+import { add, cmp, fromUnits, normalizeMoney, roundDiv, sum } from "@openbooks/engine/money/money";
+import { computeLineTaxes, type TaxComponentConfig } from "@openbooks/engine/tax/tax";
+import type { CustomFieldDefClient } from "./custom-field-inputs";
 import {
   clearedDistributionFields,
   distributionFieldsOf,
@@ -10,53 +10,57 @@ import {
   type LineRow,
   type ReturnableSourceOption,
   type SegmentOpt,
-} from './document-drawer-types'
+} from "./document-drawer-types";
 
 export const emptyLine = (): LineRow => ({
-  lineId: '',
+  lineId: "",
   clientKey: crypto.randomUUID(),
-  accountId: '',
-  itemId: '',
-  description: '',
-  quantity: '',
-  unit: '',
-  unitPrice: '',
-  costRate: '',
-  billRate: '',
-  billAmount: '',
+  accountId: "",
+  itemId: "",
+  description: "",
+  quantity: "",
+  unit: "",
+  unitPrice: "",
+  costRate: "",
+  billRate: "",
+  billAmount: "",
   isBillable: false,
-  departmentId: '',
-  projectId: '',
-  locationId: '',
-  classId: '',
-  workFrom: '',
-  workTo: '',
-  stockLocationId: '',
-  amortizationTemplateId: '',
-  amortizationStartOn: '',
-  amortizationEndOn: '',
-  returnSourceMovementId: '',
-  taxProfileId: '',
-  amount: '',
-  taxInputAmount: '',
-  withholdingTreatment: '',
-  withholdingMaterialsCost: '',
+  departmentId: "",
+  projectId: "",
+  locationId: "",
+  classId: "",
+  workFrom: "",
+  workTo: "",
+  stockLocationId: "",
+  amortizationTemplateId: "",
+  amortizationStartOn: "",
+  amortizationEndOn: "",
+  returnSourceMovementId: "",
+  taxProfileId: "",
+  amount: "",
+  taxInputAmount: "",
+  withholdingTreatment: "",
+  withholdingMaterialsCost: "",
   taxOverridden: false,
-  taxAmount: '',
-  marketplaceFacilitator: '',
+  taxAmount: "",
+  marketplaceFacilitator: "",
   ...clearedDistributionFields(),
-  promotionCode: '',
-})
+  promotionCode: "",
+});
 
 export function positiveAmount(value: unknown): boolean {
-  try { return cmp(String(value ?? ''), '0') > 0 } catch { return false }
+  try {
+    return cmp(String(value ?? ""), "0") > 0;
+  } catch {
+    return false;
+  }
 }
 
 /** A single grid cell carries user content when it is anything but blank. */
 function isBlankDrawerCell(value: unknown): boolean {
-  if (value === '' || value == null || value === false) return true
-  if (typeof value === 'string') return value.trim() === ''
-  return false
+  if (value === "" || value == null || value === false) return true;
+  if (typeof value === "string") return value.trim() === "";
+  return false;
 }
 
 /**
@@ -71,51 +75,53 @@ function isBlankDrawerCell(value: unknown): boolean {
  */
 export function isBlankDrawerLine(row: Record<string, unknown>): boolean {
   for (const key of [
-    'accountId',
-    'itemId',
-    'description',
-    'quantity',
-    'unit',
-    'unitPrice',
-    'costRate',
-    'billRate',
-    'billAmount',
-    'departmentId',
-    'projectId',
-    'locationId',
-    'classId',
-    'workFrom',
-    'workTo',
-    'stockLocationId',
-    'amortizationTemplateId',
-    'amortizationStartOn',
-    'amortizationEndOn',
-    'returnSourceMovementId',
-    'taxProfileId',
-    'amount',
-    'taxInputAmount',
-    'taxAmount',
-    'withholdingTreatment',
-    'withholdingMaterialsCost',
-    'distributionGroupId',
-    'distributionRuleId',
-    'distributionRuleName',
-    'distributionVersionId',
-    'distributionKey',
+    "accountId",
+    "itemId",
+    "description",
+    "quantity",
+    "unit",
+    "unitPrice",
+    "costRate",
+    "billRate",
+    "billAmount",
+    "departmentId",
+    "projectId",
+    "locationId",
+    "classId",
+    "workFrom",
+    "workTo",
+    "stockLocationId",
+    "amortizationTemplateId",
+    "amortizationStartOn",
+    "amortizationEndOn",
+    "returnSourceMovementId",
+    "taxProfileId",
+    "amount",
+    "taxInputAmount",
+    "taxAmount",
+    "withholdingTreatment",
+    "withholdingMaterialsCost",
+    "distributionGroupId",
+    "distributionRuleId",
+    "distributionRuleName",
+    "distributionVersionId",
+    "distributionKey",
   ]) {
-    if (!isBlankDrawerCell(row[key])) return false
+    if (!isBlankDrawerCell(row[key])) return false;
   }
-  if (row.isBillable === true || row.taxOverridden === true || row.distributionLocked === true) return false
+  if (row.isBillable === true || row.taxOverridden === true || row.distributionLocked === true)
+    return false;
   for (const [key, value] of Object.entries(row)) {
-    if (key.startsWith('seg_') && (value === INHERIT_SEGMENT || value === CLEAR_SEGMENT)) continue
-    if ((key.startsWith('cf_') || key.startsWith('seg_')) && !isBlankDrawerCell(value)) return false
+    if (key.startsWith("seg_") && (value === INHERIT_SEGMENT || value === CLEAR_SEGMENT)) continue;
+    if ((key.startsWith("cf_") || key.startsWith("seg_")) && !isBlankDrawerCell(value))
+      return false;
   }
-  return true
+  return true;
 }
 
 /** Rows that name an account — the only rows allocation candidates can key off. */
 export function hasDrawerLineAccount(row: Record<string, unknown>): boolean {
-  return String(row.accountId ?? '').trim() !== ''
+  return String(row.accountId ?? "").trim() !== "";
 }
 
 /**
@@ -128,23 +134,24 @@ export function findMissingAccountLine(
   rows: readonly Record<string, unknown>[],
 ): { index: number; lineNumber: number } | null {
   for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]!
-    if (!isBlankDrawerLine(row) && !hasDrawerLineAccount(row)) return { index: i, lineNumber: i + 1 }
+    const row = rows[i]!;
+    if (!isBlankDrawerLine(row) && !hasDrawerLineAccount(row))
+      return { index: i, lineNumber: i + 1 };
   }
-  return null
+  return null;
 }
 
-const LINE_DECIMAL_RE = /^[-+]?(\d+(\.\d*)?|\.\d+)$/
-const MAX_LINE_DECIMAL_SCALE = 10
+const LINE_DECIMAL_RE = /^[-+]?(\d+(\.\d*)?|\.\d+)$/;
+const MAX_LINE_DECIMAL_SCALE = 10;
 
 function parseLineDecimal(value: string): { units: bigint; scale: number } | null {
-  const raw = String(value ?? '').trim()
-  if (!LINE_DECIMAL_RE.test(raw)) return null
-  const unsigned = raw.replace(/^[-+]/, '')
-  const [whole = '0', fraction = ''] = unsigned.split('.')
-  if (fraction.length > MAX_LINE_DECIMAL_SCALE) return null
-  const units = BigInt(`${whole === '' ? '0' : whole}${fraction}`)
-  return { units: raw.startsWith('-') ? -units : units, scale: fraction.length }
+  const raw = String(value ?? "").trim();
+  if (!LINE_DECIMAL_RE.test(raw)) return null;
+  const unsigned = raw.replace(/^[-+]/, "");
+  const [whole = "0", fraction = ""] = unsigned.split(".");
+  if (fraction.length > MAX_LINE_DECIMAL_SCALE) return null;
+  const units = BigInt(`${whole === "" ? "0" : whole}${fraction}`);
+  return { units: raw.startsWith("-") ? -units : units, scale: fraction.length };
 }
 
 /**
@@ -155,16 +162,16 @@ function parseLineDecimal(value: string): { units: bigint; scale: number } | nul
  * discount line or a hand-typed amount must never be guessed over.
  */
 export function lineAmountFromQtyPrice(quantity: string, unitPrice: string): string | null {
-  const q = parseLineDecimal(quantity)
-  const p = parseLineDecimal(unitPrice)
-  if (!q || !p) return null
-  const product = q.units * p.units
-  const scale = q.scale + p.scale
-  if (scale <= 4) return fromUnits(product * 10n ** BigInt(4 - scale))
-  return fromUnits(roundDiv(product, 10n ** BigInt(scale - 4)))
+  const q = parseLineDecimal(quantity);
+  const p = parseLineDecimal(unitPrice);
+  if (!q || !p) return null;
+  const product = q.units * p.units;
+  const scale = q.scale + p.scale;
+  if (scale <= 4) return fromUnits(product * 10n ** BigInt(4 - scale));
+  return fromUnits(roundDiv(product, 10n ** BigInt(scale - 4)));
 }
 
-type QtyPriceRow = { quantity: string; unitPrice: string; amount: string }
+type QtyPriceRow = { quantity: string; unitPrice: string; amount: string };
 
 /**
  * Grid change handler companion: a row whose quantity or unit price just
@@ -179,25 +186,24 @@ export function applyQtyPriceToRows<Row extends QtyPriceRow>(prev: Row[], next: 
   // compared against itself, not against whichever line used to sit at its
   // position. Rows without an identity (and the unit tests) fall back to
   // position, preserving the previous behaviour exactly.
-  const prevByKey = new Map<string, Row>()
+  const prevByKey = new Map<string, Row>();
   for (const row of prev) {
-    const key = (row as { clientKey?: unknown }).clientKey
-    if (typeof key === 'string' && key !== '') prevByKey.set(key, row)
+    const key = (row as { clientKey?: unknown }).clientKey;
+    if (typeof key === "string" && key !== "") prevByKey.set(key, row);
   }
   return next.map((row, i) => {
-    const key = (row as { clientKey?: unknown }).clientKey
-    const old = (typeof key === 'string' && key !== '' ? prevByKey.get(key) : undefined) ?? prev[i]
-    if (!old || (old.quantity === row.quantity && old.unitPrice === row.unitPrice)) return row
-    const derived = lineAmountFromQtyPrice(row.quantity, row.unitPrice)
-    if (derived === null || row.amount === derived) return row
-    if (row.amount.trim() !== '') {
-      const wasDerived = lineAmountFromQtyPrice(old.quantity, old.unitPrice)
-      if (row.amount !== wasDerived) return row
+    const key = (row as { clientKey?: unknown }).clientKey;
+    const old = (typeof key === "string" && key !== "" ? prevByKey.get(key) : undefined) ?? prev[i];
+    if (!old || (old.quantity === row.quantity && old.unitPrice === row.unitPrice)) return row;
+    const derived = lineAmountFromQtyPrice(row.quantity, row.unitPrice);
+    if (derived === null || row.amount === derived) return row;
+    if (row.amount.trim() !== "") {
+      const wasDerived = lineAmountFromQtyPrice(old.quantity, old.unitPrice);
+      if (row.amount !== wasDerived) return row;
     }
-    return { ...row, amount: derived }
-  })
+    return { ...row, amount: derived };
+  });
 }
-
 
 /**
  * Stored in a credit row's returnSourceMovementId when the operator chooses
@@ -206,7 +212,7 @@ export function applyQtyPriceToRows<Row extends QtyPriceRow>(prev: Row[], next: 
  * field. Offered only on vendor credits; sales credits keep blank for a
  * purely financial line.
  */
-export const NO_RETURN_SENTINEL = 'allowance'
+export const NO_RETURN_SENTINEL = "allowance";
 
 /**
  * Save payload for a credit row's return cell: a movement id becomes the
@@ -218,30 +224,34 @@ export const NO_RETURN_SENTINEL = 'allowance'
  */
 export function returnCellPayload(
   returnSourceMovementId: string,
-  returnSources: readonly Pick<ReturnableSourceOption, 'movementId' | 'lotId' | 'serialId'>[],
+  returnSources: readonly Pick<ReturnableSourceOption, "movementId" | "lotId" | "serialId">[],
 ): {
   inventoryReturnSource: {
-    movementId: string
-    lotId: string | null
-    serialId: string | null
-  } | null
-  inventoryAllowance?: true
+    movementId: string;
+    lotId: string | null;
+    serialId: string | null;
+  } | null;
+  inventoryAllowance?: true;
 } {
   if (returnSourceMovementId === NO_RETURN_SENTINEL) {
-    return { inventoryReturnSource: null, inventoryAllowance: true }
+    return { inventoryReturnSource: null, inventoryAllowance: true };
   }
-  if (returnSourceMovementId === '') return { inventoryReturnSource: null }
-  const source = returnSources.find((candidate) => candidate.movementId === returnSourceMovementId)
+  if (returnSourceMovementId === "") return { inventoryReturnSource: null };
+  const source = returnSources.find((candidate) => candidate.movementId === returnSourceMovementId);
   return {
     inventoryReturnSource: {
       movementId: returnSourceMovementId,
       lotId: source?.lotId ?? null,
       serialId: source?.serialId ?? null,
     },
-  }
+  };
 }
 
-export function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
+export function toRow(
+  l: Record<string, unknown>,
+  lineDefs: CustomFieldDefClient[],
+  segments: SegmentOpt[],
+): LineRow {
   const row: LineRow = {
     lineId: lineText(l.id),
     // Fresh client identity on every load: the grid's React key must be
@@ -250,12 +260,12 @@ export function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient
     accountId: lineText(l.account_id),
     itemId: lineText(l.item_id),
     description: lineText(l.description),
-    quantity: l.quantity != null ? String(l.quantity) : '',
+    quantity: l.quantity != null ? String(l.quantity) : "",
     unit: lineText(l.unit),
-    unitPrice: l.unit_price != null ? String(l.unit_price) : '',
-    costRate: l.cost_rate != null ? String(l.cost_rate) : '',
-    billRate: l.bill_rate != null ? String(l.bill_rate) : '',
-    billAmount: l.bill_amount != null ? String(l.bill_amount) : '',
+    unitPrice: l.unit_price != null ? String(l.unit_price) : "",
+    costRate: l.cost_rate != null ? String(l.cost_rate) : "",
+    billRate: l.bill_rate != null ? String(l.bill_rate) : "",
+    billAmount: l.bill_amount != null ? String(l.bill_amount) : "",
     isBillable: l.is_billable === true,
     departmentId: lineText(l.department_id),
     projectId: lineText(l.project_id),
@@ -268,43 +278,52 @@ export function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient
     amortizationStartOn: lineText(l.amortization_start_on),
     amortizationEndOn: lineText(l.amortization_end_on),
     // Overwritten below from native return evidence when the line carries it.
-    returnSourceMovementId: '',
-    taxProfileId: l.tax_group_id ? `group:${l.tax_group_id}` : l.tax_code_id ? `code:${l.tax_code_id}` : '',
-    amount: l.amount != null ? String(l.amount) : '',
-    taxInputAmount: l.tax_input_amount != null ? String(l.tax_input_amount) : '',
+    returnSourceMovementId: "",
+    taxProfileId: l.tax_group_id
+      ? `group:${l.tax_group_id}`
+      : l.tax_code_id
+        ? `code:${l.tax_code_id}`
+        : "",
+    amount: l.amount != null ? String(l.amount) : "",
+    taxInputAmount: l.tax_input_amount != null ? String(l.tax_input_amount) : "",
     withholdingTreatment: lineText(l.withholding_treatment),
     withholdingMaterialsCost: lineText(l.withholding_materials_cost),
     taxOverridden: l.tax_overridden === true,
-    taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
+    taxAmount: l.tax_amount != null ? String(l.tax_amount) : "",
     marketplaceFacilitator: lineText(l.marketplace_facilitator),
     ...distributionFieldsOf(l),
     promotionCode: lineText(l.promotion_code),
-  }
-  const custom = isLineMap(l.custom) ? l.custom : null
-  const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
+  };
+  const custom = isLineMap(l.custom) ? l.custom : null;
+  const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null;
   // Native return evidence: the server owns both spellings (a vendor credit
   // names a receipt, a customer credit a shipment) and only ever writes one.
   // An explicit no-goods-returned choice (a vendor allowance) round-trips as
   // the sentinel so the picker shows the choice, not a blank.
-  const inventoryReturn = custom && isLineMap(custom.inventoryReturn) ? custom.inventoryReturn : null
+  const inventoryReturn =
+    custom && isLineMap(custom.inventoryReturn) ? custom.inventoryReturn : null;
   row.returnSourceMovementId = lineText(
     inventoryReturn?.sourceReceiptMovementId ?? inventoryReturn?.sourceIssueMovementId,
-  )
-  if (row.returnSourceMovementId === '' && custom?.inventoryAllowance === true) {
-    row.returnSourceMovementId = NO_RETURN_SENTINEL
+  );
+  if (row.returnSourceMovementId === "" && custom?.inventoryAllowance === true) {
+    row.returnSourceMovementId = NO_RETURN_SENTINEL;
   }
-  for (const def of lineDefs) row[`cf_${def.key}`] = custom?.[def.key] ?? ''
-  for (const segment of segments) row[`seg_${segment.key}`] = segmentCellValue(extraDims, segment.key)
-  return row
+  for (const def of lineDefs) row[`cf_${def.key}`] = custom?.[def.key] ?? "";
+  for (const segment of segments)
+    row[`seg_${segment.key}`] = segmentCellValue(extraDims, segment.key);
+  return row;
 }
 
-type DrawerTotalsRow = Pick<LineRow, 'accountId' | 'amount' | 'taxInputAmount' | 'taxProfileId' | 'taxOverridden' | 'taxAmount'>
+type DrawerTotalsRow = Pick<
+  LineRow,
+  "accountId" | "amount" | "taxInputAmount" | "taxProfileId" | "taxOverridden" | "taxAmount"
+>;
 
 export type DocumentDrawerTotals = {
-  subtotal: string
-  taxTotal: string
-  total: string
-}
+  subtotal: string;
+  taxTotal: string;
+  total: string;
+};
 
 /**
  * Keep the edit-mode footer in lockstep with the line payload. Persisted
@@ -324,23 +343,23 @@ export function computeDocumentDrawerTotals(
   const lineTotals = rows
     .filter((row) => !isBlankDrawerLine(row))
     .map((row) => {
-      const amount = String(row.amount)
-      const taxConfig = taxByProfile.get(row.taxProfileId) ?? []
+      const amount = String(row.amount);
+      const taxConfig = taxByProfile.get(row.taxProfileId) ?? [];
       if (!hasTax) {
         try {
-          return { subtotal: normalizeMoney(amount), taxTotal: '0.0000' }
+          return { subtotal: normalizeMoney(amount), taxTotal: "0.0000" };
         } catch {
-          return { subtotal: '0.0000', taxTotal: '0.0000' }
+          return { subtotal: "0.0000", taxTotal: "0.0000" };
         }
       }
 
-      const persistedInput = String(row.taxInputAmount ?? '').trim()
-      let inputAmount = amount
+      const persistedInput = String(row.taxInputAmount ?? "").trim();
+      let inputAmount = amount;
       if (persistedInput && taxConfig.some((component) => component.priceIncludesTax)) {
         try {
-          const normalizedAmount = normalizeMoney(amount)
-          const persistedResult = computeLineTaxes(persistedInput, taxConfig)
-          if (cmp(persistedResult.netAmount, normalizedAmount) === 0) inputAmount = persistedInput
+          const normalizedAmount = normalizeMoney(amount);
+          const persistedResult = computeLineTaxes(persistedInput, taxConfig);
+          if (cmp(persistedResult.netAmount, normalizedAmount) === 0) inputAmount = persistedInput;
         } catch {
           // An incomplete profile or malformed persisted value is handled by
           // the normal calculation/fallback below; never block the drawer.
@@ -351,38 +370,39 @@ export function computeDocumentDrawerTotals(
         const result = computeLineTaxes(
           inputAmount,
           taxConfig,
-          row.taxOverridden
-            ? { overridden: true, taxAmount: row.taxAmount }
-            : undefined,
-        )
-        return { subtotal: result.netAmount, taxTotal: result.taxTotal }
+          row.taxOverridden ? { overridden: true, taxAmount: row.taxAmount } : undefined,
+        );
+        return { subtotal: result.netAmount, taxTotal: result.taxTotal };
       } catch {
         // The save boundary still rejects malformed amounts. Showing a zero
         // for an invalid draft cell avoids inventing a numeric total here.
         try {
           return {
             subtotal: normalizeMoney(amount),
-            taxTotal: row.taxOverridden ? normalizeMoney(row.taxAmount) : '0.0000',
-          }
+            taxTotal: row.taxOverridden ? normalizeMoney(row.taxAmount) : "0.0000",
+          };
         } catch {
-          return { subtotal: '0.0000', taxTotal: '0.0000' }
+          return { subtotal: "0.0000", taxTotal: "0.0000" };
         }
       }
-    })
-  const subtotal = sum(lineTotals.map((line) => line.subtotal))
-  const taxTotal = sum(lineTotals.map((line) => line.taxTotal))
-  return { subtotal, taxTotal, total: add(subtotal, taxTotal) }
+    });
+  const subtotal = sum(lineTotals.map((line) => line.subtotal));
+  const taxTotal = sum(lineTotals.map((line) => line.taxTotal));
+  return { subtotal, taxTotal, total: add(subtotal, taxTotal) };
 }
 
-export function drawerTaxInputAmount(row: DrawerTotalsRow, taxConfig: TaxComponentConfig[]): string {
-  const amount = String(row.amount ?? '')
-  const persistedInput = String(row.taxInputAmount ?? '').trim()
-  if (!persistedInput || !taxConfig.some((component) => component.priceIncludesTax)) return amount
+export function drawerTaxInputAmount(
+  row: DrawerTotalsRow,
+  taxConfig: TaxComponentConfig[],
+): string {
+  const amount = String(row.amount ?? "");
+  const persistedInput = String(row.taxInputAmount ?? "").trim();
+  if (!persistedInput || !taxConfig.some((component) => component.priceIncludesTax)) return amount;
   try {
     return cmp(computeLineTaxes(persistedInput, taxConfig).netAmount, normalizeMoney(amount)) === 0
       ? persistedInput
-      : amount
+      : amount;
   } catch {
-    return amount
+    return amount;
   }
 }

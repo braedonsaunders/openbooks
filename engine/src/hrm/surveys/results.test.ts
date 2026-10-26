@@ -8,7 +8,12 @@ import {
   type ResultAnswer,
 } from "./results.ts";
 
-function scale(questionId: string, driver: string | null, value: number, segment: string | null): ResultAnswer {
+function scale(
+  questionId: string,
+  driver: string | null,
+  value: number,
+  segment: string | null,
+): ResultAnswer {
   return { questionId, kind: "scale", driverKey: driver, value, raw: value, segment };
 }
 

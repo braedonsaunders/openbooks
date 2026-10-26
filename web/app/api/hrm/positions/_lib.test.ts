@@ -39,12 +39,16 @@ test("a refusal message reaches the caller unmodified", async () => {
 
 test("authorization refusals distinguish probing from forbidden", async () => {
   const hidden = positionErrorResponse(
-    new HrmAuthorizationError("Position is not visible in this organization and legal-entity scope."),
+    new HrmAuthorizationError(
+      "Position is not visible in this organization and legal-entity scope.",
+    ),
   );
   assert.equal(hidden.status, 404);
   const forbidden = positionErrorResponse(
-    new HrmAuthorizationError("Position access requires the hrm.position.manage permission — ask an administrator to grant it in /admin/roles."),
+    new HrmAuthorizationError(
+      "Position access requires the hrm.position.manage permission — ask an administrator to grant it in /admin/roles.",
+    ),
   );
   assert.equal(forbidden.status, 403);
-  assert.match((await forbidden.json() as { error: string }).error, /hrm\.position\.manage/);
+  assert.match(((await forbidden.json()) as { error: string }).error, /hrm\.position\.manage/);
 });

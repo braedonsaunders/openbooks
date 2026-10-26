@@ -17,7 +17,12 @@ export function carryRefusalIdentity(refusal: PostingError, source: unknown): Po
   if (record && typeof record.remedy === "string" && record.remedy.trim() !== "") {
     carried.remedy = record.remedy;
   }
-  if (record && record.details !== null && typeof record.details === "object" && !Array.isArray(record.details)) {
+  if (
+    record &&
+    record.details !== null &&
+    typeof record.details === "object" &&
+    !Array.isArray(record.details)
+  ) {
     carried.details = record.details;
   }
   return refusal;

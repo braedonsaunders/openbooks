@@ -7,7 +7,10 @@
  */
 export const EQUITY_TERMS = {
   acceleration: { key: "equity.fields.acceleration", text: "Acceleration" },
-  accelerationPercent: { key: "equity.fields.accelerationPercent", text: "Accelerated share of unvested (%)" },
+  accelerationPercent: {
+    key: "equity.fields.accelerationPercent",
+    text: "Accelerated share of unvested (%)",
+  },
   amountPaid: { key: "equity.fields.amountPaid", text: "Amount paid" },
   antiDilution: { key: "equity.fields.antiDilution", text: "Anti-dilution" },
   attribution: { key: "equity.fields.attribution", text: "Cost attribution" },
@@ -17,7 +20,10 @@ export const EQUITY_TERMS = {
   closedOn: { key: "equity.fields.closedOn", text: "Closing date" },
   code: { key: "equity.fields.code", text: "Code" },
   consideration: { key: "equity.fields.consideration", text: "Consideration received" },
-  considerationAccount: { key: "equity.fields.considerationAccount", text: "Settles through account" },
+  considerationAccount: {
+    key: "equity.fields.considerationAccount",
+    text: "Settles through account",
+  },
   conversionPrice: { key: "equity.fields.conversionPrice", text: "Conversion price" },
   discountPercent: { key: "equity.fields.discountPercent", text: "Discount (%)" },
   dividendYieldPercent: { key: "equity.fields.dividendYieldPercent", text: "Dividend yield (%)" },
@@ -40,7 +46,10 @@ export const EQUITY_TERMS = {
   originalIssuePrice: { key: "equity.fields.originalIssuePrice", text: "Original issue price" },
   parValue: { key: "equity.fields.parValue", text: "Par value per share" },
   participation: { key: "equity.fields.participation", text: "Participation" },
-  participationCapMultiple: { key: "equity.fields.participationCapMultiple", text: "Participation cap (multiple)" },
+  participationCapMultiple: {
+    key: "equity.fields.participationCapMultiple",
+    text: "Participation cap (multiple)",
+  },
   plan: { key: "equity.fields.plan", text: "Plan" },
   preMoneyValuation: { key: "equity.fields.preMoneyValuation", text: "Pre-money valuation" },
   pricePerShare: { key: "equity.fields.pricePerShare", text: "Price per share" },
@@ -71,14 +80,23 @@ export const EQUITY_TERMS = {
   earlyExercise: { key: "equity.fields.earlyExercise", text: "Early exercise" },
   mfn: { key: "equity.fields.mfn", text: "Most-favored nation" },
   filedOn: { key: "equity.fields.filedOn", text: "Filing date" },
-  fairMarketValuePerShare: { key: "equity.fields.fairMarketValuePerShare", text: "Fair market value per share" },
+  fairMarketValuePerShare: {
+    key: "equity.fields.fairMarketValuePerShare",
+    text: "Fair market value per share",
+  },
   amountRepaid: { key: "equity.fields.amountRepaid", text: "Amount repaid" },
   interestDayCount: { key: "equity.fields.interestDayCount", text: "Day count" },
-  unvestedRepurchaseBasis: { key: "equity.fields.unvestedRepurchaseBasis", text: "Unvested repurchase price" },
+  unvestedRepurchaseBasis: {
+    key: "equity.fields.unvestedRepurchaseBasis",
+    text: "Unvested repurchase price",
+  },
   conversionClass: { key: "equity.fields.conversionClass", text: "Converts into" },
   partyKind: { key: "equity.fields.partyKind", text: "Party type" },
   issuedTerms: { key: "equity.fields.issuedTerms", text: "Terms as issued" },
-  liquidationPreferenceBasis: { key: "equity.fields.liquidationPreferenceBasis", text: "Preference measured on" },
+  liquidationPreferenceBasis: {
+    key: "equity.fields.liquidationPreferenceBasis",
+    text: "Preference measured on",
+  },
   preMoneyBasisReason: { key: "equity.fields.preMoneyBasisReason", text: "Pre-money basis" },
   investment: { key: "equity.model.investment", text: "New money" },
   targetPool: { key: "equity.model.targetPool", text: "Post-round pool target (%)" },
@@ -87,16 +105,46 @@ export const EQUITY_TERMS = {
   electedOn: { key: "equity.mfn.electedOn", text: "Election date" },
   // Equity account policy fields, as Setup labels them.
   effectiveFrom: { key: "admin.setup.fields.effectiveFrom", text: "Effective from" },
-  commonStockAccountId: { key: "admin.setup.fields.commonStockAccountId", text: "Common stock account" },
-  preferredStockAccountId: { key: "admin.setup.fields.preferredStockAccountId", text: "Preferred stock account" },
-  apicAccountId: { key: "admin.setup.fields.apicAccountId", text: "Additional paid-in capital account" },
-  apicShareBasedAccountId: { key: "admin.setup.fields.apicShareBasedAccountId", text: "Paid-in capital (share-based payments) account" },
-  compensationExpenseAccountId: { key: "admin.setup.fields.compensationExpenseAccountId", text: "Stock compensation expense account" },
-  treasuryStockAccountId: { key: "admin.setup.fields.treasuryStockAccountId", text: "Treasury stock account" },
-  convertibleInstrumentsAccountId: { key: "admin.setup.fields.convertibleInstrumentsAccountId", text: "Convertible instruments account" },
-  interestExpenseAccountId: { key: "admin.setup.fields.interestExpenseAccountId", text: "Convertible note interest expense account" },
-  accruedInterestAccountId: { key: "admin.setup.fields.accruedInterestAccountId", text: "Accrued note interest account" },
-  earlyExerciseDepositAccountId: { key: "admin.setup.fields.earlyExerciseDepositAccountId", text: "Early-exercise deposit account" },
+  commonStockAccountId: {
+    key: "admin.setup.fields.commonStockAccountId",
+    text: "Common stock account",
+  },
+  preferredStockAccountId: {
+    key: "admin.setup.fields.preferredStockAccountId",
+    text: "Preferred stock account",
+  },
+  apicAccountId: {
+    key: "admin.setup.fields.apicAccountId",
+    text: "Additional paid-in capital account",
+  },
+  apicShareBasedAccountId: {
+    key: "admin.setup.fields.apicShareBasedAccountId",
+    text: "Paid-in capital (share-based payments) account",
+  },
+  compensationExpenseAccountId: {
+    key: "admin.setup.fields.compensationExpenseAccountId",
+    text: "Stock compensation expense account",
+  },
+  treasuryStockAccountId: {
+    key: "admin.setup.fields.treasuryStockAccountId",
+    text: "Treasury stock account",
+  },
+  convertibleInstrumentsAccountId: {
+    key: "admin.setup.fields.convertibleInstrumentsAccountId",
+    text: "Convertible instruments account",
+  },
+  interestExpenseAccountId: {
+    key: "admin.setup.fields.interestExpenseAccountId",
+    text: "Convertible note interest expense account",
+  },
+  accruedInterestAccountId: {
+    key: "admin.setup.fields.accruedInterestAccountId",
+    text: "Accrued note interest account",
+  },
+  earlyExerciseDepositAccountId: {
+    key: "admin.setup.fields.earlyExerciseDepositAccountId",
+    text: "Early-exercise deposit account",
+  },
   // Terms a refusal names that no form labels.
   roundPrice: { key: "refusals.equity.terms.roundPrice", text: "Round price" },
   runDate: { key: "refusals.equity.terms.runDate", text: "Run date" },

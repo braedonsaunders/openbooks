@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button, Drawer, Input } from "@openbooks/ui";
 import { readApiErrorMessage } from "@/lib/api-error";
 import { useMoney } from "@/components/money-provider";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 
 /**
  * Recognize impairment: the write-down preview (carrying less recoverable)
@@ -48,9 +48,7 @@ export function ImpairAssetButton({
       });
       if (!res.ok) throw new Error(await readApiErrorMessage(res, t("impair.failed")));
       const result = (await res.json()) as { posted: boolean; impairmentMinor: string };
-      toast.success(
-        result.posted ? t("impair.saved") : t("impair.clean"),
-      );
+      toast.success(result.posted ? t("impair.saved") : t("impair.clean"));
       setOpen(false);
       router.refresh();
     } catch (e) {
@@ -75,15 +73,29 @@ export function ImpairAssetButton({
           <div className="space-y-4 p-4">
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("impair.remaining", { currency })}</label>
-              <Input value={remaining} onChange={(e) => setRemaining(e.target.value)} inputMode="decimal" placeholder="1000.00" />
+              <Input
+                value={remaining}
+                onChange={(e) => setRemaining(e.target.value)}
+                inputMode="decimal"
+                placeholder="1000.00"
+              />
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("impair.costs", { currency })}</label>
-              <Input value={costs} onChange={(e) => setCosts(e.target.value)} inputMode="decimal" placeholder="0.00" />
+              <Input
+                value={costs}
+                onChange={(e) => setCosts(e.target.value)}
+                inputMode="decimal"
+                placeholder="0.00"
+              />
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("impair.reason")}</label>
-              <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t("impair.reasonHint")} />
+              <Input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder={t("impair.reasonHint")}
+              />
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("impair.date")}</label>
@@ -93,7 +105,10 @@ export function ImpairAssetButton({
               <Button variant="ghost" onClick={() => setOpen(false)}>
                 {t("common.cancel")}
               </Button>
-              <Button onClick={submit} disabled={busy || !remaining || reason.trim().length < 8 || !date}>
+              <Button
+                onClick={submit}
+                disabled={busy || !remaining || reason.trim().length < 8 || !date}
+              >
                 {t("impair.submit")}
               </Button>
             </div>

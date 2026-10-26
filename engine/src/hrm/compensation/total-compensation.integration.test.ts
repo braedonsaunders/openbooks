@@ -12,15 +12,9 @@ import {
   withHarness,
 } from "../../testing/hrm-harness.ts";
 import { employeeTotalCompensation } from "./total-compensation.ts";
-import {
-  createBenefitProgram,
-  activateBenefitProgram,
-} from "../benefits/programs.ts";
+import { createBenefitProgram, activateBenefitProgram } from "../benefits/programs.ts";
 import { createBenefitAward } from "../benefits/awards.ts";
-import {
-  seedPayrollComponent,
-  seedPayrollStatutoryTreatment,
-} from "../../testing/fixtures.ts";
+import { seedPayrollComponent, seedPayrollStatutoryTreatment } from "../../testing/fixtures.ts";
 
 const setup = () =>
   setupHarness({
@@ -125,10 +119,15 @@ test(
     await withHarness(setup, async ({ org, reader }) => {
       const worker = await seedEmployment(org.orgId, org.subsidiaryId);
       const componentId = randomUUID();
-      const clearing = (await db.execute<{ id: string }>(sql`insert into accounts
+      const clearing = (
+        await db.execute<{ id: string }>(
+          sql`insert into accounts
       (org_id, number, name, type, is_active, is_summary)
       values (${org.orgId}, '1455', 'Recognition benefit clearing', 'asset_current_other', true, false)
-      returning id`, "objects"))[0]!;
+      returning id`,
+          "objects",
+        )
+      )[0]!;
       await seedPayrollComponent(org.orgId, componentId, {
         code: "RECOGNITION",
         name: "Recognition benefit",

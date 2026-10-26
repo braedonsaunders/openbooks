@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { getAuthz } from '../../lib/authz'
-import { RelatedTransactionDrawer } from '../related-transaction-drawer'
+import { getAuthz } from "../../lib/authz";
+import { RelatedTransactionDrawer } from "../related-transaction-drawer";
 
 /**
  * The related-transaction drawer, for any record that opens one.
@@ -25,14 +25,14 @@ export async function RelatedTxnSlot({
   projectId,
   formLayoutId,
 }: {
-  id: string
-  kind: string
-  partyId?: string
-  projectId?: string
-  formLayoutId?: string
+  id: string;
+  kind: string;
+  partyId?: string;
+  projectId?: string;
+  formLayoutId?: string;
 }) {
-  const authz = await getAuthz()
-  if (!authz) return null
+  const authz = await getAuthz();
+  if (!authz) return null;
   return (
     <RelatedTransactionDrawer
       id={id}
@@ -42,5 +42,5 @@ export async function RelatedTxnSlot({
       authz={authz}
       formLayoutId={formLayoutId}
     />
-  )
+  );
 }

@@ -1,10 +1,10 @@
-import 'server-only'
+import "server-only";
 
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
-import { listPipelineTemplates } from '../../../../../lib/setup/hrm-builders'
-import type { PipelineCard } from './PipelineIndex'
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
+import { listPipelineTemplates } from "../../../../../lib/setup/hrm-builders";
+import type { PipelineCard } from "./PipelineIndex";
 
 /**
  * Hiring pipelines index — the only entry point to funnel setup. Each card
@@ -13,21 +13,21 @@ import type { PipelineCard } from './PipelineIndex'
  */
 
 export interface HiringPipelinesData {
-  pipelines: PipelineCard[]
+  pipelines: PipelineCard[];
 }
 
 export async function loadHiringPipelines(): Promise<HiringPipelinesData> {
-  const authz = await requirePermission('admin.setup.manage')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'hrm')
-  return { pipelines: await listPipelineTemplates(orgId) }
+  const authz = await requirePermission("admin.setup.manage");
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "hrm");
+  return { pipelines: await listPipelineTemplates(orgId) };
 }
 
 export function hiringPipelinesSpec(data: HiringPipelinesData): PageSpec {
   return page({
-    route: '/admin/setup/hiring-pipelines',
-    layout: 'bare',
+    route: "/admin/setup/hiring-pipelines",
+    layout: "bare",
     header: [],
-    body: [widgetBlock('hiring-pipeline-index', { pipelines: data.pipelines })],
-  })
+    body: [widgetBlock("hiring-pipeline-index", { pipelines: data.pipelines })],
+  });
 }

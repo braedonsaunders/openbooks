@@ -2,7 +2,7 @@
 import { useTranslations } from "next-intl";
 import { Button, Input, Label } from "@openbooks/ui";
 import type { GroupComponentInput } from "@openbooks/engine/assets/group-component";
-import { DateField } from '../../../components/date-field'
+import { DateField } from "../../../components/date-field";
 /** Native field composition shared with the surrounding asset workpaper. */
 export function GroupComponentFields({
   value,
@@ -23,14 +23,9 @@ export function GroupComponentFields({
     salvage: "",
     remainingPlan: [],
   };
-  const set = (patch: Partial<GroupComponentInput>) =>
-    onChange({ ...current, ...patch });
+  const set = (patch: Partial<GroupComponentInput>) => onChange({ ...current, ...patch });
   const plan = (
-    key:
-      | "remainingPlan"
-      | "removedPlan"
-      | "unimpairedRemainingPlan"
-      | "unimpairedRemovedPlan",
+    key: "remainingPlan" | "removedPlan" | "unimpairedRemainingPlan" | "unimpairedRemovedPlan",
     label: string,
   ) => {
     const rows = current[key] ?? [];
@@ -44,9 +39,7 @@ export function GroupComponentFields({
               value={line.date}
               onChange={(value) =>
                 set({
-                  [key]: rows.map((r, i) =>
-                    i === index ? { ...r, date: value } : r,
-                  ),
+                  [key]: rows.map((r, i) => (i === index ? { ...r, date: value } : r)),
                 })
               }
             />
@@ -55,9 +48,7 @@ export function GroupComponentFields({
               value={line.amount}
               onChange={(e) =>
                 set({
-                  [key]: rows.map((r, i) =>
-                    i === index ? { ...r, amount: e.target.value } : r,
-                  ),
+                  [key]: rows.map((r, i) => (i === index ? { ...r, amount: e.target.value } : r)),
                 })
               }
             />
@@ -109,9 +100,7 @@ export function GroupComponentFields({
         <Input
           aria-label={t("unimpairedAccumulated")}
           value={current.unimpairedAccumulated ?? ""}
-          onChange={(e) =>
-            set({ unimpairedAccumulated: e.target.value || undefined })
-          }
+          onChange={(e) => set({ unimpairedAccumulated: e.target.value || undefined })}
         />
         {plan("unimpairedRemainingPlan", t("unimpairedRetained"))}
         {onward ? plan("unimpairedRemovedPlan", t("unimpairedTransferred")) : null}

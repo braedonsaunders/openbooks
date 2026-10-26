@@ -12,12 +12,8 @@ test("field_ticket is offered only the actions its drawer implements", () => {
   // The field-ticket drawer's renderFormAction handles customize, pdf,
   // workflow, approval, submit (and edit as the primary action) — post, void,
   // gl_impact and delete render nothing, so offering their toggles is dead.
-  assert.deepEqual([...supportedFormActionsFor("field_ticket")], [
-    "customize",
-    "pdf",
-    "workflow",
-    "approval",
-    "edit",
-    "submit",
-  ]);
+  assert.deepEqual(
+    [...supportedFormActionsFor("field_ticket")],
+    ["customize", "pdf", "workflow", "approval", "edit", "submit"],
+  );
 });

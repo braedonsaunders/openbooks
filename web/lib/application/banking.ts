@@ -45,9 +45,9 @@ function bankingFailure(error: unknown): never {
     throw new ApplicationError("invalid_input", error.message, error.status);
   }
   if (
-    error instanceof BankingError
-    || error instanceof PostingError
-    || error instanceof ControlAccountsIncompleteError
+    error instanceof BankingError ||
+    error instanceof PostingError ||
+    error instanceof ControlAccountsIncompleteError
   ) {
     // Controlled operator feedback, mirroring bankingErrorResponse (422).
     throw new ApplicationError("invalid_input", error.message, 422);
@@ -62,22 +62,35 @@ async function requireBankingFeature(orgId: string): Promise<void> {
 
 /** The subsidiary that owns an account; restricted callers fail closed on null. */
 async function accountSubsidiary(orgId: string, accountId: string): Promise<string | null> {
-  const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
+  const row = (
+    await db.execute<{ subsidiaryId: string | null }>(
+      sql`
     select subsidiary_id as "subsidiaryId" from accounts
      where id = ${accountId} and org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) throw notFound("account");
   return row.subsidiaryId;
 }
 
 /** The subsidiary that owns a reconciliation session, via its account. */
-async function reconciliationSubsidiary(orgId: string, reconciliationId: string): Promise<string | null> {
-  const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
+async function reconciliationSubsidiary(
+  orgId: string,
+  reconciliationId: string,
+): Promise<string | null> {
+  const row = (
+    await db.execute<{ subsidiaryId: string | null }>(
+      sql`
     select a.subsidiary_id as "subsidiaryId"
       from reconciliations r
       join accounts a on a.id = r.account_id and a.org_id = r.org_id
      where r.id = ${reconciliationId} and r.org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) throw notFound("reconciliation");
   return row.subsidiaryId;
 }
@@ -111,7 +124,8 @@ export async function listApplicationReconciliations(
     );
   }
   const limit = clamp(input.limit ?? 50, 1, 200);
-  const rows = await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select r.id, r.account_id, r.through_date, r.statement_balance::text as statement_balance,
            r.status, r.signed_off_at, r.created_at,
            a.number as account_number, a.name as account_name
@@ -122,7 +136,9 @@ export async function listApplicationReconciliations(
        ${input.accountId ? sql` and r.account_id = ${input.accountId}` : sql``}
      order by r.created_at desc
      limit ${limit}
-  `, "objects");
+  `,
+    "objects",
+  );
   return {
     reconciliations: rows.map((row) => ({
       id: row.id,
@@ -147,18 +163,26 @@ function bankingFeatureOff(): never {
 }
 
 /** One session's workspace/sign-off totals — same `reconciliationTotals` reader as `get_bank_reconciliation`. */
-export async function getApplicationReconciliation(context: ApplicationContext, reconciliationId: string) {
+export async function getApplicationReconciliation(
+  context: ApplicationContext,
+  reconciliationId: string,
+) {
   assertApplicationPermission(context, "banking.read");
   if (!(await isFeatureEnabled(context.authz.user.orgId, "banking"))) bankingFeatureOff();
   if (!isUuid(reconciliationId)) throw invalidInput("reconciliation id must be a UUID");
-  const row = (await db.execute<Record<string, unknown>>(sql`
+  const row = (
+    await db.execute<Record<string, unknown>>(
+      sql`
     select r.id, r.account_id, r.through_date, r.status, r.signed_off_at, r.created_at,
            a.number as account_number, a.name as account_name
       from reconciliations r
       join accounts a on a.id = r.account_id and a.org_id = r.org_id
      where r.org_id = ${context.authz.user.orgId} and r.id = ${reconciliationId}
        ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, context.authz.allowedSubsidiaryIds)}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) throw notFound("reconciliation");
   const totals = await reconciliationTotals(reconciliationId, bankingContext(context));
   return {
@@ -192,7 +216,8 @@ export async function listApplicationUnmatchedBankLines(
     ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, context.authz.allowedSubsidiaryIds)}
     ${input.accountId ? sql` and l.account_id = ${input.accountId}` : sql``}`;
   const [rows, count] = await Promise.all([
-    db.execute<Record<string, unknown>>(sql`
+    db.execute<Record<string, unknown>>(
+      sql`
       select l.id, l.posted_on, l.amount::text as amount, l.description, l.counterparty_ref,
              l.account_id, a.number as account_number, a.name as account_name
         from bank_statement_lines l
@@ -200,13 +225,18 @@ export async function listApplicationUnmatchedBankLines(
        where ${where}
        order by l.posted_on desc, l.line_number
        limit ${limit}
-    `, "objects"),
-    db.execute<{ n: string }>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<{ n: string }>(
+      sql`
       select count(*) as n
         from bank_statement_lines l
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where ${where}
-    `, "objects"),
+    `,
+      "objects",
+    ),
   ]);
   return {
     total: Number(count[0]?.n ?? 0),
@@ -233,7 +263,8 @@ export async function listApplicationBankFeeds(context: ApplicationContext) {
       404,
     );
   }
-  const rows = await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select c.id, c.name, c.provider, c.account_id, c.status,
            c.external_account_id, c.sync_cadence,
            c.next_sync_at, c.last_sync_at, c.last_attempt_at, c.last_result, c.last_error, c.is_active,
@@ -245,7 +276,9 @@ export async function listApplicationBankFeeds(context: ApplicationContext) {
        ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, context.authz.allowedSubsidiaryIds)}
      order by c.created_at desc
      limit 200
-  `, "objects");
+  `,
+    "objects",
+  );
   return {
     connections: rows.map((row) => ({
       id: row.id,
@@ -268,15 +301,21 @@ export async function listApplicationBankFeeds(context: ApplicationContext) {
   };
 }
 
-export async function startReconciliationSession(context: ApplicationContext, input: {
-  accountId: string;
-  throughDate: string;
-  statementBalance: string;
-  idempotencyKey: string;
-}): Promise<{ replayed: boolean; result: { reconciliationId: string } }> {
+export async function startReconciliationSession(
+  context: ApplicationContext,
+  input: {
+    accountId: string;
+    throughDate: string;
+    statementBalance: string;
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: { reconciliationId: string } }> {
   assertApplicationPermission(context, "banking.reconcile");
   await requireBankingFeature(context.authz.user.orgId);
-  assertSubsidiaryAccess(context, await accountSubsidiary(context.authz.user.orgId, input.accountId));
+  assertSubsidiaryAccess(
+    context,
+    await accountSubsidiary(context.authz.user.orgId, input.accountId),
+  );
   // Same exact-decimal normalization the POST /api/banking/reconciliations
   // route applies before calling the engine.
   const raw = canonicalDecimal(input.statementBalance, 4);
@@ -307,15 +346,21 @@ export async function startReconciliationSession(context: ApplicationContext, in
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
-export async function matchStatementLine(context: ApplicationContext, input: {
-  reconciliationId: string;
-  statementLineId: string;
-  journalLineIds: string[];
-  idempotencyKey: string;
-}): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
+export async function matchStatementLine(
+  context: ApplicationContext,
+  input: {
+    reconciliationId: string;
+    statementLineId: string;
+    journalLineIds: string[];
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
   assertApplicationPermission(context, "banking.reconcile");
   await requireBankingFeature(context.authz.user.orgId);
-  assertSubsidiaryAccess(context, await reconciliationSubsidiary(context.authz.user.orgId, input.reconciliationId));
+  assertSubsidiaryAccess(
+    context,
+    await reconciliationSubsidiary(context.authz.user.orgId, input.reconciliationId),
+  );
   const outcome = await executeIdempotent({
     context,
     operation: "banking.statement_line.match",
@@ -346,16 +391,25 @@ export async function matchStatementLine(context: ApplicationContext, input: {
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
-export async function matchStatementLineWithJournal(context: ApplicationContext, input: {
-  reconciliationId: string;
-  statementLineId: string;
-  offsetAccountId: string;
-  idempotencyKey: string;
-}): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
+export async function matchStatementLineWithJournal(
+  context: ApplicationContext,
+  input: {
+    reconciliationId: string;
+    statementLineId: string;
+    offsetAccountId: string;
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
   assertApplicationPermission(context, "banking.reconcile");
   await requireBankingFeature(context.authz.user.orgId);
-  assertSubsidiaryAccess(context, await reconciliationSubsidiary(context.authz.user.orgId, input.reconciliationId));
-  assertSubsidiaryAccess(context, await accountSubsidiary(context.authz.user.orgId, input.offsetAccountId));
+  assertSubsidiaryAccess(
+    context,
+    await reconciliationSubsidiary(context.authz.user.orgId, input.reconciliationId),
+  );
+  assertSubsidiaryAccess(
+    context,
+    await accountSubsidiary(context.authz.user.orgId, input.offsetAccountId),
+  );
   const outcome = await executeIdempotent({
     context,
     operation: "banking.statement_line.match_with_journal",
@@ -367,11 +421,16 @@ export async function matchStatementLineWithJournal(context: ApplicationContext,
     },
     execute: async () => {
       try {
-        await addJournalMatchFromLine(context.authz.user.orgId, context.authz.user.id, {
-          statementLineId: input.statementLineId,
-          offsetAccountId: input.offsetAccountId,
-          reconciliationId: input.reconciliationId,
-        }, context.authz.allowedSubsidiaryIds);
+        await addJournalMatchFromLine(
+          context.authz.user.orgId,
+          context.authz.user.id,
+          {
+            statementLineId: input.statementLineId,
+            offsetAccountId: input.offsetAccountId,
+            reconciliationId: input.reconciliationId,
+          },
+          context.authz.allowedSubsidiaryIds,
+        );
         return { matched: true };
       } catch (error) {
         bankingFailure(error);
@@ -381,14 +440,20 @@ export async function matchStatementLineWithJournal(context: ApplicationContext,
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
-export async function unmatchStatementLineAction(context: ApplicationContext, input: {
-  reconciliationId: string;
-  statementLineId: string;
-  idempotencyKey: string;
-}): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
+export async function unmatchStatementLineAction(
+  context: ApplicationContext,
+  input: {
+    reconciliationId: string;
+    statementLineId: string;
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
   assertApplicationPermission(context, "banking.reconcile");
   await requireBankingFeature(context.authz.user.orgId);
-  assertSubsidiaryAccess(context, await reconciliationSubsidiary(context.authz.user.orgId, input.reconciliationId));
+  assertSubsidiaryAccess(
+    context,
+    await reconciliationSubsidiary(context.authz.user.orgId, input.reconciliationId),
+  );
   const outcome = await executeIdempotent({
     context,
     operation: "banking.statement_line.unmatch",
@@ -409,13 +474,19 @@ export async function unmatchStatementLineAction(context: ApplicationContext, in
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
-export async function signOffReconciliation(context: ApplicationContext, input: {
-  reconciliationId: string;
-  idempotencyKey: string;
-}): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
+export async function signOffReconciliation(
+  context: ApplicationContext,
+  input: {
+    reconciliationId: string;
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
   assertApplicationPermission(context, "banking.reconcile");
   await requireBankingFeature(context.authz.user.orgId);
-  assertSubsidiaryAccess(context, await reconciliationSubsidiary(context.authz.user.orgId, input.reconciliationId));
+  assertSubsidiaryAccess(
+    context,
+    await reconciliationSubsidiary(context.authz.user.orgId, input.reconciliationId),
+  );
   const outcome = await executeIdempotent({
     context,
     operation: "banking.reconciliation.sign_off",

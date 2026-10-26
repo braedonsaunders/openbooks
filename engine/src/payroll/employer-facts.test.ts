@@ -5,10 +5,47 @@ import { PayrollPackError } from "./payroll-error.ts";
 
 const country = "ZZ";
 registerEmployerFacts(country, [
-  { key: "effectif", kind: "decimal", scale: 2, min: "0", max: "1000000", label: "annual employer effectif", refusalReason: "CSS L.130-1 annual legal-employer average", legalBasis: "CSS L.130-1 and R.130-1", required: true },
-  { key: "tier", kind: "choice", choices: [{ value: "a", label: "A" }, { value: "b", label: "B" }], label: "employer tier", refusalReason: "the applicable tier must be selected", legalBasis: "test declaration", required: true },
-  { key: "sector", kind: "integer", min: "1", max: "9", label: "sector code", refusalReason: "sector is required", legalBasis: "test declaration", required: true },
-  { key: "enabled", kind: "boolean", label: "eligibility", refusalReason: "eligibility is required", legalBasis: "test declaration", required: true },
+  {
+    key: "effectif",
+    kind: "decimal",
+    scale: 2,
+    min: "0",
+    max: "1000000",
+    label: "annual employer effectif",
+    refusalReason: "CSS L.130-1 annual legal-employer average",
+    legalBasis: "CSS L.130-1 and R.130-1",
+    required: true,
+  },
+  {
+    key: "tier",
+    kind: "choice",
+    choices: [
+      { value: "a", label: "A" },
+      { value: "b", label: "B" },
+    ],
+    label: "employer tier",
+    refusalReason: "the applicable tier must be selected",
+    legalBasis: "test declaration",
+    required: true,
+  },
+  {
+    key: "sector",
+    kind: "integer",
+    min: "1",
+    max: "9",
+    label: "sector code",
+    refusalReason: "sector is required",
+    legalBasis: "test declaration",
+    required: true,
+  },
+  {
+    key: "enabled",
+    kind: "boolean",
+    label: "eligibility",
+    refusalReason: "eligibility is required",
+    legalBasis: "test declaration",
+    required: true,
+  },
 ]);
 
 test("employer fact resolver validates decimals exactly to their pack-declared scale", () => {
@@ -31,9 +68,10 @@ test("employer fact resolver validates enum, integer bounds, and boolean primiti
 test("required facts refuse by the operator-facing name and legal remedy", () => {
   assert.throws(
     () => resolveEmployerFact(country, "effectif", null),
-    (error: unknown) => error instanceof PayrollPackError
-      && /annual employer effectif/.test(error.message)
-      && /CSS L.130-1/.test(error.message)
-      && /Payroll Setup → Employer facts/.test(error.message),
+    (error: unknown) =>
+      error instanceof PayrollPackError &&
+      /annual employer effectif/.test(error.message) &&
+      /CSS L.130-1/.test(error.message) &&
+      /Payroll Setup → Employer facts/.test(error.message),
   );
 });

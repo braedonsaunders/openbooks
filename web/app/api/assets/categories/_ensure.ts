@@ -31,17 +31,23 @@ export async function ensureDefaultCategory(
         hashtextextended(${`asset-category:${orgId}`}, 0)
       )`);
 
-    const existing = await tx.execute<{ id: string }>(sql`
+    const existing = await tx.execute<{ id: string }>(
+      sql`
       select id from asset_categories where org_id = ${orgId} and name = 'Uncategorised' limit 1
-    `, "objects");
+    `,
+      "objects",
+    );
     if (existing[0]) return existing[0].id;
 
     // Posting-role lookups from the COA; each may come back empty.
     const pick = async (whereSql: ReturnType<typeof sql>) => {
-      const r = await tx.execute<{ id: string }>(sql`
+      const r = await tx.execute<{ id: string }>(
+        sql`
         select id from accounts
          where org_id = ${orgId} and is_active and not is_summary ${whereSql}
-         order by number nulls last limit 1`, "objects");
+         order by number nulls last limit 1`,
+        "objects",
+      );
       return r[0]?.id ?? null;
     };
     const assetAcct = await pick(
@@ -64,7 +70,8 @@ export async function ensureDefaultCategory(
       assetAcct !== null && accumAcct !== null && expenseAcct !== null
         ? [assetAcct, accumAcct, expenseAcct]
         : [null, null, null];
-    const ins = await tx.execute<{ id: string }>(sql`
+    const ins = await tx.execute<{ id: string }>(
+      sql`
       insert into asset_categories
         (org_id, name, asset_account_id, accumulated_depreciation_account_id, depreciation_expense_account_id,
          default_method, default_life_months, created_by, updated_by)
@@ -74,17 +81,21 @@ export async function ensureDefaultCategory(
       -- The org/name uniqueness index arbitrates racers that bypassed the
       -- advisory lock; the committed winner is re-read below.
       on conflict do nothing
-      returning id`, "objects");
+      returning id`,
+      "objects",
+    );
     if (ins[0]) return ins[0].id;
 
     // A direct writer may have won the uniqueness race without taking our
     // advisory lock. Re-read the committed winner instead of returning an
     // empty id or creating a second category.
-    const winner = await tx.execute<{ id: string }>(sql`
+    const winner = await tx.execute<{ id: string }>(
+      sql`
       select id from asset_categories where org_id = ${orgId} and name = 'Uncategorised' limit 1
-    `, "objects");
-    if (!winner[0])
-      throw new Error("default asset category insert was not committed");
+    `,
+      "objects",
+    );
+    if (!winner[0]) throw new Error("default asset category insert was not committed");
     return winner[0].id;
   });
 }

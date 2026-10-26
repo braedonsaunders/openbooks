@@ -42,24 +42,30 @@ test("assertUnrestrictedScope passes only the explicit null sentinel", () => {
     undefined,
   ];
   for (const scope of cases) {
-    assert.throws(() => assertUnrestrictedScope(scope), (error: unknown) => {
-      assert.ok(error instanceof UnrestrictedScopeError);
-      assert.equal((error as UnrestrictedScopeError).status, 403);
-      assert.equal((error as Error).message, UNRESTRICTED_SCOPE_REQUIRED);
-      return true;
-    });
+    assert.throws(
+      () => assertUnrestrictedScope(scope),
+      (error: unknown) => {
+        assert.ok(error instanceof UnrestrictedScopeError);
+        assert.equal((error as UnrestrictedScopeError).status, 403);
+        assert.equal((error as Error).message, UNRESTRICTED_SCOPE_REQUIRED);
+        return true;
+      },
+    );
   }
 });
 
 test("assertAnyPermission passes when any family permission is held", () => {
   const grants = new Set(["ar.pay"]);
   assert.doesNotThrow(() => assertAnyPermission((p) => grants.has(p), ["ap.pay", "ar.pay"]));
-  assert.throws(() => assertAnyPermission((p) => grants.has(p), ["ap.pay"]), (error: unknown) => {
-    assert.ok(error instanceof ScopeNotFoundError);
-    assert.equal((error as ScopeNotFoundError).status, 404);
-    assert.equal((error as Error).message, "not found");
-    return true;
-  });
+  assert.throws(
+    () => assertAnyPermission((p) => grants.has(p), ["ap.pay"]),
+    (error: unknown) => {
+      assert.ok(error instanceof ScopeNotFoundError);
+      assert.equal((error as ScopeNotFoundError).status, 404);
+      assert.equal((error as Error).message, "not found");
+      return true;
+    },
+  );
   assert.throws(() => assertAnyPermission(() => false, []), ScopeNotFoundError);
 });
 
@@ -68,12 +74,18 @@ test("resolveDraftSubsidiary never assigns null or root to a restricted actor", 
   assert.deepEqual(resolveDraftSubsidiary(null), { ok: true, subsidiaryId: null });
   assert.deepEqual(resolveDraftSubsidiary(null, A), { ok: true, subsidiaryId: A });
   // A restricted caller naming an out-of-scope subsidiary is refused by name.
-  assert.deepEqual(resolveDraftSubsidiary(new Set([A]), B), { ok: false, error: "subsidiary_out_of_scope" });
+  assert.deepEqual(resolveDraftSubsidiary(new Set([A]), B), {
+    ok: false,
+    error: "subsidiary_out_of_scope",
+  });
   assert.deepEqual(resolveDraftSubsidiary(new Set([A]), A), { ok: true, subsidiaryId: A });
   // No choice: exactly one allowed subsidiary assigns itself, otherwise the
   // caller must choose — never a silent null.
   assert.deepEqual(resolveDraftSubsidiary(new Set([A])), { ok: true, subsidiaryId: A });
-  assert.deepEqual(resolveDraftSubsidiary(new Set([A, B])), { ok: false, error: "subsidiary_required" });
+  assert.deepEqual(resolveDraftSubsidiary(new Set([A, B])), {
+    ok: false,
+    error: "subsidiary_required",
+  });
   assert.deepEqual(resolveDraftSubsidiary(new Set()), { ok: false, error: "subsidiary_required" });
   assert.deepEqual(resolveDraftSubsidiary(new Set([A]), null), { ok: true, subsidiaryId: A });
 });

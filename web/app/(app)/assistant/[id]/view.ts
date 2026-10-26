@@ -1,16 +1,16 @@
-import 'server-only'
+import "server-only";
 
-import { redirect } from 'next/navigation'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { getOrgAiConfig } from '../../../../lib/assistant/ai-config'
-import { getModel } from '../../../../lib/assistant/client'
+import { redirect } from "next/navigation";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
+import { getModel } from "../../../../lib/assistant/client";
 import {
   listConversations,
   ownsConversation,
   recentMessages,
-} from '../../../../lib/ai-conversations'
-import { isUuid } from '@openbooks/engine/platform/identifiers'
+} from "../../../../lib/ai-conversations";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 /**
  * One deep-linkable assistant conversation, split into a loader and a spec.
@@ -38,20 +38,20 @@ import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 /** Loader-resolved, presentation-ready props for the `assistant-app` widget. */
 export interface AssistantConversationData {
-  conversations: { id: string; title: string; updatedAt: string }[]
+  conversations: { id: string; title: string; updatedAt: string }[];
   /** Route param — the owned conversation id, never a bare/foreign id: the
    *  loader redirects those to /assistant before any data resolves. */
-  activeId: string
+  activeId: string;
   initialMessages: {
-    id: string
-    role: 'user' | 'assistant' | 'system'
-    content: string
-    data: { parts?: unknown[] } | null
-    createdAt: string
-  }[]
-  canWrite: boolean
-  canConfigureAi: boolean
-  aiEnabled: boolean
+    id: string;
+    role: "user" | "assistant" | "system";
+    content: string;
+    data: { parts?: unknown[] } | null;
+    createdAt: string;
+  }[];
+  canWrite: boolean;
+  canConfigureAi: boolean;
+  aiEnabled: boolean;
 }
 
 export async function loadAssistantConversation(id: string): Promise<AssistantConversationData> {
@@ -59,15 +59,15 @@ export async function loadAssistantConversation(id: string): Promise<AssistantCo
   // owner check (redirect, not a body — see the registry entry §4), then the
   // sidebar + thread window + model config in parallel. No search params:
   // like loadDocArticle(slug), the loader takes only the segment param.
-  const authz = await requirePermission('assistant.use')
-  if (!isUuid(id) || !(await ownsConversation(authz, id, 'assistant'))) {
-    redirect('/assistant')
+  const authz = await requirePermission("assistant.use");
+  if (!isUuid(id) || !(await ownsConversation(authz, id, "assistant"))) {
+    redirect("/assistant");
   }
   const [conversations, messages, aiConfig] = await Promise.all([
-    listConversations(authz, 'assistant'),
+    listConversations(authz, "assistant"),
     recentMessages(authz, id),
     getOrgAiConfig(authz.user.orgId),
-  ])
+  ]);
   return {
     conversations,
     activeId: id,
@@ -78,22 +78,22 @@ export async function loadAssistantConversation(id: string): Promise<AssistantCo
       data: (m.data ?? null) as { parts?: unknown[] } | null,
       createdAt: m.createdAt,
     })),
-    canWrite: can(authz, 'assistant.write'),
-    canConfigureAi: can(authz, 'admin.ai.manage'),
-    aiEnabled: getModel(aiConfig, 'smart') !== null,
-  }
+    canWrite: can(authz, "assistant.write"),
+    canConfigureAi: can(authz, "admin.ai.manage"),
+    aiEnabled: getModel(aiConfig, "smart") !== null,
+  };
 }
 
 export function assistantConversationSpec(data: AssistantConversationData): PageSpec {
   return page({
-    route: '/assistant/[id]',
+    route: "/assistant/[id]",
     // Bare: the app owns its own full-height flex column (the native root
     // is `flex h-full min-h-0 flex-1` under the app shell's <main>), so no
     // ListPageLayout chrome may wrap it. Same call as the /assistant spec.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      widgetBlock('assistant-app', {
+      widgetBlock("assistant-app", {
         conversations: data.conversations,
         activeId: data.activeId,
         initialMessages: data.initialMessages,
@@ -102,5 +102,5 @@ export function assistantConversationSpec(data: AssistantConversationData): Page
         aiEnabled: data.aiEnabled,
       }),
     ],
-  })
+  });
 }

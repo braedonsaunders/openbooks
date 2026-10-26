@@ -8,7 +8,7 @@ import {
   pgTable,
   text,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
 
@@ -39,7 +39,13 @@ export const RECOGNITION_METHODS = [
 ] as const;
 
 /** Where the recognition term starts / ends when the rule is term-driven. */
-export const START_DATE_SOURCES = ["obligation", "document", "fulfillment", "event", "contract"] as const;
+export const START_DATE_SOURCES = [
+  "obligation",
+  "document",
+  "fulfillment",
+  "event",
+  "contract",
+] as const;
 export const END_DATE_SOURCES = ["term", "obligation", "contract"] as const;
 
 /**
@@ -59,7 +65,9 @@ export const recognitionRules = pgTable(
     /** Term length in accounting periods (months) when not purely date-driven. */
     recognitionPeriods: integer("recognition_periods"),
     /** Term boundaries. `document`/`fulfillment`/`event` resolve at plan time. */
-    startDateSource: text("start_date_source", { enum: START_DATE_SOURCES }).notNull().default("obligation"),
+    startDateSource: text("start_date_source", { enum: START_DATE_SOURCES })
+      .notNull()
+      .default("obligation"),
     endDateSource: text("end_date_source", { enum: END_DATE_SOURCES }).notNull().default("term"),
     /** Shift the whole schedule by N periods (deferral). */
     periodOffset: integer("period_offset").notNull().default(0),
@@ -102,7 +110,11 @@ export const fairValuePrices = pgTable(
     itemId: uuid("item_id").notNull(),
     currency: text("currency").notNull(),
     unitPrice: money("unit_price").notNull(),
-    calculationMethod: text("calculation_method", { enum: ["fixed", "percent_of_list", "cost_plus"] }).notNull().default("fixed"),
+    calculationMethod: text("calculation_method", {
+      enum: ["fixed", "percent_of_list", "cost_plus"],
+    })
+      .notNull()
+      .default("fixed"),
     formulaPercent: money("formula_percent"),
     listPrice: money("list_price"),
     unitCost: money("unit_cost"),

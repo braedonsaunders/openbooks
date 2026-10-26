@@ -31,7 +31,17 @@ export type RegistryEntity = {
 export const AUTOMATION_REGISTRY: RegistryEntity[] = [
   {
     entity: "employment",
-    readableFields: ["status", "effective_from", "subsidiary_id", "department_id", "location_id", "position_id", "job_title", "manager_employment_id", "service_start"],
+    readableFields: [
+      "status",
+      "effective_from",
+      "subsidiary_id",
+      "department_id",
+      "location_id",
+      "position_id",
+      "job_title",
+      "manager_employment_id",
+      "service_start",
+    ],
     // No writable fields: employment versions change only through the
     // governed change-request path (service + Flows approval + temporal
     // application). update_field on employment refuses with that remedy
@@ -107,12 +117,11 @@ export function assertWritableField(entity: string, field: string): void {
     );
   }
   if (!entry.writableFields.includes(field)) {
-    const remedy = entity === "employment"
-      ? "employment versions change only through a governed change request — file one instead"
-      : `allowlisted fields only (${entry.writableFields.join(", ") || "no writable fields"}), never arbitrary writes`;
-    throw new AutomationRegistryError(
-      `update_field on ${entity}.${field} is refused: ${remedy}`,
-    );
+    const remedy =
+      entity === "employment"
+        ? "employment versions change only through a governed change request — file one instead"
+        : `allowlisted fields only (${entry.writableFields.join(", ") || "no writable fields"}), never arbitrary writes`;
+    throw new AutomationRegistryError(`update_field on ${entity}.${field} is refused: ${remedy}`);
   }
 }
 
@@ -133,7 +142,8 @@ export async function loadSubjectSnapshot(
   }
   switch (entity) {
     case "employment": {
-      const rows = await db.execute<Record<string, unknown>>(sql`
+      const rows = await db.execute<Record<string, unknown>>(
+        sql`
         select v.status, v.effective_from,
                e.employer_subsidiary_id as subsidiary_id,
                e.service_start,
@@ -158,7 +168,9 @@ export async function loadSubjectSnapshot(
            and (r.effective_to is null or r.effective_to > current_date)
          where e.org_id = ${orgId} and e.id = ${subjectId}
          limit 1
-      `, "objects");
+      `,
+        "objects",
+      );
       const row = rows[0];
       if (!row) return null;
       return {
@@ -175,7 +187,8 @@ export async function loadSubjectSnapshot(
       };
     }
     case "leave_request": {
-      const rows = await db.execute<Record<string, unknown>>(sql`
+      const rows = await db.execute<Record<string, unknown>>(
+        sql`
         select r.id, r.status, r.leave_type_id, r.starts_on, r.ends_on, r.hours,
                r.employment_id, a.department_id, w.employer_subsidiary_id as subsidiary_id
           from hrm_leave_requests r
@@ -187,7 +200,9 @@ export async function loadSubjectSnapshot(
            and (a.effective_to is null or a.effective_to > current_date)
          where r.org_id = ${orgId} and r.id = ${subjectId}
          limit 1
-      `, "objects");
+      `,
+        "objects",
+      );
       const row = rows[0];
       if (!row) return null;
       return {
@@ -202,12 +217,15 @@ export async function loadSubjectSnapshot(
       };
     }
     case "timesheet_week": {
-      const rows = await db.execute<Record<string, unknown>>(sql`
+      const rows = await db.execute<Record<string, unknown>>(
+        sql`
         select id, status, week_start, employee_party_id
           from timesheet_weeks
          where org_id = ${orgId} and id = ${subjectId}
          limit 1
-      `, "objects");
+      `,
+        "objects",
+      );
       const row = rows[0];
       if (!row) return null;
       return {
@@ -218,26 +236,42 @@ export async function loadSubjectSnapshot(
       };
     }
     case "document": {
-      const rows = await db.execute<Record<string, unknown>>(sql`
+      const rows = await db.execute<Record<string, unknown>>(
+        sql`
         select id, kind, status
           from documents
          where org_id = ${orgId} and id = ${subjectId}
          limit 1
-      `, "objects");
+      `,
+        "objects",
+      );
       const row = rows[0];
       if (!row) return null;
-      return { entity, fields: pick(row, entry.readableFields), previous: previous ?? null, scope: {} };
+      return {
+        entity,
+        fields: pick(row, entry.readableFields),
+        previous: previous ?? null,
+        scope: {},
+      };
     }
     default: {
       const table = genericEntityTable(entity);
-      const rows = await db.execute<Record<string, unknown>>(sql`
+      const rows = await db.execute<Record<string, unknown>>(
+        sql`
         select * from ${sql.identifier(table)}
          where org_id = ${orgId} and id = ${subjectId}
          limit 1
-      `, "objects");
+      `,
+        "objects",
+      );
       const row = rows[0];
       if (!row) return null;
-      return { entity, fields: pick(row, entry.readableFields), previous: previous ?? null, scope: {} };
+      return {
+        entity,
+        fields: pick(row, entry.readableFields),
+        previous: previous ?? null,
+        scope: {},
+      };
     }
   }
 }

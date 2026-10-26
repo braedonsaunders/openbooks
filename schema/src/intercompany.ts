@@ -48,7 +48,8 @@ export const INTERCOMPANY_PAIR_KINDS = ["order", "invoice", "credit"] as const;
 export type IntercompanyPairKind = (typeof INTERCOMPANY_PAIR_KINDS)[number];
 
 export const INTERCOMPANY_TRANSFER_PRICING_METHODS = ["price_level", "cost_plus"] as const;
-export type IntercompanyTransferPricingMethod = (typeof INTERCOMPANY_TRANSFER_PRICING_METHODS)[number];
+export type IntercompanyTransferPricingMethod =
+  (typeof INTERCOMPANY_TRANSFER_PRICING_METHODS)[number];
 
 export const intercompanyRepresentingParties = pgTable(
   "intercompany_representing_parties",
@@ -81,7 +82,9 @@ export const intercompanyNettingRuns = pgTable(
     subsidiaryIds: uuid("subsidiary_ids").array().notNull(),
     settleCash: boolean("settle_cash").notNull().default(false),
     bankAccounts: jsonb("bank_accounts").notNull().default({}),
-    status: text("status", { enum: INTERCOMPANY_NETTING_RUN_STATUSES }).notNull().default("proposed"),
+    status: text("status", { enum: INTERCOMPANY_NETTING_RUN_STATUSES })
+      .notNull()
+      .default("proposed"),
     computation: jsonb("computation").notNull(),
     fingerprint: text("fingerprint").notNull(),
     reason: text("reason").notNull(),
@@ -160,7 +163,9 @@ export const intercompanyFundTransfers = pgTable(
     memo: text("memo"),
     reason: text("reason").notNull(),
     entryId: uuid("entry_id").notNull(),
-    status: text("status", { enum: ["posted", "reversed"] }).notNull().default("posted"),
+    status: text("status", { enum: ["posted", "reversed"] })
+      .notNull()
+      .default("posted"),
     idempotencyKey: text("idempotency_key"),
     reversalEntryId: uuid("reversal_entry_id"),
     reversalDate: date("reversal_date"),
@@ -171,9 +176,7 @@ export const intercompanyFundTransfers = pgTable(
     createdBy: uuid("created_by").notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    uniqueIndex("intercompany_fund_transfers_number_unique").on(t.orgId, t.transferNumber),
-  ],
+  (t) => [uniqueIndex("intercompany_fund_transfers_number_unique").on(t.orgId, t.transferNumber)],
 );
 
 export const intercompanyTransactionPairs = pgTable(
@@ -187,7 +190,9 @@ export const intercompanyTransactionPairs = pgTable(
     sellerDocumentId: uuid("seller_document_id").notNull(),
     buyerDocumentId: uuid("buyer_document_id").notNull(),
     origin: text("origin", { enum: ["generated", "linked"] }).notNull(),
-    status: text("status", { enum: ["linked", "unlinked"] }).notNull().default("linked"),
+    status: text("status", { enum: ["linked", "unlinked"] })
+      .notNull()
+      .default("linked"),
     linkReason: text("link_reason"),
     linkedBy: uuid("linked_by").notNull(),
     linkedAt: timestamp("linked_at", { withTimezone: true }).notNull().defaultNow(),
@@ -230,7 +235,11 @@ export const intercompanyTransferPricingPolicies = pgTable(
   },
   (t) => [
     uniqueIndex("intercompany_transfer_pricing_policies_code_unique").on(t.orgId, t.code),
-    index("intercompany_transfer_pricing_policies_lookup").on(t.orgId, t.sellerSubsidiaryId, t.effectiveFrom),
+    index("intercompany_transfer_pricing_policies_lookup").on(
+      t.orgId,
+      t.sellerSubsidiaryId,
+      t.effectiveFrom,
+    ),
   ],
 );
 

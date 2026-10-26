@@ -55,11 +55,21 @@ async function insertSignatureFile(orgId: string, id = randomUUID()): Promise<st
 }
 
 async function assertRejected(query: Promise<unknown>, scenario: string): Promise<void> {
-  await assert.rejects(query, (error: unknown) => {
-    const message = pgMessage(error);
-    assert.doesNotMatch(message, /record "new" has no field/, `${scenario}: no 42703 row-shape failure`);
-    return /field ticket evidence|signature file|signature email evidence|foreign key|violates not-null|duplicate key|unique constraint/i.test(message);
-  }, scenario);
+  await assert.rejects(
+    query,
+    (error: unknown) => {
+      const message = pgMessage(error);
+      assert.doesNotMatch(
+        message,
+        /record "new" has no field/,
+        `${scenario}: no 42703 row-shape failure`,
+      );
+      return /field ticket evidence|signature file|signature email evidence|foreign key|violates not-null|duplicate key|unique constraint/i.test(
+        message,
+      );
+    },
+    scenario,
+  );
 }
 
 /** The production evidence tables are intentionally append-only. Remove the
@@ -67,24 +77,33 @@ async function assertRejected(query: Promise<unknown>, scenario: string): Promis
  * repository teardown for unconditional evidence guards. */
 async function clearFieldTicketEvidence(orgId: string): Promise<void> {
   await db.transaction(async (tx) => {
-    await tx.execute(sql.raw(
-      'alter table public."field_ticket_signatures" disable trigger field_ticket_signature_immutable',
-    ));
-    await tx.execute(sql.raw(
-      'alter table public."field_ticket_signature_requests" disable trigger field_ticket_signature_request_immutable',
-    ));
+    await tx.execute(
+      sql.raw(
+        'alter table public."field_ticket_signatures" disable trigger field_ticket_signature_immutable',
+      ),
+    );
+    await tx.execute(
+      sql.raw(
+        'alter table public."field_ticket_signature_requests" disable trigger field_ticket_signature_request_immutable',
+      ),
+    );
     await tx.execute(sql`delete from field_ticket_signatures where org_id = ${orgId}`);
     await tx.execute(sql`delete from field_ticket_signature_requests where org_id = ${orgId}`);
-    await tx.execute(sql.raw(
-      'alter table public."field_ticket_signatures" enable trigger field_ticket_signature_immutable',
-    ));
-    await tx.execute(sql.raw(
-      'alter table public."field_ticket_signature_requests" enable trigger field_ticket_signature_request_immutable',
-    ));
+    await tx.execute(
+      sql.raw(
+        'alter table public."field_ticket_signatures" enable trigger field_ticket_signature_immutable',
+      ),
+    );
+    await tx.execute(
+      sql.raw(
+        'alter table public."field_ticket_signature_requests" enable trigger field_ticket_signature_request_immutable',
+      ),
+    );
   });
 }
 
-test("field-ticket signing evidence is valid, tenant-bound, and replay-safe",
+test(
+  "field-ticket signing evidence is valid, tenant-bound, and replay-safe",
   { skip: !DB, timeout: 120_000 },
   async () => {
     const org = await createScratchOrg();
@@ -112,11 +131,18 @@ test("field-ticket signing evidence is valid, tenant-bound, and replay-safe",
         values (${randomUUID()}, ${org.orgId}, ${ticketId}, 'customer', 'Customer',
                 'Approved', ${signatureFileId}, now(), null)`);
 
-      const persisted = await db.execute<{ requests: number; signatures: number }>(sql`
+      const persisted = await db.execute<{ requests: number; signatures: number }>(
+        sql`
         select
           (select count(*)::int from field_ticket_signature_requests where id = ${requestId}) as requests,
-          (select count(*)::int from field_ticket_signatures where org_id = ${org.orgId} and field_ticket_id = ${ticketId}) as signatures`, 'objects');
-      assert.deepEqual(persisted[0], { requests: 1, signatures: 1 }, "valid request and signature evidence persists");
+          (select count(*)::int from field_ticket_signatures where org_id = ${org.orgId} and field_ticket_id = ${ticketId}) as signatures`,
+        "objects",
+      );
+      assert.deepEqual(
+        persisted[0],
+        { requests: 1, signatures: 1 },
+        "valid request and signature evidence persists",
+      );
 
       // A request replay with the same possession digest is rejected by the
       // storage uniqueness fence, while the original evidence remains intact.

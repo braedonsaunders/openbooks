@@ -1,10 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  deactivateDependent,
-  updateDependent,
-} from "@openbooks/engine/hrm/benefits/dependents";
+import { deactivateDependent, updateDependent } from "@openbooks/engine/hrm/benefits/dependents";
 import { isUuid } from "../../../../../lib/list-params";
 import { benefitsErrorResponse } from "../../benefits/_lib";
 import { updateDependentBody } from "../bodies";
@@ -17,10 +14,7 @@ export const PATCH = defineRoute({
   handler: async ({ request: _req, authz: gate, params, body }) => {
     const { id } = params;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "dependent id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "dependent id must be a uuid" }, { status: 400 });
     const base = {
       orgId: gate.user.orgId,
       actorId: gate.user.id,
@@ -33,12 +27,8 @@ export const PATCH = defineRoute({
       }
       const dependent = await updateDependent({
         ...base,
-        ...(body.relationship !== undefined
-          ? { relationship: body.relationship }
-          : {}),
-        ...(body.displayName !== undefined
-          ? { displayName: body.displayName }
-          : {}),
+        ...(body.relationship !== undefined ? { relationship: body.relationship } : {}),
+        ...(body.displayName !== undefined ? { displayName: body.displayName } : {}),
         birthDate: body.birthDate ?? undefined,
       });
       return NextResponse.json({ dependent });

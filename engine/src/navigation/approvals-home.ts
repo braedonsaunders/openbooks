@@ -5,7 +5,7 @@
  * Pure constants: client components, server views and engine read models
  * all share this one address.
  */
-export const APPROVALS_HOME_HREF = '/inbox'
+export const APPROVALS_HOME_HREF = "/inbox";
 
 /** The Inbox view of the operator's own submissions still under review. */
-export const APPROVALS_SUBMITTED_HREF = `${APPROVALS_HOME_HREF}?tab=submitted`
+export const APPROVALS_SUBMITTED_HREF = `${APPROVALS_HOME_HREF}?tab=submitted`;

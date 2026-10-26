@@ -5,10 +5,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "@openbooks/engine/platform/db";
 import { actorAllowedSubsidiaryIds } from "@openbooks/engine/organization/actor-subsidiaries";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-} from "@openbooks/engine/testing/fixtures";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 // Delegation-ceiling suite for /api/admin/roles against the real schema.
 //
@@ -40,20 +37,26 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/authz" ||
-        (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))) {
+    if (
+      specifier === "../../../../lib/authz" ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+    ) {
       return { url: "mock:delegation-roles-authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === "mock:delegation-roles-authz") return { format: "module", source: mockAuthz, shortCircuit: true };
+    if (url === "mock:delegation-roles-authz")
+      return { format: "module", source: mockAuthz, shortCircuit: true };
     return nextLoad(url, context);
   },
 });
 const routeUrl = "./route.ts?admin-roles-delegation";
 const { POST, PATCH, DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
-function call(method: "POST" | "PATCH" | "DELETE", body: Record<string, unknown>): Promise<Response> {
+function call(
+  method: "POST" | "PATCH" | "DELETE",
+  body: Record<string, unknown>,
+): Promise<Response> {
   const handler = method === "POST" ? POST : method === "PATCH" ? PATCH : DELETE;
   return handler(
     new Request("http://openbooks.test/api/admin/roles", {
@@ -94,18 +97,38 @@ async function seed(): Promise<Fixture> {
       values (${subB}, ${orgId}, ${subA}, 'Hidden entity', 'CAD', 'CA')
     `);
     const mk = async (key: string, permissions: string[], restriction: object) =>
-      (await db.execute<{ id: string }>(sql`
+      (
+        await db.execute<{ id: string }>(
+          sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
         values (${orgId}, ${key}, ${key}, false,
                 ${JSON.stringify(permissions)}::jsonb, ${JSON.stringify(restriction)}::jsonb)
         returning id
-      `, "objects"))[0]!.id;
-    const heldId = await mk(`held_${tag}`, ["admin.roles.manage", "gl.read"], { mode: "list", subsidiaryIds: [subA.toLowerCase()] });
-    const leafHeldId = await mk(`leafheld_${tag}`, ["admin.roles.manage", "gl.read"], { mode: "list", subsidiaryIds: [subB.toLowerCase()] });
+      `,
+          "objects",
+        )
+      )[0]!.id;
+    const heldId = await mk(`held_${tag}`, ["admin.roles.manage", "gl.read"], {
+      mode: "list",
+      subsidiaryIds: [subA.toLowerCase()],
+    });
+    const leafHeldId = await mk(`leafheld_${tag}`, ["admin.roles.manage", "gl.read"], {
+      mode: "list",
+      subsidiaryIds: [subB.toLowerCase()],
+    });
     const wideId = await mk(`wide_${tag}`, [], { mode: "all" });
-    const narrowId = await mk(`narrow_${tag}`, [], { mode: "list", subsidiaryIds: [subA.toLowerCase()] });
-    const leafId = await mk(`leaf_${tag}`, [], { mode: "list", subsidiaryIds: [subB.toLowerCase()] });
-    const victimId = await mk(`victim_${tag}`, [], { mode: "list", subsidiaryIds: [subA.toLowerCase()] });
+    const narrowId = await mk(`narrow_${tag}`, [], {
+      mode: "list",
+      subsidiaryIds: [subA.toLowerCase()],
+    });
+    const leafId = await mk(`leaf_${tag}`, [], {
+      mode: "list",
+      subsidiaryIds: [subB.toLowerCase()],
+    });
+    const victimId = await mk(`victim_${tag}`, [], {
+      mode: "list",
+      subsidiaryIds: [subA.toLowerCase()],
+    });
     for (const [uid, name, roleId] of [
       [actorId, "Ceiling actor", heldId],
       [leafActorId, "Leaf actor", leafHeldId],
@@ -127,7 +150,15 @@ async function seed(): Promise<Fixture> {
     permissions: new Set(["admin.roles.manage", "gl.read"]),
     allowedSubsidiaryIds: new Set([subA.toLowerCase()]),
   };
-  return { orgId, subA: subA.toLowerCase(), subB: subB.toLowerCase(), actorId, leafActorId, victimUserId, ...ids };
+  return {
+    orgId,
+    subA: subA.toLowerCase(),
+    subB: subB.toLowerCase(),
+    actorId,
+    leafActorId,
+    victimUserId,
+    ...ids,
+  };
 }
 
 async function teardown(f: Fixture): Promise<void> {
@@ -174,25 +205,31 @@ test("POST without a restriction defaults to all and refuses a scoped actor", as
     assert.equal(res.status, 403, await res.text());
     assert.equal(await roleCount(f), rolesBefore, "no role was created");
     assert.equal(await auditCount(f), auditsBefore, "no audit was written");
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("POST inside the lens succeeds; POST covering a hidden entity refuses", async () => {
   const f = await seed();
   try {
     const ok = await call("POST", {
-      name: "In lens", key: `inlens_${f.subA.slice(0, 4)}`,
+      name: "In lens",
+      key: `inlens_${f.subA.slice(0, 4)}`,
       subsidiaryRestriction: { mode: "list", subsidiaryIds: [f.subA] },
     });
     assert.equal(ok.status, 200, await ok.text());
     const auditsBefore = await auditCount(f);
     const res = await call("POST", {
-      name: "Hidden", key: `hidden_${f.subA.slice(0, 4)}`,
+      name: "Hidden",
+      key: `hidden_${f.subA.slice(0, 4)}`,
       subsidiaryRestriction: { mode: "list", subsidiaryIds: [f.subA, f.subB] },
     });
     assert.equal(res.status, 403, await res.text());
     assert.equal(await auditCount(f), auditsBefore, "refusal wrote no audit");
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("PATCH widening a held role to all refuses and leaves the real lens scoped", async () => {
@@ -208,7 +245,9 @@ test("PATCH widening a held role to all refuses and leaves the real lens scoped"
     const after = await withBypass(() => actorAllowedSubsidiaryIds(db, f.orgId, f.actorId));
     assert.notEqual(after, null, "real derived actor lens is unchanged after refusal");
     assert.deepEqual(after, before);
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("PATCH adding an owned permission to an all-scope role still refuses", async () => {
@@ -223,44 +262,59 @@ test("PATCH adding an owned permission to an all-scope role still refuses", asyn
       return rows;
     });
     assert.deepEqual(perms.rows[0]!.permissions, []);
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("PATCH removing permissions from a wider role keeps the removal contract", async () => {
   const f = await seed();
   try {
-    await withBypass(() => db.execute(sql`
-      update app_roles set permissions = '["gl.read"]'::jsonb where id = ${f.wideId}`));
+    await withBypass(() =>
+      db.execute(sql`
+      update app_roles set permissions = '["gl.read"]'::jsonb where id = ${f.wideId}`),
+    );
     const res = await call("PATCH", { id: f.wideId, permissions: [] });
     assert.equal(res.status, 200, await res.text());
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("PATCH narrowing all to the actor lens succeeds", async () => {
   const f = await seed();
   try {
-    const res = await call("PATCH", { id: f.wideId, subsidiaryRestriction: { mode: "list", subsidiaryIds: [f.subA] } });
+    const res = await call("PATCH", {
+      id: f.wideId,
+      subsidiaryRestriction: { mode: "list", subsidiaryIds: [f.subA] },
+    });
     assert.equal(res.status, 200, await res.text());
     assert.deepEqual(await restrictionOf(f.wideId), { mode: "list", subsidiaryIds: [f.subA] });
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("PATCH widening a list and moving list to subtree on a leaf both refuse", async () => {
   const f = await seed();
   try {
     const wider = await call("PATCH", {
-      id: f.narrowId, subsidiaryRestriction: { mode: "list", subsidiaryIds: [f.subA, f.subB] },
+      id: f.narrowId,
+      subsidiaryRestriction: { mode: "list", subsidiaryIds: [f.subA, f.subB] },
     });
     assert.equal(wider.status, 403, await wider.text());
     assert.deepEqual(await restrictionOf(f.narrowId), { mode: "list", subsidiaryIds: [f.subA] });
     // subB is a leaf: list[subB] and subtree(subB) enumerate identically
     // today, but the subtree grants future children — still widening.
     const policy = await call("PATCH", {
-      id: f.leafId, subsidiaryRestriction: { mode: "subtree", subsidiaryId: f.subB },
+      id: f.leafId,
+      subsidiaryRestriction: { mode: "subtree", subsidiaryId: f.subB },
     });
     assert.equal(policy.status, 403, await policy.text());
     assert.deepEqual(await restrictionOf(f.leafId), { mode: "list", subsidiaryIds: [f.subB] });
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("DELETE into an all-scope replacement refuses; into an in-lens one succeeds", async () => {
@@ -269,9 +323,9 @@ test("DELETE into an all-scope replacement refuses; into an in-lens one succeeds
     const auditsBefore = await auditCount(f);
     const refused = await call("DELETE", { id: f.victimId, replacementRoleId: f.wideId });
     assert.equal(refused.status, 403, await refused.text());
-    const victim = await withBypass(() => db.execute(
-      sql`select id from app_roles where id = ${f.victimId}`, "objects",
-    ));
+    const victim = await withBypass(() =>
+      db.execute(sql`select id from app_roles where id = ${f.victimId}`, "objects"),
+    );
     assert.ok(victim[0], "refused deletion kept the role");
     assert.equal(await auditCount(f), auditsBefore, "refusal wrote no audit");
     const ok = await call("DELETE", { id: f.victimId, replacementRoleId: f.narrowId });
@@ -282,8 +336,13 @@ test("DELETE into an all-scope replacement refuses; into an in-lens one succeeds
       );
       return rows;
     });
-    assert.deepEqual(held.rows.map((r) => r.role_id), [f.narrowId]);
-  } finally { await teardown(f); }
+    assert.deepEqual(
+      held.rows.map((r) => r.role_id),
+      [f.narrowId],
+    );
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("POST refuses an open subtree matching today's enumeration", async () => {
@@ -298,16 +357,20 @@ test("POST refuses an open subtree matching today's enumeration", async () => {
       allowedSubsidiaryIds: new Set([f.subB]),
     };
     const refused = await call("POST", {
-      name: "Leaf subtree", key: `leafsub_${f.subA.slice(0, 4)}`,
+      name: "Leaf subtree",
+      key: `leafsub_${f.subA.slice(0, 4)}`,
       subsidiaryRestriction: { mode: "subtree", subsidiaryId: f.subB },
     });
     assert.equal(refused.status, 403, await refused.text());
     const control = await call("POST", {
-      name: "Leaf list", key: `leaflist_${f.subA.slice(0, 4)}`,
+      name: "Leaf list",
+      key: `leaflist_${f.subA.slice(0, 4)}`,
       subsidiaryRestriction: { mode: "list", subsidiaryIds: [f.subB] },
     });
     assert.equal(control.status, 200, await control.text());
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("PATCH widening scope within the lens still refuses permissions the actor does not hold", async () => {
@@ -319,24 +382,39 @@ test("PATCH widening scope within the lens still refuses permissions the actor d
   try {
     const tag = randomUUID().slice(0, 8);
     const ids = await withBypass(async () => {
-      const broadId = (await db.execute<{ id: string }>(sql`
+      const broadId = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
         values (${f.orgId}, ${`broad_${tag}`}, ${`broad ${tag}`}, false,
                 '["admin.roles.manage", "gl.read"]'::jsonb,
                 ${JSON.stringify({ mode: "list", subsidiaryIds: [f.subA, f.subB] })}::jsonb)
-        returning id`, "objects"))[0]!.id;
-      const victimId = (await db.execute<{ id: string }>(sql`
+        returning id`,
+          "objects",
+        )
+      )[0]!.id;
+      const victimId = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
         values (${f.orgId}, ${`victim_${tag}`}, ${`victim ${tag}`}, false,
                 '["gl.post"]'::jsonb,
                 ${JSON.stringify({ mode: "list", subsidiaryIds: [f.subA] })}::jsonb)
-        returning id`, "objects"))[0]!.id;
-      const heldId = (await db.execute<{ id: string }>(sql`
+        returning id`,
+          "objects",
+        )
+      )[0]!.id;
+      const heldId = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
         values (${f.orgId}, ${`held_${tag}`}, ${`held ${tag}`}, false,
                 '["gl.read"]'::jsonb,
                 ${JSON.stringify({ mode: "list", subsidiaryIds: [f.subA] })}::jsonb)
-        returning id`, "objects"))[0]!.id;
+        returning id`,
+          "objects",
+        )
+      )[0]!.id;
       const broadActor = randomUUID();
       await db.execute(sql`
         insert into users (id, org_id, email, name, password_hash, is_active)
@@ -357,7 +435,7 @@ test("PATCH widening scope within the lens still refuses permissions the actor d
       subsidiaryRestriction: { mode: "list", subsidiaryIds: [f.subA, f.subB] },
     });
     assert.equal(refused.status, 403);
-    assert.deepEqual((await refused.json() as { missing?: string[] }).missing, ["gl.post"]);
+    assert.deepEqual(((await refused.json()) as { missing?: string[] }).missing, ["gl.post"]);
     assert.deepEqual(await restrictionOf(ids.victimId), { mode: "list", subsidiaryIds: [f.subA] });
     assert.equal(await auditCount(f), auditsBefore, "refusal wrote no audit");
     // Control: widening a role whose permissions the actor holds succeeds.
@@ -366,7 +444,9 @@ test("PATCH widening scope within the lens still refuses permissions the actor d
       subsidiaryRestriction: { mode: "list", subsidiaryIds: [f.subA, f.subB] },
     });
     assert.equal(ok.status, 200, await ok.text());
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });
 
 test("unrestricted actor keeps full role scope authority", async () => {
@@ -374,8 +454,10 @@ test("unrestricted actor keeps full role scope authority", async () => {
   try {
     // Widen the actor's own stored role first so the stubbed unrestricted
     // lens matches the real derivation the route loads.
-    await withBypass(() => db.execute(sql`
-      update app_roles set subsidiary_restriction = '{"mode":"all"}'::jsonb where id = ${f.heldId}`));
+    await withBypass(() =>
+      db.execute(sql`
+      update app_roles set subsidiary_restriction = '{"mode":"all"}'::jsonb where id = ${f.heldId}`),
+    );
     routeState.authz = {
       user: { orgId: f.orgId, id: f.actorId, isSuperAdmin: false },
       permissions: new Set(["admin.roles.manage", "gl.read"]),
@@ -384,5 +466,7 @@ test("unrestricted actor keeps full role scope authority", async () => {
     const res = await call("PATCH", { id: f.heldId, subsidiaryRestriction: { mode: "all" } });
     assert.equal(res.status, 200, await res.text());
     assert.deepEqual(await restrictionOf(f.heldId), { mode: "all" });
-  } finally { await teardown(f); }
+  } finally {
+    await teardown(f);
+  }
 });

@@ -15,8 +15,8 @@
 // no DB, and deliberately NO eval()/new Function() — untrusted designer input
 // can never reach a JavaScript runtime.
 
-import { compareExactDecimals, parseExactDecimalParts, type ExactDecimal } from './decimals'
-import type { DefaultValueExpression, FormulaExpression, LogicRule } from './schema'
+import { compareExactDecimals, parseExactDecimalParts, type ExactDecimal } from "./decimals";
+import type { DefaultValueExpression, FormulaExpression, LogicRule } from "./schema";
 
 /**
  * A formula operand that cannot be evaluated to a number: garbage input,
@@ -27,10 +27,10 @@ import type { DefaultValueExpression, FormulaExpression, LogicRule } from './sch
 export class FormulaEvaluationError extends Error {}
 export class LogicEvaluationError extends Error {}
 
-export type FieldValueMap = Record<string, unknown>
+export type FieldValueMap = Record<string, unknown>;
 
 /** Per-row map keyed by section id → array of row value maps. */
-export type RowMap = Record<string, Array<FieldValueMap>>
+export type RowMap = Record<string, Array<FieldValueMap>>;
 
 /**
  * Evaluation context shared by logic + formula evaluators.
@@ -41,39 +41,48 @@ export type RowMap = Record<string, Array<FieldValueMap>>
  *                    `current_user_name` defaults.
  */
 export type EvalContext = {
-  values: FieldValueMap
-  rows: RowMap
+  values: FieldValueMap;
+  rows: RowMap;
   requestContext?: {
-    now?: Date
+    now?: Date;
     /** Org business day (YYYY-MM-DD). `today` defaults use this, never the UTC day. */
-    today?: string
-    currentUserName?: string | null
-  }
-}
+    today?: string;
+    currentUserName?: string | null;
+  };
+};
 
 // --- Helpers ---------------------------------------------------------------
 
 function isEmpty(v: unknown): boolean {
-  if (v === undefined || v === null) return true
-  if (typeof v === 'string' && v.trim() === '') return true
-  if (Array.isArray(v) && v.length === 0) return true
-  return false
+  if (v === undefined || v === null) return true;
+  if (typeof v === "string" && v.trim() === "") return true;
+  if (Array.isArray(v) && v.length === 0) return true;
+  return false;
 }
 
 function comparisonDecimal(value: unknown, label: string, emptyAsZero = true): ExactDecimal {
   // Empty form fields retain their established zero comparison semantics.
   // Nonempty amounts must parse exactly; invalid input cannot take the
   // lower-value branch of a financial approval condition.
-  if (value === null || value === undefined || value === '') {
-    if (!emptyAsZero) throw new LogicEvaluationError(`${label} requires an exact decimal threshold; enter a comparison value before continuing`)
-    return { units: 0n, scale: 0 }
+  if (value === null || value === undefined || value === "") {
+    if (!emptyAsZero)
+      throw new LogicEvaluationError(
+        `${label} requires an exact decimal threshold; enter a comparison value before continuing`,
+      );
+    return { units: 0n, scale: 0 };
   }
-  if (typeof value === 'boolean') return { units: value ? 1n : 0n, scale: 0 }
-  const decimal = typeof value === 'number' && Number.isFinite(value)
-    ? parseExactDecimalParts(String(value))
-    : typeof value === 'string' ? parseExactDecimalParts(value) : null
-  if (!decimal) throw new LogicEvaluationError(`${label} must be an exact decimal for this comparison; correct the value or condition before continuing`)
-  return decimal
+  if (typeof value === "boolean") return { units: value ? 1n : 0n, scale: 0 };
+  const decimal =
+    typeof value === "number" && Number.isFinite(value)
+      ? parseExactDecimalParts(String(value))
+      : typeof value === "string"
+        ? parseExactDecimalParts(value)
+        : null;
+  if (!decimal)
+    throw new LogicEvaluationError(
+      `${label} must be an exact decimal for this comparison; correct the value or condition before continuing`,
+    );
+  return decimal;
 }
 
 /**
@@ -85,28 +94,31 @@ function comparisonDecimal(value: unknown, label: string, emptyAsZero = true): E
  */
 function looseEquals(a: unknown, b: unknown, numeric = false): boolean {
   if (numeric) {
-    const threshold = comparisonDecimal(b, 'Comparison condition', false)
-    if (isEmpty(a)) return false
-    return compareExactDecimals(comparisonDecimal(a, 'Comparison field'), threshold) === 0
+    const threshold = comparisonDecimal(b, "Comparison condition", false);
+    if (isEmpty(a)) return false;
+    return compareExactDecimals(comparisonDecimal(a, "Comparison field"), threshold) === 0;
   }
-  if (a === b) return true
-  if (a === null || a === undefined || b === null || b === undefined) return false
-  if (typeof a === 'number' || typeof b === 'number') {
-    const decimal = (value: unknown) => typeof value === 'number' && Number.isFinite(value)
-      ? parseExactDecimalParts(String(value))
-      : typeof value === 'string' && value.trim() !== '' ? parseExactDecimalParts(value) : null
-    const na = decimal(a)
-    const nb = decimal(b)
-    return na !== null && nb !== null && compareExactDecimals(na, nb) === 0
+  if (a === b) return true;
+  if (a === null || a === undefined || b === null || b === undefined) return false;
+  if (typeof a === "number" || typeof b === "number") {
+    const decimal = (value: unknown) =>
+      typeof value === "number" && Number.isFinite(value)
+        ? parseExactDecimalParts(String(value))
+        : typeof value === "string" && value.trim() !== ""
+          ? parseExactDecimalParts(value)
+          : null;
+    const na = decimal(a);
+    const nb = decimal(b);
+    return na !== null && nb !== null && compareExactDecimals(na, nb) === 0;
   }
-  if (typeof a === 'boolean' || typeof b === 'boolean') {
+  if (typeof a === "boolean" || typeof b === "boolean") {
     const toBool = (v: unknown): boolean | undefined =>
-      v === true || v === 'true' ? true : v === false || v === 'false' ? false : undefined
-    const ba = toBool(a)
-    const bb = toBool(b)
-    return ba !== undefined && bb !== undefined && ba === bb
+      v === true || v === "true" ? true : v === false || v === "false" ? false : undefined;
+    const ba = toBool(a);
+    const bb = toBool(b);
+    return ba !== undefined && bb !== undefined && ba === bb;
   }
-  return false
+  return false;
 }
 
 /**
@@ -115,8 +127,8 @@ function looseEquals(a: unknown, b: unknown, numeric = false): boolean {
  * rollup operators (`sum_section` etc.) for repeating data.
  */
 function resolveFieldRef(ctx: EvalContext, key: string): unknown {
-  if (key.includes('.')) return undefined
-  return ctx.values[key]
+  if (key.includes(".")) return undefined;
+  return ctx.values[key];
 }
 
 // --- Logic evaluator -------------------------------------------------------
@@ -128,117 +140,133 @@ function resolveFieldRef(ctx: EvalContext, key: string): unknown {
  */
 export function evaluateLogicRule(rule: LogicRule, ctx: EvalContext): boolean {
   switch (rule.op) {
-    case 'and':
-      return rule.rules.every((r) => evaluateLogicRule(r, ctx))
-    case 'or':
-      return rule.rules.some((r) => evaluateLogicRule(r, ctx))
-    case 'not':
-      return !evaluateLogicRule(rule.rule, ctx)
-    case 'eq':
-      return looseEquals(resolveFieldRef(ctx, rule.field), rule.value, rule.valueType === 'number')
-    case 'ne':
-      return !looseEquals(resolveFieldRef(ctx, rule.field), rule.value, rule.valueType === 'number')
-    case 'gt':
-    case 'lt':
-    case 'gte':
-    case 'lte': {
+    case "and":
+      return rule.rules.every((r) => evaluateLogicRule(r, ctx));
+    case "or":
+      return rule.rules.some((r) => evaluateLogicRule(r, ctx));
+    case "not":
+      return !evaluateLogicRule(rule.rule, ctx);
+    case "eq":
+      return looseEquals(resolveFieldRef(ctx, rule.field), rule.value, rule.valueType === "number");
+    case "ne":
+      return !looseEquals(
+        resolveFieldRef(ctx, rule.field),
+        rule.value,
+        rule.valueType === "number",
+      );
+    case "gt":
+    case "lt":
+    case "gte":
+    case "lte": {
       const comparison = compareExactDecimals(
         comparisonDecimal(resolveFieldRef(ctx, rule.field), `Field "${rule.field}"`),
         comparisonDecimal(rule.value, `Condition for "${rule.field}"`, false),
-      )
-      return rule.op === 'gt' ? comparison > 0 : rule.op === 'lt' ? comparison < 0
-        : rule.op === 'gte' ? comparison >= 0 : comparison <= 0
+      );
+      return rule.op === "gt"
+        ? comparison > 0
+        : rule.op === "lt"
+          ? comparison < 0
+          : rule.op === "gte"
+            ? comparison >= 0
+            : comparison <= 0;
     }
-    case 'in': {
-      const v = resolveFieldRef(ctx, rule.field)
+    case "in": {
+      const v = resolveFieldRef(ctx, rule.field);
       // Multi-select stores arrays — treat as "any overlap".
-      const included = (value: unknown) => rule.valueType === 'number'
-        ? rule.value.some(candidate => looseEquals(value, candidate, true)) : rule.value.includes(value)
-      if (Array.isArray(v)) return v.some(included)
-      return included(v)
+      const included = (value: unknown) =>
+        rule.valueType === "number"
+          ? rule.value.some((candidate) => looseEquals(value, candidate, true))
+          : rule.value.includes(value);
+      if (Array.isArray(v)) return v.some(included);
+      return included(v);
     }
-    case 'notIn': {
-      const v = resolveFieldRef(ctx, rule.field)
-      const included = (value: unknown) => rule.valueType === 'number'
-        ? rule.value.some(candidate => looseEquals(value, candidate, true)) : rule.value.includes(value)
-      if (Array.isArray(v)) return !v.some(included)
-      return !included(v)
+    case "notIn": {
+      const v = resolveFieldRef(ctx, rule.field);
+      const included = (value: unknown) =>
+        rule.valueType === "number"
+          ? rule.value.some((candidate) => looseEquals(value, candidate, true))
+          : rule.value.includes(value);
+      if (Array.isArray(v)) return !v.some(included);
+      return !included(v);
     }
-    case 'isSet':
-      return !isEmpty(resolveFieldRef(ctx, rule.field))
-    case 'isNotSet':
-      return isEmpty(resolveFieldRef(ctx, rule.field))
+    case "isSet":
+      return !isEmpty(resolveFieldRef(ctx, rule.field));
+    case "isNotSet":
+      return isEmpty(resolveFieldRef(ctx, rule.field));
   }
 }
 
 // --- Formula evaluator -----------------------------------------------------
 
 /** Exact rational with a positive denominator, always reduced. */
-type Rational = { num: bigint; den: bigint }
+type Rational = { num: bigint; den: bigint };
 
 function gcd(a: bigint, b: bigint): bigint {
-  let x = a < 0n ? -a : a
-  let y = b < 0n ? -b : b
+  let x = a < 0n ? -a : a;
+  let y = b < 0n ? -b : b;
   while (y !== 0n) {
-    const t = x % y
-    x = y
-    y = t
+    const t = x % y;
+    x = y;
+    y = t;
   }
-  return x
+  return x;
 }
 
 function rational(num: bigint, den: bigint): Rational {
-  if (den === 0n) throw new FormulaEvaluationError('Cannot divide by zero in a formula')
+  if (den === 0n) throw new FormulaEvaluationError("Cannot divide by zero in a formula");
   if (den < 0n) {
-    num = -num
-    den = -den
+    num = -num;
+    den = -den;
   }
-  const g = gcd(num, den)
-  return g === 0n ? { num: 0n, den: 1n } : { num: num / g, den: den / g }
+  const g = gcd(num, den);
+  return g === 0n ? { num: 0n, den: 1n } : { num: num / g, den: den / g };
 }
 
-const RATIONAL_ONE: Rational = { num: 1n, den: 1n }
+const RATIONAL_ONE: Rational = { num: 1n, den: 1n };
 
 /** Decimal places kept by formula division (halves away from zero). */
-const FORMULA_DIVISION_SCALE = 10
+const FORMULA_DIVISION_SCALE = 10;
 
 function addRational(a: Rational, b: Rational): Rational {
-  return rational(a.num * b.den + b.num * a.den, a.den * b.den)
+  return rational(a.num * b.den + b.num * a.den, a.den * b.den);
 }
 
 function subRational(a: Rational, b: Rational): Rational {
-  return rational(a.num * b.den - b.num * a.den, a.den * b.den)
+  return rational(a.num * b.den - b.num * a.den, a.den * b.den);
 }
 
 function mulRational(a: Rational, b: Rational): Rational {
-  return rational(a.num * b.num, a.den * b.den)
+  return rational(a.num * b.num, a.den * b.den);
 }
 
 function divRational(a: Rational, b: Rational): Rational {
-  if (b.num === 0n) throw new FormulaEvaluationError('Cannot divide by zero in a formula')
+  if (b.num === 0n) throw new FormulaEvaluationError("Cannot divide by zero in a formula");
   // Halves away from zero at the division scale.
-  const num = a.num * b.den * 10n ** BigInt(FORMULA_DIVISION_SCALE)
-  const den = a.den * b.num
-  const negative = num < 0n !== den < 0n
-  const absNum = num < 0n ? -num : num
-  const absDen = den < 0n ? -den : den
-  const rounded = (absNum * 2n + absDen) / (absDen * 2n)
-  return { num: negative && rounded !== 0n ? -rounded : rounded, den: 10n ** BigInt(FORMULA_DIVISION_SCALE) }
+  const num = a.num * b.den * 10n ** BigInt(FORMULA_DIVISION_SCALE);
+  const den = a.den * b.num;
+  const negative = num < 0n !== den < 0n;
+  const absNum = num < 0n ? -num : num;
+  const absDen = den < 0n ? -den : den;
+  const rounded = (absNum * 2n + absDen) / (absDen * 2n);
+  return {
+    num: negative && rounded !== 0n ? -rounded : rounded,
+    den: 10n ** BigInt(FORMULA_DIVISION_SCALE),
+  };
 }
 
 function cmpRational(a: Rational, b: Rational): number {
-  const d = a.num * b.den - b.num * a.den
-  return d < 0n ? -1 : d > 0n ? 1 : 0
+  const d = a.num * b.den - b.num * a.den;
+  return d < 0n ? -1 : d > 0n ? 1 : 0;
 }
 
 function negativeRational(a: Rational): Rational {
-  return { num: -a.num, den: a.den }
+  return { num: -a.num, den: a.den };
 }
 
 /** Floored integer quotient (toward −∞), for floor/ceil/round. */
 function floorQuotient(num: bigint, den: bigint): bigint {
-  const q = num / den
-  return num >= 0n || num % den === 0n ? q : q - 1n
+  const q = num / den;
+  return num >= 0n || num % den === 0n ? q : q - 1n;
 }
 
 /**
@@ -248,24 +276,24 @@ function floorQuotient(num: bigint, den: bigint): bigint {
  * decimal throws instead of coercing to 0.
  */
 function toOperandRational(value: unknown, what: string): Rational | null {
-  if (value === null || value === undefined) return null
-  if (typeof value === 'number') {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") {
     if (!Number.isFinite(value)) {
-      throw new FormulaEvaluationError(`${what} is not a finite number`)
+      throw new FormulaEvaluationError(`${what} is not a finite number`);
     }
-    return scaledToRational(parseExactDecimalParts(String(value))!)
+    return scaledToRational(parseExactDecimalParts(String(value))!);
   }
-  if (typeof value === 'string') {
-    if (value.trim() === '') return null
-    const parts = parseExactDecimalParts(value)
-    if (!parts) throw new FormulaEvaluationError(`${what} ("${value}") is not a number`)
-    return scaledToRational(parts)
+  if (typeof value === "string") {
+    if (value.trim() === "") return null;
+    const parts = parseExactDecimalParts(value);
+    if (!parts) throw new FormulaEvaluationError(`${what} ("${value}") is not a number`);
+    return scaledToRational(parts);
   }
-  throw new FormulaEvaluationError(`${what} is not a number`)
+  throw new FormulaEvaluationError(`${what} is not a number`);
 }
 
 function scaledToRational(parts: { units: bigint; scale: number }): Rational {
-  return rational(parts.units, 10n ** BigInt(parts.scale))
+  return rational(parts.units, 10n ** BigInt(parts.scale));
 }
 
 /**
@@ -274,30 +302,30 @@ function scaledToRational(parts: { units: bigint; scale: number }): Rational {
  * (2 × 5 stays 10, not "10") and as an exact string when it cannot.
  */
 function renderAmount(value: Rational): number | string {
-  const text = renderFraction(value)
-  const n = Number(text)
-  if (Number.isFinite(n) && String(n) === text) return n
-  return text
+  const text = renderFraction(value);
+  const n = Number(text);
+  if (Number.isFinite(n) && String(n) === text) return n;
+  return text;
 }
 
 function renderFraction(value: Rational): string {
-  const negative = value.num < 0n
-  const abs = negative ? -value.num : value.num
+  const negative = value.num < 0n;
+  const abs = negative ? -value.num : value.num;
   // Long division to 24 places, then trim: every exact decimal terminates
   // long before that, and non-terminating division results were already
   // rounded at FORMULA_DIVISION_SCALE by divRational.
-  let remainder = abs % value.den
-  const digits = (abs / value.den).toString()
-  let fraction = ''
+  let remainder = abs % value.den;
+  const digits = (abs / value.den).toString();
+  let fraction = "";
   for (let i = 0; i < 24 && remainder !== 0n; i++) {
-    remainder *= 10n
-    fraction += (remainder / value.den).toString()
-    remainder = remainder % value.den
+    remainder *= 10n;
+    fraction += (remainder / value.den).toString();
+    remainder = remainder % value.den;
   }
-  fraction = fraction.replace(/0+$/, '')
-  const whole = digits.replace(/^0+(?=\d)/, '') || '0'
-  const zero = whole === '0' && fraction === ''
-  return `${negative && !zero ? '-' : ''}${whole}${fraction ? `.${fraction}` : ''}`
+  fraction = fraction.replace(/0+$/, "");
+  const whole = digits.replace(/^0+(?=\d)/, "") || "0";
+  const zero = whole === "0" && fraction === "";
+  return `${negative && !zero ? "-" : ""}${whole}${fraction ? `.${fraction}` : ""}`;
 }
 
 /**
@@ -319,223 +347,237 @@ export function evaluateFormulaTree(
   ctx: EvalContext,
 ): number | string | null {
   switch (expr.kind) {
-    case 'literal':
-      return expr.value
+    case "literal":
+      return expr.value;
 
-    case 'field_ref': {
-      const v = resolveFieldRef(ctx, expr.fieldKey)
-      if (v === undefined || v === null) return null
-      if (typeof v === 'number' || typeof v === 'string') return v
-      throw new FormulaEvaluationError(`the value of "${expr.fieldKey}" is not a number`)
+    case "field_ref": {
+      const v = resolveFieldRef(ctx, expr.fieldKey);
+      if (v === undefined || v === null) return null;
+      if (typeof v === "number" || typeof v === "string") return v;
+      throw new FormulaEvaluationError(`the value of "${expr.fieldKey}" is not a number`);
     }
 
-    case 'sum': {
-      let acc: Rational | null = null
+    case "sum": {
+      let acc: Rational | null = null;
       for (const e of expr.of) {
-        const r = toOperandRational(evaluateFormulaTree(e, ctx), operandName(e))
-        if (r !== null) acc = acc === null ? r : addRational(acc, r)
+        const r = toOperandRational(evaluateFormulaTree(e, ctx), operandName(e));
+        if (r !== null) acc = acc === null ? r : addRational(acc, r);
       }
-      return acc === null ? null : renderAmount(acc)
+      return acc === null ? null : renderAmount(acc);
     }
 
-    case 'product': {
-      let acc: Rational | null = null
+    case "product": {
+      let acc: Rational | null = null;
       for (const e of expr.of) {
-        const r = toOperandRational(evaluateFormulaTree(e, ctx), operandName(e))
-        if (r !== null) acc = acc === null ? r : mulRational(acc, r)
+        const r = toOperandRational(evaluateFormulaTree(e, ctx), operandName(e));
+        if (r !== null) acc = acc === null ? r : mulRational(acc, r);
       }
-      return acc === null ? null : renderAmount(acc)
+      return acc === null ? null : renderAmount(acc);
     }
 
-    case 'subtract': {
-      const left = toOperandRational(evaluateFormulaTree(expr.left, ctx), operandName(expr.left))
-      const right = toOperandRational(evaluateFormulaTree(expr.right, ctx), operandName(expr.right))
-      if (left === null || right === null) return null
-      return renderAmount(subRational(left, right))
+    case "subtract": {
+      const left = toOperandRational(evaluateFormulaTree(expr.left, ctx), operandName(expr.left));
+      const right = toOperandRational(
+        evaluateFormulaTree(expr.right, ctx),
+        operandName(expr.right),
+      );
+      if (left === null || right === null) return null;
+      return renderAmount(subRational(left, right));
     }
 
-    case 'divide': {
-      const left = toOperandRational(evaluateFormulaTree(expr.left, ctx), operandName(expr.left))
-      const right = toOperandRational(evaluateFormulaTree(expr.right, ctx), operandName(expr.right))
-      if (left === null || right === null) return null
-      return renderAmount(divRational(left, right))
+    case "divide": {
+      const left = toOperandRational(evaluateFormulaTree(expr.left, ctx), operandName(expr.left));
+      const right = toOperandRational(
+        evaluateFormulaTree(expr.right, ctx),
+        operandName(expr.right),
+      );
+      if (left === null || right === null) return null;
+      return renderAmount(divRational(left, right));
     }
 
-    case 'min': {
-      let best: Rational | null = null
+    case "min": {
+      let best: Rational | null = null;
       for (const e of expr.of) {
-        const r = toOperandRational(evaluateFormulaTree(e, ctx), operandName(e))
-        if (r !== null && (best === null || cmpRational(r, best) < 0)) best = r
+        const r = toOperandRational(evaluateFormulaTree(e, ctx), operandName(e));
+        if (r !== null && (best === null || cmpRational(r, best) < 0)) best = r;
       }
-      return best === null ? null : renderAmount(best)
+      return best === null ? null : renderAmount(best);
     }
 
-    case 'max': {
-      let best: Rational | null = null
+    case "max": {
+      let best: Rational | null = null;
       for (const e of expr.of) {
-        const r = toOperandRational(evaluateFormulaTree(e, ctx), operandName(e))
-        if (r !== null && (best === null || cmpRational(r, best) > 0)) best = r
+        const r = toOperandRational(evaluateFormulaTree(e, ctx), operandName(e));
+        if (r !== null && (best === null || cmpRational(r, best) > 0)) best = r;
       }
-      return best === null ? null : renderAmount(best)
+      return best === null ? null : renderAmount(best);
     }
 
-    case 'power': {
-      const base = toOperandRational(evaluateFormulaTree(expr.base, ctx), operandName(expr.base))
-      const exponent = toOperandRational(evaluateFormulaTree(expr.exponent, ctx), operandName(expr.exponent))
-      if (base === null || exponent === null) return null
-      if (exponent.den === 1n) return renderAmount(integerPower(base, exponent.num))
-      return renderApproximate(Math.pow(toFloat(base), toFloat(exponent)), 'power')
+    case "power": {
+      const base = toOperandRational(evaluateFormulaTree(expr.base, ctx), operandName(expr.base));
+      const exponent = toOperandRational(
+        evaluateFormulaTree(expr.exponent, ctx),
+        operandName(expr.exponent),
+      );
+      if (base === null || exponent === null) return null;
+      if (exponent.den === 1n) return renderAmount(integerPower(base, exponent.num));
+      return renderApproximate(Math.pow(toFloat(base), toFloat(exponent)), "power");
     }
 
-    case 'root': {
-      const of = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of))
-      const degree = toOperandRational(evaluateFormulaTree(expr.degree, ctx), operandName(expr.degree))
-      if (of === null || degree === null) return null
-      if (degree.num === 0n) throw new FormulaEvaluationError('Cannot take a zeroth root in a formula')
+    case "root": {
+      const of = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of));
+      const degree = toOperandRational(
+        evaluateFormulaTree(expr.degree, ctx),
+        operandName(expr.degree),
+      );
+      if (of === null || degree === null) return null;
+      if (degree.num === 0n)
+        throw new FormulaEvaluationError("Cannot take a zeroth root in a formula");
       if (degree.den === 1n) {
         // Integer degrees keep the old sign rule exactly where it is
         // mathematically sound: odd roots of negatives stay negative (cube
         // root of −8 = −2), while an even root of a negative is a refusal —
         // the old code returned a sign-flipped real number for it.
-        const n = degree.num
-        const ofFloat = toFloat(of)
+        const n = degree.num;
+        const ofFloat = toFloat(of);
         if (ofFloat < 0 && n % 2n === 0n) {
-          throw new FormulaEvaluationError('Cannot take an even root of a negative value in a formula')
+          throw new FormulaEvaluationError(
+            "Cannot take an even root of a negative value in a formula",
+          );
         }
         const r =
-          ofFloat < 0
-            ? -Math.pow(-ofFloat, 1 / Number(n))
-            : Math.pow(ofFloat, 1 / Number(n))
-        return renderApproximate(r, 'root')
+          ofFloat < 0 ? -Math.pow(-ofFloat, 1 / Number(n)) : Math.pow(ofFloat, 1 / Number(n));
+        return renderApproximate(r, "root");
       }
       // Fractional degrees go straight through the double: a negative base
       // is complex, so Math.pow yields NaN and the refusal below fires.
-      return renderApproximate(Math.pow(toFloat(of), 1 / toFloat(degree)), 'root')
+      return renderApproximate(Math.pow(toFloat(of), 1 / toFloat(degree)), "root");
     }
 
-    case 'abs': {
-      const v = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of))
-      if (v === null) return null
-      return renderAmount(v.num < 0n ? negativeRational(v) : v)
+    case "abs": {
+      const v = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of));
+      if (v === null) return null;
+      return renderAmount(v.num < 0n ? negativeRational(v) : v);
     }
 
-    case 'round': {
-      const v = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of))
-      if (v === null) return null
+    case "round": {
+      const v = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of));
+      if (v === null) return null;
       const places =
         Number.isInteger(expr.places) &&
         (expr.places as number) >= 0 &&
         (expr.places as number) <= 12
           ? (expr.places as number)
-          : 0
+          : 0;
       // Halves toward +∞ (Math.round semantics).
-      const scaled = { num: v.num * 10n ** BigInt(places), den: v.den }
-      const rounded = floorQuotient(scaled.num * 2n + scaled.den, scaled.den * 2n)
-      return renderAmount({ num: rounded, den: 10n ** BigInt(places) })
+      const scaled = { num: v.num * 10n ** BigInt(places), den: v.den };
+      const rounded = floorQuotient(scaled.num * 2n + scaled.den, scaled.den * 2n);
+      return renderAmount({ num: rounded, den: 10n ** BigInt(places) });
     }
 
-    case 'floor': {
-      const v = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of))
-      if (v === null) return null
-      return renderAmount({ num: floorQuotient(v.num, v.den), den: 1n })
+    case "floor": {
+      const v = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of));
+      if (v === null) return null;
+      return renderAmount({ num: floorQuotient(v.num, v.den), den: 1n });
     }
 
-    case 'ceil': {
-      const v = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of))
-      if (v === null) return null
-      return renderAmount({ num: -floorQuotient(-v.num, v.den), den: 1n })
+    case "ceil": {
+      const v = toOperandRational(evaluateFormulaTree(expr.of, ctx), operandName(expr.of));
+      if (v === null) return null;
+      return renderAmount({ num: -floorQuotient(-v.num, v.den), den: 1n });
     }
 
-    case 'sum_section': {
-      const rows = ctx.rows[expr.sectionKey] ?? []
-      let acc: Rational | null = null
+    case "sum_section": {
+      const rows = ctx.rows[expr.sectionKey] ?? [];
+      let acc: Rational | null = null;
       for (const row of rows) {
-        const r = toOperandRational(row[expr.rowFieldKey], `the value of "${expr.rowFieldKey}"`)
-        if (r !== null) acc = acc === null ? r : addRational(acc, r)
+        const r = toOperandRational(row[expr.rowFieldKey], `the value of "${expr.rowFieldKey}"`);
+        if (r !== null) acc = acc === null ? r : addRational(acc, r);
       }
-      return acc === null ? null : renderAmount(acc)
+      return acc === null ? null : renderAmount(acc);
     }
 
-    case 'count_section':
-      return (ctx.rows[expr.sectionKey] ?? []).length
+    case "count_section":
+      return (ctx.rows[expr.sectionKey] ?? []).length;
 
-    case 'avg_section': {
-      const rows = ctx.rows[expr.sectionKey] ?? []
-      let acc: Rational | null = null
-      let count = 0
+    case "avg_section": {
+      const rows = ctx.rows[expr.sectionKey] ?? [];
+      let acc: Rational | null = null;
+      let count = 0;
       for (const row of rows) {
-        const r = toOperandRational(row[expr.rowFieldKey], `the value of "${expr.rowFieldKey}"`)
-        if (r === null) continue
-        acc = acc === null ? r : addRational(acc, r)
-        count += 1
+        const r = toOperandRational(row[expr.rowFieldKey], `the value of "${expr.rowFieldKey}"`);
+        if (r === null) continue;
+        acc = acc === null ? r : addRational(acc, r);
+        count += 1;
       }
-      if (acc === null || count === 0) return null
-      return renderAmount(divRational(acc, { num: BigInt(count), den: 1n }))
+      if (acc === null || count === 0) return null;
+      return renderAmount(divRational(acc, { num: BigInt(count), den: 1n }));
     }
 
-    case 'min_section': {
-      let best: Rational | null = null
+    case "min_section": {
+      let best: Rational | null = null;
       for (const row of ctx.rows[expr.sectionKey] ?? []) {
-        const r = toOperandRational(row[expr.rowFieldKey], `the value of "${expr.rowFieldKey}"`)
-        if (r !== null && (best === null || cmpRational(r, best) < 0)) best = r
+        const r = toOperandRational(row[expr.rowFieldKey], `the value of "${expr.rowFieldKey}"`);
+        if (r !== null && (best === null || cmpRational(r, best) < 0)) best = r;
       }
-      return best === null ? null : renderAmount(best)
+      return best === null ? null : renderAmount(best);
     }
 
-    case 'max_section': {
-      let best: Rational | null = null
+    case "max_section": {
+      let best: Rational | null = null;
       for (const row of ctx.rows[expr.sectionKey] ?? []) {
-        const r = toOperandRational(row[expr.rowFieldKey], `the value of "${expr.rowFieldKey}"`)
-        if (r !== null && (best === null || cmpRational(r, best) > 0)) best = r
+        const r = toOperandRational(row[expr.rowFieldKey], `the value of "${expr.rowFieldKey}"`);
+        if (r !== null && (best === null || cmpRational(r, best) > 0)) best = r;
       }
-      return best === null ? null : renderAmount(best)
+      return best === null ? null : renderAmount(best);
     }
 
-    case 'concat': {
-      const sep = expr.separator ?? ''
+    case "concat": {
+      const sep = expr.separator ?? "";
       return expr.of
         .map((e) => {
-          const v = evaluateFormulaTree(e, ctx)
-          if (v === null || v === undefined) return ''
-          return String(v)
+          const v = evaluateFormulaTree(e, ctx);
+          if (v === null || v === undefined) return "";
+          return String(v);
         })
-        .join(sep)
+        .join(sep);
     }
 
-    case 'if':
+    case "if":
       return evaluateLogicRule(expr.condition, ctx)
         ? evaluateFormulaTree(expr.then, ctx)
-        : evaluateFormulaTree(expr.else, ctx)
+        : evaluateFormulaTree(expr.else, ctx);
   }
 }
 
 /** Human name of one operand for refusal messages. */
 function operandName(expr: FormulaExpression): string {
-  if (expr.kind === 'field_ref') return `the value of "${expr.fieldKey}"`
-  if (expr.kind === 'literal') return 'a literal value'
-  return 'a formula value'
+  if (expr.kind === "field_ref") return `the value of "${expr.fieldKey}"`;
+  if (expr.kind === "literal") return "a literal value";
+  return "a formula value";
 }
 
 function toFloat(value: Rational): number {
-  return Number(value.num) / Number(value.den)
+  return Number(value.num) / Number(value.den);
 }
 
 /** Exact integer power (negative exponents invert; 0^negative throws). */
 function integerPower(base: Rational, exponent: bigint): Rational {
-  let e = exponent
-  let b = base
+  let e = exponent;
+  let b = base;
   if (e < 0n) {
-    if (b.num === 0n) throw new FormulaEvaluationError('Cannot raise zero to a negative power in a formula')
-    b = rational(b.den, b.num)
-    e = -e
+    if (b.num === 0n)
+      throw new FormulaEvaluationError("Cannot raise zero to a negative power in a formula");
+    b = rational(b.den, b.num);
+    e = -e;
   }
-  let result: Rational = RATIONAL_ONE
+  let result: Rational = RATIONAL_ONE;
   while (e > 0n) {
-    if (e % 2n === 1n) result = mulRational(result, b)
-    b = mulRational(b, b)
-    e /= 2n
+    if (e % 2n === 1n) result = mulRational(result, b);
+    b = mulRational(b, b);
+    e /= 2n;
   }
-  return result
+  return result;
 }
 
 /**
@@ -546,19 +588,19 @@ function integerPower(base: Rational, exponent: bigint): Rational {
  */
 function renderApproximate(value: number, what: string): number | string {
   if (!Number.isFinite(value)) {
-    throw new FormulaEvaluationError(`The ${what} has no finite result in this formula`)
+    throw new FormulaEvaluationError(`The ${what} has no finite result in this formula`);
   }
-  const parts = parseExactDecimalParts(String(value))
-  if (!parts) throw new FormulaEvaluationError(`The ${what} has no finite result in this formula`)
-  return renderAmount(rational(parts.units, 10n ** BigInt(parts.scale)))
+  const parts = parseExactDecimalParts(String(value));
+  if (!parts) throw new FormulaEvaluationError(`The ${what} has no finite result in this formula`);
+  return renderAmount(rational(parts.units, 10n ** BigInt(parts.scale)));
 }
 
 // --- Default-value resolver ------------------------------------------------
 
-const pad2 = (n: number): string => String(n).padStart(2, '0')
+const pad2 = (n: number): string => String(n).padStart(2, "0");
 
 function localDateString(d: Date): string {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
 /**
@@ -567,29 +609,29 @@ function localDateString(d: Date): string {
  * evaluates to null).
  */
 export function resolveDefaultValue(expr: DefaultValueExpression, ctx: EvalContext): unknown {
-  const now = ctx.requestContext?.now ?? new Date()
+  const now = ctx.requestContext?.now ?? new Date();
   switch (expr.kind) {
-    case 'literal':
-      return expr.value
-    case 'today':
+    case "literal":
+      return expr.value;
+    case "today":
       // Product writers pass the org business day. Without it, fall back to
       // the local wall-clock date — toISOString() would yield the UTC day,
       // the wrong calendar day for evening fills west of Greenwich.
-      return ctx.requestContext?.today ?? localDateString(now)
-    case 'now':
+      return ctx.requestContext?.today ?? localDateString(now);
+    case "now":
       // <input type="datetime-local"> expects LOCAL yyyy-mm-ddThh:mm.
-      return `${localDateString(now)}T${pad2(now.getHours())}:${pad2(now.getMinutes())}`
-    case 'current_user_name':
-      return ctx.requestContext?.currentUserName ?? null
-    case 'expression': {
+      return `${localDateString(now)}T${pad2(now.getHours())}:${pad2(now.getMinutes())}`;
+    case "current_user_name":
+      return ctx.requestContext?.currentUserName ?? null;
+    case "expression": {
       // A failing default (divide-by-zero, garbage operand) leaves the field
       // blank rather than failing the whole fill — the failure is still
       // visible, because withComputedFormulas persists null, never 0.
       try {
-        return evaluateFormulaTree(expr.expr, ctx) ?? undefined
+        return evaluateFormulaTree(expr.expr, ctx) ?? undefined;
       } catch (error) {
-        if (error instanceof FormulaEvaluationError) return undefined
-        throw error
+        if (error instanceof FormulaEvaluationError) return undefined;
+        throw error;
       }
     }
   }

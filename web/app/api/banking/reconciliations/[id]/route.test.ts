@@ -1,61 +1,61 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { stubModules } from '../../../../../testing/stub-modules'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { stubModules } from "../../../../../testing/stub-modules";
 
 interface ReconciliationValues {
-  throughDate: string
-  statementBalance: string
+  throughDate: string;
+  statementBalance: string;
 }
 
 interface AuditSnapshot {
-  before: ReconciliationValues
-  after: ReconciliationValues
+  before: ReconciliationValues;
+  after: ReconciliationValues;
 }
 
 interface RouteState {
-  committed: ReconciliationValues
-  desired: ReconciliationValues[]
-  audits: AuditSnapshot[]
-  nextTransactionId: number
-  lockTail: Promise<void>
+  committed: ReconciliationValues;
+  desired: ReconciliationValues[];
+  audits: AuditSnapshot[];
+  nextTransactionId: number;
+  lockTail: Promise<void>;
 }
 
-const stateKey = Symbol.for('openbooks.reconciliation-route-test')
-stubModules({ authz: true })
+const stateKey = Symbol.for("openbooks.reconciliation-route-test");
+stubModules({ authz: true });
 const routeState: RouteState = {
   committed: {
-    throughDate: '2026-08-20',
-    statementBalance: '100.00',
+    throughDate: "2026-08-20",
+    statementBalance: "100.00",
   },
   desired: [],
   audits: [],
   nextTransactionId: 0,
   lockTail: Promise.resolve(),
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 /** Flatten a drizzle SQL chunk into text for routing the database fake. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
-      if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
-      return ''
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
     })
-    .join('')
-    .replaceAll(/\s+/g, ' ')
+    .join("")
+    .replaceAll(/\s+/g, " ")
     .trim()
-    .toLowerCase()
+    .toLowerCase();
 }
 
 const mockSources = new Map<string, string>([
   [
-    'mock:next-server',
+    "mock:next-server",
     `
       export class NextResponse extends Response {
         static json(value, init = {}) {
@@ -67,7 +67,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:drizzle',
+    "mock:drizzle",
     `
       export function sql(strings, ...values) {
         const queryChunks = []
@@ -80,7 +80,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.reconciliation-route-test')]
       const sqlText = globalThis.openbooksReconciliationSqlText
@@ -161,7 +161,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:feature-gates',
+    "mock:feature-gates",
     `
       export async function guardFeaturePermission() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
@@ -169,7 +169,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:util',
+    "mock:util",
     `
       export function bankingErrorResponse(error) {
         return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'error' }), {
@@ -179,87 +179,95 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ])
+]);
 
-;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksReconciliationSqlText?: unknown })
-  .openbooksReconciliationSqlText = sqlText
+(
+  globalThis as typeof globalThis &
+    Record<string, unknown> & { openbooksReconciliationSqlText?: unknown }
+).openbooksReconciliationSqlText = sqlText;
 
 // Neither '@/lib/api/json', the money kernel, nor the decimal classifier is
 // mocked: hand doubles cannot produce the refusals the real modules enforce.
 const mockUrls = new Map<string, string>([
-  ['next/server', 'mock:next-server'],
-  ['drizzle-orm', 'mock:drizzle'],
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['../../../../../lib/feature-gates', 'mock:feature-gates'],
-  ['@/lib/feature-gates', 'mock:feature-gates'],
-  ['../../util', 'mock:util'],
-])
+  ["next/server", "mock:next-server"],
+  ["drizzle-orm", "mock:drizzle"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["../../../../../lib/feature-gates", "mock:feature-gates"],
+  ["@/lib/feature-gates", "mock:feature-gates"],
+  ["../../util", "mock:util"],
+]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // Exercise the extracted native adjustment service against the original
     // serialized SQL fake; directory-scoped so module splits keep using it.
-    if (specifier === '../platform/db.ts' && (context.parentURL ?? '').includes('/engine/src/banking/')) {
-      return { url: 'mock:db', shortCircuit: true }
+    if (
+      specifier === "../platform/db.ts" &&
+      (context.parentURL ?? "").includes("/engine/src/banking/")
+    ) {
+      return { url: "mock:db", shortCircuit: true };
     }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?reconciliation-concurrency-test'
-const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?reconciliation-concurrency-test";
+const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const RECONCILIATION_ID = '00000000-0000-4000-8000-000000000001'
+const RECONCILIATION_ID = "00000000-0000-4000-8000-000000000001";
 
 function reset(): void {
   routeState.committed = {
-    throughDate: '2026-08-20',
-    statementBalance: '100.00',
-  }
+    throughDate: "2026-08-20",
+    statementBalance: "100.00",
+  };
   routeState.desired = [
-    { throughDate: '2026-08-21', statementBalance: '110.00' },
-    { throughDate: '2026-08-22', statementBalance: '120.00' },
-  ]
-  routeState.audits.length = 0
-  routeState.nextTransactionId = 0
-  routeState.lockTail = Promise.resolve()
+    { throughDate: "2026-08-21", statementBalance: "110.00" },
+    { throughDate: "2026-08-22", statementBalance: "120.00" },
+  ];
+  routeState.audits.length = 0;
+  routeState.nextTransactionId = 0;
+  routeState.lockTail = Promise.resolve();
 }
 
 function patch(body: Record<string, string>): Promise<Response> {
   return PATCH(
     new Request(`http://openbooks.test/api/banking/reconciliations/${RECONCILIATION_ID}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: RECONCILIATION_ID }) },
-  )
+  );
 }
 
-test('concurrent PATCH requests chain audit snapshots from committed reconciliation values', async () => {
-  reset()
+test("concurrent PATCH requests chain audit snapshots from committed reconciliation values", async () => {
+  reset();
 
   const responses = await Promise.all([
-    patch({ throughDate: '2026-08-21', statementBalance: '110.00' }),
-    patch({ throughDate: '2026-08-22', statementBalance: '120.00' }),
-  ])
+    patch({ throughDate: "2026-08-21", statementBalance: "110.00" }),
+    patch({ throughDate: "2026-08-22", statementBalance: "120.00" }),
+  ]);
 
-  assert.deepEqual(responses.map((response) => response.status), [200, 200])
+  assert.deepEqual(
+    responses.map((response) => response.status),
+    [200, 200],
+  );
   assert.deepEqual(routeState.audits, [
     {
-      before: { throughDate: '2026-08-20', statementBalance: '100.00' },
-      after: { throughDate: '2026-08-21', statementBalance: '110.00' },
+      before: { throughDate: "2026-08-20", statementBalance: "100.00" },
+      after: { throughDate: "2026-08-21", statementBalance: "110.00" },
     },
     {
-      before: { throughDate: '2026-08-21', statementBalance: '110.00' },
-      after: { throughDate: '2026-08-22', statementBalance: '120.00' },
+      before: { throughDate: "2026-08-21", statementBalance: "110.00" },
+      after: { throughDate: "2026-08-22", statementBalance: "120.00" },
     },
-  ])
-})
+  ]);
+});

@@ -144,15 +144,15 @@ export function registerPayrollReciprocity(
   for (const agreement of declaration.agreements) {
     if (agreement.workRegion === agreement.residenceRegion) {
       throw new PayrollReciprocityError(
-        `${declaration.country}: a reciprocity agreement relates two DIFFERENT regions — `
-        + `${agreement.workRegion} is declared with itself`,
+        `${declaration.country}: a reciprocity agreement relates two DIFFERENT regions — ` +
+          `${agreement.workRegion} is declared with itself`,
       );
     }
     const key = `${agreement.workRegion}>${agreement.residenceRegion}`;
     if (seen.has(key)) {
       throw new PayrollReciprocityError(
-        `${declaration.country}: two reciprocity agreements for work in ${agreement.workRegion} `
-        + `by a resident of ${agreement.residenceRegion} — the resolution would be ambiguous`,
+        `${declaration.country}: two reciprocity agreements for work in ${agreement.workRegion} ` +
+          `by a resident of ${agreement.residenceRegion} — the resolution would be ambiguous`,
       );
     }
     seen.add(key);
@@ -183,8 +183,12 @@ export function declaredPayrollReciprocity(): PayrollPackReciprocity[] {
  * default: without an agreement, the work region taxes the wages.
  */
 export function packReciprocity(country: string): PayrollPackReciprocity {
-  return declaredPayrollReciprocity().find((entry) => entry.country === country)
-    ?? { country, agreements: [] };
+  return (
+    declaredPayrollReciprocity().find((entry) => entry.country === country) ?? {
+      country,
+      agreements: [],
+    }
+  );
 }
 
 /**
@@ -202,13 +206,17 @@ export function reciprocityAgreement(
   residenceRegion: string,
 ): PayrollReciprocityAgreement | null {
   if (workRegion === residenceRegion) return null;
-  return packReciprocity(country).agreements.find((agreement) =>
-    agreement.workRegion === workRegion && agreement.residenceRegion === residenceRegion) ?? null;
+  return (
+    packReciprocity(country).agreements.find(
+      (agreement) =>
+        agreement.workRegion === workRegion && agreement.residenceRegion === residenceRegion,
+    ) ?? null
+  );
 }
 
 /** Every region whose residents may claim relief from working in `workRegion`. */
 export function reciprocityPartners(country: string, workRegion: string): string[] {
-  return packReciprocity(country).agreements
-    .filter((agreement) => agreement.workRegion === workRegion)
+  return packReciprocity(country)
+    .agreements.filter((agreement) => agreement.workRegion === workRegion)
     .map((agreement) => agreement.residenceRegion);
 }

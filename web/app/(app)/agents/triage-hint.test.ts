@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
+import { LOCALE_CODES as LOCALES } from "../../../i18n/config";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..");
 

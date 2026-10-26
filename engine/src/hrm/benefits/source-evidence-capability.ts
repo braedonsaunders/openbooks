@@ -50,8 +50,17 @@ export function mintSourceEvidenceAdmission(input: {
 }): { readonly token: object; readonly snapshot: Record<string, unknown> } {
   const executor = pinnedTransactionExecutor();
   const scope = orgContext.getStore();
-  if (!executor || executor !== input.executor || !scope || scope.bypass || scope.orgId !== input.facts.orgId) {
-    throw new BenefitsError("REFUSED", "source-evidenced obligations require their active organization command transaction");
+  if (
+    !executor ||
+    executor !== input.executor ||
+    !scope ||
+    scope.bypass ||
+    scope.orgId !== input.facts.orgId
+  ) {
+    throw new BenefitsError(
+      "REFUSED",
+      "source-evidenced obligations require their active organization command transaction",
+    );
   }
   const snapshot = structuredClone(input.snapshot);
   const frozen = deepFreezeJson(snapshot);
@@ -73,14 +82,26 @@ export function consumeSourceEvidenceAdmission(input: {
   readonly facts: SourceEvidenceAdmissionFacts;
   readonly snapshot: unknown;
 }): Record<string, unknown> {
-  const record = input.token !== null && typeof input.token === "object" ? admitted.get(input.token) : undefined;
+  const record =
+    input.token !== null && typeof input.token === "object" ? admitted.get(input.token) : undefined;
   const scope = orgContext.getStore();
-  if (!record || record.consumed || pinnedTransactionExecutor() !== record.executor || input.executor !== record.executor ||
-      !scope || scope.bypass || scope.orgId !== record.facts.orgId ||
-      canonicalRetainedJson(input.facts) !== canonicalRetainedJson(record.facts) ||
-      input.snapshot !== record.snapshot ||
-      createHash("sha256").update(canonicalRetainedJson(record.snapshot), "utf8").digest("hex") !== record.digest) {
-    throw new BenefitsError("REFUSED", "source-evidenced obligations require the locked native retained-source service");
+  if (
+    !record ||
+    record.consumed ||
+    pinnedTransactionExecutor() !== record.executor ||
+    input.executor !== record.executor ||
+    !scope ||
+    scope.bypass ||
+    scope.orgId !== record.facts.orgId ||
+    canonicalRetainedJson(input.facts) !== canonicalRetainedJson(record.facts) ||
+    input.snapshot !== record.snapshot ||
+    createHash("sha256").update(canonicalRetainedJson(record.snapshot), "utf8").digest("hex") !==
+      record.digest
+  ) {
+    throw new BenefitsError(
+      "REFUSED",
+      "source-evidenced obligations require the locked native retained-source service",
+    );
   }
   record.consumed = true;
   admitted.delete(input.token as object);

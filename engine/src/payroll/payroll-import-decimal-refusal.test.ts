@@ -87,10 +87,7 @@ test("payroll-1: component openings refuse comma money and accept plain digits",
     () => normalizeOpeningComponents({ RRSP: "12,34" }, [RRSP]),
     /must use "\." as the decimal point — write "12,34" as "12\.34"/,
   );
-  assert.throws(
-    () => normalizeOpeningComponents({ RRSP: "1,234" }, [RRSP]),
-    /is ambiguous/,
-  );
+  assert.throws(() => normalizeOpeningComponents({ RRSP: "1,234" }, [RRSP]), /is ambiguous/);
   assert.throws(
     () => normalizeOpeningComponents({ RRSP: "23,000.00" }, [RRSP]),
     /must not contain a thousands separator/,

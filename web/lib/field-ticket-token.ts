@@ -1,7 +1,7 @@
-import 'server-only'
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import "server-only";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 
 /**
  * Customer-signing links: a compact HMAC token
@@ -11,14 +11,14 @@ import { db } from '@openbooks/engine/platform/db'
  * it to can sign, exactly like the paper sheet handed across the counter.
  */
 
-const b64u = (b: Buffer) => b.toString('base64url')
+const b64u = (b: Buffer) => b.toString("base64url");
 
 function sign(payload: string): string {
   // Live read: engine db.ts snapshots the environment at module evaluation,
   // so a snapshot read misses SESSION_SECRET assigned after that import.
   const secret = process.env.SESSION_SECRET;
-  if (!secret) throw new Error('SESSION_SECRET is required to sign field-ticket tokens');
-  return b64u(createHmac('sha256', secret).update(payload).digest())
+  if (!secret) throw new Error("SESSION_SECRET is required to sign field-ticket tokens");
+  return b64u(createHmac("sha256", secret).update(payload).digest());
 }
 
 export function mintSigningToken(
@@ -27,36 +27,36 @@ export function mintSigningToken(
   requestId: string,
   expiresAt: Date,
 ): string {
-  const payload = `${orgId}.${ticketId}.${requestId}.${expiresAt.getTime()}`
-  return `${b64u(Buffer.from(payload))}.${sign(payload)}`
+  const payload = `${orgId}.${ticketId}.${requestId}.${expiresAt.getTime()}`;
+  return `${b64u(Buffer.from(payload))}.${sign(payload)}`;
 }
 
 export function signingTokenDigest(token: string): string {
-  return createHash('sha256').update(token).digest('hex')
+  return createHash("sha256").update(token).digest("hex");
 }
 
 export function verifySigningToken(
   token: string,
 ): { orgId: string; ticketId: string; requestId: string; expiresAt: Date } | null {
-  const dot = token.lastIndexOf('.')
-  if (dot < 0) return null
-  const payloadB64 = token.slice(0, dot)
-  const sig = token.slice(dot + 1)
-  let payload: string
+  const dot = token.lastIndexOf(".");
+  if (dot < 0) return null;
+  const payloadB64 = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  let payload: string;
   try {
-    payload = Buffer.from(payloadB64, 'base64url').toString()
+    payload = Buffer.from(payloadB64, "base64url").toString();
   } catch {
-    return null
+    return null;
   }
-  const expected = sign(payload)
-  const a = Buffer.from(sig)
-  const b = Buffer.from(expected)
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return null
-  const [orgId, ticketId, requestId, expStr] = payload.split('.')
-  if (!orgId || !ticketId || !requestId || !expStr) return null
-  const exp = Number(expStr)
-  if (!Number.isFinite(exp) || exp < Date.now()) return null
-  return { orgId, ticketId, requestId, expiresAt: new Date(exp) }
+  const expected = sign(payload);
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+  const [orgId, ticketId, requestId, expStr] = payload.split(".");
+  if (!orgId || !ticketId || !requestId || !expStr) return null;
+  const exp = Number(expStr);
+  if (!Number.isFinite(exp) || exp < Date.now()) return null;
+  return { orgId, ticketId, requestId, expiresAt: new Date(exp) };
 }
 
 /** Validate the persisted, independently revocable request represented by the
@@ -66,7 +66,8 @@ export async function validateSigningRequest(
   claims: NonNullable<ReturnType<typeof verifySigningToken>>,
   options: { allowResponded?: boolean } = {},
 ): Promise<boolean> {
-  const result = (await db.execute<{ id: string }>(sql`
+  const result = await db.execute<{ id: string }>(
+    sql`
     select request.id
       from field_ticket_signature_requests request
       join email_log email
@@ -81,6 +82,8 @@ export async function validateSigningRequest(
        and email.status = 'sent'
        and (${options.allowResponded === true}
             or request.responded_at is null)
-  `, 'objects'))
-  return result.length === 1
+  `,
+    "objects",
+  );
+  return result.length === 1;
 }

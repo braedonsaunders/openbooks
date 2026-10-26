@@ -1,17 +1,20 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Route boundary suite: the real field-ticket service runs against a scripted
 // database fake, pinning the exact-revision fence end to end.
-const stateKey = Symbol.for('openbooks.fieldticket-route-test')
-interface DbCall { kind: 'execute' | 'tx-execute'; text: string }
+const stateKey = Symbol.for("openbooks.fieldticket-route-test");
+interface DbCall {
+  kind: "execute" | "tx-execute";
+  text: string;
+}
 interface RouteState {
-  calls: DbCall[]
-  respondExecute: (text: string) => { rows: unknown[] }
-  respondTxExecute: (text: string) => { rows: unknown[] }
-  allowedSubsidiaryIds: Set<string> | null
-  ticketSubsidiaryId: string | null
+  calls: DbCall[];
+  respondExecute: (text: string) => { rows: unknown[] };
+  respondTxExecute: (text: string) => { rows: unknown[] };
+  allowedSubsidiaryIds: Set<string> | null;
+  ticketSubsidiaryId: string | null;
 }
 const routeState: RouteState = {
   calls: [],
@@ -19,57 +22,59 @@ const routeState: RouteState = {
   respondTxExecute: () => ({ rows: [] }),
   allowedSubsidiaryIds: null,
   ticketSubsidiaryId: null,
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 /** Flatten a drizzle SQL chunk into its raw text for keyword assertions. */
 function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
-  if (!Array.isArray(chunks)) return ''
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
   return chunks
     .map((c) => {
-      if (typeof c === 'string') return c
-      const value = (c as { value?: unknown[] })?.value
-      if (Array.isArray(value)) return value.map(String).join('')
-      if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c)
-      return ''
+      if (typeof c === "string") return c;
+      const value = (c as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c);
+      return "";
     })
-    .join('')
+    .join("");
 }
-;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksSqlTextTicket?: unknown }).openbooksSqlTextTicket = sqlText
+(
+  globalThis as typeof globalThis & Record<string, unknown> & { openbooksSqlTextTicket?: unknown }
+).openbooksSqlTextTicket = sqlText;
 
-const TICKET_ID = '00000000-0000-4000-8000-00000000f001'
-const PROJECT_ID = '00000000-0000-4000-8000-00000000f002'
-const EMPLOYEE_ID = '00000000-0000-4000-8000-00000000f003'
-const TIME_TYPE_ID = '00000000-0000-4000-8000-00000000f004'
-const STORED_REVISION = '2026-08-24T12:00:00.300001Z'
+const TICKET_ID = "00000000-0000-4000-8000-00000000f001";
+const PROJECT_ID = "00000000-0000-4000-8000-00000000f002";
+const EMPLOYEE_ID = "00000000-0000-4000-8000-00000000f003";
+const TIME_TYPE_ID = "00000000-0000-4000-8000-00000000f004";
+const STORED_REVISION = "2026-08-24T12:00:00.300001Z";
 
 function headerRow(revision: string) {
   return {
     id: TICKET_ID,
-    document_number: 'FT-1',
-    status: 'draft',
+    document_number: "FT-1",
+    status: "draft",
     party_id: null,
     project_id: PROJECT_ID,
-    currency: 'CAD',
-    document_date: '2026-08-24',
+    currency: "CAD",
+    document_date: "2026-08-24",
     reference_number: null,
     memo: null,
     revision,
-    period: 'daily',
-    period_start: '2026-08-24',
-    period_end: '2026-08-24',
+    period: "daily",
+    period_start: "2026-08-24",
+    period_end: "2026-08-24",
     foreman_party_id: null,
     charge_document_id: null,
     submitted_by: null,
     submitted_at: null,
     rejection_reason: null,
-  }
+  };
 }
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.fieldticket-route-test')]
       const sqlText = globalThis.openbooksSqlTextTicket
@@ -100,7 +105,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.fieldticket-route-test')]
       export async function guardPermission(permission) {
@@ -119,7 +124,9 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:features', `
+  [
+    "mock:features",
+    `
      const state = globalThis[Symbol.for('openbooks.fieldticket-route-test')]
      export async function isFeatureEnabled() { return true }
      export async function guardFeaturePermission(permission) {
@@ -129,275 +136,316 @@ const mockSources = new Map<string, string>([
        return new Response(null, { status: 403 })
      }
      export async function acquireFeatureGateLock() {}
-     export async function checkProjectsWriteEnabled() { return true }`],
-  ['mock:org-feature-lock', `export async function lockAndCheckOrgFeature() { return true }\nexport async function acquireOrgFeatureGateLock() {}\nexport function featureGateLockKey(orgId) { return \`openbooks:feature-gate:\${orgId}\` }`],
+     export async function checkProjectsWriteEnabled() { return true }`,
+  ],
   [
-    'mock:signing',
+    "mock:org-feature-lock",
+    `export async function lockAndCheckOrgFeature() { return true }\nexport async function acquireOrgFeatureGateLock() {}\nexport function featureGateLockKey(orgId) { return \`openbooks:feature-gate:\${orgId}\` }`,
+  ],
+  [
+    "mock:signing",
     `export async function sendTicketForSignature() {
        throw new Error('unexpected signature dispatch')
      }`,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/platform/db', 'mock:db'],
-  ['@/lib/authz', 'mock:authz'],
-  ['@/lib/feature-gates', 'mock:features'],
-  ['../../../../lib/authz', 'mock:authz'],
-  ['../../../../lib/features', 'mock:features'],
-  ['../../../../lib/field-ticket-signing', 'mock:signing'],
-  ['@openbooks/engine/organization/org-feature-lock', 'mock:org-feature-lock'],
-])
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/feature-gates", "mock:features"],
+  ["../../../../lib/authz", "mock:authz"],
+  ["../../../../lib/features", "mock:features"],
+  ["../../../../lib/field-ticket-signing", "mock:signing"],
+  ["@openbooks/engine/organization/org-feature-lock", "mock:org-feature-lock"],
+]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@/lib/feature-gates') return { url: 'mock:features', shortCircuit: true }
+    if (specifier === "@/lib/feature-gates") return { url: "mock:features", shortCircuit: true };
     // load under the plain runner (same seam as documents.test.ts).
     // Forward Next.js-style aliases to the real modules they point at.
     // The ticket service gates itself on the same feature module via a
     // sibling-relative specifier; route it to the same mock.
-    if (specifier === './features' && context.parentURL?.endsWith('/lib/field-tickets.ts')) {
-      return { url: 'mock:features', shortCircuit: true }
+    if (specifier === "./features" && context.parentURL?.endsWith("/lib/field-tickets.ts")) {
+      return { url: "mock:features", shortCircuit: true };
     }
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
+    const source = mockSources.get(url);
     if (source !== undefined) {
-      return { format: 'module', source, shortCircuit: true }
+      return { format: "module", source, shortCircuit: true };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?fieldticket-occ-test'
-const { GET, PATCH, POST } = (await import(routeUrl)) as typeof import('./route.ts')
+const routeUrl = "./route.ts?fieldticket-occ-test";
+const { GET, PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const NEXT_REVISION = '2026-08-24T12:00:00.300002Z'
+const NEXT_REVISION = "2026-08-24T12:00:00.300002Z";
 
 function reset(): void {
-  routeState.calls.length = 0
-  routeState.respondExecute = () => ({ rows: [] })
-  routeState.respondTxExecute = () => ({ rows: [] })
-  routeState.allowedSubsidiaryIds = null
-  routeState.ticketSubsidiaryId = null
+  routeState.calls.length = 0;
+  routeState.respondExecute = () => ({ rows: [] });
+  routeState.respondTxExecute = () => ({ rows: [] });
+  routeState.allowedSubsidiaryIds = null;
+  routeState.ticketSubsidiaryId = null;
 }
 
 /** Serve the read-only queries the ticket service makes outside the fence. */
 function serveReads(currentRevision: () => string): void {
   routeState.respondExecute = (text) => {
-    if (text.includes('ft.period_start')) return { rows: [headerRow(currentRevision())] }
-    if (text.includes('d.subsidiary_id as')) return { rows: [{ subsidiaryId: routeState.ticketSubsidiaryId }] }
-    if (text.includes('count(*)::int')) return { rows: [{ n: 0 }] }
-    if (text.includes('show_on_field_ticket')) return { rows: [{ id: TIME_TYPE_ID }] }
+    if (text.includes("ft.period_start")) return { rows: [headerRow(currentRevision())] };
+    if (text.includes("d.subsidiary_id as"))
+      return { rows: [{ subsidiaryId: routeState.ticketSubsidiaryId }] };
+    if (text.includes("count(*)::int")) return { rows: [{ n: 0 }] };
+    if (text.includes("show_on_field_ticket")) return { rows: [{ id: TIME_TYPE_ID }] };
     // The grid pins new crew members to active employee roles; serve the
     // pinned crew member so the fenced save can land.
-    if (text.includes('employee_roles r')) return { rows: [{ id: EMPLOYEE_ID }] }
-    return { rows: [] }
-  }
+    if (text.includes("employee_roles r")) return { rows: [{ id: EMPLOYEE_ID }] };
+    return { rows: [] };
+  };
 }
 
 function get(): Promise<Response> {
-  return GET(
-    new Request(`http://openbooks.test/api/field-tickets/${TICKET_ID}`),
-    { params: Promise.resolve({ id: TICKET_ID }) },
-  )
+  return GET(new Request(`http://openbooks.test/api/field-tickets/${TICKET_ID}`), {
+    params: Promise.resolve({ id: TICKET_ID }),
+  });
 }
 
 function patch(body: Record<string, unknown>): Promise<Response> {
   return PATCH(
     new Request(`http://openbooks.test/api/field-tickets/${TICKET_ID}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: TICKET_ID }) },
-  )
+  );
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
   return POST(
     new Request(`http://openbooks.test/api/field-tickets/${TICKET_ID}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: TICKET_ID }) },
-  )
+  );
 }
 
 function postRaw(body: string): Promise<Response> {
   return POST(
     new Request(`http://openbooks.test/api/field-tickets/${TICKET_ID}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body,
     }),
     { params: Promise.resolve({ id: TICKET_ID }) },
-  )
+  );
 }
 
-test('PATCH rejects a missing revision token as an invalid body before any write', async () => {
-  reset()
-  serveReads(() => STORED_REVISION)
+test("PATCH rejects a missing revision token as an invalid body before any write", async () => {
+  reset();
+  serveReads(() => STORED_REVISION);
 
-  const response = await patch({ memo: 'no token' })
+  const response = await patch({ memo: "no token" });
 
-  assert.equal(response.status, 400)
-  assert.equal(typeof (await response.json()).error, 'string')
-  assert.ok(!routeState.calls.some((call) => call.kind === 'tx-execute'), 'no transactional write ran')
-})
+  assert.equal(response.status, 400);
+  assert.equal(typeof (await response.json()).error, "string");
+  assert.ok(
+    !routeState.calls.some((call) => call.kind === "tx-execute"),
+    "no transactional write ran",
+  );
+});
 
-test('PATCH rejects a stale revision with a conflict and no partial write', async () => {
-  reset()
-  serveReads(() => STORED_REVISION)
+test("PATCH rejects a stale revision with a conflict and no partial write", async () => {
+  reset();
+  serveReads(() => STORED_REVISION);
   routeState.respondTxExecute = (text) =>
-    text.includes('for update') ? { rows: [{ status: 'draft', updatedAt: NEXT_REVISION }] } : { rows: [] }
+    text.includes("for update")
+      ? { rows: [{ status: "draft", updatedAt: NEXT_REVISION }] }
+      : { rows: [] };
 
-  const response = await patch({ memo: 'stale save', expectedRevision: STORED_REVISION })
+  const response = await patch({ memo: "stale save", expectedRevision: STORED_REVISION });
 
-  assert.equal(response.status, 409)
+  assert.equal(response.status, 409);
   assert.deepEqual(await response.json(), {
-    error: 'this document changed after you opened it; reload and review the latest revision',
-  })
-  assert.ok(!routeState.calls.some((call) => call.text.includes('update documents')), 'no header overwrite ran')
-})
+    error: "this document changed after you opened it; reload and review the latest revision",
+  });
+  assert.ok(
+    !routeState.calls.some((call) => call.text.includes("update documents")),
+    "no header overwrite ran",
+  );
+});
 
-test('PATCH saves the header under an exact matching revision and returns the fresh token', async () => {
-  reset()
-  let currentRevision = STORED_REVISION
-  serveReads(() => currentRevision)
+test("PATCH saves the header under an exact matching revision and returns the fresh token", async () => {
+  reset();
+  let currentRevision = STORED_REVISION;
+  serveReads(() => currentRevision);
   routeState.respondTxExecute = (text) => {
-    if (text.includes('for update')) {
-      return { rows: [{ status: 'draft', updatedAt: currentRevision }] }
+    if (text.includes("for update")) {
+      return { rows: [{ status: "draft", updatedAt: currentRevision }] };
     }
-    if (text.includes('update documents')) {
-      assert.match(text, /greatest\(/, 'the token advances monotonically inside the lock')
-      currentRevision = NEXT_REVISION
+    if (text.includes("update documents")) {
+      assert.match(text, /greatest\(/, "the token advances monotonically inside the lock");
+      currentRevision = NEXT_REVISION;
     }
-    return { rows: [] }
-  }
+    return { rows: [] };
+  };
 
-  const response = await patch({ memo: 'concurrent-safe save', expectedRevision: STORED_REVISION })
+  const response = await patch({ memo: "concurrent-safe save", expectedRevision: STORED_REVISION });
 
-  assert.equal(response.status, 200)
-  const payload = (await response.json()) as { revision: string }
-  assert.equal(payload.revision, NEXT_REVISION, 'the caller can chain the next exact save')
-  const lock = routeState.calls.find((call) => call.kind === 'tx-execute' && call.text.includes('for update'))
-  assert.ok(lock, 'the write transaction locks the ticket row first')
-})
+  assert.equal(response.status, 200);
+  const payload = (await response.json()) as { revision: string };
+  assert.equal(payload.revision, NEXT_REVISION, "the caller can chain the next exact save");
+  const lock = routeState.calls.find(
+    (call) => call.kind === "tx-execute" && call.text.includes("for update"),
+  );
+  assert.ok(lock, "the write transaction locks the ticket row first");
+});
 
-test('POST save-grid fences the grid replacement behind the same revision token', async () => {
-  reset()
-  let currentRevision = STORED_REVISION
-  serveReads(() => currentRevision)
+test("POST save-grid fences the grid replacement behind the same revision token", async () => {
+  reset();
+  let currentRevision = STORED_REVISION;
+  serveReads(() => currentRevision);
   routeState.respondTxExecute = (text) => {
-    if (text.includes('for update')) {
-      return { rows: [{ status: 'draft', updatedAt: currentRevision }] }
+    if (text.includes("for update")) {
+      return { rows: [{ status: "draft", updatedAt: currentRevision }] };
     }
-    if (text.includes('insert into time_entries')) currentRevision = NEXT_REVISION
-    return { rows: [] }
-  }
+    if (text.includes("insert into time_entries")) currentRevision = NEXT_REVISION;
+    return { rows: [] };
+  };
 
   // Missing token → malformed action body, refused before any write.
   const refused = await post({
-    action: 'save-grid',
-    rows: [{ employeePartyId: EMPLOYEE_ID, itemId: null, timeTypeId: TIME_TYPE_ID, hours: { '2026-08-24': '8' } }],
-  })
-  assert.equal(refused.status, 400)
+    action: "save-grid",
+    rows: [
+      {
+        employeePartyId: EMPLOYEE_ID,
+        itemId: null,
+        timeTypeId: TIME_TYPE_ID,
+        hours: { "2026-08-24": "8" },
+      },
+    ],
+  });
+  assert.equal(refused.status, 400);
 
   // Stale token → conflict, no grid write.
-  routeState.calls.length = 0
+  routeState.calls.length = 0;
   const stale = await post({
-    action: 'save-grid',
-    expectedRevision: '2000-01-01T00:00:00.000000Z',
-    rows: [{ employeePartyId: EMPLOYEE_ID, itemId: null, timeTypeId: TIME_TYPE_ID, hours: { '2026-08-24': '8' } }],
-  })
-  assert.equal(stale.status, 409)
-  assert.ok(!routeState.calls.some((call) => call.text.includes('insert into time_entries')))
+    action: "save-grid",
+    expectedRevision: "2000-01-01T00:00:00.000000Z",
+    rows: [
+      {
+        employeePartyId: EMPLOYEE_ID,
+        itemId: null,
+        timeTypeId: TIME_TYPE_ID,
+        hours: { "2026-08-24": "8" },
+      },
+    ],
+  });
+  assert.equal(stale.status, 409);
+  assert.ok(!routeState.calls.some((call) => call.text.includes("insert into time_entries")));
 
   // Exact token → the grid lands atomically inside the fenced transaction.
   const saved = await post({
-    action: 'save-grid',
+    action: "save-grid",
     expectedRevision: STORED_REVISION,
-    rows: [{ employeePartyId: EMPLOYEE_ID, itemId: null, timeTypeId: TIME_TYPE_ID, hours: { '2026-08-24': '8' } }],
-  })
-  assert.equal(saved.status, 200)
-  const payload = (await saved.json()) as { revision: string }
-  assert.equal(payload.revision, NEXT_REVISION)
-  const inserted = routeState.calls.find((call) => call.kind === 'tx-execute' && call.text.includes('insert into time_entries'))
-  assert.ok(inserted, 'the crew cell was written inside the fence')
-})
+    rows: [
+      {
+        employeePartyId: EMPLOYEE_ID,
+        itemId: null,
+        timeTypeId: TIME_TYPE_ID,
+        hours: { "2026-08-24": "8" },
+      },
+    ],
+  });
+  assert.equal(saved.status, 200);
+  const payload = (await saved.json()) as { revision: string };
+  assert.equal(payload.revision, NEXT_REVISION);
+  const inserted = routeState.calls.find(
+    (call) => call.kind === "tx-execute" && call.text.includes("insert into time_entries"),
+  );
+  assert.ok(inserted, "the crew cell was written inside the fence");
+});
 
-test('GET and every POST/PATCH mutation fail closed for an out-of-scope ticket', async () => {
-  reset()
-  const subsidiaryA = '00000000-0000-4000-8000-00000000fa01'
-  const subsidiaryB = '00000000-0000-4000-8000-00000000fb01'
-  routeState.allowedSubsidiaryIds = new Set([subsidiaryA])
-  routeState.ticketSubsidiaryId = subsidiaryB
-  serveReads(() => STORED_REVISION)
+test("GET and every POST/PATCH mutation fail closed for an out-of-scope ticket", async () => {
+  reset();
+  const subsidiaryA = "00000000-0000-4000-8000-00000000fa01";
+  const subsidiaryB = "00000000-0000-4000-8000-00000000fb01";
+  routeState.allowedSubsidiaryIds = new Set([subsidiaryA]);
+  routeState.ticketSubsidiaryId = subsidiaryB;
+  serveReads(() => STORED_REVISION);
 
-  const read = await get()
-  assert.equal(read.status, 404)
-  assert.deepEqual(await read.json(), { error: 'not_found' })
-  assert.ok(!routeState.calls.some((call) => call.text.includes('field_ticket_labor_snapshots')))
+  const read = await get();
+  assert.equal(read.status, 404);
+  assert.deepEqual(await read.json(), { error: "not_found" });
+  assert.ok(!routeState.calls.some((call) => call.text.includes("field_ticket_labor_snapshots")));
 
-  routeState.calls.length = 0
-  const patchResponse = await patch({ memo: 'hidden', expectedRevision: STORED_REVISION })
-  assert.equal(patchResponse.status, 404)
-  assert.deepEqual(await patchResponse.json(), { error: 'not_found' })
-  assert.ok(!routeState.calls.some((call) => call.kind === 'tx-execute'))
+  routeState.calls.length = 0;
+  const patchResponse = await patch({ memo: "hidden", expectedRevision: STORED_REVISION });
+  assert.equal(patchResponse.status, 404);
+  assert.deepEqual(await patchResponse.json(), { error: "not_found" });
+  assert.ok(!routeState.calls.some((call) => call.kind === "tx-execute"));
 
-  routeState.calls.length = 0
-  const postResponse = await post({ action: 'submit' })
-  assert.equal(postResponse.status, 404)
-  assert.deepEqual(await postResponse.json(), { error: 'not_found' })
-  assert.ok(!routeState.calls.some((call) => call.kind === 'tx-execute'))
+  routeState.calls.length = 0;
+  const postResponse = await post({ action: "submit" });
+  assert.equal(postResponse.status, 404);
+  assert.deepEqual(await postResponse.json(), { error: "not_found" });
+  assert.ok(!routeState.calls.some((call) => call.kind === "tx-execute"));
 
-  routeState.calls.length = 0
-  const malformed = await postRaw('{')
-  assert.equal(malformed.status, 404)
-  assert.deepEqual(await malformed.json(), { error: 'not_found' })
-})
+  routeState.calls.length = 0;
+  const malformed = await postRaw("{");
+  assert.equal(malformed.status, 404);
+  assert.deepEqual(await malformed.json(), { error: "not_found" });
+});
 
-test('add-line and remove-line require the exact revision before the locked mutation', async () => {
-  reset()
-  serveReads(() => STORED_REVISION)
+test("add-line and remove-line require the exact revision before the locked mutation", async () => {
+  reset();
+  serveReads(() => STORED_REVISION);
   routeState.respondTxExecute = (text) =>
-    text.includes('for update') ? { rows: [{ status: 'draft', updatedAt: NEXT_REVISION, subsidiaryId: null }] } : { rows: [] }
+    text.includes("for update")
+      ? { rows: [{ status: "draft", updatedAt: NEXT_REVISION, subsidiaryId: null }] }
+      : { rows: [] };
 
   const add = await post({
-    action: 'add-line',
-    itemId: '00000000-0000-4000-8000-00000000f005',
-    quantity: '1',
+    action: "add-line",
+    itemId: "00000000-0000-4000-8000-00000000f005",
+    quantity: "1",
     expectedRevision: STORED_REVISION,
-  })
-  assert.equal(add.status, 409)
-  assert.ok(!routeState.calls.some((call) => call.text.includes('insert into document_lines')))
+  });
+  assert.equal(add.status, 409);
+  assert.ok(!routeState.calls.some((call) => call.text.includes("insert into document_lines")));
 
-  routeState.calls.length = 0
+  routeState.calls.length = 0;
   const remove = await post({
-    action: 'remove-line',
-    lineId: '00000000-0000-4000-8000-00000000f006',
+    action: "remove-line",
+    lineId: "00000000-0000-4000-8000-00000000f006",
     expectedRevision: STORED_REVISION,
-  })
-  assert.equal(remove.status, 409)
-  assert.ok(!routeState.calls.some((call) => call.text.includes('delete from document_lines')))
-})
+  });
+  assert.equal(remove.status, 409);
+  assert.ok(!routeState.calls.some((call) => call.text.includes("delete from document_lines")));
+});
 
-test('a line mutation observes approval while holding the parent lock', async () => {
-  reset()
-  serveReads(() => STORED_REVISION)
+test("a line mutation observes approval while holding the parent lock", async () => {
+  reset();
+  serveReads(() => STORED_REVISION);
   routeState.respondTxExecute = (text) =>
-    text.includes('for update') ? { rows: [{ status: 'approved', updatedAt: STORED_REVISION, subsidiaryId: null }] } : { rows: [] }
+    text.includes("for update")
+      ? { rows: [{ status: "approved", updatedAt: STORED_REVISION, subsidiaryId: null }] }
+      : { rows: [] };
 
   const response = await post({
-    action: 'remove-line',
-    lineId: '00000000-0000-4000-8000-00000000f006',
+    action: "remove-line",
+    lineId: "00000000-0000-4000-8000-00000000f006",
     expectedRevision: STORED_REVISION,
-  })
-  assert.equal(response.status, 422)
-  assert.ok(!routeState.calls.some((call) => call.text.includes('delete from document_lines')))
-})
+  });
+  assert.equal(response.status, 422);
+  assert.ok(!routeState.calls.some((call) => call.text.includes("delete from document_lines")));
+});

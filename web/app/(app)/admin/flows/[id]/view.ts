@@ -1,17 +1,17 @@
-import 'server-only'
+import "server-only";
 
-import { notFound } from 'next/navigation'
-import { sql } from 'drizzle-orm'
-import { documentRevisionSql } from '@openbooks/engine/records/revision'
-import { db } from '@openbooks/engine/platform/db'
-import { flowSubjectProfileForOrg } from '@openbooks/engine/flows/module'
-import type { AutomationGraph } from '@openbooks/forms-core'
-import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../lib/authz'
-import { isUuid } from '../../../../../lib/list-params'
-import { PERMISSION_CATALOGUE } from '../../../../../lib/permissions'
-import type FlowBuilder from './FlowBuilder'
-import type { FlowRunRow } from '../_builder/RunsPanel'
+import { notFound } from "next/navigation";
+import { sql } from "drizzle-orm";
+import { documentRevisionSql } from "@openbooks/engine/records/revision";
+import { db } from "@openbooks/engine/platform/db";
+import { flowSubjectProfileForOrg } from "@openbooks/engine/flows/module";
+import type { AutomationGraph } from "@openbooks/forms-core";
+import { frame, page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../../lib/authz";
+import { isUuid } from "../../../../../lib/list-params";
+import { PERMISSION_CATALOGUE } from "../../../../../lib/permissions";
+import type FlowBuilder from "./FlowBuilder";
+import type { FlowRunRow } from "../_builder/RunsPanel";
 
 /**
  * The approval-flow builder, split into a loader and a spec.
@@ -31,48 +31,63 @@ import type { FlowRunRow } from '../_builder/RunsPanel'
  * a flow that was never there.
  */
 
-type BuilderProps = Parameters<typeof FlowBuilder>[0]
+type BuilderProps = Parameters<typeof FlowBuilder>[0];
 
 export interface FlowBuilderData {
-  flow: BuilderProps['flow']
-  runs: FlowRunRow[]
-  profile: BuilderProps['profile']
-  users: BuilderProps['users']
-  roles: BuilderProps['roles']
-  permissions: BuilderProps['permissions']
-  subsidiaries: BuilderProps['subsidiaries']
+  flow: BuilderProps["flow"];
+  runs: FlowRunRow[];
+  profile: BuilderProps["profile"];
+  users: BuilderProps["users"];
+  roles: BuilderProps["roles"];
+  permissions: BuilderProps["permissions"];
+  subsidiaries: BuilderProps["subsidiaries"];
 }
 
 export async function loadFlowBuilder(id: string): Promise<FlowBuilderData> {
-  const authz = await requirePermission('flows.manage')
-  if (!isUuid(id)) notFound()
+  const authz = await requirePermission("flows.manage");
+  if (!isUuid(id)) notFound();
 
   const [flowRes, runsRes, usersRes, rolesRes, subsidiariesRes] = await Promise.all([
-    db.execute(sql`
+    db.execute(
+      sql`
       select id, name, enabled, subject_kind, graph, ${documentRevisionSql(sql`updated_at`)} as updated_at
-        from flows where id = ${id} and org_id = ${authz.user.orgId}`, 'objects'),
-    db.execute(sql`
+        from flows where id = ${id} and org_id = ${authz.user.orgId}`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select id, subject_kind, subject_id, trigger, status, error, started_at, finished_at
         from flow_runs where flow_id = ${id} and org_id = ${authz.user.orgId}
-       order by started_at desc limit 30`, 'objects'),
-    db.execute(sql`
+       order by started_at desc limit 30`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select id, name, email from users
        where org_id = ${authz.user.orgId} and is_active
-       order by name`, 'objects'),
-    db.execute(sql`
+       order by name`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select key, name from app_roles
        where org_id = ${authz.user.orgId}
-       order by name`, 'objects'),
-    db.execute(sql`
+       order by name`,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select id, name from subsidiaries
        where org_id = ${authz.user.orgId} and is_active and not is_elimination
-       order by name`, 'objects'),
-  ])
-  const flow = flowRes[0]
-  if (!flow) notFound()
+       order by name`,
+      "objects",
+    ),
+  ]);
+  const flow = flowRes[0];
+  if (!flow) notFound();
 
-  const profile = await flowSubjectProfileForOrg(authz.user.orgId, String(flow.subject_kind))
-  if (!profile) notFound()
+  const profile = await flowSubjectProfileForOrg(authz.user.orgId, String(flow.subject_kind));
+  if (!profile) notFound();
 
   return {
     flow: {
@@ -98,18 +113,18 @@ export async function loadFlowBuilder(id: string): Promise<FlowBuilderData> {
       id: String(subsidiary.id),
       name: String(subsidiary.name),
     })),
-  }
+  };
 }
 
 export function flowBuilderSpec(data: FlowBuilderData): PageSpec {
   return page({
-    route: '/admin/flows/[id]',
+    route: "/admin/flows/[id]",
     // Exact native wrapper: <div className="p-4">.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
-      frame('padded', [
-        widgetBlock('flow-builder', {
+      frame("padded", [
+        widgetBlock("flow-builder", {
           flow: data.flow,
           runs: data.runs,
           profile: data.profile,
@@ -120,5 +135,5 @@ export function flowBuilderSpec(data: FlowBuilderData): PageSpec {
         }),
       ]),
     ],
-  })
+  });
 }

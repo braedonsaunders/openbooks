@@ -17,7 +17,11 @@ import {
   lockAndCheckOrgFeature,
   orgFeatureEnabled,
 } from "../../organization/org-feature-lock.ts";
-import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
+import {
+  ScopeNotFoundError,
+  subsidiaryScopeAllows,
+  subsidiaryVisibleFilter,
+} from "../../organization/subsidiary-scope.ts";
 import { db, withOrg } from "../../platform/db.ts";
 import { UsageBillingError } from "./errors.ts";
 
@@ -31,7 +35,8 @@ export type UsageCommitPeriod = (typeof USAGE_COMMIT_PERIODS)[number];
 export type UsageSubsidiaryScope = ReadonlySet<string> | null;
 
 const FEATURE_REMEDY = "Enable Usage Billing in Company Settings → Features.";
-const PLAN_VERSION_REMEDY = "Publish a new version. Subscription links pin published versions and preserve historical pricing.";
+const PLAN_VERSION_REMEDY =
+  "Publish a new version. Subscription links pin published versions and preserve historical pricing.";
 
 export interface CreateUsageRatingPlanInput {
   name: string;
@@ -105,7 +110,11 @@ function refuse(
 }
 
 function featureOff(): never {
-  return refuse("feature_off", "Usage billing is turned off for this organization.", FEATURE_REMEDY);
+  return refuse(
+    "feature_off",
+    "Usage billing is turned off for this organization.",
+    FEATURE_REMEDY,
+  );
 }
 
 async function lockAndRequireUsageBilling(orgId: string): Promise<void> {
@@ -119,7 +128,12 @@ async function requireUsageBillingRead(orgId: string): Promise<void> {
 
 function requiredText(value: unknown, field: string): string {
   if (typeof value !== "string" || !value.trim()) {
-    refuse("usage_plan_input_required", `${field} is required.`, `Provide a non-empty ${field}.`, field);
+    refuse(
+      "usage_plan_input_required",
+      `${field} is required.`,
+      `Provide a non-empty ${field}.`,
+      field,
+    );
   }
   return value.trim();
 }
@@ -127,7 +141,12 @@ function requiredText(value: unknown, field: string): string {
 function uuidText(value: unknown, field: string): string {
   const candidate = requiredText(value, field);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate)) {
-    refuse("usage_plan_uuid_invalid", `${field} must be a UUID.`, `Provide a valid ${field} from this organization.`, field);
+    refuse(
+      "usage_plan_uuid_invalid",
+      `${field} must be a UUID.`,
+      `Provide a valid ${field} from this organization.`,
+      field,
+    );
   }
   return candidate;
 }
@@ -139,7 +158,12 @@ function dateText(value: unknown, field: string): string {
     Number.isNaN(Date.parse(`${value}T00:00:00.000Z`)) ||
     new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) !== value
   ) {
-    refuse("usage_plan_date_invalid", `${field} must be a real calendar date in YYYY-MM-DD form.`, `Provide a valid ${field} in YYYY-MM-DD form.`, field);
+    refuse(
+      "usage_plan_date_invalid",
+      `${field} must be a real calendar date in YYYY-MM-DD form.`,
+      `Provide a valid ${field} in YYYY-MM-DD form.`,
+      field,
+    );
   }
   return value;
 }
@@ -157,13 +181,28 @@ function quantityText(value: unknown, field: string): string {
         field,
       );
     }
-    refuse("usage_band_quantity_invalid", `${field} must be an exact decimal with no more than 8 decimal places.`, `Provide a non-negative ${field} with no more than 8 decimal places.`, field);
+    refuse(
+      "usage_band_quantity_invalid",
+      `${field} must be an exact decimal with no more than 8 decimal places.`,
+      `Provide a non-negative ${field} with no more than 8 decimal places.`,
+      field,
+    );
   }
   if (wholeDigits(quantity) > 20) {
-    refuse("usage_band_quantity_invalid", `${field} exceeds the supported numeric(28,8) range.`, `Provide a ${field} that fits numeric(28,8).`, field);
+    refuse(
+      "usage_band_quantity_invalid",
+      `${field} exceeds the supported numeric(28,8) range.`,
+      `Provide a ${field} that fits numeric(28,8).`,
+      field,
+    );
   }
   if (compareDecimal(quantity, "0") < 0) {
-    refuse("usage_band_quantity_invalid", `${field} cannot be negative.`, `Provide a non-negative ${field}.`, field);
+    refuse(
+      "usage_band_quantity_invalid",
+      `${field} cannot be negative.`,
+      `Provide a non-negative ${field}.`,
+      field,
+    );
   }
   return quantity;
 }
@@ -173,10 +212,20 @@ function moneyText(value: unknown, field: string): string {
   try {
     money = parseMoney(value);
   } catch {
-    refuse("usage_plan_money_invalid", `${field} must be an exact money amount with no more than 4 decimal places.`, `Provide ${field} as a decimal string with no more than 4 decimal places.`, field);
+    refuse(
+      "usage_plan_money_invalid",
+      `${field} must be an exact money amount with no more than 4 decimal places.`,
+      `Provide ${field} as a decimal string with no more than 4 decimal places.`,
+      field,
+    );
   }
   if (money.split(".", 1)[0]!.replace(/^0+/, "").length > 15) {
-    refuse("usage_plan_money_out_of_range", `${field} exceeds the supported numeric(19,4) range.`, `Provide ${field} with no more than 15 whole digits.`, field);
+    refuse(
+      "usage_plan_money_out_of_range",
+      `${field} exceeds the supported numeric(19,4) range.`,
+      `Provide ${field} with no more than 15 whole digits.`,
+      field,
+    );
   }
   return money;
 }
@@ -209,23 +258,48 @@ export async function createUsageRatingPlan(
     const name = requiredText(input.name, "name");
     const currency = requiredText(input.currency, "currency");
     if (!/^[A-Z]{3}$/.test(currency)) {
-      refuse("usage_plan_currency_invalid", "The rating plan currency must be an uppercase ISO currency code.", "Choose a supported uppercase currency code for this plan.", "currency");
+      refuse(
+        "usage_plan_currency_invalid",
+        "The rating plan currency must be an uppercase ISO currency code.",
+        "Choose a supported uppercase currency code for this plan.",
+        "currency",
+      );
     }
-    const currencyExists = (await db.execute<{ code: string }>(sql`
-      select code from currencies where code = ${currency}`, "objects"))[0];
+    const currencyExists = (
+      await db.execute<{ code: string }>(
+        sql`
+      select code from currencies where code = ${currency}`,
+        "objects",
+      )
+    )[0];
     if (!currencyExists) {
-      refuse("usage_plan_currency_invalid", `Currency ${currency} is not configured in the ISO currency registry.`, "Choose a supported currency code from the organization currency registry.", "currency");
+      refuse(
+        "usage_plan_currency_invalid",
+        `Currency ${currency} is not configured in the ISO currency registry.`,
+        "Choose a supported currency code from the organization currency registry.",
+        "currency",
+      );
     }
     try {
-      const inserted = await db.execute<UsageRatingPlan>(sql`
+      const inserted = await db.execute<UsageRatingPlan>(
+        sql`
         insert into usage_rating_plans (org_id, name, currency_code, status, created_by, updated_by)
         values (${orgId}, ${name}, ${currency}, 'active', ${actor}, ${actor})
-        returning ${PLAN_COLUMNS}`, "objects");
-      if (inserted.length !== 1) throw new Error("usage rating plan insert returned an unexpected row count");
+        returning ${PLAN_COLUMNS}`,
+        "objects",
+      );
+      if (inserted.length !== 1)
+        throw new Error("usage rating plan insert returned an unexpected row count");
       return inserted[0]!;
     } catch (error) {
       if (uniqueViolationFor(error, "usage_rating_plans_org_name_unique")) {
-        refuse("usage_plan_name_in_use", `A usage rating plan named ${name} already exists in this organization.`, "Choose a different rating plan name.", "name", 409);
+        refuse(
+          "usage_plan_name_in_use",
+          `A usage rating plan named ${name} already exists in this organization.`,
+          "Choose a different rating plan name.",
+          "name",
+          409,
+        );
       }
       throw error;
     }
@@ -235,44 +309,82 @@ export async function createUsageRatingPlan(
 export async function listUsageRatingPlans(orgId: string): Promise<UsageRatingPlan[]> {
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
-    return await db.execute<UsageRatingPlan>(sql`
-      select ${PLAN_COLUMNS} from usage_rating_plans where org_id = ${orgId} order by name, id`, "objects");
+    return await db.execute<UsageRatingPlan>(
+      sql`
+      select ${PLAN_COLUMNS} from usage_rating_plans where org_id = ${orgId} order by name, id`,
+      "objects",
+    );
   });
 }
 
-export async function getUsageRatingPlanVersionWithBands(orgId: string, versionId: string): Promise<{
+export async function getUsageRatingPlanVersionWithBands(
+  orgId: string,
+  versionId: string,
+): Promise<{
   version: UsageRatingPlanVersion;
   bands: UsageRatingBand[];
 }> {
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
     const safeVersionId = uuidText(versionId, "plan_version_id");
-    const version = (await db.execute<UsageRatingPlanVersion>(sql`
+    const version = (
+      await db.execute<UsageRatingPlanVersion>(
+        sql`
       select ${VERSION_COLUMNS} from usage_rating_plan_versions
-       where org_id = ${orgId} and id = ${safeVersionId}`, "objects"))[0];
+       where org_id = ${orgId} and id = ${safeVersionId}`,
+        "objects",
+      )
+    )[0];
     if (!version) throw new ScopeNotFoundError();
-    const bands = await db.execute<UsageRatingBand>(sql`
+    const bands = await db.execute<UsageRatingBand>(
+      sql`
       select ${BAND_COLUMNS} from usage_rating_bands
        where org_id = ${orgId} and plan_version_id = ${safeVersionId}
-       order by meter_id, seq`, "objects");
+       order by meter_id, seq`,
+      "objects",
+    );
     return { version, bands };
   });
 }
 
-export async function retireUsageRatingPlan(orgId: string, actor: string, planId: string): Promise<UsageRatingPlan> {
+export async function retireUsageRatingPlan(
+  orgId: string,
+  actor: string,
+  planId: string,
+): Promise<UsageRatingPlan> {
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
     const safePlanId = uuidText(planId, "plan_id");
-    const updated = await db.execute<UsageRatingPlan>(sql`
+    const updated = await db.execute<UsageRatingPlan>(
+      sql`
       update usage_rating_plans
          set status = 'retired', updated_at = now(), updated_by = ${actor}
        where org_id = ${orgId} and id = ${safePlanId} and status = 'active'
-      returning ${PLAN_COLUMNS}`, "objects");
+      returning ${PLAN_COLUMNS}`,
+      "objects",
+    );
     if (updated.length !== 1) {
-      const existing = (await db.execute<{ status: string }>(sql`
-        select status from usage_rating_plans where org_id = ${orgId} and id = ${safePlanId}`, "objects"))[0];
-      if (!existing) refuse("usage_plan_not_found", "The usage rating plan does not exist in this organization.", "Choose a rating plan from this organization.", "plan_id");
-      refuse("usage_plan_already_retired", "The usage rating plan is already retired.", "Choose an active rating plan when opening new subscription links.", "plan_id", 409);
+      const existing = (
+        await db.execute<{ status: string }>(
+          sql`
+        select status from usage_rating_plans where org_id = ${orgId} and id = ${safePlanId}`,
+          "objects",
+        )
+      )[0];
+      if (!existing)
+        refuse(
+          "usage_plan_not_found",
+          "The usage rating plan does not exist in this organization.",
+          "Choose a rating plan from this organization.",
+          "plan_id",
+        );
+      refuse(
+        "usage_plan_already_retired",
+        "The usage rating plan is already retired.",
+        "Choose an active rating plan when opening new subscription links.",
+        "plan_id",
+        409,
+      );
     }
     return updated[0]!;
   });
@@ -287,22 +399,48 @@ export async function createUsageRatingPlanVersion(
     await lockAndRequireUsageBilling(orgId);
     const planId = uuidText(input.planId, "plan_id");
     const effectiveFrom = dateText(input.effectiveFrom, "effective_from");
-    const plan = (await db.execute<{ status: string }>(sql`
-      select status from usage_rating_plans where org_id = ${orgId} and id = ${planId} for update`, "objects"))[0];
-    if (!plan) refuse("usage_plan_not_found", "The usage rating plan does not exist in this organization.", "Choose a rating plan from this organization.", "plan_id");
+    const plan = (
+      await db.execute<{ status: string }>(
+        sql`
+      select status from usage_rating_plans where org_id = ${orgId} and id = ${planId} for update`,
+        "objects",
+      )
+    )[0];
+    if (!plan)
+      refuse(
+        "usage_plan_not_found",
+        "The usage rating plan does not exist in this organization.",
+        "Choose a rating plan from this organization.",
+        "plan_id",
+      );
     if (plan.status !== "active") {
-      refuse("usage_plan_retired", "A retired usage rating plan cannot receive a new version.", "Create a new active rating plan before defining future prices.", "plan_id", 409);
+      refuse(
+        "usage_plan_retired",
+        "A retired usage rating plan cannot receive a new version.",
+        "Create a new active rating plan before defining future prices.",
+        "plan_id",
+        409,
+      );
     }
-    const latest = (await db.execute<{ versionNo: number | null }>(sql`
+    const latest = (
+      await db.execute<{ versionNo: number | null }>(
+        sql`
       select max(version_no)::int as "versionNo"
-        from usage_rating_plan_versions where org_id = ${orgId} and plan_id = ${planId}`, "objects"))[0];
+        from usage_rating_plan_versions where org_id = ${orgId} and plan_id = ${planId}`,
+        "objects",
+      )
+    )[0];
     const versionNo = (latest?.versionNo ?? 0) + 1;
-    const inserted = await db.execute<UsageRatingPlanVersion>(sql`
+    const inserted = await db.execute<UsageRatingPlanVersion>(
+      sql`
       insert into usage_rating_plan_versions
         (org_id, plan_id, version_no, status, effective_from, created_by, updated_by)
       values (${orgId}, ${planId}, ${versionNo}, 'draft', ${effectiveFrom}, ${actor}, ${actor})
-      returning ${VERSION_COLUMNS}`, "objects");
-    if (inserted.length !== 1) throw new Error("usage rating plan version insert returned an unexpected row count");
+      returning ${VERSION_COLUMNS}`,
+      "objects",
+    );
+    if (inserted.length !== 1)
+      throw new Error("usage rating plan version insert returned an unexpected row count");
     return inserted[0]!;
   });
 }
@@ -322,25 +460,64 @@ interface PreparedBand {
 function prepareBand(input: UsageRatingBandInput, index: number): PreparedBand {
   const meterId = uuidText(input.meterId, `bands[${index}].meter_id`);
   if (!USAGE_BAND_KINDS.includes(input.kind)) {
-    refuse("usage_band_kind_invalid", `Band seq ${input.seq} has an unsupported rating kind.`, "Choose a supported usage band kind.", "kind");
+    refuse(
+      "usage_band_kind_invalid",
+      `Band seq ${input.seq} has an unsupported rating kind.`,
+      "Choose a supported usage band kind.",
+      "kind",
+    );
   }
   if (!Number.isSafeInteger(input.seq) || input.seq < 1) {
-    refuse("usage_band_sequence_invalid", `Band seq ${String(input.seq)} must be a positive integer.`, "Use consecutive band seq values starting at 1.", "seq");
+    refuse(
+      "usage_band_sequence_invalid",
+      `Band seq ${String(input.seq)} must be a positive integer.`,
+      "Use consecutive band seq values starting at 1.",
+      "seq",
+    );
   }
-  const upToQty = input.upToQty === null ? null : quantityText(input.upToQty, `bands[${index}].up_to_qty`);
+  const upToQty =
+    input.upToQty === null ? null : quantityText(input.upToQty, `bands[${index}].up_to_qty`);
   const unitPrice = quantityText(input.unitPrice, `bands[${index}].unit_price`);
   const flatAmount = moneyText(input.flatAmount ?? "0", `bands[${index}].flat_amount`);
   const includedQty = quantityText(input.includedQty ?? "0", `bands[${index}].included_qty`);
-  const packageSize = input.packageSize == null ? null : quantityText(input.packageSize, `bands[${index}].package_size`);
+  const packageSize =
+    input.packageSize == null
+      ? null
+      : quantityText(input.packageSize, `bands[${index}].package_size`);
   const packageRounding = input.packageRounding ?? null;
   if (input.kind === "package") {
-    if (packageSize === null || compareDecimal(packageSize, "0") <= 0 || !packageRounding || !USAGE_PACKAGE_ROUNDINGS.includes(packageRounding)) {
-      refuse("usage_band_package_shape_invalid", `Package band seq ${input.seq} requires a positive package size and package rounding mode.`, "Set both package_size and package_rounding to up or down for this package band.", "package_size");
+    if (
+      packageSize === null ||
+      compareDecimal(packageSize, "0") <= 0 ||
+      !packageRounding ||
+      !USAGE_PACKAGE_ROUNDINGS.includes(packageRounding)
+    ) {
+      refuse(
+        "usage_band_package_shape_invalid",
+        `Package band seq ${input.seq} requires a positive package size and package rounding mode.`,
+        "Set both package_size and package_rounding to up or down for this package band.",
+        "package_size",
+      );
     }
   } else if (packageSize !== null || packageRounding !== null) {
-    refuse("usage_band_package_shape_invalid", `Non-package band seq ${input.seq} cannot carry package terms.`, "Clear package_size and package_rounding, or change the band kind to package.", "kind");
+    refuse(
+      "usage_band_package_shape_invalid",
+      `Non-package band seq ${input.seq} cannot carry package terms.`,
+      "Clear package_size and package_rounding, or change the band kind to package.",
+      "kind",
+    );
   }
-  return { meterId, kind: input.kind, seq: input.seq, upToQty, unitPrice, flatAmount, includedQty, packageSize, packageRounding };
+  return {
+    meterId,
+    kind: input.kind,
+    seq: input.seq,
+    upToQty,
+    unitPrice,
+    flatAmount,
+    includedQty,
+    packageSize,
+    packageRounding,
+  };
 }
 
 export async function replaceUsageRatingBands(
@@ -352,10 +529,21 @@ export async function replaceUsageRatingBands(
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
     const safeVersionId = uuidText(versionId, "plan_version_id");
-    const version = (await db.execute<{ status: string }>(sql`
+    const version = (
+      await db.execute<{ status: string }>(
+        sql`
       select status from usage_rating_plan_versions
-       where org_id = ${orgId} and id = ${safeVersionId} for update`, "objects"))[0];
-    if (!version) refuse("usage_plan_version_not_found", "The usage rating plan version does not exist in this organization.", "Choose a plan version from this organization.", "plan_version_id");
+       where org_id = ${orgId} and id = ${safeVersionId} for update`,
+        "objects",
+      )
+    )[0];
+    if (!version)
+      refuse(
+        "usage_plan_version_not_found",
+        "The usage rating plan version does not exist in this organization.",
+        "Choose a plan version from this organization.",
+        "plan_version_id",
+      );
     assertUsagePlanVersionMutable(version.status);
 
     const prepared = bands.map(prepareBand);
@@ -363,33 +551,63 @@ export async function replaceUsageRatingBands(
     for (const band of prepared) {
       const key = `${band.meterId}:${band.seq}`;
       if (identityKeys.has(key)) {
-        refuse("usage_band_sequence_duplicate", `Meter ${band.meterId} has more than one band with seq ${band.seq}.`, "Give each band for this meter a unique consecutive seq value.", "seq", 409);
+        refuse(
+          "usage_band_sequence_duplicate",
+          `Meter ${band.meterId} has more than one band with seq ${band.seq}.`,
+          "Give each band for this meter a unique consecutive seq value.",
+          "seq",
+          409,
+        );
       }
       identityKeys.add(key);
     }
     const meterIds = [...new Set(prepared.map((band) => band.meterId))];
     if (meterIds.length > 0) {
-      const meterRows = await db.execute<{ id: string }>(sql`
+      const meterRows = await db.execute<{ id: string }>(
+        sql`
         select id from usage_meters where org_id = ${orgId}
-          and id in (${sql.join(meterIds.map((id) => sql`${id}`), sql`, `)})`, "objects");
+          and id in (${sql.join(
+            meterIds.map((id) => sql`${id}`),
+            sql`, `,
+          )})`,
+        "objects",
+      );
       if (meterRows.length !== meterIds.length) {
-        refuse("usage_band_meter_unavailable", "A rating band references a meter outside this organization.", "Choose meters that belong to this organization.", "meter_id");
+        refuse(
+          "usage_band_meter_unavailable",
+          "A rating band references a meter outside this organization.",
+          "Choose meters that belong to this organization.",
+          "meter_id",
+        );
       }
     }
 
-    const existingBandCount = (await db.execute<{ count: number }>(sql`
+    const existingBandCount =
+      (
+        await db.execute<{ count: number }>(
+          sql`
       select count(*)::int as count from usage_rating_bands
-       where org_id = ${orgId} and plan_version_id = ${safeVersionId}`, "objects"))[0]?.count ?? 0;
+       where org_id = ${orgId} and plan_version_id = ${safeVersionId}`,
+          "objects",
+        )
+      )[0]?.count ?? 0;
     if (existingBandCount > 0) {
       const deleted = await db.execute<never>(sql`
         delete from usage_rating_bands where org_id = ${orgId} and plan_version_id = ${safeVersionId}`);
       if (deleted.rowCount !== existingBandCount) {
-        refuse("usage_band_edit_conflict", "The draft bands changed while the replacement was being saved.", "Reload the draft and apply the complete band set again.", "plan_version_id", 409);
+        refuse(
+          "usage_band_edit_conflict",
+          "The draft bands changed while the replacement was being saved.",
+          "Reload the draft and apply the complete band set again.",
+          "plan_version_id",
+          409,
+        );
       }
     }
     const inserted: UsageRatingBand[] = [];
     for (const band of prepared) {
-      const result = await db.execute<UsageRatingBand>(sql`
+      const result = await db.execute<UsageRatingBand>(
+        sql`
         insert into usage_rating_bands
           (org_id, plan_version_id, meter_id, kind, seq, up_to_qty, unit_price, flat_amount,
            included_qty, package_size, package_rounding, created_by, updated_by)
@@ -397,8 +615,11 @@ export async function replaceUsageRatingBands(
           (${orgId}, ${safeVersionId}, ${band.meterId}, ${band.kind}, ${band.seq}, ${band.upToQty},
            ${band.unitPrice}, ${band.flatAmount}, ${band.includedQty}, ${band.packageSize},
            ${band.packageRounding}, ${actor}, ${actor})
-        returning ${BAND_COLUMNS}`, "objects");
-      if (result.length !== 1) throw new Error("usage rating band insert returned an unexpected row count");
+        returning ${BAND_COLUMNS}`,
+        "objects",
+      );
+      if (result.length !== 1)
+        throw new Error("usage rating band insert returned an unexpected row count");
       inserted.push(result[0]!);
     }
     return inserted;
@@ -407,7 +628,12 @@ export async function replaceUsageRatingBands(
 
 function validateBandCoverage(bands: readonly UsageRatingBand[]): void {
   if (bands.length === 0) {
-    refuse("usage_band_coverage_missing", "A rating plan version cannot publish without rating bands.", "Add bands that cover each meter from zero through an unbounded final band.", "bands");
+    refuse(
+      "usage_band_coverage_missing",
+      "A rating plan version cannot publish without rating bands.",
+      "Add bands that cover each meter from zero through an unbounded final band.",
+      "bands",
+    );
   }
   const byMeter = new Map<string, UsageRatingBand[]>();
   for (const band of bands) {
@@ -426,7 +652,7 @@ function validateBandCoverage(bands: readonly UsageRatingBand[]): void {
         refuse(
           "usage_band_coverage_gap",
           `Meter ${meterId} has a gap before band seq ${band.seq}; rating bands must be consecutively numbered from seq 1.`,
-            `Change band seq ${band.seq} to seq ${expectedSeq} so the meter's complete quantity range is ordered without gaps.`,
+          `Change band seq ${band.seq} to seq ${expectedSeq} so the meter's complete quantity range is ordered without gaps.`,
           "seq",
         );
       }
@@ -497,24 +723,47 @@ export async function publishUsagePlanVersion(
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
     const safeVersionId = uuidText(versionId, "plan_version_id");
-    const version = (await db.execute<{ status: string }>(sql`
+    const version = (
+      await db.execute<{ status: string }>(
+        sql`
       select status from usage_rating_plan_versions
-       where org_id = ${orgId} and id = ${safeVersionId} for update`, "objects"))[0];
-    if (!version) refuse("usage_plan_version_not_found", "The usage rating plan version does not exist in this organization.", "Choose a plan version from this organization.", "plan_version_id");
+       where org_id = ${orgId} and id = ${safeVersionId} for update`,
+        "objects",
+      )
+    )[0];
+    if (!version)
+      refuse(
+        "usage_plan_version_not_found",
+        "The usage rating plan version does not exist in this organization.",
+        "Choose a plan version from this organization.",
+        "plan_version_id",
+      );
     assertUsagePlanVersionMutable(version.status);
-    const bands = await db.execute<UsageRatingBand>(sql`
+    const bands = await db.execute<UsageRatingBand>(
+      sql`
       select ${BAND_COLUMNS} from usage_rating_bands
        where org_id = ${orgId} and plan_version_id = ${safeVersionId}
-       order by meter_id, seq`, "objects");
+       order by meter_id, seq`,
+      "objects",
+    );
     validateBandCoverage(bands);
     const hash = canonicalBandHash(bands);
-    const updated = await db.execute<UsageRatingPlanVersion>(sql`
+    const updated = await db.execute<UsageRatingPlanVersion>(
+      sql`
       update usage_rating_plan_versions
          set status = 'published', spec_hash = ${hash}, updated_at = now(), updated_by = ${actor}
        where org_id = ${orgId} and id = ${safeVersionId} and status = 'draft'
-      returning ${VERSION_COLUMNS}`, "objects");
+      returning ${VERSION_COLUMNS}`,
+      "objects",
+    );
     if (updated.length !== 1) {
-      refuse("usage_plan_version_publish_conflict", "The usage rating plan version changed before publication completed.", "Reload the draft and publish it again after resolving concurrent edits.", "plan_version_id", 409);
+      refuse(
+        "usage_plan_version_publish_conflict",
+        "The usage rating plan version changed before publication completed.",
+        "Reload the draft and publish it again after resolving concurrent edits.",
+        "plan_version_id",
+        409,
+      );
     }
     return updated[0]!;
   });
@@ -538,32 +787,63 @@ export async function createSubscriptionUsageLink(
     const planVersionId = uuidText(input.planVersionId, "plan_version_id");
     const meterIds = input.meterIds.map((meterId) => uuidText(meterId, "meter_id"));
     if (meterIds.length === 0) {
-      refuse("usage_link_meter_set_required", "A subscription usage link must include at least one meter.", "Select the meters this published plan version will rate.", "meter_ids");
+      refuse(
+        "usage_link_meter_set_required",
+        "A subscription usage link must include at least one meter.",
+        "Select the meters this published plan version will rate.",
+        "meter_ids",
+      );
     }
     const uniqueMeters = [...new Set(meterIds)];
     if (uniqueMeters.length !== meterIds.length) {
-      refuse("usage_link_meter_duplicate", "A subscription usage link cannot repeat a meter.", "Include each meter once in the link's meter set.", "meter_ids");
+      refuse(
+        "usage_link_meter_duplicate",
+        "A subscription usage link cannot repeat a meter.",
+        "Include each meter once in the link's meter set.",
+        "meter_ids",
+      );
     }
     const effectiveFrom = dateText(input.effectiveFrom, "effective_from");
-    const effectiveTo = input.effectiveTo == null ? null : dateText(input.effectiveTo, "effective_to");
+    const effectiveTo =
+      input.effectiveTo == null ? null : dateText(input.effectiveTo, "effective_to");
     if (effectiveTo !== null && effectiveTo < effectiveFrom) {
-      refuse("usage_link_window_invalid", "The subscription usage link ends before it begins.", "Set effective_to on or after effective_from.", "effective_to");
+      refuse(
+        "usage_link_window_invalid",
+        "The subscription usage link ends before it begins.",
+        "Set effective_to on or after effective_from.",
+        "effective_to",
+      );
     }
     let commitAmount: string | null = null;
     if (input.commitAmount != null) commitAmount = moneyText(input.commitAmount, "commit_amount");
     const commitPeriod = input.commitPeriod ?? null;
     if ((commitAmount === null) !== (commitPeriod === null)) {
-      refuse("usage_link_commit_pair_invalid", "A minimum commit requires both an amount and a period.", "Provide both commit_amount and commit_period, or clear both.", commitAmount === null ? "commit_amount" : "commit_period");
+      refuse(
+        "usage_link_commit_pair_invalid",
+        "A minimum commit requires both an amount and a period.",
+        "Provide both commit_amount and commit_period, or clear both.",
+        commitAmount === null ? "commit_amount" : "commit_period",
+      );
     }
-    if (commitAmount !== null && (cmp(commitAmount, "0") <= 0 || !USAGE_COMMIT_PERIODS.includes(commitPeriod!))) {
-      refuse("usage_link_commit_invalid", "The minimum commit amount or period is invalid.", "Provide a positive commit_amount and choose monthly or annual.", "commit_amount");
+    if (
+      commitAmount !== null &&
+      (cmp(commitAmount, "0") <= 0 || !USAGE_COMMIT_PERIODS.includes(commitPeriod!))
+    ) {
+      refuse(
+        "usage_link_commit_invalid",
+        "The minimum commit amount or period is invalid.",
+        "Provide a positive commit_amount and choose monthly or annual.",
+        "commit_amount",
+      );
     }
 
-    const subscription = (await db.execute<{
-      customerId: string;
-      planCurrency: string | null;
-      customerSubsidiaryId: string | null;
-    }>(sql`
+    const subscription = (
+      await db.execute<{
+        customerId: string;
+        planCurrency: string | null;
+        customerSubsidiaryId: string | null;
+      }>(
+        sql`
       select s.customer_id as "customerId", sp.currency_code as "planCurrency",
              customer.subsidiary_id as "customerSubsidiaryId"
         from subscriptions s
@@ -571,39 +851,78 @@ export async function createSubscriptionUsageLink(
         join parties customer on customer.org_id = s.org_id and customer.id = s.customer_id
        where s.org_id = ${orgId} and s.id = ${subscriptionId}
          ${subsidiaryVisibleFilter(sql`customer.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-       for update of s, customer`, "objects"))[0];
+       for update of s, customer`,
+        "objects",
+      )
+    )[0];
     if (!subscription) {
       throw new ScopeNotFoundError();
     }
-    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, subscription.customerSubsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
+    if (
+      !subsidiaryScopeAllows(allowedSubsidiaryIds, subscription.customerSubsidiaryId, {
+        orgWideNull: true,
+      })
+    )
+      throw new ScopeNotFoundError();
     if (subscription.customerId !== customerId) {
-      refuse("usage_link_customer_mismatch", "The link customer does not match the subscription's customer.", "Link the subscription's own customer to this usage plan.", "customer_id");
+      refuse(
+        "usage_link_customer_mismatch",
+        "The link customer does not match the subscription's customer.",
+        "Link the subscription's own customer to this usage plan.",
+        "customer_id",
+      );
     }
 
-    const planVersion = (await db.execute<{
-      status: string;
-      effectiveFrom: string;
-      planId: string;
-      planCurrency: string;
-      planStatus: string;
-    }>(sql`
+    const planVersion = (
+      await db.execute<{
+        status: string;
+        effectiveFrom: string;
+        planId: string;
+        planCurrency: string;
+        planStatus: string;
+      }>(
+        sql`
       select v.status, v.effective_from::text as "effectiveFrom", v.plan_id as "planId",
              p.currency_code as "planCurrency", p.status as "planStatus"
        from usage_rating_plan_versions v
         join usage_rating_plans p on p.org_id = v.org_id and p.id = v.plan_id
        where v.org_id = ${orgId} and v.id = ${planVersionId}
-       for share of v, p`, "objects"))[0];
+       for share of v, p`,
+        "objects",
+      )
+    )[0];
     if (!planVersion) {
-      refuse("usage_link_plan_version_not_found", "The usage rating plan version does not exist in this organization.", "Choose a published rating plan version from this organization.", "plan_version_id");
+      refuse(
+        "usage_link_plan_version_not_found",
+        "The usage rating plan version does not exist in this organization.",
+        "Choose a published rating plan version from this organization.",
+        "plan_version_id",
+      );
     }
     if (planVersion.status !== "published") {
-      refuse("usage_link_version_unpublished", "A subscription usage link must pin a published rating plan version.", "Publish the rating plan version before opening a subscription link.", "plan_version_id");
+      refuse(
+        "usage_link_version_unpublished",
+        "A subscription usage link must pin a published rating plan version.",
+        "Publish the rating plan version before opening a subscription link.",
+        "plan_version_id",
+      );
     }
     if (planVersion.planStatus !== "active") {
-      refuse("usage_link_plan_retired", "A retired usage rating plan cannot receive a new subscription link.", "Choose an active rating plan or create a new one for future links.", "plan_version_id", 409);
+      refuse(
+        "usage_link_plan_retired",
+        "A retired usage rating plan cannot receive a new subscription link.",
+        "Choose an active rating plan or create a new one for future links.",
+        "plan_version_id",
+        409,
+      );
     }
     if (effectiveFrom < planVersion.effectiveFrom) {
-      refuse("usage_link_precedes_version", "The subscription link begins before its rating plan version is effective.", "Set effective_from on or after the plan version's effective_from date.", "effective_from");
+      refuse(
+        "usage_link_precedes_version",
+        "The subscription link begins before its rating plan version is effective.",
+        "Set effective_from on or after the plan version's effective_from date.",
+        "effective_from",
+      );
     }
     if (!subscription.planCurrency || planVersion.planCurrency !== subscription.planCurrency) {
       refuse(
@@ -614,14 +933,20 @@ export async function createSubscriptionUsageLink(
       );
     }
 
-    const lifecycle = (await db.execute<{ termStartsOn: string; termEndsOn: string | null }>(sql`
+    const lifecycle = (
+      await db.execute<{ termStartsOn: string; termEndsOn: string | null }>(
+        sql`
       select term_starts_on::text as "termStartsOn", term_ends_on::text as "termEndsOn"
         from subscription_lifecycles
-       where org_id = ${orgId} and subscription_id = ${subscriptionId}`, "objects"))[0];
+       where org_id = ${orgId} and subscription_id = ${subscriptionId}`,
+        "objects",
+      )
+    )[0];
     if (lifecycle) {
       if (
         effectiveFrom < lifecycle.termStartsOn ||
-        (lifecycle.termEndsOn !== null && (effectiveTo === null || effectiveTo > lifecycle.termEndsOn))
+        (lifecycle.termEndsOn !== null &&
+          (effectiveTo === null || effectiveTo > lifecycle.termEndsOn))
       ) {
         refuse(
           "usage_link_lifecycle_window_invalid",
@@ -634,30 +959,63 @@ export async function createSubscriptionUsageLink(
       }
     }
 
-    const meterRows = await db.execute<{ id: string; itemId: string | null; isActive: boolean }>(sql`
+    const meterRows = await db.execute<{ id: string; itemId: string | null; isActive: boolean }>(
+      sql`
       select id, item_id as "itemId", is_active as "isActive"
         from usage_meters where org_id = ${orgId}
-          and id in (${sql.join(uniqueMeters.map((id) => sql`${id}`), sql`, `)})
-       for share`, "objects");
+          and id in (${sql.join(
+            uniqueMeters.map((id) => sql`${id}`),
+            sql`, `,
+          )})
+       for share`,
+      "objects",
+    );
     if (meterRows.length !== uniqueMeters.length) {
-      refuse("usage_link_meter_unavailable", "The link includes a meter outside this organization.", "Select meters that belong to this organization.", "meter_ids");
+      refuse(
+        "usage_link_meter_unavailable",
+        "The link includes a meter outside this organization.",
+        "Select meters that belong to this organization.",
+        "meter_ids",
+      );
     }
     const missingItem = meterRows.find((meter) => meter.itemId === null);
     if (missingItem) {
-      refuse("usage_link_meter_item_required", `Meter ${missingItem.id} has no billing item.`, "Set the meter's item before linking it to a subscription usage plan.", "meter_ids");
+      refuse(
+        "usage_link_meter_item_required",
+        `Meter ${missingItem.id} has no billing item.`,
+        "Set the meter's item before linking it to a subscription usage plan.",
+        "meter_ids",
+      );
     }
     const inactiveMeter = meterRows.find((meter) => !meter.isActive);
     if (inactiveMeter) {
-      refuse("usage_link_meter_inactive", `Meter ${inactiveMeter.id} is inactive.`, "Reactivate the meter before opening a new subscription usage link.", "meter_ids", 409);
+      refuse(
+        "usage_link_meter_inactive",
+        `Meter ${inactiveMeter.id} is inactive.`,
+        "Reactivate the meter before opening a new subscription usage link.",
+        "meter_ids",
+        409,
+      );
     }
-    const pricedMeters = await db.execute<{ meterId: string }>(sql`
+    const pricedMeters = await db.execute<{ meterId: string }>(
+      sql`
       select distinct meter_id as "meterId" from usage_rating_bands
        where org_id = ${orgId} and plan_version_id = ${planVersionId}
-         and meter_id in (${sql.join(uniqueMeters.map((id) => sql`${id}`), sql`, `)})`, "objects");
+         and meter_id in (${sql.join(
+           uniqueMeters.map((id) => sql`${id}`),
+           sql`, `,
+         )})`,
+      "objects",
+    );
     if (pricedMeters.length !== uniqueMeters.length) {
       const priced = new Set(pricedMeters.map((row) => row.meterId));
       const missing = uniqueMeters.find((meterId) => !priced.has(meterId))!;
-      refuse("usage_link_meter_unpriced", `The published version has no rating bands for meter ${missing}.`, "Add and publish bands for every meter selected on the subscription link.", "meter_ids");
+      refuse(
+        "usage_link_meter_unpriced",
+        `The published version has no rating bands for meter ${missing}.`,
+        "Add and publish bands for every meter selected on the subscription link.",
+        "meter_ids",
+      );
     }
 
     const existingLinks = await db.execute<{
@@ -665,30 +1023,48 @@ export async function createSubscriptionUsageLink(
       meterIds: string[];
       effectiveFrom: string;
       effectiveTo: string | null;
-    }>(sql`
+    }>(
+      sql`
       select id, meter_ids as "meterIds", effective_from::text as "effectiveFrom",
              effective_to::text as "effectiveTo"
         from subscription_usage_links
-       where org_id = ${orgId} and subscription_id = ${subscriptionId}`, "objects");
-    const collision = existingLinks.find((link) =>
-      intersect(link.meterIds, uniqueMeters) &&
-      (effectiveTo === null || link.effectiveFrom <= effectiveTo) &&
-      (link.effectiveTo === null || link.effectiveTo >= effectiveFrom));
+       where org_id = ${orgId} and subscription_id = ${subscriptionId}`,
+      "objects",
+    );
+    const collision = existingLinks.find(
+      (link) =>
+        intersect(link.meterIds, uniqueMeters) &&
+        (effectiveTo === null || link.effectiveFrom <= effectiveTo) &&
+        (link.effectiveTo === null || link.effectiveTo >= effectiveFrom),
+    );
     if (collision) {
-      refuse("usage_link_window_overlap", `The requested window overlaps usage link ${collision.id} for one or more selected meters.`, "Close the existing link or choose a non-overlapping effective window for these meters.", "effective_from", 409);
+      refuse(
+        "usage_link_window_overlap",
+        `The requested window overlaps usage link ${collision.id} for one or more selected meters.`,
+        "Close the existing link or choose a non-overlapping effective window for these meters.",
+        "effective_from",
+        409,
+      );
     }
 
-    const inserted = await db.execute<SubscriptionUsageLink>(sql`
+    const inserted = await db.execute<SubscriptionUsageLink>(
+      sql`
       insert into subscription_usage_links
         (org_id, subscription_id, customer_id, plan_version_id, meter_ids,
          effective_from, effective_to, commit_amount, commit_period, allow_overage,
          created_by, updated_by)
       values
-        (${orgId}, ${subscriptionId}, ${customerId}, ${planVersionId}, array[${sql.join(uniqueMeters.map((id) => sql`${id}`), sql`, `)}]::uuid[],
+        (${orgId}, ${subscriptionId}, ${customerId}, ${planVersionId}, array[${sql.join(
+          uniqueMeters.map((id) => sql`${id}`),
+          sql`, `,
+        )}]::uuid[],
          ${effectiveFrom}, ${effectiveTo}, ${commitAmount}, ${commitPeriod}, ${input.allowOverage ?? true},
          ${actor}, ${actor})
-      returning ${LINK_COLUMNS}`, "objects");
-    if (inserted.length !== 1) throw new Error("subscription usage link insert returned an unexpected row count");
+      returning ${LINK_COLUMNS}`,
+      "objects",
+    );
+    if (inserted.length !== 1)
+      throw new Error("subscription usage link insert returned an unexpected row count");
     return inserted[0]!;
   });
 }
@@ -704,87 +1080,155 @@ export async function closeSubscriptionUsageLink(
     await lockAndRequireUsageBilling(orgId);
     const safeLinkId = uuidText(linkId, "link_id");
     const effectiveTo = dateText(effectiveToInput, "effective_to");
-    const link = (await db.execute<{ subscriptionId: string; effectiveFrom: string; effectiveTo: string | null; customerSubsidiaryId: string | null }>(sql`
+    const link = (
+      await db.execute<{
+        subscriptionId: string;
+        effectiveFrom: string;
+        effectiveTo: string | null;
+        customerSubsidiaryId: string | null;
+      }>(
+        sql`
       select l.subscription_id as "subscriptionId", l.effective_from::text as "effectiveFrom",
              l.effective_to::text as "effectiveTo", c.subsidiary_id as "customerSubsidiaryId"
         from subscription_usage_links l join parties c on c.org_id = l.org_id and c.id = l.customer_id
        where l.org_id = ${orgId} and l.id = ${safeLinkId}
          ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
-       for update of l, c`, "objects"))[0];
-    if (!link || !subsidiaryScopeAllows(allowedSubsidiaryIds, link.customerSubsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
-  if (link.effectiveTo !== null) {
-    refuse("usage_link_already_closed", "The subscription usage link already has an effective_to date.", "Open a new usage link for a later pricing window.", "link_id", 409);
-  }
-  if (effectiveTo < link.effectiveFrom) {
-    refuse("usage_link_window_invalid", "The subscription usage link ends before it begins.", "Set effective_to on or after effective_from.", "effective_to");
-  }
-  await db.execute(sql`
+       for update of l, c`,
+        "objects",
+      )
+    )[0];
+    if (
+      !link ||
+      !subsidiaryScopeAllows(allowedSubsidiaryIds, link.customerSubsidiaryId, { orgWideNull: true })
+    )
+      throw new ScopeNotFoundError();
+    if (link.effectiveTo !== null) {
+      refuse(
+        "usage_link_already_closed",
+        "The subscription usage link already has an effective_to date.",
+        "Open a new usage link for a later pricing window.",
+        "link_id",
+        409,
+      );
+    }
+    if (effectiveTo < link.effectiveFrom) {
+      refuse(
+        "usage_link_window_invalid",
+        "The subscription usage link ends before it begins.",
+        "Set effective_to on or after effective_from.",
+        "effective_to",
+      );
+    }
+    await db.execute(sql`
     select id from subscriptions
      where org_id = ${orgId} and id = ${link.subscriptionId} for update`);
-  const lifecycle = (await db.execute<{ termStartsOn: string; termEndsOn: string | null }>(sql`
+    const lifecycle = (
+      await db.execute<{ termStartsOn: string; termEndsOn: string | null }>(
+        sql`
     select term_starts_on::text as "termStartsOn", term_ends_on::text as "termEndsOn"
       from subscription_lifecycles
-     where org_id = ${orgId} and subscription_id = ${link.subscriptionId}`, "objects"))[0];
-  if (
-    lifecycle &&
-    (link.effectiveFrom < lifecycle.termStartsOn ||
-      (lifecycle.termEndsOn !== null && effectiveTo > lifecycle.termEndsOn))
-  ) {
-    refuse(
-      "usage_link_lifecycle_window_invalid",
-      "The subscription usage link window falls outside the subscription's active lifecycle term.",
-      lifecycle.termEndsOn === null
-        ? `Set the link window on or after ${lifecycle.termStartsOn}.`
-        : `Set the link window inside ${lifecycle.termStartsOn} through ${lifecycle.termEndsOn}.`,
-      "effective_to",
-    );
-  }
-  const updated = await db.execute<SubscriptionUsageLink>(sql`
+     where org_id = ${orgId} and subscription_id = ${link.subscriptionId}`,
+        "objects",
+      )
+    )[0];
+    if (
+      lifecycle &&
+      (link.effectiveFrom < lifecycle.termStartsOn ||
+        (lifecycle.termEndsOn !== null && effectiveTo > lifecycle.termEndsOn))
+    ) {
+      refuse(
+        "usage_link_lifecycle_window_invalid",
+        "The subscription usage link window falls outside the subscription's active lifecycle term.",
+        lifecycle.termEndsOn === null
+          ? `Set the link window on or after ${lifecycle.termStartsOn}.`
+          : `Set the link window inside ${lifecycle.termStartsOn} through ${lifecycle.termEndsOn}.`,
+        "effective_to",
+      );
+    }
+    const updated = await db.execute<SubscriptionUsageLink>(
+      sql`
       update subscription_usage_links
          set effective_to = ${effectiveTo}, updated_at = now(), updated_by = ${actor}
        where org_id = ${orgId} and id = ${safeLinkId} and effective_to is null
-      returning ${LINK_COLUMNS}`, "objects");
+      returning ${LINK_COLUMNS}`,
+      "objects",
+    );
     if (updated.length !== 1) {
-      refuse("usage_link_close_conflict", "The subscription usage link changed before it could be closed.", "Reload the current link and retry with the intended effective_to date.", "link_id", 409);
+      refuse(
+        "usage_link_close_conflict",
+        "The subscription usage link changed before it could be closed.",
+        "Reload the current link and retry with the intended effective_to date.",
+        "link_id",
+        409,
+      );
     }
     return updated[0]!;
   });
 }
 
-export async function listSubscriptionUsageLinks(orgId: string, filters: {
-  subscriptionId?: string;
-  customerId?: string;
-}, allowedSubsidiaryIds: UsageSubsidiaryScope = null): Promise<SubscriptionUsageLink[]> {
+export async function listSubscriptionUsageLinks(
+  orgId: string,
+  filters: {
+    subscriptionId?: string;
+    customerId?: string;
+  },
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
+): Promise<SubscriptionUsageLink[]> {
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
     if ((filters.subscriptionId === undefined) === (filters.customerId === undefined)) {
-      refuse("usage_link_filter_required", "Choose one subscription or customer to list usage links.", "Supply exactly one subscription_id or customer_id filter.");
+      refuse(
+        "usage_link_filter_required",
+        "Choose one subscription or customer to list usage links.",
+        "Supply exactly one subscription_id or customer_id filter.",
+      );
     }
-    const subscriptionId = filters.subscriptionId === undefined ? null : uuidText(filters.subscriptionId, "subscription_id");
-    const customerId = filters.customerId === undefined ? null : uuidText(filters.customerId, "customer_id");
+    const subscriptionId =
+      filters.subscriptionId === undefined
+        ? null
+        : uuidText(filters.subscriptionId, "subscription_id");
+    const customerId =
+      filters.customerId === undefined ? null : uuidText(filters.customerId, "customer_id");
     if (customerId !== null) {
-      const customer = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      const customer = (
+        await db.execute<{ subsidiaryId: string | null }>(
+          sql`
         select subsidiary_id as "subsidiaryId" from parties
          where org_id = ${orgId} and id = ${customerId}
-           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`, "objects"))[0];
-      if (!customer || !subsidiaryScopeAllows(allowedSubsidiaryIds, customer.subsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
+           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`,
+          "objects",
+        )
+      )[0];
+      if (
+        !customer ||
+        !subsidiaryScopeAllows(allowedSubsidiaryIds, customer.subsidiaryId, { orgWideNull: true })
+      )
+        throw new ScopeNotFoundError();
     }
     if (subscriptionId !== null) {
-      const subscription = (await db.execute<{ id: string }>(sql`
+      const subscription = (
+        await db.execute<{ id: string }>(
+          sql`
         select s.id from subscriptions s
         join parties c on c.org_id = s.org_id and c.id = s.customer_id
         where s.org_id = ${orgId} and s.id = ${subscriptionId}
-          ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`, "objects"))[0];
+          ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`,
+          "objects",
+        )
+      )[0];
       if (!subscription) throw new ScopeNotFoundError();
     }
-    return await db.execute<SubscriptionUsageLink>(sql`
+    return await db.execute<SubscriptionUsageLink>(
+      sql`
       select ${LINK_COLUMNS} from subscription_usage_links
        where org_id = ${orgId} and (${subscriptionId}::uuid is null or subscription_id = ${subscriptionId})
          and (${customerId}::uuid is null or customer_id = ${customerId})
          and exists (select 1 from parties c where c.org_id = subscription_usage_links.org_id
            and c.id = subscription_usage_links.customer_id
            ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})
-       order by effective_from, id`, "objects");
+       order by effective_from, id`,
+      "objects",
+    );
   });
 }
 

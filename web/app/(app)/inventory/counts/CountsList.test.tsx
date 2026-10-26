@@ -1,7 +1,7 @@
-import assert from 'node:assert/strict'
-import test, { type TestContext } from 'node:test'
-import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
-import { stubModules } from '../../../../testing/stub-modules'
+import assert from "node:assert/strict";
+import test, { type TestContext } from "node:test";
+import { bootJsdomEnvironment } from "../../../../testing/jsdom-env";
+import { stubModules } from "../../../../testing/stub-modules";
 
 // Cycle-count create refusals: a line with an item but no stock location must
 // be refused persistently on its own row — naming the missing field — with
@@ -9,12 +9,12 @@ import { stubModules } from '../../../../testing/stub-modules'
 // in the form-level alert. A business location with no stock locations must
 // say so in the picker and link to the Stock Locations setup surface.
 
-await bootJsdomEnvironment({ url: 'http://localhost:4800/inventory?inventoryView=counts' })
+await bootJsdomEnvironment({ url: "http://localhost:4800/inventory?inventoryView=counts" });
 
 const script = {
   toasts: [] as Array<{ kind: string; message: string }>,
   fetchCalls: [] as Array<{ url: string; method: string }>,
-}
+};
 Object.assign(globalThis, {
   __countTestToasts: script.toasts,
   __countTestRouter: {
@@ -24,51 +24,51 @@ Object.assign(globalThis, {
     back() {},
     prefetch() {},
   },
-})
+});
 stubModules({
   navigation: {
     source:
-      'export function useRouter(){return globalThis.__countTestRouter}' +
+      "export function useRouter(){return globalThis.__countTestRouter}" +
       'export function usePathname(){return "/inventory"}' +
-      'export function useSearchParams(){return new URLSearchParams()}',
+      "export function useSearchParams(){return new URLSearchParams()}",
   },
   intl: false,
   authz: false,
   features: false,
   extra: {
-    'next/link':
+    "next/link":
       'export default function Link(p){return globalThis.React.createElement("a",{href:p.href,className:p.className},p.children)}',
     sonner:
       'export const toast={success(m){globalThis.__countTestToasts.push({kind:"success",message:String(m)})},error(m){globalThis.__countTestToasts.push({kind:"error",message:String(m)})},info(m){globalThis.__countTestToasts.push({kind:"info",message:String(m)})}};export function Toaster(){return null}',
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../messages/en')).default
-const { MoneyProvider } = await import('../../../../components/money-provider')
-const { BusinessDateProvider } = await import('../../../../components/business-date-provider')
-const { CountsList } = await import('./CountsList')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default;
+const { MoneyProvider } = await import("../../../../components/money-provider");
+const { BusinessDateProvider } = await import("../../../../components/business-date-provider");
+const { CountsList } = await import("./CountsList");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-const LOC_MAIN = 'loc-main'
-const LOC_EMPTY = 'loc-empty'
-const ITEM_WIDGET = '11111111-1111-4111-8111-111111111111'
-const SL_BIN = '22222222-2222-4222-8222-222222222222'
+const LOC_MAIN = "loc-main";
+const LOC_EMPTY = "loc-empty";
+const ITEM_WIDGET = "11111111-1111-4111-8111-111111111111";
+const SL_BIN = "22222222-2222-4222-8222-222222222222";
 
 function baseProps(overrides: Record<string, unknown> = {}) {
   return {
     counts: [],
     totalCount: 0,
     nextCursor: null,
-    locations: [{ id: LOC_MAIN, name: 'Main' }],
-    subsidiaries: [{ id: 'sub-1', name: 'Sub' }],
-    items: [{ id: ITEM_WIDGET, code: 'W-1', name: 'Widget' }],
-    stockLocations: [{ id: SL_BIN, code: 'BIN-1', locationId: LOC_MAIN }],
+    locations: [{ id: LOC_MAIN, name: "Main" }],
+    subsidiaries: [{ id: "sub-1", name: "Sub" }],
+    items: [{ id: ITEM_WIDGET, code: "W-1", name: "Widget" }],
+    stockLocations: [{ id: SL_BIN, code: "BIN-1", locationId: LOC_MAIN }],
     lots: [],
     canPost: true,
     reviewRequired: true,
@@ -77,7 +77,7 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     itemsExcludedCount: 0,
     createRequested: true,
     ...overrides,
-  }
+  };
 }
 
 async function mountCounts(
@@ -85,29 +85,30 @@ async function mountCounts(
   props: Record<string, unknown>,
   onFetch?: (url: string, method: string) => unknown,
 ): Promise<void> {
-  const prior = globalThis.fetch
+  const prior = globalThis.fetch;
   globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
-    const url = String(input)
-    const method = init?.method ?? 'GET'
-    script.fetchCalls.push({ url, method })
-    if (url.includes('/api/inventory/tracking-options')) return Response.json({ tracking: 'none', lots: [], serials: [] })
-    if (onFetch) return Response.json(await onFetch(url, method))
-    return Response.json({ counts: [], totalCount: 0, nextCursor: null })
-  }) as typeof fetch
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    script.fetchCalls.push({ url, method });
+    if (url.includes("/api/inventory/tracking-options"))
+      return Response.json({ tracking: "none", lots: [], serials: [] });
+    if (onFetch) return Response.json(await onFetch(url, method));
+    return Response.json({ counts: [], totalCount: 0, nextCursor: null });
+  }) as typeof fetch;
   t.after(() => {
-    globalThis.fetch = prior
-  })
+    globalThis.fetch = prior;
+  });
   // The picker dropdown portals to document.body, so the root IS the body —
   // portaled option clicks would otherwise never reach React.
-  const rootHandle = createRoot(document.body)
+  const rootHandle = createRoot(document.body);
   t.after(async () => {
     await act(async () => {
-      rootHandle.unmount()
-    })
-    for (const node of [...document.body.children]) node.remove()
-  })
-  script.toasts.length = 0
-  script.fetchCalls.length = 0
+      rootHandle.unmount();
+    });
+    for (const node of [...document.body.children]) node.remove();
+  });
+  script.toasts.length = 0;
+  script.fetchCalls.length = 0;
   await act(async () => {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -117,226 +118,252 @@ async function mountCounts(
           </BusinessDateProvider>
         </MoneyProvider>
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+    await tick();
+  });
 }
 
 function triggersNamed(label: string): HTMLButtonElement[] {
   return [...document.querySelectorAll('button[aria-haspopup="listbox"]')].filter(
-    (b) => b.getAttribute('aria-label') === label,
-  ) as HTMLButtonElement[]
+    (b) => b.getAttribute("aria-label") === label,
+  ) as HTMLButtonElement[];
 }
 
 async function pickOption(triggerLabel: string, optionText: string) {
-  const trigger = triggersNamed(triggerLabel)[0]
-  assert.ok(trigger, `a ${triggerLabel} picker must exist`)
+  const trigger = triggersNamed(triggerLabel)[0];
+  assert.ok(trigger, `a ${triggerLabel} picker must exist`);
   await act(async () => {
-    trigger.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-  })
-  await tick()
+    trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
   const option = [...document.querySelectorAll('button[role="option"]')].find((b) =>
-    (b.textContent ?? '').includes(optionText),
-  ) as HTMLElement | undefined
-  assert.ok(option, `option ${optionText} must be offered`)
+    (b.textContent ?? "").includes(optionText),
+  ) as HTMLElement | undefined;
+  assert.ok(option, `option ${optionText} must be offered`);
   await act(async () => {
-    option.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-  })
-  await tick()
+    option.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
 }
 
 async function clickButtonNamed(name: string) {
-  const button = [...document.querySelectorAll('button')].find(
-    (b) => (b.textContent ?? '').trim() === name,
-  ) as HTMLButtonElement | undefined
-  assert.ok(button, `a ${name} button must exist`)
+  const button = [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === name,
+  ) as HTMLButtonElement | undefined;
+  assert.ok(button, `a ${name} button must exist`);
   await act(async () => {
-    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-    await tick()
-  })
-  await tick()
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+  });
+  await tick();
 }
 
-test('a line missing its stock location is refused on the row with zero requests', async (t) => {
-  await mountCounts(t, baseProps())
-  await pickOption('Business location', 'Main')
-  await pickOption('Item', 'Widget')
-  await clickButtonNamed('Open count')
-  await tick()
-  assert.equal(script.fetchCalls.filter(call => call.method === 'POST').length, 0, 'the refusal must happen client-side: no count command may fire')
-  const alerts = [...document.querySelectorAll('[role="alert"]')].map((a) => a.textContent ?? '')
+test("a line missing its stock location is refused on the row with zero requests", async (t) => {
+  await mountCounts(t, baseProps());
+  await pickOption("Business location", "Main");
+  await pickOption("Item", "Widget");
+  await clickButtonNamed("Open count");
+  await tick();
+  assert.equal(
+    script.fetchCalls.filter((call) => call.method === "POST").length,
+    0,
+    "the refusal must happen client-side: no count command may fire",
+  );
+  const alerts = [...document.querySelectorAll('[role="alert"]')].map((a) => a.textContent ?? "");
   assert.ok(
     alerts.some((text) => /Line 1: choose a stock location/.test(text)),
     `a row-pinned refusal must name the missing field, saw: ${JSON.stringify(alerts)}`,
-  )
+  );
   assert.ok(
     alerts.some((text) => /Failed|Line 1: choose a stock location/.test(text) && text.length > 30),
-    'the form-level alert must also carry the row refusal',
-  )
+    "the form-level alert must also carry the row refusal",
+  );
   assert.ok(
-    script.toasts.some((toast) => toast.kind === 'error' && /Line 1: choose a stock location/.test(toast.message)),
-    'the refusal must also toast',
-  )
-})
+    script.toasts.some(
+      (toast) => toast.kind === "error" && /Line 1: choose a stock location/.test(toast.message),
+    ),
+    "the refusal must also toast",
+  );
+});
 
-test('a location with no stock locations names the setup surface', async (t) => {
+test("a location with no stock locations names the setup surface", async (t) => {
   await mountCounts(
     t,
     baseProps({
       locations: [
-        { id: LOC_MAIN, name: 'Main' },
-        { id: LOC_EMPTY, name: 'Empty room' },
+        { id: LOC_MAIN, name: "Main" },
+        { id: LOC_EMPTY, name: "Empty room" },
       ],
     }),
-  )
-  await pickOption('Business location', 'Empty room')
-  await tick()
-  const body = document.body.textContent ?? ''
-  assert.match(body, /This location has no stock locations yet\./, 'the picker must say the location has none')
-  const setupLink = document.querySelector('a[href="/inventory?inventoryView=locations"]')
-  assert.ok(setupLink, 'the empty state must link to the Stock Locations setup surface')
-  assert.match(setupLink.textContent ?? '', /Set up stock locations/, 'the link must name its remedy')
-})
+  );
+  await pickOption("Business location", "Empty room");
+  await tick();
+  const body = document.body.textContent ?? "";
+  assert.match(
+    body,
+    /This location has no stock locations yet\./,
+    "the picker must say the location has none",
+  );
+  const setupLink = document.querySelector('a[href="/inventory?inventoryView=locations"]');
+  assert.ok(setupLink, "the empty state must link to the Stock Locations setup surface");
+  assert.match(
+    setupLink.textContent ?? "",
+    /Set up stock locations/,
+    "the link must name its remedy",
+  );
+});
 
-test('without setup permission the empty state has no setup link', async (t) => {
+test("without setup permission the empty state has no setup link", async (t) => {
   await mountCounts(
     t,
     baseProps({
-      locations: [{ id: LOC_EMPTY, name: 'Empty room' }],
+      locations: [{ id: LOC_EMPTY, name: "Empty room" }],
       stockLocations: [],
       canManageStockLocations: false,
     }),
-  )
-  await pickOption('Business location', 'Empty room')
-  await tick()
-  const body = document.body.textContent ?? ''
-  assert.match(body, /This location has no stock locations yet\./, 'the picker must still say the location has none')
+  );
+  await pickOption("Business location", "Empty room");
+  await tick();
+  const body = document.body.textContent ?? "";
+  assert.match(
+    body,
+    /This location has no stock locations yet\./,
+    "the picker must still say the location has none",
+  );
   assert.equal(
     document.querySelector('a[href="/inventory?inventoryView=locations"]'),
     null,
-    'readers without setup permission must not get a setup link',
-  )
-})
+    "readers without setup permission must not get a setup link",
+  );
+});
 
-test('excluded items name the Item Costing prerequisite with a link', async (t) => {
-  await mountCounts(
-    t,
-    baseProps({ items: [], itemsExcludedCount: 2, canManageItems: true }),
-  )
-  await tick()
-  const body = document.body.textContent ?? ''
+test("excluded items name the Item Costing prerequisite with a link", async (t) => {
+  await mountCounts(t, baseProps({ items: [], itemsExcludedCount: 2, canManageItems: true }));
+  await tick();
+  const body = document.body.textContent ?? "";
   assert.match(
     body,
     /2 active items have no Item Costing profile/,
     'the picker must say why items are missing instead of a bare "No matches"',
-  )
-  const itemsLink = document.querySelector('a[href="/items"]')
-  assert.ok(itemsLink, 'item managers must get the items link')
-  assert.match(itemsLink.textContent ?? '', /Open items/, 'the link must name its remedy')
-})
+  );
+  const itemsLink = document.querySelector('a[href="/items"]');
+  assert.ok(itemsLink, "item managers must get the items link");
+  assert.match(itemsLink.textContent ?? "", /Open items/, "the link must name its remedy");
+});
 
-test('without item permission the costing note names the grant', async (t) => {
-  await mountCounts(
-    t,
-    baseProps({ items: [], itemsExcludedCount: 1, canManageItems: false }),
-  )
-  await tick()
-  const body = document.body.textContent ?? ''
-  assert.match(body, /1 active item has no Item Costing profile/, 'the prerequisite must still be named')
-  assert.equal(document.querySelector('a[href="/items"]'), null, 'readers without item access must not get the link')
-  assert.match(body, /item-management access/, 'the copy must name the grant needed')
-})
+test("without item permission the costing note names the grant", async (t) => {
+  await mountCounts(t, baseProps({ items: [], itemsExcludedCount: 1, canManageItems: false }));
+  await tick();
+  const body = document.body.textContent ?? "";
+  assert.match(
+    body,
+    /1 active item has no Item Costing profile/,
+    "the prerequisite must still be named",
+  );
+  assert.equal(
+    document.querySelector('a[href="/items"]'),
+    null,
+    "readers without item access must not get the link",
+  );
+  assert.match(body, /item-management access/, "the copy must name the grant needed");
+});
 
-test('no exclusions means no costing note', async (t) => {
-  await mountCounts(t, baseProps({ itemsExcludedCount: 0 }))
-  await tick()
-  const body = document.body.textContent ?? ''
-  assert.doesNotMatch(body, /Item Costing profile/, 'a fully-profiled tenant must see no prerequisite')
-})
+test("no exclusions means no costing note", async (t) => {
+  await mountCounts(t, baseProps({ itemsExcludedCount: 0 }));
+  await tick();
+  const body = document.body.textContent ?? "";
+  assert.doesNotMatch(
+    body,
+    /Item Costing profile/,
+    "a fully-profiled tenant must see no prerequisite",
+  );
+});
 
-test('a viewer without posting access hears the grant in the empty state', async (t) => {
-  await mountCounts(
-    t,
-    baseProps({ canPost: false, createRequested: false }),
-  )
-  await tick()
-  const body = document.body.textContent ?? ''
-  assert.doesNotMatch(body, /Open one to snapshot/, 'viewers must not be told to open what they cannot open')
+test("a viewer without posting access hears the grant in the empty state", async (t) => {
+  await mountCounts(t, baseProps({ canPost: false, createRequested: false }));
+  await tick();
+  const body = document.body.textContent ?? "";
+  assert.doesNotMatch(
+    body,
+    /Open one to snapshot/,
+    "viewers must not be told to open what they cannot open",
+  );
   assert.match(
     body,
     /inventory posting access/,
-    'the viewer empty state must name the grant that opens counts',
-  )
-})
+    "the viewer empty state must name the grant that opens counts",
+  );
+});
 
-test('a poster keeps the actionable empty state', async (t) => {
-  await mountCounts(
-    t,
-    baseProps({ canPost: true, createRequested: false }),
-  )
-  await tick()
-  const body = document.body.textContent ?? ''
-  assert.match(body, /Open one to snapshot/, 'posters keep the actionable empty copy')
-})
+test("a poster keeps the actionable empty state", async (t) => {
+  await mountCounts(t, baseProps({ canPost: true, createRequested: false }));
+  await tick();
+  const body = document.body.textContent ?? "";
+  assert.match(body, /Open one to snapshot/, "posters keep the actionable empty copy");
+});
 
 // A reviewed count uses tenant Flow decisions before native inventory posting.
 const REVIEW_DETAIL = {
   header: {
-    id: 'count-1',
-    status: 'review',
+    id: "count-1",
+    status: "review",
     locationId: LOC_MAIN,
-    subsidiaryId: 'sub-1',
-    countedOn: '2026-09-23',
+    subsidiaryId: "sub-1",
+    countedOn: "2026-09-23",
     memo: null,
-    locationName: 'Main',
-    subsidiaryName: 'Sub',
+    locationName: "Main",
+    subsidiaryName: "Sub",
   },
   lines: [
     {
-      id: 'line-1',
+      id: "line-1",
       itemId: ITEM_WIDGET,
       stockLocationId: SL_BIN,
       lotId: null,
-      expectedQuantity: '10.0000',
-      countedQuantity: '9.0000',
+      expectedQuantity: "10.0000",
+      countedQuantity: "9.0000",
       adjustmentMovementId: null,
-      itemCode: 'W-1',
-      itemName: 'Widget',
-      stockLocationCode: 'BIN-1',
+      itemCode: "W-1",
+      itemName: "Widget",
+      stockLocationCode: "BIN-1",
       lotNumber: null,
-      variance: '-1.0000',
+      variance: "-1.0000",
     },
   ],
-}
+};
 
 async function mountReviewDetail(t: TestContext, reviewRequired: boolean): Promise<void> {
   await mountCounts(
     t,
-    baseProps({ selectedCountId: 'count-1', createRequested: false, reviewRequired }),
-    (url) => (url.includes('id=') ? REVIEW_DETAIL : { counts: [], totalCount: 0, nextCursor: null }),
-  )
-  await tick()
-  await tick()
-  await tick()
-  await tick()
-  await tick()
+    baseProps({ selectedCountId: "count-1", createRequested: false, reviewRequired }),
+    (url) =>
+      url.includes("id=") ? REVIEW_DETAIL : { counts: [], totalCount: 0, nextCursor: null },
+  );
+  await tick();
+  await tick();
+  await tick();
+  await tick();
+  await tick();
 }
 
-test('a reviewed count does not infer a separate independent-review policy', async (t) => {
-  await mountReviewDetail(t, false)
-  assert.doesNotMatch(document.body.textContent ?? '', /Independent review is off/)
-  assert.ok(document.querySelector('[role="dialog"]'), 'the selected count keeps its record drawer')
-})
+test("a reviewed count does not infer a separate independent-review policy", async (t) => {
+  await mountReviewDetail(t, false);
+  assert.doesNotMatch(document.body.textContent ?? "", /Independent review is off/);
+  assert.ok(
+    document.querySelector('[role="dialog"]'),
+    "the selected count keeps its record drawer",
+  );
+});
 
-test('a review-status count shows no warning while independent review is required', async (t) => {
-  await mountReviewDetail(t, true)
+test("a review-status count shows no warning while independent review is required", async (t) => {
+  await mountReviewDetail(t, true);
   assert.equal(
     document.querySelector('[role="note"]'),
     null,
-    'no warning may show while the requirement is on',
-  )
-})
+    "no warning may show while the requirement is on",
+  );
+});

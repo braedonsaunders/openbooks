@@ -20,17 +20,23 @@ export const runtime = "nodejs";
 // reach the domain check below (normalizeLayout) so the caller gets the
 // usable 422 board refusal. Rejecting it in the schema would answer 400 and
 // erase that domain refusal.
-const layoutBody = z.array(z.strictObject({
-  cardId: z.string(),
-  x: z.number().int().min(0).max(11),
-  y: z.number().int().min(0).max(999),
-  w: z.number().int().min(1).max(12),
-  h: z.number().int().min(1).max(24),
-})).max(1000, "layout cannot contain more than 1000 cards");
-const revisionBody = z.string({ error: "expectedUpdatedAt is required; reload and review the latest revision" }).regex(
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/,
-  "expectedUpdatedAt must be the exact dashboard revision",
-);
+const layoutBody = z
+  .array(
+    z.strictObject({
+      cardId: z.string(),
+      x: z.number().int().min(0).max(11),
+      y: z.number().int().min(0).max(999),
+      w: z.number().int().min(1).max(12),
+      h: z.number().int().min(1).max(24),
+    }),
+  )
+  .max(1000, "layout cannot contain more than 1000 cards");
+const revisionBody = z
+  .string({ error: "expectedUpdatedAt is required; reload and review the latest revision" })
+  .regex(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/,
+    "expectedUpdatedAt must be the exact dashboard revision",
+  );
 
 function bad(error: string) {
   return NextResponse.json({ error }, { status: 422 });
@@ -49,8 +55,7 @@ function dashboardRevisionSql(column: SQL): SQL<string> {
   )`;
 }
 
-const DASHBOARD_REVISION_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
+const DASHBOARD_REVISION_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 const DASHBOARD_REVISION_REQUIRED =
   "the dashboard revision is required; reload and review the latest revision";
 const DASHBOARD_REVISION_CONFLICT =
@@ -87,11 +92,9 @@ export const GET = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     const dashboard = await loadDashboard(id, gate.user.orgId);
-    if (!dashboard)
-      return notFound("record");
+    if (!dashboard) return notFound("record");
     return NextResponse.json(dashboard);
   },
 });
@@ -117,18 +120,22 @@ export const PATCH = defineRoute({
       name: z.string().trim().min(1, "name cannot be empty").max(200).optional(),
       description: z.string().trim().max(2000).nullable().optional(),
       layout: layoutBody.optional(),
-      allowedRoles: z.array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys")).nullable().optional(),
+      allowedRoles: z
+        .array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys"))
+        .nullable()
+        .optional(),
     })
-    .refine((body) => Object.keys(body).some((key) => key !== "expectedUpdatedAt"), "provide at least one dashboard field to update"),
+    .refine(
+      (body) => Object.keys(body).some((key) => key !== "expectedUpdatedAt"),
+      "provide at least one dashboard field to update",
+    ),
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const user = gate.user;
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
 
     const existing = await loadDashboard(id, user.orgId);
-    if (!existing)
-      return notFound("record");
+    if (!existing) return notFound("record");
 
     const body = routeBody as PatchBody;
 
@@ -143,8 +150,7 @@ export const PATCH = defineRoute({
     }
 
     const name = body.name !== undefined ? body.name.trim() : undefined;
-    if (name !== undefined && name === "")
-      return bad("Dashboard name cannot be empty");
+    if (name !== undefined && name === "") return bad("Dashboard name cannot be empty");
 
     let layout: ReturnType<typeof normalizeLayout> | undefined = undefined;
     if (body.layout !== undefined) {
@@ -165,32 +171,30 @@ export const PATCH = defineRoute({
     }
 
     try {
-      const outcome = await mutateInsight(
-        gate,
-        "insight_dashboards",
-        id,
-        "update",
-        async (tx) => {
-          // Lock and compare in the same transaction as the replacement. A slow
-          // request can therefore never commit over a newer save that advanced
-          // the exact revision while this request was in flight.
-          const locked = (await tx.execute<{ updatedAt: string }>(sql`
+      const outcome = await mutateInsight(gate, "insight_dashboards", id, "update", async (tx) => {
+        // Lock and compare in the same transaction as the replacement. A slow
+        // request can therefore never commit over a newer save that advanced
+        // the exact revision while this request was in flight.
+        const locked = (
+          await tx.execute<{ updatedAt: string }>(
+            sql`
         select ${dashboardRevisionSql(sql.raw("updated_at"))} as "updatedAt"
           from insight_dashboards
          where id = ${id} and org_id = ${user.orgId}
          for update
-      `, "objects"))[0];
-          if (!locked) throw new DashboardRevisionError(404, "not found");
-          assertDashboardRevision(expectedRevision, locked.updatedAt);
+      `,
+            "objects",
+          )
+        )[0];
+        if (!locked) throw new DashboardRevisionError(404, "not found");
+        assertDashboardRevision(expectedRevision, locked.updatedAt);
 
-          if (
-            layout !== undefined &&
-            !(await layoutCardsVisible(tx, gate, layout))
-          ) {
-            return bad("Layout references an unavailable card");
-          }
+        if (layout !== undefined && !(await layoutCardsVisible(tx, gate, layout))) {
+          return bad("Layout references an unavailable card");
+        }
 
-          const updated = await tx.execute(sql`
+        const updated = await tx.execute(
+          sql`
         update insight_dashboards set
           name = ${name !== undefined ? name : sql`name`},
           description = ${body.description !== undefined ? strOrNull(body.description) : sql`description`},
@@ -200,10 +204,11 @@ export const PATCH = defineRoute({
           updated_by = ${user.id}
         where id = ${id} and org_id = ${user.orgId}
         returning *, ${dashboardRevisionSql(sql.raw("updated_at"))} as updated_at
-      `, "objects");
-          return NextResponse.json(updated[0]);
-        },
-      );
+      `,
+          "objects",
+        );
+        return NextResponse.json(updated[0]);
+      });
       return outcome;
     } catch (e) {
       if (e instanceof DashboardRevisionError) {
@@ -223,26 +228,18 @@ export const DELETE = defineRoute({
   handler: async ({ request: _req, authz: gate, params }) => {
     const user = gate.user;
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
 
-    if (!(await loadDashboard(id, user.orgId)))
-      return notFound("record");
+    if (!(await loadDashboard(id, user.orgId))) return notFound("record");
 
-    return mutateInsight(
-      gate,
-      "insight_dashboards",
-      id,
-      "delete",
-      async (tx) => {
-        await tx.execute(
-          sql`delete from insight_dashboard_pins where dashboard_id = ${id} and org_id = ${user.orgId}`,
-        );
-        await tx.execute(
-          sql`delete from insight_dashboards where id = ${id} and org_id = ${user.orgId}`,
-        );
-        return NextResponse.json({ ok: true });
-      },
-    );
+    return mutateInsight(gate, "insight_dashboards", id, "delete", async (tx) => {
+      await tx.execute(
+        sql`delete from insight_dashboard_pins where dashboard_id = ${id} and org_id = ${user.orgId}`,
+      );
+      await tx.execute(
+        sql`delete from insight_dashboards where id = ${id} and org_id = ${user.orgId}`,
+      );
+      return NextResponse.json({ ok: true });
+    });
   },
 });

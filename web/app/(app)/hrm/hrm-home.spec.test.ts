@@ -12,12 +12,17 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
 // The repository root, with its trailing slash: `@/x` resolves to `web/x`.
-const root = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "/")).href;
+const root = pathToFileURL(
+  join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "/"),
+).href;
 const { stubModules } = await import("../../../testing/stub-modules");
-stubModules({ navigation: "export function redirect(){throw new Error('redirect')}export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return '/hrm'}export function useSearchParams(){return new URLSearchParams()}", intl: true });
+stubModules({
+  navigation:
+    "export function redirect(){throw new Error('redirect')}export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return '/hrm'}export function useSearchParams(){return new URLSearchParams()}",
+  intl: true,
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/server") {
       return {
         shortCircuit: true,
@@ -238,14 +243,25 @@ test("the pending queue leads the hero column with subordinate panels below it",
   const panels = panelsIn(heroGrid(hrmSpec(fixture()) as unknown as Tree));
   const first = panels.map((panel) => panel.widgets[0] ?? null);
   assert.equal(first[0], "hrm-pending-requests", "the pending queue leads the hero column");
-  for (const widget of ["hrm-onboarding-panel", "hrm-leave-panel", "hrm-benefits-panel", "hrm-recruiting-panel"]) {
+  for (const widget of [
+    "hrm-onboarding-panel",
+    "hrm-leave-panel",
+    "hrm-benefits-panel",
+    "hrm-recruiting-panel",
+  ]) {
     const at = first.indexOf(widget);
     assert.ok(at > 0, `${widget} renders below the pending queue, never above it`);
   }
   assert.ok(first.includes("hrm-recent-changes"), "the hero column carries recent changes");
   const workforce = panels.find((panel) => panel.widgets.includes("hrm-headcount-mix"));
-  assert.ok(workforce?.widgets.includes("trend-chart"), "the workforce panel carries the trend chart beside the department mix");
-  assert.ok(workforce?.widgets.includes("hrm-pulse"), "the workforce panel leads with its pulse figures");
+  assert.ok(
+    workforce?.widgets.includes("trend-chart"),
+    "the workforce panel carries the trend chart beside the department mix",
+  );
+  assert.ok(
+    workforce?.widgets.includes("hrm-pulse"),
+    "the workforce panel leads with its pulse figures",
+  );
 });
 
 test("month ends step back through month boundaries, leap days included", () => {
@@ -273,13 +289,26 @@ test("quiet modules collapse behind their activity flags", () => {
   assert.equal(gated["hrm-leave-panel"], "leaveHasActivity");
   assert.equal(gated["hrm-benefits-panel"], "benefitsHasActivity");
   assert.equal(gated["hrm-recruiting-panel"], "recruitingHasActivity");
-  assert.equal(gated["hrm-pending-requests"], "pendingHasActivity", "a clear queue collapses; a refusal keeps it open");
+  assert.equal(
+    gated["hrm-pending-requests"],
+    "pendingHasActivity",
+    "a clear queue collapses; a refusal keeps it open",
+  );
 
   const quiet = panelsIn(
-    heroGrid(hrmSpec(fixture({ onboarding: null, leavePanel: null, benefitsPanel: null, recruiting: null })) as unknown as Tree),
+    heroGrid(
+      hrmSpec(
+        fixture({ onboarding: null, leavePanel: null, benefitsPanel: null, recruiting: null }),
+      ) as unknown as Tree,
+    ),
   );
   const widgets = quiet.flatMap((panel) => panel.widgets);
-  for (const widget of ["hrm-onboarding-panel", "hrm-leave-panel", "hrm-benefits-panel", "hrm-recruiting-panel"]) {
+  for (const widget of [
+    "hrm-onboarding-panel",
+    "hrm-leave-panel",
+    "hrm-benefits-panel",
+    "hrm-recruiting-panel",
+  ]) {
     assert.ok(!widgets.includes(widget), `${widget} collapses when its loader data is null`);
   }
 });
@@ -319,7 +348,11 @@ test("the department mix binds the census and names the employer only for multi-
     if (entry.widget === "hrm-headcount-mix") props = entry.props as Tree;
   });
   assert.equal(props?.rows, groups, "the mix renders the loader-resolved census rows");
-  assert.equal(mix(false)?.showEmployer, false, "a single-entity org sees departments, never an employer line");
+  assert.equal(
+    mix(false)?.showEmployer,
+    false,
+    "a single-entity org sees departments, never an employer line",
+  );
   assert.equal(mix(true)?.showEmployer, true, "a multi-entity org gains the employer line");
 });
 

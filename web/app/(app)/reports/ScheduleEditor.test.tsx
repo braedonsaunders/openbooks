@@ -14,7 +14,10 @@ declare global {
  * leaves React's test queue unusable for later mounts in this file.
  */
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/reports/custom/run/schedule-test", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/reports/custom/run/schedule-test",
+  matchMediaMatches: false,
+});
 
 const { stubModules } = await import("../../../testing/stub-modules");
 stubModules({
@@ -108,7 +111,12 @@ test("empty schedule list renders the hint", async (t) => {
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <ScheduleEditor definitionId={randomUUID()} schedules={[]} canSchedule onChanged={() => {}} />
+        <ScheduleEditor
+          definitionId={randomUUID()}
+          schedules={[]}
+          canSchedule
+          onChanged={() => {}}
+        />
       </NextIntlClientProvider>,
     );
     await tick();
@@ -119,7 +127,8 @@ test("empty schedule list renders the hint", async (t) => {
 /** : a failed delete must name the failure even when the error body is not JSON. */
 test("a non-JSON delete failure still surfaces the delete-failed toast", async (t) => {
   const prior = globalThis.fetch;
-  globalThis.fetch = (async () => new Response("<html>proxy boom</html>", { status: 500 })) as typeof fetch;
+  globalThis.fetch = (async () =>
+    new Response("<html>proxy boom</html>", { status: 500 })) as typeof fetch;
   const { host, root } = await mountEditor();
   t.after(async () => {
     await act(async () => {
@@ -155,7 +164,9 @@ test("a confirmed delete calls the schedule endpoint and toasts", async (t) => {
     calls.some((call) => call.startsWith("DELETE ") && call.includes(SCHEDULE_ID)),
     "confirming must send the schedule DELETE",
   );
-  const successes = (globalThis.__schedTestToasts ?? []).filter((toast) => toast.kind === "success");
+  const successes = (globalThis.__schedTestToasts ?? []).filter(
+    (toast) => toast.kind === "success",
+  );
   assert.equal(successes.length, 1, "a confirmed delete must toast success");
   assert.match(successes[0]!.message, /deleted/i);
 });

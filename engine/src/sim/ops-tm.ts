@@ -16,7 +16,11 @@ import type { SimOrg } from "./world.ts";
  */
 
 /** Create a field-ticket document (a non-posting crew record) for a job/day. */
-export async function createFieldTicket(world: SimOrg, projectId: string, date: string): Promise<{ fieldTicketId: string; number: string }> {
+export async function createFieldTicket(
+  world: SimOrg,
+  projectId: string,
+  date: string,
+): Promise<{ fieldTicketId: string; number: string }> {
   const id = randomUUID();
   // The suffix must be unique per (org, kind, number) — documents_org_kind_number.
   // Four hex characters is 16 bits, so a day with a few hundred tickets hits a
@@ -36,11 +40,18 @@ export async function createFieldTicket(world: SimOrg, projectId: string, date: 
 /** Log one approved, billable crew time entry against a project (optionally on a field ticket). */
 export async function logTime(
   world: SimOrg,
-  input: { projectId: string; employeeId: string; hours: string; workedOn: string; fieldTicketId?: string | null },
+  input: {
+    projectId: string;
+    employeeId: string;
+    hours: string;
+    workedOn: string;
+    fieldTicketId?: string | null;
+  },
 ): Promise<{ timeEntryId: string }> {
   const emp = world.employees.find((e) => e.id === input.employeeId);
   if (!emp) throw new Error(`unknown employee ${input.employeeId}`);
-  if (!world.timeTypeId || !world.laborItemId) throw new Error("this company has no labor billing setup");
+  if (!world.timeTypeId || !world.laborItemId)
+    throw new Error("this company has no labor billing setup");
   const id = randomUUID();
   await db.execute(sql`
     insert into time_entries
@@ -65,24 +76,39 @@ export async function logCrewDay(
   const { fieldTicketId, number } = await createFieldTicket(world, input.projectId, input.workedOn);
   const out: string[] = [];
   for (const employeeId of ids) {
-    const r = await logTime(world, { projectId: input.projectId, employeeId, hours: input.hours, workedOn: input.workedOn, fieldTicketId });
+    const r = await logTime(world, {
+      projectId: input.projectId,
+      employeeId,
+      hours: input.hours,
+      workedOn: input.workedOn,
+      fieldTicketId,
+    });
     out.push(r.timeEntryId);
   }
   return { timeEntryIds: out, fieldTicket: number };
 }
 
 /** Post the labor cost for approved time entries (DR field labor / CR labor clearing). */
-export async function postLaborCost(world: SimOrg, timeEntryIds: string[]): Promise<{ entryIds: string[] }> {
+export async function postLaborCost(
+  world: SimOrg,
+  timeEntryIds: string[],
+): Promise<{ entryIds: string[] }> {
   const entryIds = await postProjectLaborCost(world.orgId, world.actors.controller, timeEntryIds);
   return { entryIds };
 }
 
 /** Post labor cost for all not-yet-costed approved time on a project. */
-export async function postLaborForProject(world: SimOrg, projectId: string): Promise<{ entryIds: string[]; costed: number }> {
-  const rows = (await db.execute<{ id: string }>(sql`
+export async function postLaborForProject(
+  world: SimOrg,
+  projectId: string,
+): Promise<{ entryIds: string[]; costed: number }> {
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id from time_entries
      where org_id = ${world.orgId} and project_id = ${projectId}
-       and status = 'approved' and cost_journal_entry_id is null`, "objects"));
+       and status = 'approved' and cost_journal_entry_id is null`,
+    "objects",
+  );
   const ids = rows.map((r) => r.id);
   if (ids.length === 0) return { entryIds: [], costed: 0 };
   const { entryIds } = await postLaborCost(world, ids);
@@ -116,23 +142,36 @@ export async function billTimeAndMaterials(
   projectId: string,
   invoiceDate: string,
   opts: { extraLines?: ExtraBillLine[]; memo?: string; costPlusFee?: number } = {},
-): Promise<{ invoiceId: string; documentNumber: string; billed: string; laborCost: string; lines: number } | null> {
-  const proj = (await db.execute<{ customer_id: string | null; name: string; code: string }>(sql`
-    select customer_id, name, code from projects where id = ${projectId} and org_id = ${world.orgId}`, "objects"));
+): Promise<{
+  invoiceId: string;
+  documentNumber: string;
+  billed: string;
+  laborCost: string;
+  lines: number;
+} | null> {
+  const proj = await db.execute<{ customer_id: string | null; name: string; code: string }>(
+    sql`
+    select customer_id, name, code from projects where id = ${projectId} and org_id = ${world.orgId}`,
+    "objects",
+  );
   const customerId = proj[0]?.customer_id;
   if (!customerId) throw new Error(`project ${projectId} has no customer to bill`);
 
-  const time = (await db.execute<UnbilledTime>(sql`
+  const time = await db.execute<UnbilledTime>(
+    sql`
     select id, hours::text, bill_rate::text, cost_rate::text, employee_party_id, time_type_id
       from time_entries
      where org_id = ${world.orgId} and project_id = ${projectId}
-       and status = 'approved' and is_billable and billing_status = 'unbilled'`, "objects"));
+       and status = 'approved' and is_billable and billing_status = 'unbilled'`,
+    "objects",
+  );
   const extraLines = opts.extraLines ?? [];
   if (time.length === 0 && extraLines.length === 0) return null;
 
   // Cost-plus jobs bill labor at cost × (1 + fee); standard T&M bills at bill rate.
   const fee = opts.costPlusFee;
-  const rateOf = (t: UnbilledTime) => (fee === undefined ? t.bill_rate : mul(t.cost_rate, (1 + fee).toFixed(4)));
+  const rateOf = (t: UnbilledTime) =>
+    fee === undefined ? t.bill_rate : mul(t.cost_rate, (1 + fee).toFixed(4));
   const empName = new Map(world.employees.map((e) => [e.id, e.name]));
   const effRates = time.map(rateOf);
   const lineAmounts = time.map((t, i) => mul(t.hours, effRates[i]!));

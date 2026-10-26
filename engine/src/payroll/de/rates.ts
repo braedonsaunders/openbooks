@@ -171,8 +171,8 @@ const DE_EDITION_SCAFFOLD: PayrollEditionScaffold = {
   files: [],
   barrels: [],
   steps: [
-    "Transcribe the BMF Programmablaufplan für den Lohnsteuerabzug 2027 "
-    + "into engine/src/payroll/de/pap.ts (the 2026 PAP is implemented).",
+    "Transcribe the BMF Programmablaufplan für den Lohnsteuerabzug 2027 " +
+      "into engine/src/payroll/de/pap.ts (the 2026 PAP is implemented).",
     "Transcribe the 2027 SV Rechengrößen (Sozialversicherungs-Rechengrößenverordnung 2027).",
     "Add a published 2027 edition to DE_TAX_YEARS; refuse 2027 by name until then.",
   ],
@@ -186,12 +186,12 @@ export const DE_TAX_YEARS: PayrollTaxYearSupport = {
       label: "BMF Programmablaufplan für den Lohnsteuerabzug 2026 (Stand 12.11.2025, endgültig)",
       effectiveFrom: "2026-01-01",
       citation:
-        "BMF-Schreiben vom 12.11.2025, GZ IV C 5 - S 2361/00025/016/028 "
-        + "(Programmablaufplan für die maschinelle Berechnung der vom "
-        + "Arbeitslohn einzubehaltenden Lohnsteuer 2026, Anlage 1, 40 Seiten); "
-        + "Sozialversicherungs-Rechengrößenverordnung 2026 (BGBl 2025 Nr. 278); "
-        + "EStG §32a (Tarif 2026); SolZG §§3–4; SGB V §§6/223/241/249; "
-        + "SGB VI §168; SGB III §§341/346; SGB XI §§55/58",
+        "BMF-Schreiben vom 12.11.2025, GZ IV C 5 - S 2361/00025/016/028 " +
+        "(Programmablaufplan für die maschinelle Berechnung der vom " +
+        "Arbeitslohn einzubehaltenden Lohnsteuer 2026, Anlage 1, 40 Seiten); " +
+        "Sozialversicherungs-Rechengrößenverordnung 2026 (BGBl 2025 Nr. 278); " +
+        "EStG §32a (Tarif 2026); SolZG §§3–4; SGB V §§6/223/241/249; " +
+        "SGB VI §168; SGB III §§341/346; SGB XI §§55/58",
       status: "published",
     },
   ],
@@ -240,10 +240,11 @@ const DE_KVZ_SLOT = {
       min: "0",
       max: "10",
       required: true,
-      help: "The Krankenkasse's own Zusatzbeitragssatz as a percent number "
-        + "(2,90 for 2,90%), from the fund's own notice — never the "
-        + "BMG-announced national average. Applies to every employee in this "
-        + "configuration; a workforce spanning several funds is not modelled.",
+      help:
+        "The Krankenkasse's own Zusatzbeitragssatz as a percent number " +
+        "(2,90 for 2,90%), from the fund's own notice — never the " +
+        "BMG-announced national average. Applies to every employee in this " +
+        "configuration; a workforce spanning several funds is not modelled.",
     },
   ],
   citation: "§§241–242 SGB V (allgemeiner Satz 14,6 Prozent; kassenindividueller Zusatzbeitrag)",

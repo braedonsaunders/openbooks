@@ -76,7 +76,8 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmExitItemRouteNextResponse = NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmExitItemRouteNextResponse =
+  NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -87,22 +88,23 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-exit-item";
-  const itemRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-exit-item";
+const itemRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const EXIT_ID = "00000000-0000-4000-8000-000000000091";
 const params = { params: Promise.resolve({ id: EXIT_ID }) };
@@ -127,7 +129,10 @@ test("a missing feature flag 404s before the service runs", async () => {
   reset();
   routeState.featureOn = false;
   assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), params)).status, 404);
-  assert.equal((await itemRoute!.PATCH(patchRequest({ reasonKind: "resignation" }), params)).status, 404);
+  assert.equal(
+    (await itemRoute!.PATCH(patchRequest({ reasonKind: "resignation" }), params)).status,
+    404,
+  );
   assert.deepEqual(routeState.calls, []);
 });
 
@@ -143,7 +148,10 @@ test("an unknown id never reaches the service", async () => {
   reset();
   const bad = { params: Promise.resolve({ id: "nope" }) };
   assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), bad)).status, 400);
-  assert.equal((await itemRoute!.PATCH(patchRequest({ reasonKind: "resignation" }), bad)).status, 400);
+  assert.equal(
+    (await itemRoute!.PATCH(patchRequest({ reasonKind: "resignation" }), bad)).status,
+    400,
+  );
   assert.deepEqual(routeState.calls, []);
 });
 

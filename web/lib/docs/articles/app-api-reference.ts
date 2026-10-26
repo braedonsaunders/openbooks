@@ -1,26 +1,26 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const appApiReference: DocArticle = {
-  slug: 'app-api-reference',
-  title: 'App API Reference',
-  category: 'apps',
+  slug: "app-api-reference",
+  title: "App API Reference",
+  category: "apps",
   order: 3,
   summary:
-    'Function-by-function reference for the app frontend bridge, backend host API, endpoint contract, permissions, limits, and governance.',
-  updated: '2026-10-26',
+    "Function-by-function reference for the app frontend bridge, backend host API, endpoint contract, permissions, limits, and governance.",
+  updated: "2026-10-26",
   keywords: [
-    'app API',
-    'frontend SDK',
-    'backend API',
-    'openbooks',
-    'ob',
-    'storage',
-    'records',
-    'journal',
-    'governance',
-    'record API',
+    "app API",
+    "frontend SDK",
+    "backend API",
+    "openbooks",
+    "ob",
+    "storage",
+    "records",
+    "journal",
+    "governance",
+    "record API",
   ],
-  related: ['app-builder', 'apps', 'scripting-api-reference', 'rest-api'],
+  related: ["app-builder", "apps", "scripting-api-reference", "rest-api"],
   body: `# App API Reference
 
 This article defines the complete public programming contract for installed
@@ -985,4 +985,4 @@ extend the governed host surface with
 explicit record types, operations, permissions, schemas, audit behavior, and
 unit costs rather than granting sandbox code ambient access.
 `,
-}
+};

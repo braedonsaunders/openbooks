@@ -1,24 +1,41 @@
-import { z } from 'zod';
-import { uuidString } from '@openbooks/engine/platform/identifiers';
-import { defineRoute } from '@/lib/api/route';
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
-import { isUuid } from '../../../../lib/list-params'
-import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
-import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../../../../lib/budget-scope'
-import { BudgetMutationError } from '../../../../lib/budget-mutations'
-import { BUDGET_KINDS } from '../../../../lib/budgets'
-const POSTBodySchema1 = z.object({
-  bookId: uuidString({ error: 'invalid_book_id' }).optional(), description: z.string({ error: 'invalid_description' }).max(2000, { error: 'invalid_description' }).optional(),
-  fiscalYear: z.number({ error: 'invalid_fiscal_year' }).int({ error: 'invalid_fiscal_year' }).min(1900, { error: 'invalid_fiscal_year' }).max(9999, { error: 'invalid_fiscal_year' }).optional(), kind: z.enum(['forecast', 'budget'], { error: 'invalid_kind' }).optional(),
-  name: z.string().max(200).optional(), sourceScenarioId: uuidString({ error: 'invalid_source_scenario_id' }).optional(),
-}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
+import { isUuid } from "../../../../lib/list-params";
+import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
+import {
+  outOfScopeScenarioError,
+  scenarioOutOfScopeSubsidiaryNames,
+} from "../../../../lib/budget-scope";
+import { BudgetMutationError } from "../../../../lib/budget-mutations";
+import { BUDGET_KINDS } from "../../../../lib/budgets";
+const POSTBodySchema1 = z
+  .object({
+    bookId: uuidString({ error: "invalid_book_id" }).optional(),
+    description: z
+      .string({ error: "invalid_description" })
+      .max(2000, { error: "invalid_description" })
+      .optional(),
+    fiscalYear: z
+      .number({ error: "invalid_fiscal_year" })
+      .int({ error: "invalid_fiscal_year" })
+      .min(1900, { error: "invalid_fiscal_year" })
+      .max(9999, { error: "invalid_fiscal_year" })
+      .optional(),
+    kind: z.enum(["forecast", "budget"], { error: "invalid_kind" }).optional(),
+    name: z.string().max(200).optional(),
+    sourceScenarioId: uuidString({ error: "invalid_source_scenario_id" }).optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "At least one field must be provided.",
+  });
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * A missing copy-source scenario is a 404 by sentinel message. A plain
@@ -27,52 +44,68 @@ export const runtime = 'nodejs'
  * exact wire shape and status.
  */
 class SourceNotFoundRefusal extends Error {
-  readonly status = 404
+  readonly status = 404;
   constructor() {
-    super('source_not_found')
-    this.name = 'SourceNotFoundRefusal'
+    super("source_not_found");
+    this.name = "SourceNotFoundRefusal";
   }
 }
 
 export const POST = defineRoute({
-  permission: 'budgets.manage',
-  feature: 'budgets',
+  permission: "budgets.manage",
+  feature: "budgets",
   body: POSTBodySchema1,
   invalidBodyStatus: 422,
   handler: async ({ authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
-    const user = gate.user
+    const user = gate.user;
 
-    const body = (routeBody) as Record<string, unknown>
-    if (body.bookId !== undefined && (typeof body.bookId !== 'string' || !isUuid(body.bookId))) {
-        return NextResponse.json({ error: 'invalid_book_id' }, { status: 422 })
-      }
-    const requestedBook = typeof body.bookId === 'string' ? body.bookId : null
-    if (
-        body.fiscalYear !== undefined
-        && (typeof body.fiscalYear !== 'number' || !Number.isInteger(body.fiscalYear) || body.fiscalYear < 1900 || body.fiscalYear > 9999)
-      ) {
-        return NextResponse.json({ error: 'invalid_fiscal_year' }, { status: 422 })
-      }
-    const requestedYear = body.fiscalYear === undefined ? null : body.fiscalYear
-    if (body.kind !== undefined && (typeof body.kind !== 'string' || !BUDGET_KINDS.includes(body.kind as "forecast" | "budget"))) {
-        return NextResponse.json({ error: 'invalid_kind' }, { status: 422 })
-      }
-    const kind = body.kind === undefined ? 'budget' : body.kind
-    if (body.sourceScenarioId !== undefined && (typeof body.sourceScenarioId !== 'string' || !isUuid(body.sourceScenarioId))) {
-        return NextResponse.json({ error: 'invalid_source_scenario_id' }, { status: 422 })
-      }
-    const sourceScenarioId = typeof body.sourceScenarioId === 'string' ? body.sourceScenarioId : null
-    if (sourceScenarioId) {
-      const outOfScope = await scenarioOutOfScopeSubsidiaryNames(sourceScenarioId, user.orgId, gate.allowedSubsidiaryIds)
-      if (outOfScope.length > 0) return apiErrorResponse(outOfScopeScenarioError(outOfScope))
+    const body = routeBody as Record<string, unknown>;
+    if (body.bookId !== undefined && (typeof body.bookId !== "string" || !isUuid(body.bookId))) {
+      return NextResponse.json({ error: "invalid_book_id" }, { status: 422 });
     }
-    if (body.description !== undefined && typeof body.description !== 'string') {
-        return NextResponse.json({ error: 'invalid_description' }, { status: 422 })
-      }
-    const description = typeof body.description === 'string' ? body.description.trim().slice(0, 2000) : null
-    const today = await businessToday(user.orgId)
-    const defaults = (await db.execute<{ book_id: string | null; fiscal_year: number | null }>(sql`
+    const requestedBook = typeof body.bookId === "string" ? body.bookId : null;
+    if (
+      body.fiscalYear !== undefined &&
+      (typeof body.fiscalYear !== "number" ||
+        !Number.isInteger(body.fiscalYear) ||
+        body.fiscalYear < 1900 ||
+        body.fiscalYear > 9999)
+    ) {
+      return NextResponse.json({ error: "invalid_fiscal_year" }, { status: 422 });
+    }
+    const requestedYear = body.fiscalYear === undefined ? null : body.fiscalYear;
+    if (
+      body.kind !== undefined &&
+      (typeof body.kind !== "string" || !BUDGET_KINDS.includes(body.kind as "forecast" | "budget"))
+    ) {
+      return NextResponse.json({ error: "invalid_kind" }, { status: 422 });
+    }
+    const kind = body.kind === undefined ? "budget" : body.kind;
+    if (
+      body.sourceScenarioId !== undefined &&
+      (typeof body.sourceScenarioId !== "string" || !isUuid(body.sourceScenarioId))
+    ) {
+      return NextResponse.json({ error: "invalid_source_scenario_id" }, { status: 422 });
+    }
+    const sourceScenarioId =
+      typeof body.sourceScenarioId === "string" ? body.sourceScenarioId : null;
+    if (sourceScenarioId) {
+      const outOfScope = await scenarioOutOfScopeSubsidiaryNames(
+        sourceScenarioId,
+        user.orgId,
+        gate.allowedSubsidiaryIds,
+      );
+      if (outOfScope.length > 0) return apiErrorResponse(outOfScopeScenarioError(outOfScope));
+    }
+    if (body.description !== undefined && typeof body.description !== "string") {
+      return NextResponse.json({ error: "invalid_description" }, { status: 422 });
+    }
+    const description =
+      typeof body.description === "string" ? body.description.trim().slice(0, 2000) : null;
+    const today = await businessToday(user.orgId);
+    const defaults = await db.execute<{ book_id: string | null; fiscal_year: number | null }>(
+      sql`
         select
           (select id from accounting_books
             where org_id = ${user.orgId} and is_active
@@ -83,52 +116,74 @@ export const POST = defineRoute({
               order by starts_on desc limit 1),
             (select max(fiscal_year) from accounting_periods where org_id = ${user.orgId})
           ) as fiscal_year
-      `, 'objects'))
-    const bookId = requestedBook ?? defaults[0]?.book_id
-    const fiscalYear = requestedYear !== null
-        ? requestedYear
-        : Number(defaults[0]?.fiscal_year)
+      `,
+      "objects",
+    );
+    const bookId = requestedBook ?? defaults[0]?.book_id;
+    const fiscalYear = requestedYear !== null ? requestedYear : Number(defaults[0]?.fiscal_year);
     if (!bookId || !Number.isInteger(fiscalYear)) {
-        return NextResponse.json({ error: 'configure_an_accounting_book_and_periods_first' }, { status: 409 })
-      }
-    const valid = (await db.execute(sql`
+      return NextResponse.json(
+        { error: "configure_an_accounting_book_and_periods_first" },
+        { status: 409 },
+      );
+    }
+    const valid = await db.execute(
+      sql`
         select 1 from accounting_books where id = ${bookId} and org_id = ${user.orgId} and is_active
-      `, 'objects'))
-    const havePeriods = (await db.execute(sql`
+      `,
+      "objects",
+    );
+    const havePeriods = await db.execute(
+      sql`
         select 1 from accounting_periods
          where org_id = ${user.orgId} and fiscal_year = ${fiscalYear} and not is_adjustment limit 1
-      `, 'objects'))
+      `,
+      "objects",
+    );
     if (!valid[0] || !havePeriods[0]) {
-        return NextResponse.json({ error: 'invalid_book_or_fiscal_year' }, { status: 422 })
-      }
-    const requestedName = typeof body.name === 'string' ? body.name.trim().slice(0, 200) : ''
-    const baseName = requestedName || `FY${fiscalYear} ${kind === 'forecast' ? 'Forecast' : 'Budget'}`
+      return NextResponse.json({ error: "invalid_book_or_fiscal_year" }, { status: 422 });
+    }
+    const requestedName = typeof body.name === "string" ? body.name.trim().slice(0, 200) : "";
+    const baseName =
+      requestedName || `FY${fiscalYear} ${kind === "forecast" ? "Forecast" : "Budget"}`;
     try {
-        const result = await db.transaction(async (tx) => {
-          await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${user.orgId}:${bookId}:${fiscalYear}:${kind}`}, 0))`)
-          const names = (await tx.execute<{ name: string }>(sql`
+      const result = await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`${user.orgId}:${bookId}:${fiscalYear}:${kind}`}, 0))`,
+        );
+        const names = await tx.execute<{ name: string }>(
+          sql`
             select name from budget_scenarios
              where org_id = ${user.orgId} and book_id = ${bookId} and fiscal_year = ${fiscalYear} and kind = ${kind}
                and (name = ${baseName} or name like ${`${baseName} (%`})
-          `, 'objects'))
-          const used = new Set(names.map((row) => row.name))
-          let name = baseName
-          for (let i = 2; used.has(name); i++) name = `${baseName} (${i})`
+          `,
+          "objects",
+        );
+        const used = new Set(names.map((row) => row.name));
+        let name = baseName;
+        for (let i = 2; used.has(name); i++) name = `${baseName} (${i})`;
 
-          const inserted = (await tx.execute<{ id: string; revision: number }>(sql`
+        const inserted = await tx.execute<{ id: string; revision: number }>(
+          sql`
             insert into budget_scenarios
               (org_id, book_id, fiscal_year, name, description, kind, status, created_by, updated_by)
             values (${user.orgId}, ${bookId}, ${fiscalYear}, ${name}, ${description}, ${kind}, 'draft', ${user.id}, ${user.id})
             returning id, revision
-          `, 'objects'))
-          const scenario = inserted[0]!
+          `,
+          "objects",
+        );
+        const scenario = inserted[0]!;
 
-          if (sourceScenarioId) {
-            const source = (await tx.execute<{ id: string }>(sql`
+        if (sourceScenarioId) {
+          const source = await tx.execute<{ id: string }>(
+            sql`
               select id from budget_scenarios where id = ${sourceScenarioId} and org_id = ${user.orgId}
-            `, 'objects'))
-            if (!source[0]) throw new Error('source_not_found')
-            const unmapped = (await tx.execute<{ period_name: string }>(sql`
+            `,
+            "objects",
+          );
+          if (!source[0]) throw new Error("source_not_found");
+          const unmapped = await tx.execute<{ period_name: string }>(
+            sql`
               select distinct source_period.name as period_name
                 from budget_lines bl
                 join accounting_periods source_period
@@ -142,12 +197,16 @@ export const POST = defineRoute({
                where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
                  and destination.id is null
                order by 1
-            `, 'objects'))
-            if (unmapped.length > 0) {
-              const names = unmapped.map((row) => row.period_name).join(', ')
-              throw new BudgetMutationError(`unmapped_periods: no ${fiscalYear} period matches source period(s) ${names}`)
-            }
-            await tx.execute(sql`
+            `,
+            "objects",
+          );
+          if (unmapped.length > 0) {
+            const names = unmapped.map((row) => row.period_name).join(", ");
+            throw new BudgetMutationError(
+              `unmapped_periods: no ${fiscalYear} period matches source period(s) ${names}`,
+            );
+          }
+          await tx.execute(sql`
               insert into budget_lines
                 (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
                  extra_dims, amount, note, created_by, updated_by)
@@ -164,23 +223,23 @@ export const POST = defineRoute({
                  and destination.period_number = source_period.period_number
                where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
                  ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-            `)
-          }
+            `);
+        }
 
-          await tx.execute(sql`
+        await tx.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${user.orgId}, 'budget_scenarios', ${scenario.id}, 'insert',
               ${JSON.stringify({ name, description, fiscalYear, bookId, kind, sourceScenarioId })}::jsonb, ${user.id})
-          `)
-          return scenario
-        })
-        return NextResponse.json(result)
-      } catch (error) {
-        if (error instanceof Error && error.message === 'source_not_found') {
-          return apiErrorResponse(new SourceNotFoundRefusal())
-        }
-        if (error instanceof BudgetMutationError) return apiErrorResponse(error)
-        throw error
+          `);
+        return scenario;
+      });
+      return NextResponse.json(result);
+    } catch (error) {
+      if (error instanceof Error && error.message === "source_not_found") {
+        return apiErrorResponse(new SourceNotFoundRefusal());
       }
+      if (error instanceof BudgetMutationError) return apiErrorResponse(error);
+      throw error;
+    }
   },
 });

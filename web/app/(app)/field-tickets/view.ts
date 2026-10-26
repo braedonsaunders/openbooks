@@ -1,14 +1,24 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { pickString } from '../../../lib/list-params'
-import { can, requirePermission } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { loadFieldTicketCreateData, loadFieldTicketDrawerData } from '../../../lib/field-ticket-drawer-data'
-import type { FieldTicketDrawer } from './FieldTicketDrawer'
-import type { FieldTicketCreateDrawerProps } from './FieldTicketCreateDrawer'
-import type { DrawerMode } from '../../../lib/drawer-mode'
+import { getTranslations } from "next-intl/server";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { pickString } from "../../../lib/list-params";
+import { can, requirePermission } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
+import {
+  loadFieldTicketCreateData,
+  loadFieldTicketDrawerData,
+} from "../../../lib/field-ticket-drawer-data";
+import type { FieldTicketDrawer } from "./FieldTicketDrawer";
+import type { FieldTicketCreateDrawerProps } from "./FieldTicketCreateDrawer";
+import type { DrawerMode } from "../../../lib/drawer-mode";
 
 /**
  * Field tickets, split into a loader and a spec.
@@ -33,81 +43,87 @@ import type { DrawerMode } from '../../../lib/drawer-mode'
  * `journal-drawer`).
  */
 
-const BASE = '/field-tickets'
-const PARAM = 'ticket'
-const CREATE_PARAM = 'ticketNew'
+const BASE = "/field-tickets";
+const PARAM = "ticket";
+const CREATE_PARAM = "ticketNew";
 
-type FieldTicketDrawerProps = Parameters<typeof FieldTicketDrawer>[0]
+type FieldTicketDrawerProps = Parameters<typeof FieldTicketDrawer>[0];
 
 export interface FieldTicketsData {
-  title: string
-  description: string
-  currentParams: Record<string, string | string[] | undefined>
-  canManage: boolean
+  title: string;
+  description: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  canManage: boolean;
   newButton: {
-    base: string
-    param: string
-    createParam: string
-    label: string
-  }
-  drawer: (FieldTicketDrawerProps & { initialMode: DrawerMode }) | FieldTicketCreateDrawerProps | null
+    base: string;
+    param: string;
+    createParam: string;
+    label: string;
+  };
+  drawer:
+    (FieldTicketDrawerProps & { initialMode: DrawerMode }) | FieldTicketCreateDrawerProps | null;
 }
 
 export async function loadFieldTickets(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<FieldTicketsData> {
-  const authz = await requirePermission('time.read')
-  const orgId = authz.user.orgId
-  await requireFeatureEnabled(orgId, 'fieldTickets')
-  const canManage = can(authz, 'time.manage')
-  const t = await getTranslations('fieldTickets')
-  const openId = pickString(sp[PARAM])
+  const authz = await requirePermission("time.read");
+  const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "fieldTickets");
+  const canManage = can(authz, "time.manage");
+  const t = await getTranslations("fieldTickets");
+  const openId = pickString(sp[PARAM]);
   const drawerData = openId
-    ? await loadFieldTicketDrawerData({ authz, ticketId: openId, formLayoutId: pickString(sp.form) })
-    : null
+    ? await loadFieldTicketDrawerData({
+        authz,
+        ticketId: openId,
+        formLayoutId: pickString(sp.form),
+      })
+    : null;
   // Unsaved create: only for callers who may create, and never over an
   // open ticket. Loading it reads pickers and allocates nothing.
-  const createData = !openId && pickString(sp[CREATE_PARAM]) === '1' && canManage
-    ? await loadFieldTicketCreateData({ authz })
-    : null
+  const createData =
+    !openId && pickString(sp[CREATE_PARAM]) === "1" && canManage
+      ? await loadFieldTicketCreateData({ authz })
+      : null;
 
   return {
-    title: t('title'),
-    description: t('description'),
+    title: t("title"),
+    description: t("description"),
     currentParams: sp,
     canManage,
     newButton: {
       base: BASE,
       param: PARAM,
       createParam: CREATE_PARAM,
-      label: t('list.new'),
+      label: t("list.new"),
     },
     drawer: drawerData
-      ? { ...drawerData, initialMode: pickString(sp.mode) === 'edit' ? 'edit' : 'view' }
+      ? { ...drawerData, initialMode: pickString(sp.mode) === "edit" ? "edit" : "view" }
       : createData,
-  }
+  };
 }
 
-const f = ref<FieldTicketsData>()
+const f = ref<FieldTicketsData>();
 
 export function fieldTicketsSpec(data: FieldTicketsData): PageSpec {
   const newOrder = {
-    widget: 'new-order',
+    widget: "new-order",
     props: {
       base: data.newButton.base,
       param: data.newButton.param,
       createParam: data.newButton.createParam,
       label: data.newButton.label,
     },
-  }
+  };
   return page({
-    route: '/field-tickets',
-    layout: 'list',
+    route: "/field-tickets",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget(newOrder.widget, newOrder.props, f('canManage'))],
+        title: f("title"),
+        description: f("description"),
+        actions: [widget(newOrder.widget, newOrder.props, f("canManage"))],
       }),
     ],
     body: [
@@ -115,13 +131,15 @@ export function fieldTicketsSpec(data: FieldTicketsData): PageSpec {
       // a user id and a permission decision, none of which may travel through
       // a spec. The document reference opens the drawer; the slot's
       // built-in eye-link fallback is the byte-identical render.
-      widgetBlock('record-list-view', {
-        recordType: 'field_ticket',
-        basePath: '/field-tickets',
+      widgetBlock("record-list-view", {
+        recordType: "field_ticket",
+        basePath: "/field-tickets",
         sp: data.currentParams,
-        drawer: data.drawer ? { widget: 'field-ticket-drawer', props: { drawer: data.drawer } } : null,
+        drawer: data.drawer
+          ? { widget: "field-ticket-drawer", props: { drawer: data.drawer } }
+          : null,
         emptyAction: data.canManage ? newOrder : null,
       }),
     ],
-  })
+  });
 }

@@ -1,7 +1,10 @@
-'use client'
+"use client";
 
-import { useRouter } from 'next/navigation'
-import { ChangeRequestDetailDrawer, type ChangeRequestDetailSubject } from './ChangeRequestDetailDrawer'
+import { useRouter } from "next/navigation";
+import {
+  ChangeRequestDetailDrawer,
+  type ChangeRequestDetailSubject,
+} from "./ChangeRequestDetailDrawer";
 
 /**
  * Request-detail entry point for the change-request queue, opened from a
@@ -21,18 +24,18 @@ export function ChangeRequestDetailDialog({
   canManage,
   canVerb = false,
 }: {
-  requestId: string | null
-  closeHref: string
-  subject: ChangeRequestDetailSubject | null
-  departmentOptions: { value: string; label: string }[]
+  requestId: string | null;
+  closeHref: string;
+  subject: ChangeRequestDetailSubject | null;
+  departmentOptions: { value: string; label: string }[];
   /** Loader-resolved manage grant: the drawer's lifecycle actions
    * render only with it. */
-  canManage: boolean
+  canManage: boolean;
   /** Verb actions (Rescind/Correct) display gate: the approve grant. */
-  canVerb?: boolean
+  canVerb?: boolean;
 }) {
-  const router = useRouter()
-  if (!requestId) return null
+  const router = useRouter();
+  if (!requestId) return null;
   return (
     <ChangeRequestDetailDrawer
       key={requestId}
@@ -42,9 +45,9 @@ export function ChangeRequestDetailDialog({
       canManage={canManage}
       canVerb={canVerb}
       onClose={() => {
-        router.push(closeHref as never)
-        router.refresh()
+        router.push(closeHref as never);
+        router.refresh();
       }}
     />
-  )
+  );
 }

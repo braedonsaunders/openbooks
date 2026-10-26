@@ -56,7 +56,10 @@ export const savedViews = pgTable(
     ...auditColumns,
   },
   (t) => [
-    check("saved_views_canonical_sort_model", sql`jsonb_typeof(${t.query}) = 'object' and not (${t.query} ? 'sort') and (not (${t.query} ? 'sorts') or jsonb_typeof(${t.query}->'sorts') = 'array')`),
+    check(
+      "saved_views_canonical_sort_model",
+      sql`jsonb_typeof(${t.query}) = 'object' and not (${t.query} ? 'sort') and (not (${t.query} ? 'sorts') or jsonb_typeof(${t.query}->'sorts') = 'array')`,
+    ),
     uniqueIndex("saved_views_org_slug").on(t.orgId, t.slug),
     index("saved_views_org_scope").on(t.orgId, t.scope),
     index("saved_views_org_owner").on(t.orgId, t.ownerId),

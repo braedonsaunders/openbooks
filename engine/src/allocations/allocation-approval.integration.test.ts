@@ -61,7 +61,10 @@ async function seedPeriodRule(opts: {
   const deptA = await seedDepartment(opts.org.orgId, `A-${ruleId.slice(0, 4)}`);
   const deptB = await seedDepartment(opts.org.orgId, `B-${ruleId.slice(0, 4)}`);
   let sequence = 1;
-  for (const [dept, percent] of [[deptA, "60.0000"], [deptB, "40.0000"]] as const) {
+  for (const [dept, percent] of [
+    [deptA, "60.0000"],
+    [deptB, "40.0000"],
+  ] as const) {
     await db.execute(sql`
       insert into allocation_rule_targets
         (id, org_id, version_id, sequence, target_account_id, department_id,
@@ -93,7 +96,10 @@ async function seedSourceEntry(org: ScratchOrg, actorId: string, amount: string)
     currency: "CAD",
     lines: [
       { accountId: org.accounts.adjustment, amount, departmentId: null },
-      { accountId: org.accounts.bank, amount: amount.startsWith("-") ? amount.slice(1) : `-${amount}` },
+      {
+        accountId: org.accounts.bank,
+        amount: amount.startsWith("-") ? amount.slice(1) : `-${amount}`,
+      },
     ],
   });
   assert.ok(entryId);
@@ -112,9 +118,12 @@ async function runRow(runId: string): Promise<{
     flow_run_id: string | null;
     error: string | null;
     requested_by: string | null;
-  }>(sql`
+  }>(
+    sql`
     select status, journal_entry_id, flow_run_id::text, error, requested_by::text as requested_by
-      from allocation_runs where id = ${runId}`, "objects");
+      from allocation_runs where id = ${runId}`,
+    "objects",
+  );
   const row = rows[0];
   assert.ok(row);
   return {
@@ -127,247 +136,296 @@ async function runRow(runId: string): Promise<{
 }
 
 async function lineageCount(orgId: string, runId: string): Promise<number> {
-  const rows = await db.execute<{ count: string }>(sql`
+  const rows = await db.execute<{ count: string }>(
+    sql`
     select count(*)::text as count from allocation_lineage
-     where org_id = ${orgId} and run_id = ${runId}`, "objects");
+     where org_id = ${orgId} and run_id = ${runId}`,
+    "objects",
+  );
   return Number(rows[0]?.count ?? 0);
 }
 
-async function pendingGateForRun(runId: string): Promise<{ id: string; assigneeUserId: string } | null> {
-  const rows = await db.execute<{ id: string; assigneeUserId: string }>(sql`
+async function pendingGateForRun(
+  runId: string,
+): Promise<{ id: string; assigneeUserId: string } | null> {
+  const rows = await db.execute<{ id: string; assigneeUserId: string }>(
+    sql`
     select id, assignee_user_id as "assigneeUserId" from flow_gates
-     where subject_kind = 'allocation_run' and subject_id = ${runId} and status = 'pending'`, "objects");
+     where subject_kind = 'allocation_run' and subject_id = ${runId} and status = 'pending'`,
+    "objects",
+  );
   return rows[0] ?? null;
 }
 
 async function journalCreator(entryId: string): Promise<string | null> {
-  const rows = await db.execute<{ created_by: string | null }>(sql`
-    select created_by::text from journal_entries where id = ${entryId}`, "objects");
+  const rows = await db.execute<{ created_by: string | null }>(
+    sql`
+    select created_by::text from journal_entries where id = ${entryId}`,
+    "objects",
+  );
   return rows[0]?.created_by ?? null;
 }
 
-test("allocation_run is a registered flow subject with no writable fields", { skip: !DB }, async () => {
-  const adapter = getFlowAdapter("allocation_run");
-  assert.ok(adapter);
-  assert.equal(adapter.subjectKind, "allocation_run");
-  assert.equal(adapter.writableFields.size, 0);
-});
+test(
+  "allocation_run is a registered flow subject with no writable fields",
+  { skip: !DB },
+  async () => {
+    const adapter = getFlowAdapter("allocation_run");
+    assert.ok(adapter);
+    assert.equal(adapter.subjectKind, "allocation_run");
+    assert.equal(adapter.writableFields.size, 0);
+  },
+);
 
-test("post with an approval flow opens the flow and waits — no journal", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  await enableAllocations(org.orgId);
-  const actors = await seedFlowActors(org.orgId);
-  try {
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: "allocation_run",
-      assignees: [{ type: "user", userId: actors.approver1Id }],
-      mode: "any",
-    });
-    await seedSourceEntry(org, actors.adminId, "1000.0000");
-    const { ruleId } = await seedPeriodRule({
-      org,
-      publisherId: actors.adminId,
-      poolAccountId: org.accounts.adjustment,
-    });
-    const linesBefore = await journalLineCount(org.orgId);
-    const preview = await previewAllocationRun({
-      orgId: org.orgId,
-      ruleId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      actorId: actors.submitterId,
-      trigger: "manual",
-    });
-    const opened = await postAllocationRun(preview.id, actors.submitterId, "Please approve the sweep");
-    assert.equal(opened.status, "pending_approval");
-    assert.ok(opened.flowRunId);
-    const row = await runRow(preview.id);
-    assert.equal(row.status, "pending_approval");
-    assert.equal(row.flowRunId, opened.flowRunId);
-    assert.equal(row.journalEntryId, null);
-    assert.equal(row.requestedBy, actors.submitterId);
-    assert.equal(await journalLineCount(org.orgId), linesBefore);
-    assert.equal(await lineageCount(org.orgId, preview.id), 0);
-    const gate = await pendingGateForRun(preview.id);
-    assert.ok(gate);
-    assert.equal(gate.assigneeUserId, actors.approver1Id);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("flow approval posts the run with journal + lineage as the approver", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  await enableAllocations(org.orgId);
-  const actors = await seedFlowActors(org.orgId);
-  try {
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: "allocation_run",
-      assignees: [{ type: "user", userId: actors.approver1Id }],
-      mode: "any",
-    });
-    await seedSourceEntry(org, actors.adminId, "1000.0000");
-    const { ruleId } = await seedPeriodRule({
-      org,
-      publisherId: actors.adminId,
-      poolAccountId: org.accounts.adjustment,
-    });
-    const preview = await previewAllocationRun({
-      orgId: org.orgId,
-      ruleId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      actorId: actors.submitterId,
-      trigger: "manual",
-    });
-    await postAllocationRun(preview.id, actors.submitterId, "Please approve the sweep");
-    const gate = await pendingGateForRun(preview.id);
-    assert.ok(gate);
-    await decideGate({ gateId: gate.id, decision: "approved", userId: actors.approver1Id });
-    const row = await runRow(preview.id);
-    assert.equal(row.status, "posted");
-    assert.ok(row.journalEntryId);
-    assert.equal(await journalCreator(row.journalEntryId!), actors.approver1Id);
-    assert.ok((await lineageCount(org.orgId, preview.id)) > 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("flow rejection records failure with no journal and untouched lineage", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  await enableAllocations(org.orgId);
-  const actors = await seedFlowActors(org.orgId);
-  try {
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: "allocation_run",
-      assignees: [{ type: "user", userId: actors.approver1Id }],
-      mode: "any",
-    });
-    await seedSourceEntry(org, actors.adminId, "1000.0000");
-    const { ruleId } = await seedPeriodRule({
-      org,
-      publisherId: actors.adminId,
-      poolAccountId: org.accounts.adjustment,
-    });
-    const linesBefore = await journalLineCount(org.orgId);
-    const preview = await previewAllocationRun({
-      orgId: org.orgId,
-      ruleId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      actorId: actors.submitterId,
-      trigger: "manual",
-    });
-    await postAllocationRun(preview.id, actors.submitterId, "Please approve the sweep");
-    const gate = await pendingGateForRun(preview.id);
-    assert.ok(gate);
-    await decideGate({
-      gateId: gate.id,
-      decision: "rejected",
-      userId: actors.approver1Id,
-      comment: "Wrong period",
-    });
-    const row = await runRow(preview.id);
-    assert.equal(row.status, "failed");
-    assert.ok(row.error?.startsWith("rejected:"));
-    assert.equal(row.journalEntryId, null);
-    assert.equal(await journalLineCount(org.orgId), linesBefore);
-    assert.equal(await lineageCount(org.orgId, preview.id), 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("post refuses when the configured flow gates but another allocation flow fails", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  await enableAllocations(org.orgId);
-  const actors = await seedFlowActors(org.orgId);
-  try {
-    const good = await seedApprovalFlow(org.orgId, {
-      subjectKind: "allocation_run",
-      assignees: [{ type: "user", userId: actors.approver1Id }],
-      mode: "any",
-    });
-    const bad = await seedApprovalFlow(org.orgId, {
-      subjectKind: "allocation_run",
-      assignees: [{ type: "role", role: "nonexistent_role" }],
-      mode: "any",
-    });
-    // Distinct names so the refusal can tell the two flows apart.
-    await db.execute(sql`update flows set name = 'Working allocation flow' where id = ${good.flowId}`);
-    await db.execute(sql`update flows set name = 'Broken allocation flow' where id = ${bad.flowId}`);
-    await seedSourceEntry(org, actors.adminId, "1000.0000");
-    const { ruleId } = await seedPeriodRule({
-      org,
-      publisherId: actors.adminId,
-      poolAccountId: org.accounts.adjustment,
-    });
-    const preview = await previewAllocationRun({
-      orgId: org.orgId,
-      ruleId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      actorId: actors.submitterId,
-      trigger: "manual",
-    });
-    const linesBefore = await journalLineCount(org.orgId);
-    let message = "";
+test(
+  "post with an approval flow opens the flow and waits — no journal",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
+    const actors = await seedFlowActors(org.orgId);
     try {
-      await postAllocationRun(preview.id, actors.submitterId, "Please approve the sweep");
-    } catch (e) {
-      message = e instanceof Error ? e.message : String(e);
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "allocation_run",
+        assignees: [{ type: "user", userId: actors.approver1Id }],
+        mode: "any",
+      });
+      await seedSourceEntry(org, actors.adminId, "1000.0000");
+      const { ruleId } = await seedPeriodRule({
+        org,
+        publisherId: actors.adminId,
+        poolAccountId: org.accounts.adjustment,
+      });
+      const linesBefore = await journalLineCount(org.orgId);
+      const preview = await previewAllocationRun({
+        orgId: org.orgId,
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actors.submitterId,
+        trigger: "manual",
+      });
+      const opened = await postAllocationRun(
+        preview.id,
+        actors.submitterId,
+        "Please approve the sweep",
+      );
+      assert.equal(opened.status, "pending_approval");
+      assert.ok(opened.flowRunId);
+      const row = await runRow(preview.id);
+      assert.equal(row.status, "pending_approval");
+      assert.equal(row.flowRunId, opened.flowRunId);
+      assert.equal(row.journalEntryId, null);
+      assert.equal(row.requestedBy, actors.submitterId);
+      assert.equal(await journalLineCount(org.orgId), linesBefore);
+      assert.equal(await lineageCount(org.orgId, preview.id), 0);
+      const gate = await pendingGateForRun(preview.id);
+      assert.ok(gate);
+      assert.equal(gate.assigneeUserId, actors.approver1Id);
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-    assert.match(message, /Broken allocation flow/, "the refusal names the failed flow");
-    assert.match(message, /zero assignees/, "the refusal names the cause");
-    // The refusal rolls the post back: still previewed, no journal, no gate.
-    const row = await runRow(preview.id);
-    assert.equal(row.status, "previewed");
-    assert.equal(row.flowRunId, null);
-    assert.equal(row.journalEntryId, null);
-    assert.equal(await journalLineCount(org.orgId), linesBefore);
-    assert.equal(await pendingGateForRun(preview.id), null);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
-test("scheduler auto_post with a flow waits in pending_approval, never posts", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  await enableAllocations(org.orgId);
-  const actors = await seedFlowActors(org.orgId);
-  try {
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: "allocation_run",
-      assignees: [{ type: "user", userId: actors.approver1Id }],
-      mode: "any",
-    });
-    await seedSourceEntry(org, actors.adminId, "500.0000");
-    const { ruleId, versionId } = await seedPeriodRule({
-      org,
-      publisherId: actors.adminId,
-      poolAccountId: org.accounts.adjustment,
-      runPolicy: "auto_post",
-    });
-    const outcome = await processAllocationRunOutboxRow({
-      id: randomUUID(),
-      org_id: org.orgId,
-      payload: { ruleId, versionId, periodId: org.periodId, bookId: org.bookId },
-    });
-    assert.equal(outcome.outcome, "ran");
-    const posted = await db.execute<{ count: string }>(sql`
+test(
+  "flow approval posts the run with journal + lineage as the approver",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
+    const actors = await seedFlowActors(org.orgId);
+    try {
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "allocation_run",
+        assignees: [{ type: "user", userId: actors.approver1Id }],
+        mode: "any",
+      });
+      await seedSourceEntry(org, actors.adminId, "1000.0000");
+      const { ruleId } = await seedPeriodRule({
+        org,
+        publisherId: actors.adminId,
+        poolAccountId: org.accounts.adjustment,
+      });
+      const preview = await previewAllocationRun({
+        orgId: org.orgId,
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actors.submitterId,
+        trigger: "manual",
+      });
+      await postAllocationRun(preview.id, actors.submitterId, "Please approve the sweep");
+      const gate = await pendingGateForRun(preview.id);
+      assert.ok(gate);
+      await decideGate({ gateId: gate.id, decision: "approved", userId: actors.approver1Id });
+      const row = await runRow(preview.id);
+      assert.equal(row.status, "posted");
+      assert.ok(row.journalEntryId);
+      assert.equal(await journalCreator(row.journalEntryId!), actors.approver1Id);
+      assert.ok((await lineageCount(org.orgId, preview.id)) > 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "flow rejection records failure with no journal and untouched lineage",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
+    const actors = await seedFlowActors(org.orgId);
+    try {
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "allocation_run",
+        assignees: [{ type: "user", userId: actors.approver1Id }],
+        mode: "any",
+      });
+      await seedSourceEntry(org, actors.adminId, "1000.0000");
+      const { ruleId } = await seedPeriodRule({
+        org,
+        publisherId: actors.adminId,
+        poolAccountId: org.accounts.adjustment,
+      });
+      const linesBefore = await journalLineCount(org.orgId);
+      const preview = await previewAllocationRun({
+        orgId: org.orgId,
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actors.submitterId,
+        trigger: "manual",
+      });
+      await postAllocationRun(preview.id, actors.submitterId, "Please approve the sweep");
+      const gate = await pendingGateForRun(preview.id);
+      assert.ok(gate);
+      await decideGate({
+        gateId: gate.id,
+        decision: "rejected",
+        userId: actors.approver1Id,
+        comment: "Wrong period",
+      });
+      const row = await runRow(preview.id);
+      assert.equal(row.status, "failed");
+      assert.ok(row.error?.startsWith("rejected:"));
+      assert.equal(row.journalEntryId, null);
+      assert.equal(await journalLineCount(org.orgId), linesBefore);
+      assert.equal(await lineageCount(org.orgId, preview.id), 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "post refuses when the configured flow gates but another allocation flow fails",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
+    const actors = await seedFlowActors(org.orgId);
+    try {
+      const good = await seedApprovalFlow(org.orgId, {
+        subjectKind: "allocation_run",
+        assignees: [{ type: "user", userId: actors.approver1Id }],
+        mode: "any",
+      });
+      const bad = await seedApprovalFlow(org.orgId, {
+        subjectKind: "allocation_run",
+        assignees: [{ type: "role", role: "nonexistent_role" }],
+        mode: "any",
+      });
+      // Distinct names so the refusal can tell the two flows apart.
+      await db.execute(
+        sql`update flows set name = 'Working allocation flow' where id = ${good.flowId}`,
+      );
+      await db.execute(
+        sql`update flows set name = 'Broken allocation flow' where id = ${bad.flowId}`,
+      );
+      await seedSourceEntry(org, actors.adminId, "1000.0000");
+      const { ruleId } = await seedPeriodRule({
+        org,
+        publisherId: actors.adminId,
+        poolAccountId: org.accounts.adjustment,
+      });
+      const preview = await previewAllocationRun({
+        orgId: org.orgId,
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actors.submitterId,
+        trigger: "manual",
+      });
+      const linesBefore = await journalLineCount(org.orgId);
+      let message = "";
+      try {
+        await postAllocationRun(preview.id, actors.submitterId, "Please approve the sweep");
+      } catch (e) {
+        message = e instanceof Error ? e.message : String(e);
+      }
+      assert.match(message, /Broken allocation flow/, "the refusal names the failed flow");
+      assert.match(message, /zero assignees/, "the refusal names the cause");
+      // The refusal rolls the post back: still previewed, no journal, no gate.
+      const row = await runRow(preview.id);
+      assert.equal(row.status, "previewed");
+      assert.equal(row.flowRunId, null);
+      assert.equal(row.journalEntryId, null);
+      assert.equal(await journalLineCount(org.orgId), linesBefore);
+      assert.equal(await pendingGateForRun(preview.id), null);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "scheduler auto_post with a flow waits in pending_approval, never posts",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
+    const actors = await seedFlowActors(org.orgId);
+    try {
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "allocation_run",
+        assignees: [{ type: "user", userId: actors.approver1Id }],
+        mode: "any",
+      });
+      await seedSourceEntry(org, actors.adminId, "500.0000");
+      const { ruleId, versionId } = await seedPeriodRule({
+        org,
+        publisherId: actors.adminId,
+        poolAccountId: org.accounts.adjustment,
+        runPolicy: "auto_post",
+      });
+      const outcome = await processAllocationRunOutboxRow({
+        id: randomUUID(),
+        org_id: org.orgId,
+        payload: { ruleId, versionId, periodId: org.periodId, bookId: org.bookId },
+      });
+      assert.equal(outcome.outcome, "ran");
+      const posted = await db.execute<{ count: string }>(
+        sql`
       select count(*)::text as count from allocation_runs
-       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'posted'`, "objects");
-    assert.equal(Number(posted[0]?.count ?? 0), 0);
-    const waiting = await db.execute<{ id: string }>(sql`
+       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'posted'`,
+        "objects",
+      );
+      assert.equal(Number(posted[0]?.count ?? 0), 0);
+      const waiting = await db.execute<{ id: string }>(
+        sql`
       select id from allocation_runs
-       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'pending_approval'`, "objects");
-    assert.equal(waiting.length, 1);
-    assert.ok(await pendingGateForRun(waiting[0]!.id));
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+       where org_id = ${org.orgId} and rule_id = ${ruleId} and status = 'pending_approval'`,
+        "objects",
+      );
+      assert.equal(waiting.length, 1);
+      assert.ok(await pendingGateForRun(waiting[0]!.id));
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("version without a flow posts directly — behaviour unchanged", { skip: !DB }, async () => {
   const org = await createScratchOrg();
@@ -388,7 +446,11 @@ test("version without a flow posts directly — behaviour unchanged", { skip: !D
       actorId: actors.submitterId,
       trigger: "manual",
     });
-    const posted = await postAllocationRun(preview.id, actors.submitterId, "Post monthly cost sweep");
+    const posted = await postAllocationRun(
+      preview.id,
+      actors.submitterId,
+      "Post monthly cost sweep",
+    );
     assert.equal(posted.status, "posted");
     assert.ok(posted.journalEntryId);
     assert.equal(posted.flowRunId, null);
@@ -397,89 +459,102 @@ test("version without a flow posts directly — behaviour unchanged", { skip: !D
   }
 });
 
-test("misconfigured approval flow fails closed — the run stays previewed", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  await enableAllocations(org.orgId);
-  const actors = await seedFlowActors(org.orgId);
-  try {
-    await seedSourceEntry(org, actors.adminId, "1000.0000");
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: "allocation_run", assignees: [{ type: "user", userId: randomUUID() }], mode: "all",
-    });
-    const { ruleId } = await seedPeriodRule({
-      org,
-      publisherId: actors.adminId,
-      poolAccountId: org.accounts.adjustment,
-    });
-    const preview = await previewAllocationRun({
-      orgId: org.orgId,
-      ruleId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      actorId: actors.submitterId,
-      trigger: "manual",
-    });
-    await assert.rejects(
-      postAllocationRun(preview.id, actors.submitterId, "Please approve the sweep"),
-      /approval flow/,
-    );
-    assert.equal((await runRow(preview.id)).status, "previewed");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "misconfigured approval flow fails closed — the run stays previewed",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
+    const actors = await seedFlowActors(org.orgId);
+    try {
+      await seedSourceEntry(org, actors.adminId, "1000.0000");
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "allocation_run",
+        assignees: [{ type: "user", userId: randomUUID() }],
+        mode: "all",
+      });
+      const { ruleId } = await seedPeriodRule({
+        org,
+        publisherId: actors.adminId,
+        poolAccountId: org.accounts.adjustment,
+      });
+      const preview = await previewAllocationRun({
+        orgId: org.orgId,
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actors.submitterId,
+        trigger: "manual",
+      });
+      await assert.rejects(
+        postAllocationRun(preview.id, actors.submitterId, "Please approve the sweep"),
+        /approval flow/,
+      );
+      assert.equal((await runRow(preview.id)).status, "previewed");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a period closed after approval was requested refuses at approval time", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  await enableAllocations(org.orgId);
-  const actors = await seedFlowActors(org.orgId);
-  try {
-    await seedApprovalFlow(org.orgId, {
-      subjectKind: "allocation_run",
-      assignees: [{ type: "user", userId: actors.approver1Id }],
-      mode: "any",
-    });
-    await seedSourceEntry(org, actors.adminId, "1000.0000");
-    const { ruleId } = await seedPeriodRule({
-      org,
-      publisherId: actors.adminId,
-      poolAccountId: org.accounts.adjustment,
-    });
-    const preview = await previewAllocationRun({
-      orgId: org.orgId,
-      ruleId,
-      periodId: org.periodId,
-      bookId: org.bookId,
-      actorId: actors.submitterId,
-      trigger: "manual",
-    });
-    await postAllocationRun(preview.id, actors.submitterId, "Please approve the sweep");
-    const gate = await pendingGateForRun(preview.id);
-    assert.ok(gate);
-    await db.execute(sql`
+test(
+  "a period closed after approval was requested refuses at approval time",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
+    const actors = await seedFlowActors(org.orgId);
+    try {
+      await seedApprovalFlow(org.orgId, {
+        subjectKind: "allocation_run",
+        assignees: [{ type: "user", userId: actors.approver1Id }],
+        mode: "any",
+      });
+      await seedSourceEntry(org, actors.adminId, "1000.0000");
+      const { ruleId } = await seedPeriodRule({
+        org,
+        publisherId: actors.adminId,
+        poolAccountId: org.accounts.adjustment,
+      });
+      const preview = await previewAllocationRun({
+        orgId: org.orgId,
+        ruleId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        actorId: actors.submitterId,
+        trigger: "manual",
+      });
+      await postAllocationRun(preview.id, actors.submitterId, "Please approve the sweep");
+      const gate = await pendingGateForRun(preview.id);
+      assert.ok(gate);
+      await db.execute(sql`
       insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
       values (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl', 'closed', now(),
               'approval-time close must refuse the posting')`);
-    // A closed period refuses the posting inside the release: under the
-    // unified atomic decision failure contract the whole decide unit rolls
-    // back — the decision is not recorded, the gate stays pending so the
-    // same decision can be retried, and nothing posts.
-    await assert.rejects(
-      decideGate({ gateId: gate.id, decision: "approved", userId: actors.approver1Id }),
-      (e: unknown) => {
-        assert.ok(e instanceof DecisionFailedError, `expected DecisionFailedError, got ${String(e)}`);
-        assert.match(e.message, /was not recorded/);
-        return true;
-      },
-      "a closed period must refuse the approval without recording it",
-    );
-    const stillPending = await pendingGateForRun(preview.id);
-    assert.ok(stillPending, "the gate stays pending so the decision can be retried");
-    assert.equal(stillPending.id, gate.id);
-    const row = await runRow(preview.id);
-    assert.equal(row.journalEntryId, null);
-    assert.equal(await lineageCount(org.orgId, preview.id), 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // A closed period refuses the posting inside the release: under the
+      // unified atomic decision failure contract the whole decide unit rolls
+      // back — the decision is not recorded, the gate stays pending so the
+      // same decision can be retried, and nothing posts.
+      await assert.rejects(
+        decideGate({ gateId: gate.id, decision: "approved", userId: actors.approver1Id }),
+        (e: unknown) => {
+          assert.ok(
+            e instanceof DecisionFailedError,
+            `expected DecisionFailedError, got ${String(e)}`,
+          );
+          assert.match(e.message, /was not recorded/);
+          return true;
+        },
+        "a closed period must refuse the approval without recording it",
+      );
+      const stillPending = await pendingGateForRun(preview.id);
+      assert.ok(stillPending, "the gate stays pending so the decision can be retried");
+      assert.equal(stillPending.id, gate.id);
+      const row = await runRow(preview.id);
+      assert.equal(row.journalEntryId, null);
+      assert.equal(await lineageCount(org.orgId, preview.id), 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

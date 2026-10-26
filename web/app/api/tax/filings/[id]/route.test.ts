@@ -1,29 +1,35 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
-import { NextResponse } from 'next/server'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
+import { NextResponse } from "next/server";
 
 // Route boundary regression: a tax filing snapshot is
 // organization-wide, so subsidiary-restricted compliance.file holders must
 // never reach the irreversible mark-filed engine call.
 interface RouteState {
-  permissions: Set<string>
-  allowedSubsidiaryIds: Set<string> | null
-  engineCalls: Array<{ orgId: string; filingId: string; actorId: string; reference: string | null }>
+  permissions: Set<string>;
+  allowedSubsidiaryIds: Set<string> | null;
+  engineCalls: Array<{
+    orgId: string;
+    filingId: string;
+    actorId: string;
+    reference: string | null;
+  }>;
 }
 
-const stateKey = Symbol.for('openbooks.tax-filing-id-route-test')
+const stateKey = Symbol.for("openbooks.tax-filing-id-route-test");
 const routeState: RouteState = {
   permissions: new Set(),
   allowedSubsidiaryIds: null,
   engineCalls: [],
-}
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
-;(globalThis as typeof globalThis & Record<string, unknown>).openbooksTaxFilingIdNextResponse = NextResponse
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksTaxFilingIdNextResponse =
+  NextResponse;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:authz',
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.tax-filing-id-route-test')]
       const NextResponse = globalThis.openbooksTaxFilingIdNextResponse
@@ -45,7 +51,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:tax-filing',
+    "mock:tax-filing",
     `
       const state = globalThis[Symbol.for('openbooks.tax-filing-id-route-test')]
       export class TaxFilingError extends Error {
@@ -63,74 +69,76 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/authz', 'mock:authz'],
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['@openbooks/engine/tax-returns/filing', 'mock:tax-filing'],
-])
+  ["@/lib/authz", "mock:authz"],
+  ["../../../../../lib/authz", "mock:authz"],
+  ["@openbooks/engine/tax-returns/filing", "mock:tax-filing"],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const { PATCH } = (await import('./route.ts')) as typeof import('./route.ts')
-after(() => hooks.deregister())
+const { PATCH } = (await import("./route.ts")) as typeof import("./route.ts");
+after(() => hooks.deregister());
 
-const FILING_ID = '00000000-0000-4000-8000-00000000f001'
+const FILING_ID = "00000000-0000-4000-8000-00000000f001";
 
-function reset(allowedSubsidiaryIds: Set<string> | null, permissions = ['compliance.file']): void {
-  routeState.permissions = new Set(permissions)
-  routeState.allowedSubsidiaryIds = allowedSubsidiaryIds
-  routeState.engineCalls.length = 0
+function reset(allowedSubsidiaryIds: Set<string> | null, permissions = ["compliance.file"]): void {
+  routeState.permissions = new Set(permissions);
+  routeState.allowedSubsidiaryIds = allowedSubsidiaryIds;
+  routeState.engineCalls.length = 0;
 }
 
 function patch(body: string): Promise<Response> {
   return PATCH(
     new Request(`http://openbooks.test/api/tax/filings/${FILING_ID}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
       body,
     }),
     { params: Promise.resolve({ id: FILING_ID }) },
-  )
+  );
 }
 
-test('a subsidiary-restricted filer gets the named 403 instead of certifying the organization-wide snapshot', async () => {
-  reset(new Set(['00000000-0000-4000-8000-00000000a001']))
+test("a subsidiary-restricted filer gets the named 403 instead of certifying the organization-wide snapshot", async () => {
+  reset(new Set(["00000000-0000-4000-8000-00000000a001"]));
 
-  const response = await patch('this is deliberately not JSON')
+  const response = await patch("this is deliberately not JSON");
 
   // The body is not JSON, so a parse-first route would answer 400 here.
-  assert.equal(response.status, 403, 'scope denial settles before request-body parsing')
-  assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
-  assert.deepEqual(routeState.engineCalls, [], 'scope denial never reaches markTaxFilingFiled')
-})
+  assert.equal(response.status, 403, "scope denial settles before request-body parsing");
+  assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+  assert.deepEqual(routeState.engineCalls, [], "scope denial never reaches markTaxFilingFiled");
+});
 
-test('an unrestricted compliance filer can certify the snapshot', async () => {
-  reset(null)
+test("an unrestricted compliance filer can certify the snapshot", async () => {
+  reset(null);
 
-  const response = await patch(JSON.stringify({ filingReference: 'REF-2026-042' }))
+  const response = await patch(JSON.stringify({ filingReference: "REF-2026-042" }));
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     id: FILING_ID,
-    filed_at: '2026-08-24T00:00:00.000Z',
-  })
-  assert.deepEqual(routeState.engineCalls, [{
-    orgId: 'org-1',
-    filingId: FILING_ID,
-    actorId: 'user-1',
-    reference: 'REF-2026-042',
-  }])
-})
+    filed_at: "2026-08-24T00:00:00.000Z",
+  });
+  assert.deepEqual(routeState.engineCalls, [
+    {
+      orgId: "org-1",
+      filingId: FILING_ID,
+      actorId: "user-1",
+      reference: "REF-2026-042",
+    },
+  ]);
+});

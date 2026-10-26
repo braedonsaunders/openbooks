@@ -15,10 +15,7 @@
  */
 
 interface FunctionDb {
-  query: (
-    text: string,
-    values?: unknown[],
-  ) => Promise<{ rows: Array<{ stmt: string }> }>;
+  query: (text: string, values?: unknown[]) => Promise<{ rows: Array<{ stmt: string }> }>;
 }
 
 /**

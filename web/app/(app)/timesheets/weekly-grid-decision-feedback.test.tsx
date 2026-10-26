@@ -30,8 +30,7 @@ stubModules({
       "export default function Link(p){return globalThis.React.createElement('a',{href:p.href,className:p.className},p.children)}",
     sonner:
       "export const toast={success(m){globalThis.__gridDecision.toasts.push({kind:'success',message:m})},error(m,o){globalThis.__gridDecision.toasts.push({kind:'error',message:m,options:o})},warning(){},info(){}};export function Toaster(){return null}",
-    "../../../lib/confirm":
-      "export async function confirmDialog(){return true}",
+    "../../../lib/confirm": "export async function confirmDialog(){return true}",
     "../lib/prompt": "export async function promptDialog(){return 'Needs rework before approval'}",
   },
 });
@@ -47,7 +46,15 @@ const { BusinessDateProvider } = await import("../../../components/business-date
 const { WeeklyGrid } = await import("./WeeklyGrid");
 
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
-const DAYS = ["2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"];
+const DAYS = [
+  "2026-07-12",
+  "2026-07-13",
+  "2026-07-14",
+  "2026-07-15",
+  "2026-07-16",
+  "2026-07-17",
+  "2026-07-18",
+];
 
 function weekPayload() {
   return {
@@ -94,10 +101,23 @@ async function mountGrid() {
   script.resolvers = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    if(url.startsWith('/api/flows/record-state'))return Response.json({approvalState:{status:'pending',pendingWith:[],myActions:{gateId:'gate-1',signatureRequired:false}},history:[],failedRun:null,canRetry:false});
-    if(url==='/api/flows/gates/decide'&&init?.method==='POST'){
-      script.posts.push({url,body:JSON.parse(String(init.body))});return new Promise<Response>(resolve=>script.resolvers.push(resolve));
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    if (url.startsWith("/api/flows/record-state"))
+      return Response.json({
+        approvalState: {
+          status: "pending",
+          pendingWith: [],
+          myActions: { gateId: "gate-1", signatureRequired: false },
+        },
+        history: [],
+        failedRun: null,
+        canRetry: false,
+      });
+    if (url === "/api/flows/gates/decide" && init?.method === "POST") {
+      script.posts.push({ url, body: JSON.parse(String(init.body)) });
+      return new Promise<Response>((resolve) => script.resolvers.push(resolve));
     }
     return Response.json({});
   }) as typeof fetch;
@@ -147,7 +167,12 @@ async function resolveNext(payload: unknown) {
   const resolve = script.resolvers.shift();
   assert.ok(resolve, "a decision request must be in flight");
   await act(async () => {
-    resolve(new Response(JSON.stringify(payload), { status: 200, headers: { "content-type": "application/json" } }));
+    resolve(
+      new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
     await tick(120);
   });
   await tick(120);
@@ -171,7 +196,7 @@ test("a slow approval shows its busy state, posts once, then pins success", asyn
     await tick(60);
   });
   assert.equal(script.posts.length, 1, "a double click posts exactly once");
-  await resolveNext({ok:true,resumed:"approve"});
+  await resolveNext({ ok: true, resumed: "approve" });
   assert.equal(script.posts.length, 1);
   const toasted = script.toasts.find((toast) => toast.kind === "success");
   assert.ok(toasted, "completion toasts");
@@ -198,7 +223,7 @@ test("a slow rejection shows its busy state, then pins success", async (t) => {
     await tick(60);
   });
   assert.equal(script.posts.length, 1, "a double click posts exactly once");
-  await resolveNext({ok:true,resumed:"reject"});
+  await resolveNext({ ok: true, resumed: "reject" });
   const status = document.querySelector('[role="status"]');
   assert.ok(status, "completion pins a success status beside the actions");
   assert.match(status?.textContent ?? "", /Decision recorded/);

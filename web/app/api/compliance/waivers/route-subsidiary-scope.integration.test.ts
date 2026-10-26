@@ -11,10 +11,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "", allowedSubsidiaryIds: null as ReadonlySet<string> | null };
 Object.assign(globalThis, { __complianceWaiverScopeState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -37,7 +43,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { installEngineSeams } = await import("@openbooks/engine/composition/install");
 installEngineSeams();
 const { POST } = await import("./route.ts");
@@ -47,34 +54,53 @@ async function fixture() {
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   state.orgId = org.orgId;
   state.actorId = actorId;
-  await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-    coalesce(settings->'features','{}'::jsonb)||'{"subcontractorCompliance":true}'::jsonb) where id=${org.orgId}`));
+  await withBypassContext(() =>
+    db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"subcontractorCompliance":true}'::jsonb) where id=${org.orgId}`),
+  );
   const branchId = randomUUID();
   const hiddenPartyId = randomUUID();
   const visiblePartyId = randomUUID();
   const hiddenProjectId = randomUUID();
   const visibleProjectId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-    values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Hidden Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`));
-  await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+    values (${branchId}, ${org.orgId}, ${org.subsidiaryId}, 'Hidden Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
     values (${hiddenPartyId},${org.orgId},'vendor','Hidden vendor',${branchId},true,'{}'::jsonb),
-           (${visiblePartyId},${org.orgId},'vendor','Visible vendor',${org.subsidiaryId},true,'{}'::jsonb)`));
+           (${visiblePartyId},${org.orgId},'vendor','Visible vendor',${org.subsidiaryId},true,'{}'::jsonb)`),
+  );
   const scopeClassId = randomUUID();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into compliance_classes (id, org_id, code, name, lien_waiver_enforcement, default_information_return, created_by, updated_by)
-    values (${scopeClassId}, ${org.orgId}, 'SUB', 'Subcontractor', 'none', '1099-NEC', ${actorId}, ${actorId})`));
-  await withBypassContext(() => db.execute(sql`
+    values (${scopeClassId}, ${org.orgId}, 'SUB', 'Subcontractor', 'none', '1099-NEC', ${actorId}, ${actorId})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into vendor_roles (org_id, party_id, compliance_class_id, created_by, updated_by)
     values (${org.orgId}, ${hiddenPartyId}, ${scopeClassId}, ${actorId}, ${actorId}),
-           (${org.orgId}, ${visiblePartyId}, ${scopeClassId}, ${actorId}, ${actorId})`));
-  await withBypassContext(() => db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+           (${org.orgId}, ${visiblePartyId}, ${scopeClassId}, ${actorId}, ${actorId})`),
+  );
+  await withBypassContext(() =>
+    db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
     values (${hiddenProjectId},${org.orgId},${branchId},'HID','Hidden project',${org.customerId},'active',true,'{}'::jsonb),
-           (${visibleProjectId},${org.orgId},${org.subsidiaryId},'VIS','Visible project',${org.customerId},'active',true,'{}'::jsonb)`));
-  const requirementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+           (${visibleProjectId},${org.orgId},${org.subsidiaryId},'VIS','Visible project',${org.customerId},'active',true,'{}'::jsonb)`),
+  );
+  const requirementId = (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
     insert into compliance_requirements (org_id, class_id, code, name, category, enforcement, created_by, updated_by)
     values (${org.orgId}, ${scopeClassId}, 'COI', 'Certificate of insurance', 'insurance', 'block_payment', ${actorId}, ${actorId})
-    returning id`, "objects")))[0]!.id;
+    returning id`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
   return { org, hiddenPartyId, visiblePartyId, hiddenProjectId, visibleProjectId, requirementId };
 }
 
@@ -86,16 +112,22 @@ const VALID = {
 
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () =>
-    POST(new Request("http://waivers.test/api/compliance/waivers", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    })),
+    POST(
+      new Request("http://waivers.test/api/compliance/waivers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
 
 async function waiverCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from compliance_waivers where org_id = ${orgId}`, "objects"));
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from compliance_waivers where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
@@ -103,7 +135,12 @@ test("waiver creation cannot grant an exception to a hidden vendor", async () =>
   const { org, hiddenPartyId, visibleProjectId, requirementId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
-    const response = await post({ partyId: hiddenPartyId, projectId: visibleProjectId, requirementId, ...VALID });
+    const response = await post({
+      partyId: hiddenPartyId,
+      projectId: visibleProjectId,
+      requirementId,
+      ...VALID,
+    });
     assert.equal(response.status, 404, JSON.stringify(await response.json().catch(() => null)));
     assert.equal(await waiverCount(org.orgId), 0);
   } finally {
@@ -116,7 +153,12 @@ test("waiver creation cannot grant an exception under a hidden project", async (
   const { org, visiblePartyId, hiddenProjectId, requirementId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
-    const response = await post({ partyId: visiblePartyId, projectId: hiddenProjectId, requirementId, ...VALID });
+    const response = await post({
+      partyId: visiblePartyId,
+      projectId: hiddenProjectId,
+      requirementId,
+      ...VALID,
+    });
     assert.equal(response.status, 404, JSON.stringify(await response.json().catch(() => null)));
     assert.equal(await waiverCount(org.orgId), 0);
   } finally {
@@ -129,7 +171,12 @@ test("waiver creation still files in-scope exception requests", async () => {
   const { org, visiblePartyId, visibleProjectId, requirementId } = await fixture();
   try {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
-    const response = await post({ partyId: visiblePartyId, projectId: visibleProjectId, requirementId, ...VALID });
+    const response = await post({
+      partyId: visiblePartyId,
+      projectId: visibleProjectId,
+      requirementId,
+      ...VALID,
+    });
     const json = (await response.json().catch(() => null)) as { status?: string } | null;
     assert.equal(response.status, 200, JSON.stringify(json));
     assert.equal(json?.status, "approved", "the tenant configured no approval gate");

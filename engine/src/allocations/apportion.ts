@@ -42,7 +42,10 @@ function parseWeightUnits(value: string, what: string): bigint {
   const whole = m?.[2];
   const frac = m?.[3];
   if (!m || (whole === undefined && (frac === undefined || frac === ""))) {
-    throw new AllocationApportionError("weight_invalid", `${what} is not a decimal number: "${value}"`);
+    throw new AllocationApportionError(
+      "weight_invalid",
+      `${what} is not a decimal number: "${value}"`,
+    );
   }
   if ((frac?.length ?? 0) > 10) {
     throw new AllocationApportionError(
@@ -50,7 +53,8 @@ function parseWeightUnits(value: string, what: string): bigint {
       `${what} loses precision beyond 10 decimal places: "${value}"`,
     );
   }
-  const magnitude = BigInt(whole ?? "0") * WEIGHT_SCALE + BigInt(((frac ?? "") + "0".repeat(10)).slice(0, 10));
+  const magnitude =
+    BigInt(whole ?? "0") * WEIGHT_SCALE + BigInt(((frac ?? "") + "0".repeat(10)).slice(0, 10));
   return m[1] === "-" ? -magnitude : magnitude;
 }
 
@@ -80,32 +84,50 @@ export function apportionTargets(
   try {
     totalUnits = toUnits(total);
   } catch {
-    throw new AllocationApportionError("total_invalid", `total is not ledger money (numeric 19,4): "${total}"`);
+    throw new AllocationApportionError(
+      "total_invalid",
+      `total is not ledger money (numeric 19,4): "${total}"`,
+    );
   }
   const canonicalTotal = fromUnits(totalUnits);
 
   const seen = new Set<string>();
   for (const w of weights) {
     if (seen.has(w.key)) {
-      throw new AllocationApportionError("duplicate_key", `duplicate apportion target key: "${w.key}"`);
+      throw new AllocationApportionError(
+        "duplicate_key",
+        `duplicate apportion target key: "${w.key}"`,
+      );
     }
     seen.add(w.key);
   }
-  const parsed = weights.map((w) => ({ ...w, units: parseWeightUnits(w.weight, `weight for target "${w.key}"`) }));
+  const parsed = weights.map((w) => ({
+    ...w,
+    units: parseWeightUnits(w.weight, `weight for target "${w.key}"`),
+  }));
   for (const p of parsed) {
     if (p.units < 0n) {
-      throw new AllocationApportionError("weight_negative", `weight for target "${p.key}" is negative: "${p.weight}"`);
+      throw new AllocationApportionError(
+        "weight_negative",
+        `weight for target "${p.key}" is negative: "${p.weight}"`,
+      );
     }
   }
   const remainderCount = parsed.filter((p) => p.isRemainder).length;
   if (remainderCount > 1) {
-    throw new AllocationApportionError("remainder_count", "at most one apportion target may take the remainder");
+    throw new AllocationApportionError(
+      "remainder_count",
+      "at most one apportion target may take the remainder",
+    );
   }
   const soleRemainder: (typeof parsed)[number] | undefined = parsed.find((p) => p.isRemainder);
 
   if (parsed.length === 0) {
     if (totalUnits !== 0n) {
-      throw new AllocationApportionError("no_targets", `cannot apportion ${canonicalTotal} over zero targets`);
+      throw new AllocationApportionError(
+        "no_targets",
+        `cannot apportion ${canonicalTotal} over zero targets`,
+      );
     }
     return { total: canonicalTotal, weightTotal: "0", targets: [], residualKey: null };
   }
@@ -119,13 +141,19 @@ export function apportionTargets(
   if (residualPolicy === "explicit_target") {
     if (residualKey !== undefined && residualKey !== null) {
       if (!seen.has(residualKey)) {
-        throw new AllocationApportionError("residual_unknown", `explicit residual target does not exist: "${residualKey}"`);
+        throw new AllocationApportionError(
+          "residual_unknown",
+          `explicit residual target does not exist: "${residualKey}"`,
+        );
       }
       absorberKey = residualKey;
     } else if (soleRemainder !== undefined) {
       absorberKey = soleRemainder.key;
     } else {
-      throw new AllocationApportionError("residual_missing", "explicit_target residual policy needs a residual target key");
+      throw new AllocationApportionError(
+        "residual_missing",
+        "explicit_target residual policy needs a residual target key",
+      );
     }
   } else if (soleRemainder !== undefined) {
     absorberKey = soleRemainder.key;
@@ -160,7 +188,8 @@ export function apportionTargets(
     const amount: bigint = amounts[index] ?? 0n;
     // The absorber's memo is what it holds beyond its own exact share,
     // floored toward zero as the kernel floors it.
-    const residualUnits = index === absorberIndex ? amount - (totalUnits * splitWeights[index]!) / basis : 0n;
+    const residualUnits =
+      index === absorberIndex ? amount - (totalUnits * splitWeights[index]!) / basis : 0n;
     return {
       key: p.key,
       weight: p.weight,
@@ -170,7 +199,12 @@ export function apportionTargets(
     };
   });
 
-  return { total: canonicalTotal, weightTotal: formatWeightUnits(weightTotalUnits), targets, residualKey: absorberKey };
+  return {
+    total: canonicalTotal,
+    weightTotal: formatWeightUnits(weightTotalUnits),
+    targets,
+    residualKey: absorberKey,
+  };
 }
 
 /**
@@ -185,7 +219,10 @@ export function apportionTargets(
  */
 export function fixedPercentWeights(targets: AllocationRuleTarget[]): WeightedTarget[] {
   if (targets.filter((t) => t.isRemainder).length > 1) {
-    throw new AllocationApportionError("remainder_count", "at most one target may take the remainder");
+    throw new AllocationApportionError(
+      "remainder_count",
+      "at most one target may take the remainder",
+    );
   }
   let sum = 0n;
   const out: WeightedTarget[] = targets.map((t) => {
@@ -252,7 +289,10 @@ export function steppedWeights(total: string, tiers: readonly SteppedTier[]): We
   try {
     totalUnits = toUnits(total);
   } catch {
-    throw new AllocationApportionError("total_invalid", `total is not ledger money (numeric 19,4): "${total}"`);
+    throw new AllocationApportionError(
+      "total_invalid",
+      `total is not ledger money (numeric 19,4): "${total}"`,
+    );
   }
   if (tiers.length === 0) {
     throw new AllocationApportionError("stepped_tiers", "stepped basis needs at least one tier");
@@ -277,7 +317,10 @@ export function steppedWeights(total: string, tiers: readonly SteppedTier[]): We
         );
       }
       if (cap < 0n) {
-        throw new AllocationApportionError("stepped_tiers", `stepped tier "${key}" bound is negative: "${tier.upTo}"`);
+        throw new AllocationApportionError(
+          "stepped_tiers",
+          `stepped tier "${key}" bound is negative: "${tier.upTo}"`,
+        );
       }
       if (cap <= prev) {
         throw new AllocationApportionError(
@@ -286,7 +329,10 @@ export function steppedWeights(total: string, tiers: readonly SteppedTier[]): We
         );
       }
     } else if (index !== tiers.length - 1) {
-      throw new AllocationApportionError("stepped_tiers", `open stepped tier "${key}" must be the last tier`);
+      throw new AllocationApportionError(
+        "stepped_tiers",
+        `open stepped tier "${key}" must be the last tier`,
+      );
     }
     const width = cap === null ? remaining : cap - prev;
     const take = width < remaining ? width : remaining;

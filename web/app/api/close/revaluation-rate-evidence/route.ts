@@ -12,20 +12,22 @@ export const runtime = "nodejs";
 
 const currencyCode = z.string().regex(/^[A-Z]{3}$/);
 
-const recordBodySchema = z.object({
-  bookId: uuidString(),
-  subsidiaryId: uuidString(),
-  periodId: uuidString(),
-  accountId: uuidString(),
-  transactionCurrency: currencyCode,
-  measurementCurrency: currencyCode,
-  rateDate: z.string().date().optional(),
-  rate: z.string().min(1),
-  source: z.string().min(1),
-  reason: z.string().min(1),
-  expectedCurrentId: uuidString().nullable(),
-  requestId: uuidString(),
-}).strict();
+const recordBodySchema = z
+  .object({
+    bookId: uuidString(),
+    subsidiaryId: uuidString(),
+    periodId: uuidString(),
+    accountId: uuidString(),
+    transactionCurrency: currencyCode,
+    measurementCurrency: currencyCode,
+    rateDate: z.string().date().optional(),
+    rate: z.string().min(1),
+    source: z.string().min(1),
+    reason: z.string().min(1),
+    expectedCurrentId: uuidString().nullable(),
+    requestId: uuidString(),
+  })
+  .strict();
 
 /**
  * The close run's selected-entity FX exposures: the revaluation engine's own
@@ -51,7 +53,11 @@ export const GET = defineRoute({
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean);
-    const context = applicationContextFromSession(authz, "api", request.headers.get("x-request-id") ?? "");
+    const context = applicationContextFromSession(
+      authz,
+      "api",
+      request.headers.get("x-request-id") ?? "",
+    );
     const exposures = await listApplicationRevaluationExposures(context, {
       periodId,
       bookId,

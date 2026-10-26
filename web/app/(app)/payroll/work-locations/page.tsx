@@ -9,8 +9,10 @@ export async function generateMetadata() {
   return { title: t("workLocations.title") };
 }
 
-export default async function PayrollWorkLocationsPage({ searchParams }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+export default async function PayrollWorkLocationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
   const data = await loadWorkLocations(sp);

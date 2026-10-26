@@ -22,8 +22,19 @@ export function fingerprintChangeBuckets(
   const changed = (keys: string[]): boolean =>
     keys.some((key) => String(before[key] ?? "") !== String(after[key] ?? ""));
   const buckets: string[] = [];
-  if (changed(["entries", "entry_changed", "debits", "documents", "document_changed",
-    "unassigned_documents", "unassigned_document_changed", "group_activity"])) buckets.push("ledger");
+  if (
+    changed([
+      "entries",
+      "entry_changed",
+      "debits",
+      "documents",
+      "document_changed",
+      "unassigned_documents",
+      "unassigned_document_changed",
+      "group_activity",
+    ])
+  )
+    buckets.push("ledger");
   if (changed(["reconciliations"])) buckets.push("reconciliations");
   if (changed(["consolidated_rates", "fx_rate_age_policy"])) buckets.push("rates");
   return buckets;
@@ -36,10 +47,20 @@ export async function periodFingerprintEvidence(
   subsidiaryIds: string[] = [],
   includeGroupEvidence = true,
 ): Promise<PeriodFingerprintEvidence> {
-  const period = (await db.execute<{
-    id: string; starts_on: string; ends_on: string; is_adjustment: boolean; fiscal_calendar_id: string; period_number: number;
-  }>(sql`select id,starts_on::text as starts_on,ends_on::text as ends_on,is_adjustment,fiscal_calendar_id,period_number from accounting_periods
-    where org_id=${orgId} and id=${periodId}`, "objects"))[0];
+  const period = (
+    await db.execute<{
+      id: string;
+      starts_on: string;
+      ends_on: string;
+      is_adjustment: boolean;
+      fiscal_calendar_id: string;
+      period_number: number;
+    }>(
+      sql`select id,starts_on::text as starts_on,ends_on::text as ends_on,is_adjustment,fiscal_calendar_id,period_number from accounting_periods
+    where org_id=${orgId} and id=${periodId}`,
+      "objects",
+    )
+  )[0];
   if (!period) throw new CloseError("period not found");
   // Closing balances include prior posted activity. A controlled reopening of
   // an earlier period must invalidate evidence even without a current-period
@@ -51,7 +72,8 @@ export async function periodFingerprintEvidence(
   const entryScope = sql`(exists(select 1 from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id and ${inScope(sql`l.subsidiary_id`)})
     or (not exists(select 1 from journal_lines l where l.org_id=e.org_id and l.entry_id=e.id) and ${inScope(sql`e.subsidiary_id`)}))`;
   const documentScope = sql`(d.subsidiary_id is null or ${inScope(sql`d.subsidiary_id`)})`;
-  const result = (await db.execute<Record<string, unknown>>(sql`
+  const result = await db.execute<Record<string, unknown>>(
+    sql`
     select
       (select count(*) from journal_entries e where e.org_id = ${orgId} and ${ledgerPeriodScope} and e.book_id = ${bookId} and ${entryScope}) as entries,
       (select coalesce(max(updated_at)::text, '') from journal_entries e where e.org_id = ${orgId} and ${ledgerPeriodScope} and e.book_id = ${bookId} and ${entryScope}) as entry_changed,
@@ -108,11 +130,16 @@ export async function periodFingerprintEvidence(
         join accounts a on a.id=l.account_id and a.org_id=l.org_id
         where e.org_id=${orgId} and ${ledgerPeriodScope} and e.book_id=${bookId}
           and a.eliminate and ${includeGroupEvidence}) as group_activity
-  `, "objects"));
+  `,
+    "objects",
+  );
   return (result[0] ?? {}) as PeriodFingerprintEvidence;
 }
 
-function hashFingerprintEvidence(subsidiaryIds: string[], evidence: PeriodFingerprintEvidence): string {
+function hashFingerprintEvidence(
+  subsidiaryIds: string[],
+  evidence: PeriodFingerprintEvidence,
+): string {
   return createHash("sha256")
     .update(JSON.stringify({ subsidiaryIds: [...subsidiaryIds].sort(), evidence }))
     .digest("hex");
@@ -139,6 +166,12 @@ export async function periodFingerprintWithEvidence(
   subsidiaryIds: string[] = [],
   includeGroupEvidence = true,
 ): Promise<{ fingerprint: string; evidence: PeriodFingerprintEvidence }> {
-  const evidence = await periodFingerprintEvidence(orgId, periodId, bookId, subsidiaryIds, includeGroupEvidence);
+  const evidence = await periodFingerprintEvidence(
+    orgId,
+    periodId,
+    bookId,
+    subsidiaryIds,
+    includeGroupEvidence,
+  );
   return { fingerprint: hashFingerprintEvidence(subsidiaryIds, evidence), evidence };
 }

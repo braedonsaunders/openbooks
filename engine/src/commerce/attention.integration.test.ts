@@ -4,7 +4,12 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { registerChannelAdapter } from "./adapters.ts";
-import { countChannelOrdersForBusinessDay, createChannel, markChannelActive, retryChannel } from "./channels.ts";
+import {
+  countChannelOrdersForBusinessDay,
+  createChannel,
+  markChannelActive,
+  retryChannel,
+} from "./channels.ts";
 import type { ChannelInboundDelivery } from "./contracts.ts";
 import { CommerceError } from "./errors.ts";
 import { channelAttention, processPendingEvents, receiveInboundEvent } from "./inbound.ts";
@@ -49,7 +54,12 @@ registerChannelAdapter({
   },
   async handleEvent(delivery: ChannelInboundDelivery) {
     if (delivery.topic === "boom") {
-      throw new CommerceError("test_handler_failed", "Test handler refuses topic boom.", "Replay after fixing the topic.", { field: "topic" });
+      throw new CommerceError(
+        "test_handler_failed",
+        "Test handler refuses topic boom.",
+        "Replay after fixing the topic.",
+        { field: "topic" },
+      );
     }
     return { action: "processed", resultRef: { eventId: delivery.eventId } };
   },
@@ -59,9 +69,13 @@ registerChannelAdapter({
 async function setup(run: (org: ScratchOrg, actor: string) => Promise<void>): Promise<void> {
   const org = await createScratchOrg();
   try {
-    const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Attention tester", "admin"));
+    const actor = await withOrgContext(org.orgId, () =>
+      createScratchUser(org.orgId, "Attention tester", "admin"),
+    );
     await withOrgContext(org.orgId, async () => {
-      const result = await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ salesChannels: true })}::jsonb, true) where id = ${org.orgId}`);
+      const result = await db.execute<never>(
+        sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ salesChannels: true })}::jsonb, true) where id = ${org.orgId}`,
+      );
       assert.equal(result.rowCount, 1);
     });
     await run(org, actor);
@@ -70,7 +84,11 @@ async function setup(run: (org: ScratchOrg, actor: string) => Promise<void>): Pr
   }
 }
 
-async function connect(orgId: string, actor: string, account: string): Promise<{ id: string; secret: string }> {
+async function connect(
+  orgId: string,
+  actor: string,
+  account: string,
+): Promise<{ id: string; secret: string }> {
   const { channel, webhookSecret } = await createChannel(orgId, actor, {
     kind: "shopify",
     name: account,
@@ -84,7 +102,12 @@ async function connect(orgId: string, actor: string, account: string): Promise<{
   return { id: channel.id, secret: webhookSecret! };
 }
 
-function headers(secret: string, body: Buffer, topic: string, eventId: string): Record<string, string> {
+function headers(
+  secret: string,
+  body: Buffer,
+  topic: string,
+  eventId: string,
+): Record<string, string> {
   return {
     "x-test-signature": createHmac("sha256", secret).update(body).digest("hex"),
     "x-test-topic": topic,
@@ -92,36 +115,60 @@ function headers(secret: string, body: Buffer, topic: string, eventId: string): 
   };
 }
 
-async function deliver(orgId: string, channelId: string, secret: string, topic: string, eventId: string): Promise<void> {
+async function deliver(
+  orgId: string,
+  channelId: string,
+  secret: string,
+  topic: string,
+  eventId: string,
+): Promise<void> {
   const body = Buffer.from(JSON.stringify({ id: eventId }));
-  await withOrgContext(orgId, () => receiveInboundEvent({ channelId, rawBody: body, headers: headers(secret, body, topic, eventId) }));
+  await withOrgContext(orgId, () =>
+    receiveInboundEvent({
+      channelId,
+      rawBody: body,
+      headers: headers(secret, body, topic, eventId),
+    }),
+  );
 }
 
-test("attention counts failed and dead deliveries per channel with the newest delivery time", DB, async () => {
-  await setup(async (org, actor) => {
-    const first = await withOrgContext(org.orgId, () => connect(org.orgId, actor, "one.myshopify.com"));
-    const second = await withOrgContext(org.orgId, () => connect(org.orgId, actor, "two.myshopify.com"));
-    await deliver(org.orgId, first.id, first.secret, "orders/create", "evt-ok");
-    await deliver(org.orgId, first.id, first.secret, "boom", "evt-fail-1");
-    await deliver(org.orgId, first.id, first.secret, "boom", "evt-fail-2");
-    await withOrgContext(org.orgId, () => processPendingEvents(10));
-    // One failure ages into a dead letter while the other stays retryable.
-    await withOrgContext(org.orgId, () => db.execute(sql`
+test(
+  "attention counts failed and dead deliveries per channel with the newest delivery time",
+  DB,
+  async () => {
+    await setup(async (org, actor) => {
+      const first = await withOrgContext(org.orgId, () =>
+        connect(org.orgId, actor, "one.myshopify.com"),
+      );
+      const second = await withOrgContext(org.orgId, () =>
+        connect(org.orgId, actor, "two.myshopify.com"),
+      );
+      await deliver(org.orgId, first.id, first.secret, "orders/create", "evt-ok");
+      await deliver(org.orgId, first.id, first.secret, "boom", "evt-fail-1");
+      await deliver(org.orgId, first.id, first.secret, "boom", "evt-fail-2");
+      await withOrgContext(org.orgId, () => processPendingEvents(10));
+      // One failure ages into a dead letter while the other stays retryable.
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       update integration_inbound_events set status = 'dead', attempts = 8
-       where org_id = ${org.orgId} and provider_event_id = 'evt-fail-1'`));
-    const attention = await withOrgContext(org.orgId, () => channelAttention(org.orgId));
-    assert.deepEqual(
-      { failed: attention[first.id]?.failed, dead: attention[first.id]?.dead },
-      { failed: 1, dead: 1 },
-    );
-    assert.ok(attention[first.id]?.lastReceivedAt);
-    assert.equal(attention[second.id], undefined);
-  });
-});
+       where org_id = ${org.orgId} and provider_event_id = 'evt-fail-1'`),
+      );
+      const attention = await withOrgContext(org.orgId, () => channelAttention(org.orgId));
+      assert.deepEqual(
+        { failed: attention[first.id]?.failed, dead: attention[first.id]?.dead },
+        { failed: 1, dead: 1 },
+      );
+      assert.ok(attention[first.id]?.lastReceivedAt);
+      assert.equal(attention[second.id], undefined);
+    });
+  },
+);
 
 test("attention is scoped to the organization", DB, async () => {
   await setup(async (org, actor) => {
-    const channel = await withOrgContext(org.orgId, () => connect(org.orgId, actor, "scoped.myshopify.com"));
+    const channel = await withOrgContext(org.orgId, () =>
+      connect(org.orgId, actor, "scoped.myshopify.com"),
+    );
     await deliver(org.orgId, channel.id, channel.secret, "boom", "evt-scoped");
     const other = await createScratchOrg();
     try {
@@ -135,46 +182,52 @@ test("attention is scoped to the organization", DB, async () => {
   });
 });
 
-test("today's channel order count uses the business-day window and subsidiary scope", DB, async () => {
-  await setup(async (org, actor) => {
-    const { channel } = await withOrgContext(org.orgId, () => createChannel(org.orgId, actor, {
-      kind: "shopify",
-      name: "Business-day orders",
-      subsidiaryId: org.subsidiaryId,
-      currency: "CAD",
-      externalAccount: "business-day.myshopify.com",
-      settings: {},
-    }));
-    await withOrgContext(org.orgId, async () => {
-      const orders: Array<[string, string]> = [
-        ["before-day", "2026-04-07T03:59:59Z"],
-        ["start-of-day", "2026-04-07T04:00:00Z"],
-        ["end-of-day", "2026-04-08T03:59:59Z"],
-        ["next-day", "2026-04-08T04:00:00Z"],
-      ];
-      for (const [externalId, orderedAt] of orders) {
-        await db.execute(sql`
+test(
+  "today's channel order count uses the business-day window and subsidiary scope",
+  DB,
+  async () => {
+    await setup(async (org, actor) => {
+      const { channel } = await withOrgContext(org.orgId, () =>
+        createChannel(org.orgId, actor, {
+          kind: "shopify",
+          name: "Business-day orders",
+          subsidiaryId: org.subsidiaryId,
+          currency: "CAD",
+          externalAccount: "business-day.myshopify.com",
+          settings: {},
+        }),
+      );
+      await withOrgContext(org.orgId, async () => {
+        const orders: Array<[string, string]> = [
+          ["before-day", "2026-04-07T03:59:59Z"],
+          ["start-of-day", "2026-04-07T04:00:00Z"],
+          ["end-of-day", "2026-04-08T03:59:59Z"],
+          ["next-day", "2026-04-08T04:00:00Z"],
+        ];
+        for (const [externalId, orderedAt] of orders) {
+          await db.execute(sql`
           insert into channel_orders
             (org_id, channel_id, external_id, external_number, shop_currency, presentment_currency,
              subtotal_minor, tax_minor, shipping_minor, total_minor, ordered_at)
           values (${org.orgId}, ${channel.id}, ${externalId}, ${externalId}, 'CAD', 'CAD', 0, 0, 0, 0,
             ${orderedAt}::timestamptz)`);
-      }
-    });
+        }
+      });
 
-    const visible = await countChannelOrdersForBusinessDay(
-      org.orgId,
-      "2026-04-07",
-      "America/Toronto",
-      new Set([org.subsidiaryId]),
-    );
-    const hidden = await countChannelOrdersForBusinessDay(
-      org.orgId,
-      "2026-04-07",
-      "America/Toronto",
-      new Set(),
-    );
-    assert.equal(visible, "2");
-    assert.equal(hidden, "0");
-  });
-});
+      const visible = await countChannelOrdersForBusinessDay(
+        org.orgId,
+        "2026-04-07",
+        "America/Toronto",
+        new Set([org.subsidiaryId]),
+      );
+      const hidden = await countChannelOrdersForBusinessDay(
+        org.orgId,
+        "2026-04-07",
+        "America/Toronto",
+        new Set(),
+      );
+      assert.equal(visible, "2");
+      assert.equal(hidden, "0");
+    });
+  },
+);

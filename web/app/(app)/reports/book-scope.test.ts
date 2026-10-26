@@ -17,9 +17,9 @@ import test from "node:test";
 // (its primaryFilter slot is taken by the project-scope picker), so the
 // subject scan below never selects it.
 
-import ts from 'typescript';
+import ts from "typescript";
 
-const { ReportBookSelectionError, reportBookSelection } = await import('../../../lib/report-books')
+const { ReportBookSelectionError, reportBookSelection } = await import("../../../lib/report-books");
 
 const REPORTS_DIR = dirname(fileURLToPath(import.meta.url));
 
@@ -30,7 +30,10 @@ function viewsUsingBookPicker(): string[] {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) walk(full);
-      else if (entry.name === 'view.ts' && readFileSync(full, 'utf8').includes('reportBookSelection(')) {
+      else if (
+        entry.name === "view.ts" &&
+        readFileSync(full, "utf8").includes("reportBookSelection(")
+      ) {
         found.push(relative(REPORTS_DIR, full));
       }
     }
@@ -41,7 +44,7 @@ function viewsUsingBookPicker(): string[] {
 
 for (const file of viewsUsingBookPicker()) {
   test(`${file} scopes on-screen data and drills to the selected accounting book`, () => {
-    const source = readFileSync(join(REPORTS_DIR, file), 'utf8');
+    const source = readFileSync(join(REPORTS_DIR, file), "utf8");
     const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
     // The reader is whichever awaited data call takes the selected book id —
     // an options object (bookId: selectedBook?.id) or a positional trailing
@@ -65,21 +68,25 @@ for (const file of viewsUsingBookPicker()) {
         isAwaited(node) &&
         // Promise.all is the await-driver, not a data call: its array
         // argument textually contains the reader's threading.
-        node.expression.getText(tree) !== 'Promise.all'
+        node.expression.getText(tree) !== "Promise.all"
       ) {
-        const args = node.arguments.map((arg) => arg.getText(tree)).join(',');
+        const args = node.arguments.map((arg) => arg.getText(tree)).join(",");
         // The subsidiary view resolves the selected entity's translation basis
         // in the selected book before the reader runs; it is not the reader.
-        if (node.expression.getText(tree) === 'reportSubsidiaryView') {
-          assert.match(args, /selectedBook\??\.id/, 'the subsidiary view resolves in the selected book');
+        if (node.expression.getText(tree) === "reportSubsidiaryView") {
+          assert.match(
+            args,
+            /selectedBook\??\.id/,
+            "the subsidiary view resolves in the selected book",
+          );
         } else if (/selectedBook\??\.id/.test(args)) reads++;
       }
       if (ts.isObjectLiteralExpression(node)) {
         const properties = node.properties.filter(ts.isPropertyAssignment);
-        const kind = properties.find((prop) => prop.name.getText(tree) === 'kind');
-        if (kind && ts.isStringLiteral(kind.initializer) && kind.initializer.text === 'ledger') {
-          const book = properties.find((prop) => prop.name.getText(tree) === 'bookId');
-          assert.ok(book, 'every ledger drill carries its accounting book');
+        const kind = properties.find((prop) => prop.name.getText(tree) === "kind");
+        if (kind && ts.isStringLiteral(kind.initializer) && kind.initializer.text === "ledger") {
+          const book = properties.find((prop) => prop.name.getText(tree) === "bookId");
+          assert.ok(book, "every ledger drill carries its accounting book");
           assert.match(book.initializer.getText(tree), /selectedBook\??\.id/);
         }
       }
@@ -99,12 +106,14 @@ test("detail exports label the book basis when an org holds more than one book",
   // P&L/Balance Sheet prefix the book name into periodPhrase; a secondary-book
   // detail CSV/PDF without the same label is not self-describing. Single-book
   // orgs stay byte-identical, so the prefix applies only when books.length > 1.
-  const source = readFileSync(new URL("../../api/reports/statement/[kind]/export/route.ts", import.meta.url), "utf8");
+  const source = readFileSync(
+    new URL("../../api/reports/statement/[kind]/export/route.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(source, /books\.length\s*>\s*1/);
   assert.match(source, /dateRangeLabel/);
   assert.match(source, /selectedBook\.name/);
 });
-
 
 // One selection contract for statement pages, exports, and supporting rows:
 // only an omitted selection defaults to the primary book. A stale or foreign
@@ -112,16 +121,13 @@ test("detail exports label the book basis when an org holds more than one book",
 // malformed id is refused before any book is read. Multi-book catalog and
 // default semantics are covered database-backed in
 // book-selection.integration.test.ts.
-test('a malformed book selection is refused before any book is read', async () => {
-  await assert.rejects(
-    reportBookSelection('org-1', 'not-a-uuid'),
-    (error: unknown) => {
-      assert.ok(error instanceof ReportBookSelectionError, 'the refusal must be typed')
-      assert.equal(
-        (error as Error).message,
-        'Accounting book is unavailable. Choose an active accounting book.',
-      )
-      return true
-    },
-  )
-})
+test("a malformed book selection is refused before any book is read", async () => {
+  await assert.rejects(reportBookSelection("org-1", "not-a-uuid"), (error: unknown) => {
+    assert.ok(error instanceof ReportBookSelectionError, "the refusal must be typed");
+    assert.equal(
+      (error as Error).message,
+      "Accounting book is unavailable. Choose an active accounting book.",
+    );
+    return true;
+  });
+});

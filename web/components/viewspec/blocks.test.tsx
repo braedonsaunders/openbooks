@@ -9,7 +9,11 @@ import type { Block } from "@braedonsaunders/appkit-viewspec";
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (/\.(css|scss|sass|less)(\?[^"]*)?$/.test(specifier)) {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export default {}" };
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export default {}",
+      };
     }
     return nextResolve(specifier, context);
   },

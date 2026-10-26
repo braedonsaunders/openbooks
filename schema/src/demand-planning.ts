@@ -169,14 +169,8 @@ export const demandPlanSuggestions = pgTable(
   (t) => [
     uniqueIndex("demand_plan_suggestions_org_id_id_unique").on(t.orgId, t.id),
     index("demand_plan_suggestions_org_run_status").on(t.orgId, t.runId, t.status),
-    check(
-      "demand_plan_suggestions_quantity_positive",
-      sql`${t.quantity} > 0`,
-    ),
-    check(
-      "demand_plan_suggestions_forecast_nonnegative",
-      sql`${t.forecastQty} >= 0`,
-    ),
+    check("demand_plan_suggestions_quantity_positive", sql`${t.quantity} > 0`),
+    check("demand_plan_suggestions_forecast_nonnegative", sql`${t.forecastQty} >= 0`),
     check(
       "demand_plan_suggestions_cover_nonnegative",
       sql`${t.daysOfCover} is null or ${t.daysOfCover} >= 0`,
@@ -210,10 +204,7 @@ export const demandForecastOverrides = pgTable(
       t.stockLocationId,
       t.periodStart,
     ),
-    check(
-      "demand_forecast_overrides_quantity_nonnegative",
-      sql`${t.quantity} >= 0`,
-    ),
+    check("demand_forecast_overrides_quantity_nonnegative", sql`${t.quantity} >= 0`),
     check(
       "demand_forecast_overrides_reason_valid",
       sql`length(btrim(${t.reason})) between 5 and 500`,

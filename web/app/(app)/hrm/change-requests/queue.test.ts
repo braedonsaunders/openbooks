@@ -29,7 +29,6 @@ function lookup(key: string): string {
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-
     const parent = context.parentURL ?? "";
     const owned = parent.endsWith("/web/lib/hrm/change-requests.ts");
     if (owned && specifier === "next-intl/server") {
@@ -74,7 +73,13 @@ registerHooks({
           ),
       };
     }
-    if (owned && (specifier === "../features" || specifier === "../feature-gates" || specifier.endsWith("/lib/features") || specifier.endsWith("/lib/feature-gates"))) {
+    if (
+      owned &&
+      (specifier === "../features" ||
+        specifier === "../feature-gates" ||
+        specifier.endsWith("/lib/features") ||
+        specifier.endsWith("/lib/feature-gates"))
+    ) {
       return {
         shortCircuit: true,
         format: "module",
@@ -129,12 +134,9 @@ registerHooks({
 });
 
 const { loadChangeRequestQueue } = await import("../../../../lib/hrm/change-requests.ts");
-const { resolveQueueStatus, segmentOfServiceStatus } = await import(
-  "../../../../lib/hrm/queue-status.ts"
-);
-const { HrmAuthorizationError } = await import(
-  "@openbooks/engine/hrm/authorization"
-);
+const { resolveQueueStatus, segmentOfServiceStatus } =
+  await import("../../../../lib/hrm/queue-status.ts");
+const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorization");
 
 const gap = globalThis as Record<string, unknown>;
 
@@ -170,13 +172,20 @@ test("an unknown segment refuses naming the five segments, never a silent All", 
   stubList([]);
   const data = await loadChangeRequestQueue(HR_ADMIN, { status: "bogus" });
   assert.ok(data.refusal, "the refusal travels as data the page renders");
-  assert.equal(data.refusal.title, lookup("queue.refusalTitle"), "the refusal carries the catalogued title");
+  assert.equal(
+    data.refusal.title,
+    lookup("queue.refusalTitle"),
+    "the refusal carries the catalogued title",
+  );
   assert.ok(
     data.refusal.message.includes("bogus"),
     "the refusal names the segment the URL asked for",
   );
   for (const segment of ["draft", "submitted", "approved", "rejected", "withdrawn"]) {
-    assert.ok(data.refusal.message.includes(segment), `the refusal names the valid ${segment} segment`);
+    assert.ok(
+      data.refusal.message.includes(segment),
+      `the refusal names the valid ${segment} segment`,
+    );
   }
   assert.equal(data.hasContent, false, "no rows render beside the refusal");
   assert.deepEqual(data.rows, [], "no rows leak through a refused segment");
@@ -201,7 +210,11 @@ test("an absent segment lists every request with exact per-segment counts", asyn
   );
   assert.equal(data.rows.length, 5, "All shows every service row, applied included");
   const submitted = data.segments.find((segment) => segment.value === "submitted");
-  assert.equal(submitted?.label, lookup("queue.segments.submitted"), "the segment label does not duplicate the shared count badge");
+  assert.equal(
+    submitted?.label,
+    lookup("queue.segments.submitted"),
+    "the segment label does not duplicate the shared count badge",
+  );
   assert.equal(submitted?.count, 2, "the shared status filter receives the exact count separately");
 });
 
@@ -221,7 +234,8 @@ test("the submitted segment shows pending approvals only", async () => {
 });
 
 test("a subsidiary-scope denial refuses with the remedy, never a partial list", async () => {
-  const remedy = "a role restricted to specific subsidiaries cannot read the org-wide queue — ask an administrator for access";
+  const remedy =
+    "a role restricted to specific subsidiaries cannot read the org-wide queue — ask an administrator for access";
   stubList({ error: new HrmAuthorizationError(remedy) });
   const data = await loadChangeRequestQueue(HR_ADMIN, {});
   assert.ok(data.refusal, "the denial travels as data");
@@ -240,13 +254,21 @@ test("an unexpected system failure propagates instead of an empty queue", async 
 });
 
 test("the segment mapping leaves applied to All and refuses anything else", () => {
-  assert.deepEqual(resolveQueueStatus(null), { ok: true, segment: null, serviceStatus: null }, "absent means All");
+  assert.deepEqual(
+    resolveQueueStatus(null),
+    { ok: true, segment: null, serviceStatus: null },
+    "absent means All",
+  );
   assert.deepEqual(
     resolveQueueStatus("submitted"),
     { ok: true, segment: "submitted", serviceStatus: "pending_approval" },
     "submitted filters the pending state",
   );
-  assert.equal(segmentOfServiceStatus("applied"), null, "an applied request counts toward no segment");
+  assert.equal(
+    segmentOfServiceStatus("applied"),
+    null,
+    "an applied request counts toward no segment",
+  );
   const refused = resolveQueueStatus("applied");
   assert.equal(refused.ok, false, "applied is not a segment");
   if (!refused.ok) {

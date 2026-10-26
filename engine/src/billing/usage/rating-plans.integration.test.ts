@@ -13,12 +13,7 @@ import {
   publishUsagePlanVersion,
   replaceUsageRatingBands,
 } from "./rating-plans.ts";
-import {
-  createPrepaidGrant,
-  prepaidBalance,
-  prepaidState,
-  recordPrepaidDraw,
-} from "./prepaid.ts";
+import { createPrepaidGrant, prepaidBalance, prepaidState, recordPrepaidDraw } from "./prepaid.ts";
 import { createUsageMeter } from "./records.ts";
 import {
   createScratchOrg,
@@ -44,7 +39,11 @@ async function withUsageOrg(run: (org: ScratchOrg, actor: string) => Promise<voi
              true
            )
          where id = ${org.orgId}`);
-      assert.equal(enabled.rowCount, 1, "the scratch organization must receive the usage feature settings");
+      assert.equal(
+        enabled.rowCount,
+        1,
+        "the scratch organization must receive the usage feature settings",
+      );
     });
     await run(org, actor);
   } finally {
@@ -109,8 +108,13 @@ async function seedPostedInvoiceLine(
   const documentId = randomUUID();
   const lineId = randomUUID();
   await withBypassContext(async () => {
-    const rule = (await db.execute<{ method: string }>(sql`
-      select method from recognition_rules where org_id = ${org.orgId} and id = ${org.recognitionRuleId}`, "objects"))[0];
+    const rule = (
+      await db.execute<{ method: string }>(
+        sql`
+      select method from recognition_rules where org_id = ${org.orgId} and id = ${org.recognitionRuleId}`,
+        "objects",
+      )
+    )[0];
     assert.ok(rule, "the scratch recognition rule must be available");
     if (rule.method !== method) {
       const changed = await db.execute<never>(sql`
@@ -142,23 +146,34 @@ async function seedPostedInvoiceLine(
        where org_id = ${org.orgId} and id = ${documentId} and status = 'draft'`);
     assert.equal(approved.rowCount, 1, "the invoice must enter the approved posting state");
   });
-  await postDocument(documentId, {
-    control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
-  }, { audit: { actorId: actor, source: "test" } });
+  await postDocument(
+    documentId,
+    {
+      control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+    },
+    { audit: { actorId: actor, source: "test" } },
+  );
   return lineId;
 }
 
 function usageError(code: string, detail: string) {
   return (error: unknown) =>
-    error instanceof UsageBillingError && error.code === code &&
+    error instanceof UsageBillingError &&
+    error.code === code &&
     `${error.message} ${error.remedy}`.toLowerCase().includes(detail.toLowerCase());
 }
 
 test("publishing freezes a rating version and hashes a sub-cent band price", DB, async () => {
   await withUsageOrg(async (org, actor) => {
     const meter = await meterFor(org, actor, "freeze");
-    const plan = await createUsageRatingPlan(org.orgId, actor, { name: `Frozen ${randomUUID()}`, currency: "CAD" });
-    const version = await createUsageRatingPlanVersion(org.orgId, actor, { planId: plan.id, effectiveFrom: org.date });
+    const plan = await createUsageRatingPlan(org.orgId, actor, {
+      name: `Frozen ${randomUUID()}`,
+      currency: "CAD",
+    });
+    const version = await createUsageRatingPlanVersion(org.orgId, actor, {
+      planId: plan.id,
+      effectiveFrom: org.date,
+    });
     await replaceUsageRatingBands(org.orgId, actor, version.id, [
       { meterId: meter.id, kind: "graduated", seq: 1, upToQty: null, unitPrice: "0.00000001" },
     ]);
@@ -178,51 +193,82 @@ test("publishing freezes a rating version and hashes a sub-cent band price", DB,
   });
 });
 
-test("band coverage refuses a sequence gap and overlapping quantity boundary by seq", DB, async () => {
-  await withUsageOrg(async (org, actor) => {
-    const meter = await meterFor(org, actor, "coverage");
-    const plan = await createUsageRatingPlan(org.orgId, actor, { name: `Coverage ${randomUUID()}`, currency: "CAD" });
-    const gap = await createUsageRatingPlanVersion(org.orgId, actor, { planId: plan.id, effectiveFrom: org.date });
-    await replaceUsageRatingBands(org.orgId, actor, gap.id, [
-      { meterId: meter.id, kind: "graduated", seq: 1, upToQty: "10", unitPrice: "1" },
-      { meterId: meter.id, kind: "graduated", seq: 3, upToQty: null, unitPrice: "2" },
-    ]);
-    await assert.rejects(
-      publishUsagePlanVersion(org.orgId, actor, gap.id),
-      (error: unknown) => error instanceof UsageBillingError && error.code === "usage_band_coverage_gap" &&
-        error.message.includes("seq 3") && error.remedy.includes("seq 2"),
-    );
+test(
+  "band coverage refuses a sequence gap and overlapping quantity boundary by seq",
+  DB,
+  async () => {
+    await withUsageOrg(async (org, actor) => {
+      const meter = await meterFor(org, actor, "coverage");
+      const plan = await createUsageRatingPlan(org.orgId, actor, {
+        name: `Coverage ${randomUUID()}`,
+        currency: "CAD",
+      });
+      const gap = await createUsageRatingPlanVersion(org.orgId, actor, {
+        planId: plan.id,
+        effectiveFrom: org.date,
+      });
+      await replaceUsageRatingBands(org.orgId, actor, gap.id, [
+        { meterId: meter.id, kind: "graduated", seq: 1, upToQty: "10", unitPrice: "1" },
+        { meterId: meter.id, kind: "graduated", seq: 3, upToQty: null, unitPrice: "2" },
+      ]);
+      await assert.rejects(
+        publishUsagePlanVersion(org.orgId, actor, gap.id),
+        (error: unknown) =>
+          error instanceof UsageBillingError &&
+          error.code === "usage_band_coverage_gap" &&
+          error.message.includes("seq 3") &&
+          error.remedy.includes("seq 2"),
+      );
 
-    const zeroRange = await createUsageRatingPlanVersion(org.orgId, actor, { planId: plan.id, effectiveFrom: org.date });
-    await replaceUsageRatingBands(org.orgId, actor, zeroRange.id, [
-      { meterId: meter.id, kind: "graduated", seq: 1, upToQty: "0", unitPrice: "1" },
-      { meterId: meter.id, kind: "graduated", seq: 2, upToQty: null, unitPrice: "2" },
-    ]);
-    await assert.rejects(
-      publishUsagePlanVersion(org.orgId, actor, zeroRange.id),
-      (error: unknown) => error instanceof UsageBillingError && error.code === "usage_band_coverage_gap" &&
-        error.message.includes("seq 1") && error.remedy.includes("seq 1"),
-    );
+      const zeroRange = await createUsageRatingPlanVersion(org.orgId, actor, {
+        planId: plan.id,
+        effectiveFrom: org.date,
+      });
+      await replaceUsageRatingBands(org.orgId, actor, zeroRange.id, [
+        { meterId: meter.id, kind: "graduated", seq: 1, upToQty: "0", unitPrice: "1" },
+        { meterId: meter.id, kind: "graduated", seq: 2, upToQty: null, unitPrice: "2" },
+      ]);
+      await assert.rejects(
+        publishUsagePlanVersion(org.orgId, actor, zeroRange.id),
+        (error: unknown) =>
+          error instanceof UsageBillingError &&
+          error.code === "usage_band_coverage_gap" &&
+          error.message.includes("seq 1") &&
+          error.remedy.includes("seq 1"),
+      );
 
-    const overlap = await createUsageRatingPlanVersion(org.orgId, actor, { planId: plan.id, effectiveFrom: org.date });
-    await replaceUsageRatingBands(org.orgId, actor, overlap.id, [
-      { meterId: meter.id, kind: "graduated", seq: 1, upToQty: "10", unitPrice: "1" },
-      { meterId: meter.id, kind: "graduated", seq: 2, upToQty: "9", unitPrice: "2" },
-      { meterId: meter.id, kind: "graduated", seq: 3, upToQty: null, unitPrice: "3" },
-    ]);
-    await assert.rejects(
-      publishUsagePlanVersion(org.orgId, actor, overlap.id),
-      (error: unknown) => error instanceof UsageBillingError && error.code === "usage_band_coverage_overlap" &&
-        error.message.includes("seq 2") && error.remedy.includes("seq 2"),
-    );
-  });
-});
+      const overlap = await createUsageRatingPlanVersion(org.orgId, actor, {
+        planId: plan.id,
+        effectiveFrom: org.date,
+      });
+      await replaceUsageRatingBands(org.orgId, actor, overlap.id, [
+        { meterId: meter.id, kind: "graduated", seq: 1, upToQty: "10", unitPrice: "1" },
+        { meterId: meter.id, kind: "graduated", seq: 2, upToQty: "9", unitPrice: "2" },
+        { meterId: meter.id, kind: "graduated", seq: 3, upToQty: null, unitPrice: "3" },
+      ]);
+      await assert.rejects(
+        publishUsagePlanVersion(org.orgId, actor, overlap.id),
+        (error: unknown) =>
+          error instanceof UsageBillingError &&
+          error.code === "usage_band_coverage_overlap" &&
+          error.message.includes("seq 2") &&
+          error.remedy.includes("seq 2"),
+      );
+    });
+  },
+);
 
 test("a nine-decimal unit price is refused with the invoice precision remedy", DB, async () => {
   await withUsageOrg(async (org, actor) => {
     const meter = await meterFor(org, actor, "precision");
-    const plan = await createUsageRatingPlan(org.orgId, actor, { name: `Precision ${randomUUID()}`, currency: "CAD" });
-    const version = await createUsageRatingPlanVersion(org.orgId, actor, { planId: plan.id, effectiveFrom: org.date });
+    const plan = await createUsageRatingPlan(org.orgId, actor, {
+      name: `Precision ${randomUUID()}`,
+      currency: "CAD",
+    });
+    const version = await createUsageRatingPlanVersion(org.orgId, actor, {
+      planId: plan.id,
+      effectiveFrom: org.date,
+    });
     await assert.rejects(
       replaceUsageRatingBands(org.orgId, actor, version.id, [
         { meterId: meter.id, kind: "graduated", seq: 1, upToQty: null, unitPrice: "0.000000001" },
@@ -258,26 +304,37 @@ test("subscription links validate the customer's identity and plan currency", DB
 
     const usd = await publishedVersion(org, actor, meter.id, "USD");
     await assert.rejects(
-      createSubscriptionUsageLink(org.orgId, actor, { ...input, customerId: org.customerId, planVersionId: usd.version.id }),
+      createSubscriptionUsageLink(org.orgId, actor, {
+        ...input,
+        customerId: org.customerId,
+        planVersionId: usd.version.id,
+      }),
       usageError("usage_link_currency_mismatch", "matches the subscription's own plan currency"),
     );
   });
 });
 
-test("prepaid grant refuses a posted invoice line without usage-method recognition", DB, async () => {
-  await withUsageOrg(async (org, actor) => {
-    const lineId = await seedPostedInvoiceLine(org, actor, "point_in_time", "25");
-    await assert.rejects(
-      createPrepaidGrant(org.orgId, actor, {
-        customerId: org.customerId,
-        sourceDocumentLineId: lineId,
-        amount: "25",
-        currency: "CAD",
-      }),
-      usageError("usage_prepaid_source_not_eligible", "Set a usage-method recognition rule on the prepaid item and bill it again"),
-    );
-  });
-});
+test(
+  "prepaid grant refuses a posted invoice line without usage-method recognition",
+  DB,
+  async () => {
+    await withUsageOrg(async (org, actor) => {
+      const lineId = await seedPostedInvoiceLine(org, actor, "point_in_time", "25");
+      await assert.rejects(
+        createPrepaidGrant(org.orgId, actor, {
+          customerId: org.customerId,
+          sourceDocumentLineId: lineId,
+          amount: "25",
+          currency: "CAD",
+        }),
+        usageError(
+          "usage_prepaid_source_not_eligible",
+          "Set a usage-method recognition rule on the prepaid item and bill it again",
+        ),
+      );
+    });
+  },
+);
 
 test("prepaid draws reduce derived balances, depletion and expiry remain derived", DB, async () => {
   await withUsageOrg(async (org, actor) => {
@@ -288,15 +345,27 @@ test("prepaid draws reduce derived balances, depletion and expiry remain derived
       amount: "10",
       currency: "CAD",
     });
-    await recordPrepaidDraw(org.orgId, { grantId: depletedGrant.id, periodMonth: "2026-07-01", amount: "4" });
+    await recordPrepaidDraw(org.orgId, {
+      grantId: depletedGrant.id,
+      periodMonth: "2026-07-01",
+      amount: "4",
+    });
     assert.equal(await prepaidBalance(org.orgId, depletedGrant.id, "2026-07-15"), "6.0000");
-    await recordPrepaidDraw(org.orgId, { grantId: depletedGrant.id, periodMonth: "2026-07-01", amount: "6" });
+    await recordPrepaidDraw(org.orgId, {
+      grantId: depletedGrant.id,
+      periodMonth: "2026-07-01",
+      amount: "6",
+    });
     assert.deepEqual(await prepaidState(org.orgId, depletedGrant.id, "2026-07-31"), {
       state: "depleted",
       balance: "0.0000",
     });
     await assert.rejects(
-      recordPrepaidDraw(org.orgId, { grantId: depletedGrant.id, periodMonth: "2026-07-01", amount: "0.01" }),
+      recordPrepaidDraw(org.orgId, {
+        grantId: depletedGrant.id,
+        periodMonth: "2026-07-01",
+        amount: "0.01",
+      }),
       usageError("usage_prepaid_balance_exceeded", "remaining balance of 0.0000"),
     );
 
@@ -313,7 +382,11 @@ test("prepaid draws reduce derived balances, depletion and expiry remain derived
       balance: "12.0000",
     });
     await assert.rejects(
-      recordPrepaidDraw(org.orgId, { grantId: expiredGrant.id, periodMonth: "2026-08-01", amount: "1" }),
+      recordPrepaidDraw(org.orgId, {
+        grantId: expiredGrant.id,
+        periodMonth: "2026-08-01",
+        amount: "1",
+      }),
       usageError("usage_prepaid_grant_expired", "expired balances remain liabilities"),
     );
   });

@@ -43,9 +43,7 @@ const routeState: RouteState = {
   flowsEnabled: true,
   flowQueries: 0,
 };
-(
-  globalThis as typeof globalThis & Record<symbol, unknown>
-)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
@@ -150,7 +148,8 @@ registerHooks({
     return nextResolve(specifier);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url) ?? mockSources.get(`mock:${new URL(url).searchParams.get("mock")}`);
+    const source =
+      mockSources.get(url) ?? mockSources.get(`mock:${new URL(url).searchParams.get("mock")}`);
     if (source !== undefined) return { format: "module", source, shortCircuit: true };
     return nextLoad(url, context);
   },
@@ -188,7 +187,10 @@ test("turning Flows off preserves the submitter's pending-document withdrawal fa
   routeState.documentSubmitterId = routeState.authz.user.id;
   const response = await GET(request("quote"));
   assert.equal(response.status, 200);
-  const body = await response.json() as { submittedByViewer: boolean; approvalState: { status: string } };
+  const body = (await response.json()) as {
+    submittedByViewer: boolean;
+    approvalState: { status: string };
+  };
   assert.equal(body.submittedByViewer, true);
   assert.equal(body.approvalState.status, "pending_approval");
   assert.equal(routeState.flowQueries, 3, "recorded approval evidence remains visible");
@@ -343,11 +345,23 @@ test("with Flows off a customer payment answers an empty approval state, draft o
       neverSubmitted: true,
       canRetry: false,
       submittedByViewer: false,
-    canWithdrawCommand: false,
+      canWithdrawCommand: false,
     });
-    assert.deepEqual(routeState.readChecks, ["customer_payment"], "the receipt's own read grant is enforced");
-    assert.deepEqual(routeState.statusCalls, [SUBJECT_ID], "the empty state carries the record's own status");
-    assert.equal(routeState.flowQueries, 3, "recorded evidence is read under the native scope lock");
+    assert.deepEqual(
+      routeState.readChecks,
+      ["customer_payment"],
+      "the receipt's own read grant is enforced",
+    );
+    assert.deepEqual(
+      routeState.statusCalls,
+      [SUBJECT_ID],
+      "the empty state carries the record's own status",
+    );
+    assert.equal(
+      routeState.flowQueries,
+      3,
+      "recorded evidence is read under the native scope lock",
+    );
   }
 });
 
@@ -368,7 +382,11 @@ test("with Flows off a vendor payment answers an empty approval state", async ()
     submittedByViewer: false,
     canWithdrawCommand: false,
   });
-  assert.deepEqual(routeState.readChecks, ["vendor_payment"], "the payment's own read grant is enforced");
+  assert.deepEqual(
+    routeState.readChecks,
+    ["vendor_payment"],
+    "the payment's own read grant is enforced",
+  );
   assert.equal(routeState.flowQueries, 3, "recorded evidence is read under the native scope lock");
 });
 
@@ -407,7 +425,11 @@ test("a readable vendor payment answers its approval state, never a refusal", as
   assert.deepEqual(body.approvalState.pendingWith, []);
   assert.equal(body.approvalState.myActions, null);
   assert.deepEqual(body.history, []);
-  assert.deepEqual(routeState.readChecks, ["vendor_payment"], "the payment's own read grant is enforced");
+  assert.deepEqual(
+    routeState.readChecks,
+    ["vendor_payment"],
+    "the payment's own read grant is enforced",
+  );
 });
 
 test("a vendor payment the caller cannot read still meets the missing-record answer", async () => {
@@ -491,7 +513,10 @@ test("the submitter is flagged as the viewer of the submission while a later unr
   const response = await GET(request());
 
   assert.equal(response.status, 200);
-  const body = (await response.json()) as { submittedByViewer: boolean; approvalState: { pendingWith: unknown[] } };
+  const body = (await response.json()) as {
+    submittedByViewer: boolean;
+    approvalState: { pendingWith: unknown[] };
+  };
   assert.equal(body.approvalState.pendingWith.length, 1);
   assert.equal(body.submittedByViewer, true);
 });
@@ -507,7 +532,10 @@ test("a viewer who did not submit is not flagged as the submitter, even with a l
     const response = await GET(request());
 
     assert.equal(response.status, 200);
-    assert.equal(((await response.json()) as { submittedByViewer: boolean }).submittedByViewer, false);
+    assert.equal(
+      ((await response.json()) as { submittedByViewer: boolean }).submittedByViewer,
+      false,
+    );
   } finally {
     routeState.authz.user.id = "user-1";
   }
@@ -523,7 +551,10 @@ test("a decided submission has no open submission to flag", async () => {
   const response = await GET(request());
 
   assert.equal(response.status, 200);
-  assert.equal(((await response.json()) as { submittedByViewer: boolean }).submittedByViewer, false);
+  assert.equal(
+    ((await response.json()) as { submittedByViewer: boolean }).submittedByViewer,
+    false,
+  );
 });
 
 test("a pending document submitter remains eligible to recall without a live workflow gate", async () => {
@@ -546,5 +577,8 @@ test("a workflow actor cannot claim submission authority owned by another docume
   const response = await GET(request());
 
   assert.equal(response.status, 200);
-  assert.equal(((await response.json()) as { submittedByViewer: boolean }).submittedByViewer, false);
+  assert.equal(
+    ((await response.json()) as { submittedByViewer: boolean }).submittedByViewer,
+    false,
+  );
 });

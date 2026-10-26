@@ -15,8 +15,14 @@ import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 const leaseTerms = {
-  billingDay: 1, paymentTermsDays: 0, securityDepositRequired: "0", camMethod: "none" as const,
-  lateFeeType: "none" as const, lateFeeValue: "0", graceDays: 0, autoPost: true,
+  billingDay: 1,
+  paymentTermsDays: 0,
+  securityDepositRequired: "0",
+  camMethod: "none" as const,
+  lateFeeType: "none" as const,
+  lateFeeValue: "0",
+  graceDays: 0,
+  autoPost: true,
 };
 
 async function seedTruncationOrg() {
@@ -50,9 +56,17 @@ test("PM2: past-due and lease detail survive the schedule preview cap", { skip: 
     // org's open July-2026 period; the workspace reads as of 2026-07-20 so
     // the test never depends on the ambient business date.
     const leaseA = await createPropertyLease({
-      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, tenantId: fx.org.customerId,
-      leaseNumber: "L-OLD", startsOn: "2026-04-01", endsOn: "2026-06-30",
-      baseRent: "1000", autoInvoice: true, ...leaseTerms,
+      orgId,
+      actorId: fx.actorId,
+      allowedSubsidiaryIds: null,
+      propertyId: fx.propertyId,
+      tenantId: fx.org.customerId,
+      leaseNumber: "L-OLD",
+      startsOn: "2026-04-01",
+      endsOn: "2026-06-30",
+      baseRent: "1000",
+      autoInvoice: true,
+      ...leaseTerms,
     });
     await activatePropertyLease(orgId, fx.actorId, null, leaseA.id);
     const billed = await billDueLeaseCharges(orgId, fx.actorId, null, "2026-07-01", leaseA.id);
@@ -63,17 +77,32 @@ test("PM2: past-due and lease detail survive the schedule preview cap", { skip: 
     // cap: every filler line is newer, so the preview keeps filler only and
     // the old invoiced lines fall out first.
     const leaseB = await createPropertyLease({
-      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, propertyId: fx.propertyId, tenantId: fx.org.customerId,
-      leaseNumber: "L-NEW", startsOn: "2026-07-01", endsOn: null,
-      baseRent: "100", autoInvoice: false, ...leaseTerms,
+      orgId,
+      actorId: fx.actorId,
+      allowedSubsidiaryIds: null,
+      propertyId: fx.propertyId,
+      tenantId: fx.org.customerId,
+      leaseNumber: "L-NEW",
+      startsOn: "2026-07-01",
+      endsOn: null,
+      baseRent: "100",
+      autoInvoice: false,
+      ...leaseTerms,
     });
     await activatePropertyLease(orgId, fx.actorId, null, leaseB.id);
     // Filler rides a second charge with no generated lines, so its daily
     // periods cannot collide with the monthly base-rent schedule under the
     // (org, charge, period-starts-on) uniqueness rule.
     const fillerCharge = await addLeaseCharge({
-      orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId: leaseB.id, chargeType: "parking",
-      description: "Bulk filler", amount: "100", frequency: "monthly", effectiveFrom: "2026-07-02",
+      orgId,
+      actorId: fx.actorId,
+      allowedSubsidiaryIds: null,
+      leaseId: leaseB.id,
+      chargeType: "parking",
+      description: "Bulk filler",
+      amount: "100",
+      frequency: "monthly",
+      effectiveFrom: "2026-07-02",
     });
     await db.execute(sql`insert into lease_schedule_lines (org_id, lease_id, charge_id, period_starts_on, period_ends_on, due_on, amount, status)
       select ${orgId}, ${leaseB.id}, ${fillerCharge.id}, d::date, (d + interval '1 month' - interval '1 day')::date, d::date, '100', 'scheduled'
@@ -82,11 +111,19 @@ test("PM2: past-due and lease detail survive the schedule preview cap", { skip: 
     const workspace = await propertyManagementWorkspace(orgId, null, "2026-07-20");
 
     // The preview is capped while the completeness evidence is not.
-    assert.ok(workspace.scheduleTotal > 2000, `expected more than 2000 lines, got ${workspace.scheduleTotal}`);
+    assert.ok(
+      workspace.scheduleTotal > 2000,
+      `expected more than 2000 lines, got ${workspace.scheduleTotal}`,
+    );
     assert.equal(workspace.schedules.length, 2000);
     assert.equal(workspace.schedulesTruncated, true);
-    const previewDocuments = new Set(workspace.schedules.map((line) => line.invoiceDocumentId).filter(Boolean));
-    assert.ok(!previewDocuments.has(invoiceId), "the oldest invoiced line fell out of the capped preview");
+    const previewDocuments = new Set(
+      workspace.schedules.map((line) => line.invoiceDocumentId).filter(Boolean),
+    );
+    assert.ok(
+      !previewDocuments.has(invoiceId),
+      "the oldest invoiced line fell out of the capped preview",
+    );
 
     // Past-due still counts the oldest posted unpaid invoice ...
     assert.equal(workspace.overdueAsOf, "2026-07-20");

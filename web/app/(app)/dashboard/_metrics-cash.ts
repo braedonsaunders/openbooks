@@ -1,8 +1,8 @@
-import 'server-only'
-import { getTranslations } from 'next-intl/server'
-import { compareMoney } from '@/lib/cash/core'
-import { MissingExchangeRateError } from '@/lib/fx-presentation'
-import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
+import "server-only";
+import { getTranslations } from "next-intl/server";
+import { compareMoney } from "@/lib/cash/core";
+import { MissingExchangeRateError } from "@/lib/fx-presentation";
+import type { DashboardWidgetContext, WidgetValue } from "./_metrics-context";
 
 /**
  * Dashboard widget readers for cash conversion, cash pressure and the cash forecast (Cash Flow).
@@ -16,57 +16,57 @@ import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
  */
 
 export type CashLowestPoint = {
-  amount: string
+  amount: string;
   /** Week-start ISO of the week the lowest projected cash occurs in. */
-  week: string
-  status: 'healthy' | 'caution' | 'critical'
-  horizonWeeks: number
+  week: string;
+  status: "healthy" | "caution" | "critical";
+  horizonWeeks: number;
   /** Names of refused forecast categories (empty = full forecast). */
-  refused: string[]
-}
+  refused: string[];
+};
 
 export type CashBurn = {
-  weeklyOutflow: string
-  netChange: string
-  horizonWeeks: number
+  weeklyOutflow: string;
+  netChange: string;
+  horizonWeeks: number;
   /** Names of refused forecast categories (empty = full forecast). */
-  refused: string[]
-}
+  refused: string[];
+};
 
 export type CashCoverage = {
   /** (cash + AR outstanding) / AP outstanding on the 0..n scale. */
-  ratio: string
+  ratio: string;
   /** At or above 1 the on-hand cash and receivables cover the payables. */
-  covered: boolean
-}
+  covered: boolean;
+};
 
 export type CashForecastWeek = {
-  label: string
-  inflow: string
-  outflow: string
-  net: string
-  endingCash: string
-}
+  label: string;
+  inflow: string;
+  outflow: string;
+  net: string;
+  endingCash: string;
+};
 
 export type CashForecast = {
   /** Weekly magnitudes only — the week's entries stay on the dashboard. */
-  weeks: CashForecastWeek[]
-  projectedEnd: string
-  horizonWeeks: number
+  weeks: CashForecastWeek[];
+  projectedEnd: string;
+  horizonWeeks: number;
   /** Names of refused forecast categories (empty = full forecast). */
-  refused: string[]
-}
+  refused: string[];
+};
 
 export type CashWidgetMetrics = {
-  cashLowest: WidgetValue<CashLowestPoint> | null
-  cashBurn: WidgetValue<CashBurn> | null
-  cashCoverage: WidgetValue<CashCoverage> | null
+  cashLowest: WidgetValue<CashLowestPoint> | null;
+  cashBurn: WidgetValue<CashBurn> | null;
+  cashCoverage: WidgetValue<CashCoverage> | null;
   /** Mean days to collect (null = no collection history). */
-  cashCollectDays: WidgetValue<number | null> | null
+  cashCollectDays: WidgetValue<number | null> | null;
   /** Mean days to pay (null = no payment history). */
-  cashPayDays: WidgetValue<number | null> | null
-  cashForecast: WidgetValue<CashForecast> | null
-}
+  cashPayDays: WidgetValue<number | null> | null;
+  cashForecast: WidgetValue<CashForecast> | null;
+};
 
 export const EMPTY_CASH_WIDGET_METRICS: CashWidgetMetrics = {
   cashLowest: null,
@@ -75,40 +75,50 @@ export const EMPTY_CASH_WIDGET_METRICS: CashWidgetMetrics = {
   cashCollectDays: null,
   cashPayDays: null,
   cashForecast: null,
-}
+};
 
 export async function loadCashWidgetMetrics(
   ctx: DashboardWidgetContext,
   need: (...fields: (keyof CashWidgetMetrics)[]) => boolean,
 ): Promise<Partial<CashWidgetMetrics>> {
-  if (!need('cashLowest', 'cashBurn', 'cashCoverage', 'cashCollectDays', 'cashPayDays', 'cashForecast')) return {}
-  const read = ctx.cashPosition
-  if (!read) return {}
-  let position
+  if (
+    !need(
+      "cashLowest",
+      "cashBurn",
+      "cashCoverage",
+      "cashCollectDays",
+      "cashPayDays",
+      "cashForecast",
+    )
+  )
+    return {};
+  const read = ctx.cashPosition;
+  if (!read) return {};
+  let position;
   try {
-    position = await read()
+    position = await read();
   } catch (error: unknown) {
     // A missing exchange rate refuses per widget with its message (the
     // runway tile answers the same condition with its reason); anything
     // else still throws.
     if (error instanceof MissingExchangeRateError) {
-      const refused = { available: false as const, reason: error.message }
-      const out: Partial<CashWidgetMetrics> = {}
-      if (need('cashLowest')) out.cashLowest = refused
-      if (need('cashBurn')) out.cashBurn = refused
-      if (need('cashCoverage')) out.cashCoverage = refused
-      if (need('cashCollectDays')) out.cashCollectDays = refused
-      if (need('cashPayDays')) out.cashPayDays = refused
-      if (need('cashForecast')) out.cashForecast = refused
-      return out
+      const refused = { available: false as const, reason: error.message };
+      const out: Partial<CashWidgetMetrics> = {};
+      if (need("cashLowest")) out.cashLowest = refused;
+      if (need("cashBurn")) out.cashBurn = refused;
+      if (need("cashCoverage")) out.cashCoverage = refused;
+      if (need("cashCollectDays")) out.cashCollectDays = refused;
+      if (need("cashPayDays")) out.cashPayDays = refused;
+      if (need("cashForecast")) out.cashForecast = refused;
+      return out;
     }
-    throw error
+    throw error;
   }
   // Refused categories understate outflows: every figure below names them so
   // no tile reads as a healthy fact while the forecast is partial.
-  const refused = (position.unavailableCategories ?? []).map((r) => r.name)
-  const out: Partial<CashWidgetMetrics> = {}
-  if (need('cashLowest')) {
+  const refused = (position.unavailableCategories ?? []).map((r) => r.name);
+  const out: Partial<CashWidgetMetrics> = {};
+  if (need("cashLowest")) {
     out.cashLowest = {
       available: true,
       value: {
@@ -118,9 +128,9 @@ export async function loadCashWidgetMetrics(
         horizonWeeks: position.horizonWeeks,
         refused,
       },
-    }
+    };
   }
-  if (need('cashBurn')) {
+  if (need("cashBurn")) {
     out.cashBurn = {
       available: true,
       value: {
@@ -129,15 +139,15 @@ export async function loadCashWidgetMetrics(
         horizonWeeks: position.horizonWeeks,
         refused,
       },
-    }
+    };
   }
-  if (need('cashCollectDays')) {
-    out.cashCollectDays = { available: true, value: position.dso }
+  if (need("cashCollectDays")) {
+    out.cashCollectDays = { available: true, value: position.dso };
   }
-  if (need('cashPayDays')) {
-    out.cashPayDays = { available: true, value: position.dpo }
+  if (need("cashPayDays")) {
+    out.cashPayDays = { available: true, value: position.dpo };
   }
-  if (need('cashForecast')) {
+  if (need("cashForecast")) {
     out.cashForecast = {
       available: true,
       value: {
@@ -152,18 +162,21 @@ export async function loadCashWidgetMetrics(
         horizonWeeks: position.horizonWeeks,
         refused,
       },
-    }
+    };
   }
-  if (need('cashCoverage')) {
+  if (need("cashCoverage")) {
     // No AP outstanding means no coverage ratio exists — the tile names
     // that instead of dividing by zero or rendering 0× as a fact.
     out.cashCoverage =
       position.arCoverage === null
-        ? { available: false, reason: (await getTranslations('dashboard'))('analytics.noPayables') }
+        ? { available: false, reason: (await getTranslations("dashboard"))("analytics.noPayables") }
         : {
             available: true,
-            value: { ratio: position.arCoverage, covered: compareMoney(position.arCoverage, '1') >= 0 },
-          }
+            value: {
+              ratio: position.arCoverage,
+              covered: compareMoney(position.arCoverage, "1") >= 0,
+            },
+          };
   }
-  return out
+  return out;
 }

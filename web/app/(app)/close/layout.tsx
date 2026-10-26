@@ -1,8 +1,8 @@
-import { redirect } from 'next/navigation'
-import { getAuthz } from '../../../lib/authz'
-import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { redirect } from "next/navigation";
+import { getAuthz } from "../../../lib/authz";
+import { requireFeatureEnabled } from "../../../lib/feature-gates";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * Feature-gate boundary for the whole /close segment.
@@ -14,8 +14,8 @@ export const dynamic = 'force-dynamic'
  * at once, the same arrangement as the continuous-close segment layout.
  */
 export default async function CloseLayout({ children }: { children: React.ReactNode }) {
-  const authz = await getAuthz()
-  if (!authz) redirect('/login')
-  await requireFeatureEnabled(authz.user.orgId, 'continuousClose')
-  return children
+  const authz = await getAuthz();
+  if (!authz) redirect("/login");
+  await requireFeatureEnabled(authz.user.orgId, "continuousClose");
+  return children;
 }

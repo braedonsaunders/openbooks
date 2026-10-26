@@ -7,10 +7,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { esPackFilings, parseEs190RowId, parseEs111RowId } from "./es/filings.ts";
-import {
-  ES_190_PAYROLL_CLAVE,
-  ES_190_UNSUPPORTED_CLAVES,
-} from "./es/modelo-190.ts";
+import { ES_190_PAYROLL_CLAVE, ES_190_UNSUPPORTED_CLAVES } from "./es/modelo-190.ts";
 
 const EMP = "11111111-1111-1111-8111-111111111111";
 const FOREIGN = "22222222-2222-2222-8222-222222222222";
@@ -20,7 +17,13 @@ test("ES declares the certificado (190, annual), the 111 (quarterly plus mensual
   assert.equal(filings.country, "ES");
   assert.deepEqual(
     filings.yearEnd.map((filing) => [filing.key, filing.cadence]),
-    [["190", "annual"], ["111", "quarterly"], ["111-mensual", "monthly"], ["216", "quarterly"], ["296", "annual"]],
+    [
+      ["190", "annual"],
+      ["111", "quarterly"],
+      ["111-mensual", "monthly"],
+      ["216", "quarterly"],
+      ["296", "annual"],
+    ],
   );
   for (const filing of filings.yearEnd) {
     assert.equal(typeof filing.population, "function");
@@ -36,13 +39,25 @@ test("ES declares the certificado (190, annual), the 111 (quarterly plus mensual
 
 test("ES 190 rows are one employee plus domicile-province code; 111 rows are one quarter", () => {
   assert.deepEqual(parseEs190RowId(`${EMP}:28`), {
-    employees: [EMP], accounts: [],
+    employees: [EMP],
+    accounts: [],
   });
   assert.deepEqual(parseEs111RowId("Q3"), { employees: [], accounts: [] });
 });
 
 test("ES row grammars refuse what their populations never build", () => {
-  for (const bad of ["not-a-row", "", EMP, `${EMP}:MD`, `${EMP}:MD:extra`, "MD", "Q5", "Q0", "q1", `${EMP}:Q1`]) {
+  for (const bad of [
+    "not-a-row",
+    "",
+    EMP,
+    `${EMP}:MD`,
+    `${EMP}:MD:extra`,
+    "MD",
+    "Q5",
+    "Q0",
+    "q1",
+    `${EMP}:Q1`,
+  ]) {
     assert.equal(parseEs190RowId(bad), null, `190 must refuse ${bad}`);
   }
   for (const bad of ["not-a-row", "", EMP, `${EMP}:MD`, "Q5", "Q0", "q1", "1", "Trimestre 1"]) {
@@ -62,7 +77,10 @@ test("ordinary payroll classifies as Modelo 190 clave A with no subclave", () =>
   const refused = new Set(["B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]);
   assert.deepEqual(new Set(ES_190_UNSUPPORTED_CLAVES.map((entry) => entry.clave)), refused);
   for (const entry of ES_190_UNSUPPORTED_CLAVES) {
-    assert.ok(entry.reason.length > 20, `clave ${entry.clave} must name why payroll never files it`);
+    assert.ok(
+      entry.reason.length > 20,
+      `clave ${entry.clave} must name why payroll never files it`,
+    );
   }
 });
 

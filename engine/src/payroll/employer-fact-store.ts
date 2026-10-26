@@ -25,7 +25,8 @@ export async function listPayrollEmployerFacts(
   orgId: string,
   input: { country?: string; subsidiaryId?: string; filingAccountId?: string } = {},
 ): Promise<StoredPayrollEmployerFact[]> {
-  const rows = await db.execute<StoredPayrollEmployerFact>(sql`
+  const rows = await db.execute<StoredPayrollEmployerFact>(
+    sql`
     select id, subsidiary_id as "subsidiaryId", filing_account_id as "filingAccountId", country, fact_key as "factKey",
            effective_from::text as "effectiveFrom",
            case when superseded_on is null then null else (superseded_on - 1)::text end as "effectiveThrough",
@@ -41,7 +42,9 @@ export async function listPayrollEmployerFacts(
        and (${input.subsidiaryId ?? null}::uuid is null or subsidiary_id = ${input.subsidiaryId ?? null}::uuid)
        and (${input.filingAccountId ?? null}::uuid is null or filing_account_id = ${input.filingAccountId ?? null}::uuid)
      order by country, fact_key, effective_from desc
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows;
 }
 
@@ -64,9 +67,11 @@ export async function findStoredEmployerFactValue(input: {
 }): Promise<string | null> {
   const declaration = employerFact(input.country, input.factKey);
   const accountScoped = declaration.scope === "filing_account";
-  const subsidiaryId = accountScoped ? null : input.subsidiaryId ?? null;
-  const filingAccountId = accountScoped ? input.filingAccountId ?? null : null;
-  const row = (await input.tx.execute<{ fact_value: string }>(sql`
+  const subsidiaryId = accountScoped ? null : (input.subsidiaryId ?? null);
+  const filingAccountId = accountScoped ? (input.filingAccountId ?? null) : null;
+  const row = (
+    await input.tx.execute<{ fact_value: string }>(
+      sql`
     select fact_value
       from payroll_employer_facts
      where org_id = ${input.orgId}
@@ -78,7 +83,10 @@ export async function findStoredEmployerFactValue(input: {
        and (superseded_on is null or superseded_on > ${input.asOf}::date)
      order by effective_from desc, superseded_on asc nulls last
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row?.fact_value ?? null;
 }
 
@@ -118,17 +126,21 @@ export async function upsertPayrollEmployerFact(input: {
   }
   const reason = input.changeReason.trim();
   if (!reason || reason.length > 500) {
-    throw new PayrollPackError("employer fact change reason is required and limited to 500 characters");
+    throw new PayrollPackError(
+      "employer fact change reason is required and limited to 500 characters",
+    );
   }
   const declaration = employerFact(input.country, input.factKey);
   // Filing-account facts bind to exactly one declared filing identity and
   // legal-employer facts to exactly one subsidiary: a value stored against
   // the wrong owner would price or file for the wrong entity.
   const accountScoped = declaration.scope === "filing_account";
-  const subsidiaryId = accountScoped ? null : input.subsidiaryId ?? null;
-  const filingAccountId = accountScoped ? input.filingAccountId ?? null : null;
-  if (!accountScoped && (!subsidiaryId || input.filingAccountId)
-    || accountScoped && (!filingAccountId || input.subsidiaryId)) {
+  const subsidiaryId = accountScoped ? null : (input.subsidiaryId ?? null);
+  const filingAccountId = accountScoped ? (input.filingAccountId ?? null) : null;
+  if (
+    (!accountScoped && (!subsidiaryId || input.filingAccountId)) ||
+    (accountScoped && (!filingAccountId || input.subsidiaryId))
+  ) {
     throw new PayrollPackError(
       `${declaration.label} must be saved for exactly one ${accountScoped ? "filing account" : "legal employer"}`,
     );
@@ -140,37 +152,66 @@ export async function upsertPayrollEmployerFact(input: {
   if (value == null) throw new PayrollPackError(`${declaration.label} must have a value`);
   const needsEndDate = declaration.effectiveThroughRequiredFor?.includes(value) ?? false;
   if (needsEndDate && !input.effectiveThrough) {
-    throw new PayrollPackError(`${declaration.label} must include the inclusive final date approved by the authority`);
+    throw new PayrollPackError(
+      `${declaration.label} must include the inclusive final date approved by the authority`,
+    );
   }
   if (input.effectiveThrough && !isIsoCalendarDate(input.effectiveThrough)) {
-    throw new PayrollPackError("employer fact effective-through date must be a real ISO calendar date");
+    throw new PayrollPackError(
+      "employer fact effective-through date must be a real ISO calendar date",
+    );
   }
   if (input.effectiveThrough && input.effectiveThrough < input.effectiveFrom) {
-    throw new PayrollPackError("employer fact effective-through date cannot precede its effective-from date");
+    throw new PayrollPackError(
+      "employer fact effective-through date cannot precede its effective-from date",
+    );
   }
-  if (declaration.effectivePeriod === "calendar_year" && !/^\d{4}-01-01$/.test(input.effectiveFrom)) {
-    throw new PayrollPackError(`${declaration.label} is effective by calendar year; use January 1 of the applicable year`);
+  if (
+    declaration.effectivePeriod === "calendar_year" &&
+    !/^\d{4}-01-01$/.test(input.effectiveFrom)
+  ) {
+    throw new PayrollPackError(
+      `${declaration.label} is effective by calendar year; use January 1 of the applicable year`,
+    );
   }
   const id = randomUUID();
-  const lockKey = [input.orgId, subsidiaryId ?? filingAccountId, input.country, input.factKey, input.effectiveFrom].join("\u001f");
+  const lockKey = [
+    input.orgId,
+    subsidiaryId ?? filingAccountId,
+    input.country,
+    input.factKey,
+    input.effectiveFrom,
+  ].join("\u001f");
   return await inDbTransaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
     if (filingAccountId) {
-      const account = (await tx.execute<{ id: string }>(sql`
+      const account = (
+        await tx.execute<{ id: string }>(
+          sql`
         select id from payroll_filing_accounts
          where org_id = ${input.orgId} and id = ${filingAccountId}
            and country = ${input.country}
            and program_type = ${declaration.filingProgramType!}
            and is_active
          for share
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!account) {
         throw new PayrollPackError(
           `${declaration.label} must use an active ${input.country} ${declaration.filingProgramType} account in this organization`,
         );
       }
     }
-    const before = (await tx.execute<{ id: string; fact_value: string; change_reason: string; effective_through: string | null }>(sql`
+    const before = (
+      await tx.execute<{
+        id: string;
+        fact_value: string;
+        change_reason: string;
+        effective_through: string | null;
+      }>(
+        sql`
       select id, fact_value, change_reason,
              case when superseded_on is null then null else (superseded_on - 1)::text end as effective_through
 
@@ -182,7 +223,10 @@ export async function upsertPayrollEmployerFact(input: {
          and effective_from = ${input.effectiveFrom}::date
          and (superseded_on is null or superseded_on > CURRENT_DATE)
        for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (before) {
       const changed = await tx.execute<never>(sql`
         update payroll_employer_facts
@@ -191,20 +235,28 @@ export async function upsertPayrollEmployerFact(input: {
            and (superseded_on is null or superseded_on > CURRENT_DATE)
       `);
       if ((changed.rowCount ?? 0) !== 1) {
-        throw new PayrollPackError(`${declaration.label} was not saved because its current value changed concurrently`);
+        throw new PayrollPackError(
+          `${declaration.label} was not saved because its current value changed concurrently`,
+        );
       }
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${input.orgId}, 'payroll_employer_facts', ${before.id}, 'supersede',
           ${JSON.stringify({
-            country: input.country, factKey: input.factKey, subsidiaryId, filingAccountId,
+            country: input.country,
+            factKey: input.factKey,
+            subsidiaryId,
+            filingAccountId,
             effectiveFrom: input.effectiveFrom,
             effectiveThrough: before.effective_through,
-            before: before.fact_value, after: value, reason,
+            before: before.fact_value,
+            after: value,
+            reason,
           })}::jsonb, ${input.actorId})
       `);
     }
-    const inserted = await tx.execute<StoredPayrollEmployerFact>(sql`
+    const inserted = await tx.execute<StoredPayrollEmployerFact>(
+      sql`
       insert into payroll_employer_facts
         (id, org_id, subsidiary_id, filing_account_id, country, fact_key, effective_from,
          value_kind, fact_value, value_scale, superseded_on, change_reason, created_by, updated_by)
@@ -224,17 +276,26 @@ export async function upsertPayrollEmployerFact(input: {
         fact_value as "factValue", value_scale as "valueScale",
         change_reason as "changeReason", created_at::text as "createdAt",
         created_by as "createdBy"
-    `, "objects");
+    `,
+      "objects",
+    );
     const row = inserted[0];
-    if (!row) throw new PayrollPackError(`${declaration.label} was not saved — insert returned no row`);
+    if (!row)
+      throw new PayrollPackError(`${declaration.label} was not saved — insert returned no row`);
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${input.orgId}, 'payroll_employer_facts', ${id}, 'insert',
         ${JSON.stringify({
-          country: input.country, factKey: input.factKey, subsidiaryId, filingAccountId,
-          effectiveFrom: input.effectiveFrom, effectiveThrough: input.effectiveThrough ?? null, before: before?.fact_value ?? null,
+          country: input.country,
+          factKey: input.factKey,
+          subsidiaryId,
+          filingAccountId,
+          effectiveFrom: input.effectiveFrom,
+          effectiveThrough: input.effectiveThrough ?? null,
+          before: before?.fact_value ?? null,
 
-          after: value, reason,
+          after: value,
+          reason,
         })}::jsonb, ${input.actorId})
     `);
     return row;

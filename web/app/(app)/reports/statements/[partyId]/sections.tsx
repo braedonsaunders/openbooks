@@ -1,5 +1,5 @@
-import { ReportDrillLink } from '../../ReportDrillLink'
-import type { ReportDrillTarget } from '../../../../../lib/report-drill'
+import { ReportDrillLink } from "../../ReportDrillLink";
+import type { ReportDrillTarget } from "../../../../../lib/report-drill";
 
 /**
  * The aging summary strip above a party statement: one drilled figure per
@@ -15,37 +15,37 @@ export function AgingStrip({
   totalDrill,
   asOfLabel,
 }: {
-  cells: { key: string; label: string; value: string; drill: ReportDrillTarget }[]
-  totalLabel: string
-  total: string
-  totalDrill: ReportDrillTarget
+  cells: { key: string; label: string; value: string; drill: ReportDrillTarget }[];
+  totalLabel: string;
+  total: string;
+  totalDrill: ReportDrillTarget;
   /** Selected period-end date, so two correctly different bucket views never read as inconsistent. */
-  asOfLabel: string
+  asOfLabel: string;
 }) {
-  const linkClass = 'hover:text-teal-700 hover:underline dark:hover:text-teal-300'
+  const linkClass = "hover:text-teal-700 hover:underline dark:hover:text-teal-300";
   return (
     <div className="mb-6">
       <p className="mb-1 text-right text-xs text-slate-500 dark:text-slate-400">{asOfLabel}</p>
       <div className="grid grid-flow-col auto-cols-fr divide-x divide-slate-200 border-y border-slate-200 py-3 dark:divide-slate-700 dark:border-slate-700">
-      {cells.map((cell) => (
-        <div key={cell.key} className="min-w-0 px-2 text-center">
-          <div className="truncate text-xs text-slate-500 dark:text-slate-400">{cell.label}</div>
+        {cells.map((cell) => (
+          <div key={cell.key} className="min-w-0 px-2 text-center">
+            <div className="truncate text-xs text-slate-500 dark:text-slate-400">{cell.label}</div>
+            <div className="truncate tabular-nums">
+              <ReportDrillLink target={cell.drill} className={linkClass}>
+                {cell.value}
+              </ReportDrillLink>
+            </div>
+          </div>
+        ))}
+        <div className="min-w-0 px-2 text-center font-semibold">
+          <div className="truncate text-xs text-slate-500 dark:text-slate-400">{totalLabel}</div>
           <div className="truncate tabular-nums">
-            <ReportDrillLink target={cell.drill} className={linkClass}>
-              {cell.value}
+            <ReportDrillLink target={totalDrill} className={linkClass}>
+              {total}
             </ReportDrillLink>
           </div>
         </div>
-      ))}
-      <div className="min-w-0 px-2 text-center font-semibold">
-        <div className="truncate text-xs text-slate-500 dark:text-slate-400">{totalLabel}</div>
-        <div className="truncate tabular-nums">
-          <ReportDrillLink target={totalDrill} className={linkClass}>
-            {total}
-          </ReportDrillLink>
-        </div>
-      </div>
       </div>
     </div>
-  )
+  );
 }

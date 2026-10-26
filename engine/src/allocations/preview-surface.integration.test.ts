@@ -9,10 +9,7 @@ import {
   seedFlowActors,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
-import {
-  AllocationRunError,
-  previewAllocationRun,
-} from "./period-run.ts";
+import { AllocationRunError, previewAllocationRun } from "./period-run.ts";
 import { postProjectGlEntry } from "../projects/recognition.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -98,7 +95,10 @@ test(
           actorId,
         }),
         (error: unknown) => {
-          assert.ok(error instanceof AllocationRunError, `expected AllocationRunError, got ${String(error)}`);
+          assert.ok(
+            error instanceof AllocationRunError,
+            `expected AllocationRunError, got ${String(error)}`,
+          );
           assert.equal(error.code, "INVALID");
           return true;
         },
@@ -125,7 +125,10 @@ test(
           actorId,
         }),
         (error: unknown) => {
-          assert.ok(error instanceof AllocationRunError, `expected AllocationRunError, got ${String(error)}`);
+          assert.ok(
+            error instanceof AllocationRunError,
+            `expected AllocationRunError, got ${String(error)}`,
+          );
           assert.equal(error.code, "NOT_FOUND");
           return true;
         },

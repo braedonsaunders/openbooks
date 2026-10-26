@@ -59,7 +59,11 @@ export function isNetSuiteAccountId(value: string): boolean {
   return NETSUITE_ACCOUNT_ID.test(value);
 }
 
-const pct = (s: string | number) => encodeURIComponent(String(s)).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
+const pct = (s: string | number) =>
+  encodeURIComponent(String(s)).replace(
+    /[!'()*]/g,
+    (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase(),
+  );
 
 /**
  * A deterministic security refusal, not a transient fault: something tried to
@@ -77,7 +81,11 @@ class NetSuiteRedirectRefused extends Error {}
  * browser-style opaque one), so any redirect with a Location is refused
  * outright rather than followed.
  */
-async function netsuiteFetch(url: string | URL, init: RequestInit = {}, transport: typeof fetch = guardedFetch): Promise<Response> {
+async function netsuiteFetch(
+  url: string | URL,
+  init: RequestInit = {},
+  transport: typeof fetch = guardedFetch,
+): Promise<Response> {
   const res = await transport(url, { ...init, redirect: "manual" });
   const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
   if (location !== null) {
@@ -88,7 +96,12 @@ async function netsuiteFetch(url: string | URL, init: RequestInit = {}, transpor
   return res;
 }
 
-function oauthHeader(creds: NetSuiteCreds, method: string, url: string, query: Record<string, string | number>): string {
+function oauthHeader(
+  creds: NetSuiteCreds,
+  method: string,
+  url: string,
+  query: Record<string, string | number>,
+): string {
   const oauth: Record<string, string> = {
     oauth_consumer_key: creds.consumerKey,
     oauth_token: creds.tokenKey,
@@ -139,16 +152,20 @@ async function suiteqlPage(
     const timer = setTimeout(() => ctl.abort(), 60_000);
     try {
       const qp = { limit, offset };
-      const res = await netsuiteFetch(`${url}?limit=${limit}&offset=${offset}`, {
-        method: "POST",
-        headers: {
-          Authorization: oauthHeader(creds, "POST", url, qp),
-          "Content-Type": "application/json",
-          Prefer: "transient",
+      const res = await netsuiteFetch(
+        `${url}?limit=${limit}&offset=${offset}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: oauthHeader(creds, "POST", url, qp),
+            "Content-Type": "application/json",
+            Prefer: "transient",
+          },
+          body: JSON.stringify({ q: query }),
+          signal: ctl.signal,
         },
-        body: JSON.stringify({ q: query }),
-        signal: ctl.signal,
-      }, transport);
+        transport,
+      );
       if ((res.status === 429 || res.status >= 500) && attempt < 4) {
         lastErr = new Error(`SuiteQL HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
         const retryAfter = Number(res.headers.get("retry-after") ?? 0);
@@ -222,26 +239,34 @@ export async function netsuiteRestlet<T = unknown>(
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 120_000);
     try {
-      const response = await netsuiteFetch(`${endpoint}?${search.toString()}`, {
-        method,
-        headers: {
-          Authorization: oauthHeader(creds, method, endpoint, query),
-          Accept: "application/json",
-          ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+      const response = await netsuiteFetch(
+        `${endpoint}?${search.toString()}`,
+        {
+          method,
+          headers: {
+            Authorization: oauthHeader(creds, method, endpoint, query),
+            Accept: "application/json",
+            ...(method === "POST" ? { "Content-Type": "application/json" } : {}),
+          },
+          ...(method === "POST" ? { body: JSON.stringify(params) } : {}),
+          signal: ctl.signal,
         },
-        ...(method === "POST" ? { body: JSON.stringify(params) } : {}),
-        signal: ctl.signal,
-      }, transport);
+        transport,
+      );
       if ((response.status === 429 || response.status >= 500) && attempt < 4) {
-        lastError = new Error(`RESTlet HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`);
+        lastError = new Error(
+          `RESTlet HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`,
+        );
         const retryAfter = Number(response.headers.get("retry-after") ?? 0);
         await sleep(retryAfter > 0 ? retryAfter * 1_000 : attempt * 2_000);
         continue;
       }
       if (!response.ok) {
-        throw new Error(`RESTlet HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`);
+        throw new Error(
+          `RESTlet HTTP ${response.status}: ${(await response.text()).slice(0, 500)}`,
+        );
       }
-      return await response.json() as T;
+      return (await response.json()) as T;
     } catch (error) {
       if (error instanceof NetSuiteRedirectRefused) throw error;
       lastError = error;
@@ -265,11 +290,21 @@ export async function netsuiteRecords<T = Record<string, unknown>>(
   let offset = 0;
   for (;;) {
     const query = { limit, offset };
-    const res = await netsuiteFetch(`${endpoint}?limit=${limit}&offset=${offset}`, {
-      headers: { Authorization: oauthHeader(creds, "GET", endpoint, query), Accept: "application/json" },
-    }, transport);
-    if (!res.ok) throw new Error(`SuiteTalk ${recordType} HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
-    const data = await res.json() as { items?: T[]; hasMore?: boolean };
+    const res = await netsuiteFetch(
+      `${endpoint}?limit=${limit}&offset=${offset}`,
+      {
+        headers: {
+          Authorization: oauthHeader(creds, "GET", endpoint, query),
+          Accept: "application/json",
+        },
+      },
+      transport,
+    );
+    if (!res.ok)
+      throw new Error(
+        `SuiteTalk ${recordType} HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`,
+      );
+    const data = (await res.json()) as { items?: T[]; hasMore?: boolean };
     rows.push(...(data.items ?? []));
     if (!data.hasMore) return rows;
     offset += limit;
@@ -285,11 +320,21 @@ export async function netsuiteRecord<T = Record<string, unknown>>(
 ): Promise<T> {
   const endpoint = `${creds.host}/services/rest/record/v1/${encodeURIComponent(recordType)}/${encodeURIComponent(String(id))}`;
   const query = { expandSubResources: "true" };
-  const res = await netsuiteFetch(`${endpoint}?expandSubResources=true`, {
-    headers: { Authorization: oauthHeader(creds, "GET", endpoint, query), Accept: "application/json" },
-  }, transport);
-  if (!res.ok) throw new Error(`SuiteTalk ${recordType}/${id} HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
-  return await res.json() as T;
+  const res = await netsuiteFetch(
+    `${endpoint}?expandSubResources=true`,
+    {
+      headers: {
+        Authorization: oauthHeader(creds, "GET", endpoint, query),
+        Accept: "application/json",
+      },
+    },
+    transport,
+  );
+  if (!res.ok)
+    throw new Error(
+      `SuiteTalk ${recordType}/${id} HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`,
+    );
+  return (await res.json()) as T;
 }
 
 function xmlAttribute(value: string): string {
@@ -300,23 +345,14 @@ function xmlAttribute(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-function soapTokenPassport(
-  creds: NetSuiteCreds,
-  endpointVersion: string,
-): string {
+function soapTokenPassport(creds: NetSuiteCreds, endpointVersion: string): string {
   const nonce = randomBytes(16).toString("hex");
   const timestamp = String(Math.floor(Date.now() / 1000));
-  const signatureBase = [
-    creds.account,
-    creds.consumerKey,
-    creds.tokenKey,
-    nonce,
-    timestamp,
-  ].join("&");
+  const signatureBase = [creds.account, creds.consumerKey, creds.tokenKey, nonce, timestamp].join(
+    "&",
+  );
   const signatureKey = `${creds.consumerSecret}&${creds.tokenSecret}`;
-  const signature = createHmac("sha256", signatureKey)
-    .update(signatureBase)
-    .digest("base64");
+  const signature = createHmac("sha256", signatureKey).update(signatureBase).digest("base64");
   return `<tokenPassport xmlns="urn:messages_${endpointVersion}.platform.webservices.netsuite.com">
       <account>${xmlAttribute(creds.account)}</account>
       <consumerKey>${xmlAttribute(creds.consumerKey)}</consumerKey>
@@ -348,20 +384,22 @@ async function netsuiteSoapRequest(
   </soap-env:Header>
   <soap-env:Body>${body}</soap-env:Body>
 </soap-env:Envelope>`;
-      const response = await netsuiteFetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/xml; charset=utf-8",
-          SOAPAction: action,
+      const response = await netsuiteFetch(
+        url,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "text/xml; charset=utf-8",
+            SOAPAction: action,
+          },
+          body: envelope,
+          signal: ctl.signal,
         },
-        body: envelope,
-        signal: ctl.signal,
-      }, transport);
+        transport,
+      );
       const text = await response.text();
       if (!response.ok) {
-        throw new Error(
-          `SuiteTalk SOAP HTTP ${response.status}: ${text.slice(0, 500)}`,
-        );
+        throw new Error(`SuiteTalk SOAP HTTP ${response.status}: ${text.slice(0, 500)}`);
       }
       return text;
     } catch (error) {
@@ -393,13 +431,9 @@ export function parseSoapTransactionSearchPage(text: string): {
     const internalId = match[1]?.match(/\binternalId="(\d+)"/)?.[1];
     if (internalId) transactionIds.add(internalId);
   }
-  const searchId =
-    text.match(/<(?:\w+:)?searchId>([^<]+)<\/(?:\w+:)?searchId>/)?.[1] ??
-    null;
+  const searchId = text.match(/<(?:\w+:)?searchId>([^<]+)<\/(?:\w+:)?searchId>/)?.[1] ?? null;
   const totalPages = Number(
-    text.match(
-      /<(?:\w+:)?totalPages>(\d+)<\/(?:\w+:)?totalPages>/,
-    )?.[1] ?? 0,
+    text.match(/<(?:\w+:)?totalPages>(\d+)<\/(?:\w+:)?totalPages>/)?.[1] ?? 0,
   );
   return {
     transactionIds: [...transactionIds],
@@ -448,9 +482,7 @@ export async function netsuiteSoapTransactionIdsForFile(
       transactionIds.add(transactionId);
     }
     if (page.totalPages > 1 && !page.searchId) {
-      throw new Error(
-        `SuiteTalk SOAP transaction search omitted its search id for file ${fileId}`,
-      );
+      throw new Error(`SuiteTalk SOAP transaction search omitted its search id for file ${fileId}`);
     }
     for (let pageIndex = 2; pageIndex <= page.totalPages; pageIndex++) {
       pageText = await netsuiteSoapRequest(
@@ -492,7 +524,9 @@ export async function netsuiteSoapFileGet(
   const url = `${creds.host}/services/NetSuitePort_${endpointVersion}`;
   const nonce = randomBytes(16).toString("hex");
   const timestamp = String(Math.floor(Date.now() / 1000));
-  const signatureBase = [creds.account, creds.consumerKey, creds.tokenKey, nonce, timestamp].join("&");
+  const signatureBase = [creds.account, creds.consumerKey, creds.tokenKey, nonce, timestamp].join(
+    "&",
+  );
   const signatureKey = `${creds.consumerSecret}&${creds.tokenSecret}`;
   const signature = createHmac("sha256", signatureKey).update(signatureBase).digest("base64");
   const envelope = `<?xml version="1.0" encoding="UTF-8"?>
@@ -521,19 +555,25 @@ export async function netsuiteSoapFileGet(
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 180_000);
     try {
-      const response = await netsuiteFetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: "get" },
-        body: envelope,
-        signal: ctl.signal,
-      }, transport);
+      const response = await netsuiteFetch(
+        url,
+        {
+          method: "POST",
+          headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: "get" },
+          body: envelope,
+          signal: ctl.signal,
+        },
+        transport,
+      );
       const text = await response.text();
       if (!response.ok) {
         throw new Error(`SuiteTalk SOAP HTTP ${response.status}: ${text.slice(0, 500)}`);
       }
       if (!text.includes('isSuccess="true"')) {
         const message = text.match(/<message[^>]*>([^<]*)<\/message>/);
-        throw new Error(`SuiteTalk SOAP file-get failed for ${fileId}: ${message?.[1] ?? text.slice(0, 300)}`);
+        throw new Error(
+          `SuiteTalk SOAP file-get failed for ${fileId}: ${message?.[1] ?? text.slice(0, 300)}`,
+        );
       }
       const name = text.match(/<(?:\w+:)?name>([^<]*)<\/(?:\w+:)?name>/)?.[1] ?? "";
       const open = /<(\w+:)?content>/.exec(text);
@@ -541,9 +581,11 @@ export async function netsuiteSoapFileGet(
       const contentStart = open.index + open[0].length;
       const closeTag = `</${open[1] ?? ""}content>`;
       const contentEnd = text.indexOf(closeTag, contentStart);
-      if (contentEnd < 0) throw new Error(`SuiteTalk SOAP file-get returned truncated content for ${fileId}`);
+      if (contentEnd < 0)
+        throw new Error(`SuiteTalk SOAP file-get returned truncated content for ${fileId}`);
       const bytes = Buffer.from(text.slice(contentStart, contentEnd).trim(), "base64");
-      if (bytes.length === 0) throw new Error(`SuiteTalk SOAP file-get returned empty content for ${fileId}`);
+      if (bytes.length === 0)
+        throw new Error(`SuiteTalk SOAP file-get returned empty content for ${fileId}`);
       return { name, bytes };
     } catch (error) {
       if (error instanceof NetSuiteRedirectRefused) throw error;
@@ -553,55 +595,140 @@ export async function netsuiteSoapFileGet(
       clearTimeout(timer);
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("SuiteTalk SOAP file-get failed after retries");
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("SuiteTalk SOAP file-get failed after retries");
 }
 
-
-export type NetSuiteCustomizationKind = 'entityCustomField' | 'itemCustomField' | 'transactionBodyCustomField' | 'transactionColumnCustomField' | 'customRecordType';
-export interface NetSuiteCustomizationChoice { value: string; label: string; internalId: string }
-const customizationKinds: readonly NetSuiteCustomizationKind[] = ['entityCustomField', 'itemCustomField', 'transactionBodyCustomField', 'transactionColumnCustomField', 'customRecordType'];
-const xmlRows = (value: unknown): Record<string, unknown>[] => value == null ? [] : (Array.isArray(value) ? value : [value]) as Record<string, unknown>[];
+export type NetSuiteCustomizationKind =
+  | "entityCustomField"
+  | "itemCustomField"
+  | "transactionBodyCustomField"
+  | "transactionColumnCustomField"
+  | "customRecordType";
+export interface NetSuiteCustomizationChoice {
+  value: string;
+  label: string;
+  internalId: string;
+}
+const customizationKinds: readonly NetSuiteCustomizationKind[] = [
+  "entityCustomField",
+  "itemCustomField",
+  "transactionBodyCustomField",
+  "transactionColumnCustomField",
+  "customRecordType",
+];
+const xmlRows = (value: unknown): Record<string, unknown>[] =>
+  value == null ? [] : ((Array.isArray(value) ? value : [value]) as Record<string, unknown>[]);
 type MetadataNode = Record<string, unknown>;
-const metadataNode = (value: unknown): MetadataNode => value && typeof value === 'object' && !Array.isArray(value) ? value as MetadataNode : {};
+const metadataNode = (value: unknown): MetadataNode =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as MetadataNode) : {};
 function metadataAt(value: unknown, ...keys: string[]): MetadataNode {
   for (const key of keys) value = metadataNode(value)[key];
   return metadataNode(value);
 }
 function soapMetadata(text: string): MetadataNode {
-  if (XMLValidator.validate(text) !== true) throw new Error('NetSuite customization metadata is incomplete');
-  const result: unknown = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true, parseTagValue: false }).parse(text);
-  const body = metadataAt(result, 'Envelope', 'Body');
-  if (!Object.keys(body).length || body.Fault) throw new Error('NetSuite customization access was refused; grant read access to custom fields and records, then retry');
+  if (XMLValidator.validate(text) !== true)
+    throw new Error("NetSuite customization metadata is incomplete");
+  const result: unknown = new XMLParser({
+    ignoreAttributes: false,
+    removeNSPrefix: true,
+    parseTagValue: false,
+  }).parse(text);
+  const body = metadataAt(result, "Envelope", "Body");
+  if (!Object.keys(body).length || body.Fault)
+    throw new Error(
+      "NetSuite customization access was refused; grant read access to custom fields and records, then retry",
+    );
   return body;
 }
 /** Read names and stable script identities through the authenticated customization service. */
-export async function netsuiteCustomizationChoices(kind: NetSuiteCustomizationKind, creds: NetSuiteCreds, endpointVersion = '2022_1', transport: typeof fetch = guardedFetch): Promise<NetSuiteCustomizationChoice[]> {
-  if (!customizationKinds.includes(kind)) throw new Error('Unsupported NetSuite customization type');
-  const response = soapMetadata(await netsuiteSoapRequest('getCustomizationId', `<getCustomizationId xmlns="urn:messages_${xmlAttribute(endpointVersion)}.platform.webservices.netsuite.com"><customizationType getCustomizationType="${kind}"/><includeInactives>false</includeInactives></getCustomizationId>`, creds, endpointVersion, 60_000, transport));
-  const result = metadataAt(response, 'getCustomizationIdResponse', 'getCustomizationIdResult');
-  if (metadataNode(result.status)['@_isSuccess'] !== 'true') throw new Error('NetSuite customization access was refused; grant read access to custom fields and records, then retry');
+export async function netsuiteCustomizationChoices(
+  kind: NetSuiteCustomizationKind,
+  creds: NetSuiteCreds,
+  endpointVersion = "2022_1",
+  transport: typeof fetch = guardedFetch,
+): Promise<NetSuiteCustomizationChoice[]> {
+  if (!customizationKinds.includes(kind))
+    throw new Error("Unsupported NetSuite customization type");
+  const response = soapMetadata(
+    await netsuiteSoapRequest(
+      "getCustomizationId",
+      `<getCustomizationId xmlns="urn:messages_${xmlAttribute(endpointVersion)}.platform.webservices.netsuite.com"><customizationType getCustomizationType="${kind}"/><includeInactives>false</includeInactives></getCustomizationId>`,
+      creds,
+      endpointVersion,
+      60_000,
+      transport,
+    ),
+  );
+  const result = metadataAt(response, "getCustomizationIdResponse", "getCustomizationIdResult");
+  if (metadataNode(result.status)["@_isSuccess"] !== "true")
+    throw new Error(
+      "NetSuite customization access was refused; grant read access to custom fields and records, then retry",
+    );
   const rows = xmlRows(metadataNode(result.customizationRefList).customizationRef);
-  if (!/^\d+$/.test(String(result.totalRecords ?? '')) || Number(result.totalRecords) !== rows.length) throw new Error('NetSuite customization metadata is incomplete; retry before changing mappings');
+  if (
+    !/^\d+$/.test(String(result.totalRecords ?? "")) ||
+    Number(result.totalRecords) !== rows.length
+  )
+    throw new Error(
+      "NetSuite customization metadata is incomplete; retry before changing mappings",
+    );
   return rows.map((row) => {
-    const scriptId = String(row['@_scriptId'] ?? '');
-    const internalId = String(row['@_internalId'] ?? '');
-    if (!/^[a-z][a-z0-9_]{0,119}$/i.test(scriptId) || !internalId) throw new Error('NetSuite returned an invalid customization identity');
+    const scriptId = String(row["@_scriptId"] ?? "");
+    const internalId = String(row["@_internalId"] ?? "");
+    if (!/^[a-z][a-z0-9_]{0,119}$/i.test(scriptId) || !internalId)
+      throw new Error("NetSuite returned an invalid customization identity");
     return { value: scriptId, label: String(row.name ?? scriptId), internalId };
   });
 }
 /** Child-field choices come only from the selected custom record's definition. */
-export async function netsuiteCustomRecordFields(parent: string, creds: NetSuiteCreds, endpointVersion = '2022_1', transport: typeof fetch = guardedFetch): Promise<NetSuiteCustomizationChoice[]> {
-  const choices = await netsuiteCustomizationChoices('customRecordType', creds, endpointVersion, transport);
+export async function netsuiteCustomRecordFields(
+  parent: string,
+  creds: NetSuiteCreds,
+  endpointVersion = "2022_1",
+  transport: typeof fetch = guardedFetch,
+): Promise<NetSuiteCustomizationChoice[]> {
+  const choices = await netsuiteCustomizationChoices(
+    "customRecordType",
+    creds,
+    endpointVersion,
+    transport,
+  );
   const record = choices.find((row) => row.value === parent);
-  if (!record) throw new Error('Selected source record is unavailable; choose an accessible record before mapping its fields');
-  const response = soapMetadata(await netsuiteSoapRequest('getList', `<getList xmlns="urn:messages_${xmlAttribute(endpointVersion)}.platform.webservices.netsuite.com"><baseRef xmlns:c="urn:core_${xmlAttribute(endpointVersion)}.platform.webservices.netsuite.com" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="c:CustomizationRef" internalId="${xmlAttribute(record.internalId)}" type="customRecordType"/></getList>`, creds, endpointVersion, 60_000, transport));
-  const reads = xmlRows(metadataAt(response, 'getListResponse', 'readResponseList').readResponse);
+  if (!record)
+    throw new Error(
+      "Selected source record is unavailable; choose an accessible record before mapping its fields",
+    );
+  const response = soapMetadata(
+    await netsuiteSoapRequest(
+      "getList",
+      `<getList xmlns="urn:messages_${xmlAttribute(endpointVersion)}.platform.webservices.netsuite.com"><baseRef xmlns:c="urn:core_${xmlAttribute(endpointVersion)}.platform.webservices.netsuite.com" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="c:CustomizationRef" internalId="${xmlAttribute(record.internalId)}" type="customRecordType"/></getList>`,
+      creds,
+      endpointVersion,
+      60_000,
+      transport,
+    ),
+  );
+  const reads = xmlRows(metadataAt(response, "getListResponse", "readResponseList").readResponse);
   const read = reads[0];
   const definition = metadataNode(read?.record);
-  if (reads.length !== 1 || metadataNode(read?.status)['@_isSuccess'] !== 'true' || String(definition['@_internalId']) !== record.internalId) throw new Error('Selected source record metadata is inaccessible; grant custom-record read access and retry');
+  if (
+    reads.length !== 1 ||
+    metadataNode(read?.status)["@_isSuccess"] !== "true" ||
+    String(definition["@_internalId"]) !== record.internalId
+  )
+    throw new Error(
+      "Selected source record metadata is inaccessible; grant custom-record read access and retry",
+    );
   return xmlRows(metadataNode(definition.customFieldList).customField).map((field) => {
-    const scriptId = String(field.scriptId ?? field['@_scriptId'] ?? '');
-    if (!/^[a-z][a-z0-9_]{0,119}$/i.test(scriptId)) throw new Error('Source record returned an invalid child field');
-    return { value: scriptId, label: String(field.label ?? scriptId), internalId: String(field['@_internalId'] ?? '') };
+    const scriptId = String(field.scriptId ?? field["@_scriptId"] ?? "");
+    if (!/^[a-z][a-z0-9_]{0,119}$/i.test(scriptId))
+      throw new Error("Source record returned an invalid child field");
+    return {
+      value: scriptId,
+      label: String(field.label ?? scriptId),
+      internalId: String(field["@_internalId"] ?? ""),
+    };
   });
 }

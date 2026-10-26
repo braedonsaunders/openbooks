@@ -27,15 +27,15 @@ test("long strings are truncated with an explicit marker", () => {
 });
 
 test("oversized arrays are capped and carry truncatedCount", () => {
-  const compacted = compactToolResultForModel({ ok: true, data: { rows: Array.from({ length: 500 }, (_, i) => row(i)) } }) as {
+  const compacted = compactToolResultForModel({
+    ok: true,
+    data: { rows: Array.from({ length: 500 }, (_, i) => row(i)) },
+  }) as {
     data: { rows: { items: unknown[]; truncatedCount: number } };
   };
   assert.ok(Array.isArray(compacted.data.rows.items));
   assert.ok(compacted.data.rows.items.length <= MODEL_RESULT_ARRAY_ITEMS);
-  assert.equal(
-    compacted.data.rows.items.length + compacted.data.rows.truncatedCount,
-    500,
-  );
+  assert.equal(compacted.data.rows.items.length + compacted.data.rows.truncatedCount, 500);
 });
 
 test("objects nested deeper than the limit are flattened to shape markers", () => {
@@ -86,12 +86,18 @@ test("twelve worst-case steps cannot exceed the per-turn budget", () => {
 });
 
 test("withModelCompaction keeps execute and adds a compacting toModelOutput", async () => {
-  const execute = async () => ({ ok: true as const, data: { rows: Array.from({ length: 500 }, (_, i) => row(i)) } });
+  const execute = async () => ({
+    ok: true as const,
+    data: { rows: Array.from({ length: 500 }, (_, i) => row(i)) },
+  });
   const tools = { big_tool: { description: "d", inputSchema: {}, execute } } as never;
-  const wrapped = withModelCompaction(tools) as unknown as Record<string, {
-    execute: typeof execute;
-    toModelOutput: (args: { output: unknown }) => { type: string; value: unknown };
-  }>;
+  const wrapped = withModelCompaction(tools) as unknown as Record<
+    string,
+    {
+      execute: typeof execute;
+      toModelOutput: (args: { output: unknown }) => { type: string; value: unknown };
+    }
+  >;
   const entry = wrapped.big_tool;
   assert.ok(entry);
   assert.equal(entry.execute, execute);

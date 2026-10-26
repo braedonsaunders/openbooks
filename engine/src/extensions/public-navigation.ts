@@ -1,1 +1,1 @@
-export { listActiveExtensionContributions } from './projections.ts'
+export { listActiveExtensionContributions } from "./projections.ts";

@@ -7,17 +7,21 @@ test("the year-end seal supplies the reopen scope before period locks are checke
   let calls = 0;
   const executor = {
     execute: async (_query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       calls += 1;
       return inMode({
-        rows: calls === 1
-          ? [{
-              fiscal_year: 2026,
-              closing_period_id: "closing-period-id",
-              closing_period_name: "P12 FY2026",
-              subsidiary_id: "subsidiary-id",
-            }]
-          : [],
+        rows:
+          calls === 1
+            ? [
+                {
+                  fiscal_year: 2026,
+                  closing_period_id: "closing-period-id",
+                  closing_period_name: "P12 FY2026",
+                  subsidiary_id: "subsidiary-id",
+                },
+              ]
+            : [],
       });
     },
   } as unknown as SqlExecutor;

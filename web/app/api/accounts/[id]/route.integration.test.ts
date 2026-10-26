@@ -27,7 +27,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const module_ = (source: string): { shortCircuit: true; format: "module"; url: string } => ({
   shortCircuit: true,
@@ -42,9 +42,11 @@ registerHooks({
     // override only the session gate, so the subsidiary-scope guards under
     // test are the production functions — a hand-copied guard double could
     // only drift from the original.
-    if (specifier === "../../../../lib/authz" ||
+    if (
+      specifier === "../../../../lib/authz" ||
       (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts")) ||
-      (specifier === "./authz" && context.parentURL?.includes("/web/lib/feature-gates.ts"))) {
+      (specifier === "./authz" && context.parentURL?.includes("/web/lib/feature-gates.ts"))
+    ) {
       const real = nextResolve(specifier, context).url;
       const nextServer = nextResolve("next/server", context).url;
       return module_(`
@@ -66,19 +68,22 @@ const routeUrl = "./route.ts?account-hierarchy-test";
 const { GET, PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { withBypassContext, db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 /** Seed one account of a single shared type; returns its id. */
 async function seedAccount(orgId: string, number: string, isSummary: boolean): Promise<string> {
   const id = randomUUID();
-  await withBypassContext(() => (db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into accounts (id, org_id, number, name, type, is_summary, is_active,
                           eliminate, reconcilable, required_dimensions, custom,
                           subsidiary_include_children)
     values (${id}, ${orgId}, ${number}, ${`Account ${number}`}, 'asset_other', ${isSummary}, true,
-            false, false, '[]'::jsonb, '{}'::jsonb, true)`)));
+            false, false, '[]'::jsonb, '{}'::jsonb, true)`),
+  );
   return id;
 }
 
@@ -95,15 +100,19 @@ function patchRequest(body: unknown): Request {
 }
 
 async function parentIdOf(orgId: string, accountId: string): Promise<string | null> {
-  const r = await db.execute<{ parent_id: string | null }>(sql`
-    select parent_id from accounts where org_id = ${orgId} and id = ${accountId}`, "objects");
+  const r = await db.execute<{ parent_id: string | null }>(
+    sql`
+    select parent_id from accounts where org_id = ${orgId} and id = ${accountId}`,
+    "objects",
+  );
   assert.ok(r[0], "the edited account must still exist");
   return r[0]!.parent_id;
 }
 
 /** Number of accounts that are their own ancestor — nonzero means a cycle exists. */
 async function selfAncestorCount(orgId: string): Promise<number> {
-  const r = await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     with recursive anc as (
       select id, parent_id as anc_id from accounts where org_id = ${orgId}
       union
@@ -111,14 +120,19 @@ async function selfAncestorCount(orgId: string): Promise<number> {
       join accounts p on p.id = a.anc_id
       where p.parent_id is not null
     )
-    select count(*)::int as n from anc where id = anc_id`, "objects");
+    select count(*)::int as n from anc where id = anc_id`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
 async function auditCount(orgId: string, rowIds: string[]): Promise<number> {
-  const r = await db.execute<{ n: number }>(sql`
+  const r = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from audit_log
-     where org_id = ${orgId} and table_name = 'accounts' and row_id in ${rowIds}`, "objects");
+     where org_id = ${orgId} and table_name = 'accounts' and row_id in ${rowIds}`,
+    "objects",
+  );
   return r[0]!.n;
 }
 
@@ -138,12 +152,14 @@ async function openBypassClient(orgId: string): Promise<Client> {
 
 async function seedJournalEntry(client: Client, org: ScratchOrg, label: string): Promise<string> {
   const entryId = randomUUID();
-  await withBypassContext(() => (client.query(
-    `insert into journal_entries
+  await withBypassContext(() =>
+    client.query(
+      `insert into journal_entries
        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
      values ($1, $2, $3, $4, $5, $6, $7, 'draft', 'manual')`,
-    [entryId, org.orgId, org.bookId, org.subsidiaryId, label, org.date, org.periodId],
-  )));
+      [entryId, org.orgId, org.bookId, org.subsidiaryId, label, org.date, org.periodId],
+    ),
+  );
   return entryId;
 }
 
@@ -153,23 +169,25 @@ async function insertBalancedLines(
   entryId: string,
   accountId: string,
 ): Promise<void> {
-  await withBypassContext(() => (client.query(
-    `insert into journal_lines
+  await withBypassContext(() =>
+    client.query(
+      `insert into journal_lines
        (id, org_id, entry_id, line_number, account_id, subsidiary_id,
         amount, currency, txn_amount, fx_rate)
      values
        ($1, $2, $3, 1, $4, $5, '10', 'CAD', '10', 1),
        ($6, $2, $3, 2, $7, $5, '-10', 'CAD', '-10', 1)`,
-    [
-      randomUUID(),
-      org.orgId,
-      entryId,
-      accountId,
-      org.subsidiaryId,
-      randomUUID(),
-      org.accounts.clearing,
-    ],
-  )));
+      [
+        randomUUID(),
+        org.orgId,
+        entryId,
+        accountId,
+        org.subsidiaryId,
+        randomUUID(),
+        org.accounts.clearing,
+      ],
+    ),
+  );
 }
 
 async function waitForLock(
@@ -179,14 +197,17 @@ async function waitForLock(
 ): Promise<void> {
   for (let waited = 0; waited < 10_000; waited += 25) {
     if (settled()) assert.fail(failure);
-    const blocked = await db.execute<{ n: number }>(sql`
+    const blocked = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n
         from pg_stat_activity
        where datname = current_database()
          and wait_event_type = 'Lock'
          and (${predicate.pid ?? null}::int is null or pid = ${predicate.pid ?? null})
          and (${predicate.queryPattern ?? null}::text is null
-              or query ilike ${predicate.queryPattern ?? null})`, "objects");
+              or query ilike ${predicate.queryPattern ?? null})`,
+      "objects",
+    );
     if ((blocked[0]?.n ?? 0) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -197,13 +218,16 @@ async function accountState(
   orgId: string,
   accountId: string,
 ): Promise<{ type: string; is_summary: boolean; line_count: number }> {
-  const state = await db.execute<{ type: string; is_summary: boolean; line_count: number }>(sql`
+  const state = await db.execute<{ type: string; is_summary: boolean; line_count: number }>(
+    sql`
     select a.type, a.is_summary,
            count(l.id)::int as line_count
       from accounts a
       left join journal_lines l on l.org_id = a.org_id and l.account_id = a.id
      where a.org_id = ${orgId} and a.id = ${accountId}
-     group by a.id, a.type, a.is_summary`, "objects");
+     group by a.id, a.type, a.is_summary`,
+    "objects",
+  );
   assert.ok(state[0], "the raced account must still exist");
   return state[0]!;
 }
@@ -278,12 +302,15 @@ async function holdAccountsShareLock(orgId: string): Promise<Client> {
 async function waitForAdvisoryParking(): Promise<void> {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
-    const r = await db.execute<{ n: number }>(sql`
+    const r = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from pg_stat_activity
        where datname = current_database()
          and pid <> pg_backend_pid()
          and wait_event_type = 'Lock'
-         and wait_event = 'advisory'`, "objects");
+         and wait_event = 'advisory'`,
+      "objects",
+    );
     if ((r[0]?.n ?? 0) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -293,11 +320,15 @@ async function waitForAdvisoryParking(): Promise<void> {
 }
 
 test("concurrent reciprocal reparents commit at most one edge and refuse the cycle", async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   let holder: Client | null = null;
   try {
-    const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-    routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] }, permissions: new Set(), allowedSubsidiaryIds: null };
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = {
+      user: { orgId: org.orgId, id: adminId, roles: [{ key: "admin" }] },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
     const a = await seedSummaryAccount(org.orgId, "9101");
     const b = await seedSummaryAccount(org.orgId, "9102");
 
@@ -305,18 +336,18 @@ test("concurrent reciprocal reparents commit at most one edge and refuse the cyc
     // Start both requests without awaiting them: neither can finish while the
     // SHARE lock pins the table, so awaiting them before releasing the holder
     // would deadlock the harness against its own commit below.
-    const firstPending = PATCH(patchRequest({ parentId: b }), { params: Promise.resolve({ id: a }) }).then(
-      async (res) => ({
-        status: res.status,
-        body: (await res.json()) as { error?: string; field?: string },
-      }),
-    );
-    const secondPending = PATCH(patchRequest({ parentId: a }), { params: Promise.resolve({ id: b }) }).then(
-      async (res) => ({
-        status: res.status,
-        body: (await res.json()) as { error?: string; field?: string },
-      }),
-    );
+    const firstPending = PATCH(patchRequest({ parentId: b }), {
+      params: Promise.resolve({ id: a }),
+    }).then(async (res) => ({
+      status: res.status,
+      body: (await res.json()) as { error?: string; field?: string },
+    }));
+    const secondPending = PATCH(patchRequest({ parentId: a }), {
+      params: Promise.resolve({ id: b }),
+    }).then(async (res) => ({
+      status: res.status,
+      body: (await res.json()) as { error?: string; field?: string },
+    }));
     // Park both requests mid-flight: each has passed its reads while the
     // table is frozen against writes, and the loser is queued behind the
     // winner's transaction-scoped hierarchy lock.
@@ -342,7 +373,8 @@ test("concurrent reciprocal reparents commit at most one edge and refuse the cyc
     const bParent = await parentIdOf(org.orgId, b);
     const edges = [aParent, bParent].filter(Boolean);
     assert.equal(edges.length, 1, "exactly one reciprocal edge committed");
-    if (aParent) assert.equal(aParent, b, "the surviving edge must be one of the requested parents");
+    if (aParent)
+      assert.equal(aParent, b, "the surviving edge must be one of the requested parents");
     else assert.equal(bParent, a, "the surviving edge must be one of the requested parents");
     assert.equal(await selfAncestorCount(org.orgId), 0, "the chart must remain acyclic");
 
@@ -358,10 +390,14 @@ test("concurrent reciprocal reparents commit at most one edge and refuse the cyc
 });
 
 test("concurrent valid reparents serialize on the hierarchy lock and both commit", async () => {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-    routeState.authz = { user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] }, permissions: new Set(), allowedSubsidiaryIds: null };
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = {
+      user: { orgId: org.orgId, id: adminId, roles: [{ key: "admin" }] },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
     const m1 = await seedSummaryAccount(org.orgId, "9201");
     const m2 = await seedSummaryAccount(org.orgId, "9202");
     const p1 = await seedSummaryAccount(org.orgId, "9203");
@@ -371,7 +407,10 @@ test("concurrent valid reparents serialize on the hierarchy lock and both commit
       PATCH(patchRequest({ parentId: p1 }), { params: Promise.resolve({ id: m1 }) }),
       PATCH(patchRequest({ parentId: p2 }), { params: Promise.resolve({ id: m2 }) }),
     ]);
-    assert.deepEqual(responses.map((r) => r.status), [200, 200]);
+    assert.deepEqual(
+      responses.map((r) => r.status),
+      [200, 200],
+    );
     assert.equal(await parentIdOf(org.orgId, m1), p1);
     assert.equal(await parentIdOf(org.orgId, m2), p2);
     assert.equal(await selfAncestorCount(org.orgId), 0);
@@ -392,13 +431,13 @@ test(
   "account classification edits serialize with a concurrent first journal line",
   { skip: !DB, timeout: 30_000 },
   async () => {
-    const org = await withBypassContext(() => (createScratchOrg()));
+    const org = await withBypassContext(() => createScratchOrg());
     let editor: Client | null = null;
     let poster: Client | null = null;
     try {
-      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
+      const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
       routeState.authz = {
-        user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] },
+        user: { orgId: org.orgId, id: adminId, roles: [{ key: "admin" }] },
         permissions: new Set(),
         allowedSubsidiaryIds: null,
       };
@@ -436,10 +475,12 @@ test(
       // committed posting state, and only then land the first balanced lines.
       const demotionTarget = await seedAccount(org.orgId, "9303", true);
       editor = await openBypassClient(org.orgId);
-      await withBypassContext(() => (editor!.query(
-        "update accounts set is_summary = false where org_id = $1 and id = $2",
-        [org.orgId, demotionTarget],
-      )));
+      await withBypassContext(() =>
+        editor!.query("update accounts set is_summary = false where org_id = $1 and id = $2", [
+          org.orgId,
+          demotionTarget,
+        ]),
+      );
 
       poster = await openBypassClient(org.orgId);
       const entryId = await seedJournalEntry(poster, org, "ACCOUNT-DEMOTION-RACE");
@@ -492,97 +533,103 @@ test(
   },
 );
 
-test(
-  "account PATCH rejects non-string names at the JSON boundary",
-  async () => {
-    const org = await withBypassContext(() => (createScratchOrg()));
-    try {
-      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-      routeState.authz = {
-        user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] },
-        permissions: new Set(),
-        allowedSubsidiaryIds: null,
-      };
-      const accountId = await seedAccount(org.orgId, "9401", false);
-      const response = await PATCH(patchRequest({ name: 0 }), {
-        params: Promise.resolve({ id: accountId }),
-      });
-      assert.equal(response.status, 400);
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+test("account PATCH rejects non-string names at the JSON boundary", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = {
+      user: { orgId: org.orgId, id: adminId, roles: [{ key: "admin" }] },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
+    const accountId = await seedAccount(org.orgId, "9401", false);
+    const response = await PATCH(patchRequest({ name: 0 }), {
+      params: Promise.resolve({ id: accountId }),
+    });
+    assert.equal(response.status, 400);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "account PATCH preserves omitted required custom fields on a partial edit",
-  async () => {
-    const org = await withBypassContext(() => (createScratchOrg()));
-    try {
-      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-      routeState.authz = {
-        user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] },
-        permissions: new Set(),
-        allowedSubsidiaryIds: null,
-      };
-      const accountId = await seedAccount(org.orgId, "9402", false);
-      await withBypassContext(() => (db.execute(sql`
+test("account PATCH preserves omitted required custom fields on a partial edit", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = {
+      user: { orgId: org.orgId, id: adminId, roles: [{ key: "admin" }] },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
+    const accountId = await seedAccount(org.orgId, "9402", false);
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into custom_field_defs
           (id, org_id, target_table, key, label, field_type, config, is_required, is_active, created_by, updated_by)
         values
           (${randomUUID()}, ${org.orgId}, 'accounts', 'required_code', 'Required code', 'text', '{}'::jsonb, true, true, ${adminId}, ${adminId}),
           (${randomUUID()}, ${org.orgId}, 'accounts', 'optional_note', 'Optional note', 'text', '{}'::jsonb, false, true, ${adminId}, ${adminId})
-      `)));
-      await withBypassContext(() => (db.execute(sql`update accounts set custom = '{"required_code":"R-1"}'::jsonb where id = ${accountId} and org_id = ${org.orgId}`)));
+      `),
+    );
+    await withBypassContext(() =>
+      db.execute(
+        sql`update accounts set custom = '{"required_code":"R-1"}'::jsonb where id = ${accountId} and org_id = ${org.orgId}`,
+      ),
+    );
 
-      const response = await PATCH(patchRequest({ custom: { optional_note: "updated" } }), {
-        params: Promise.resolve({ id: accountId }),
-      });
-      assert.equal(response.status, 200, JSON.stringify(await response.json()));
-      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from accounts where id = ${accountId} and org_id = ${org.orgId}`, "objects"))[0]?.custom;
-      assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    const response = await PATCH(patchRequest({ custom: { optional_note: "updated" } }), {
+      params: Promise.resolve({ id: accountId }),
+    });
+    assert.equal(response.status, 200, JSON.stringify(await response.json()));
+    const stored = (
+      await db.execute<{ custom: Record<string, unknown> }>(
+        sql`select custom from accounts where id = ${accountId} and org_id = ${org.orgId}`,
+        "objects",
+      )
+    )[0]?.custom;
+    assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "account GET and PATCH return the same not-found response for a hidden subsidiary record",
-  async () => {
-    const org = await withBypassContext(() => (createScratchOrg()));
-    try {
-      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-      const hiddenSubsidiary = randomUUID();
-      await withBypassContext(() => (db.execute(sql`
+test("account GET and PATCH return the same not-found response for a hidden subsidiary record", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    const hiddenSubsidiary = randomUUID();
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${hiddenSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Hidden API account entity', 'CAD', 'CA')
-      `)));
-      const hiddenAccount = await seedAccount(org.orgId, "9403", false);
-      await withBypassContext(() => (db.execute(sql`
+      `),
+    );
+    const hiddenAccount = await seedAccount(org.orgId, "9403", false);
+    await withBypassContext(() =>
+      db.execute(sql`
         update accounts set subsidiary_id = ${hiddenSubsidiary}
          where id = ${hiddenAccount} and org_id = ${org.orgId}
-      `)));
-      routeState.authz = {
-        user: { orgId: org.orgId, id: adminId, roles: [{key:"admin"}] },
-        permissions: new Set(),
-        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
-      };
+      `),
+    );
+    routeState.authz = {
+      user: { orgId: org.orgId, id: adminId, roles: [{ key: "admin" }] },
+      permissions: new Set(),
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    };
 
-      const getResponse = await GET(new Request("http://localhost/api/accounts/hidden"), {
-        params: Promise.resolve({ id: hiddenAccount }),
-      });
-      const patchResponse = await PATCH(patchRequest({ name: "Should stay hidden" }), {
-        params: Promise.resolve({ id: hiddenAccount }),
-      });
-      assert.equal(getResponse.status, 404);
-      assert.equal(patchResponse.status, 404);
-      assert.deepEqual(await getResponse.json(), await patchResponse.json());
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    const getResponse = await GET(new Request("http://localhost/api/accounts/hidden"), {
+      params: Promise.resolve({ id: hiddenAccount }),
+    });
+    const patchResponse = await PATCH(patchRequest({ name: "Should stay hidden" }), {
+      params: Promise.resolve({ id: hiddenAccount }),
+    });
+    assert.equal(getResponse.status, 404);
+    assert.equal(patchResponse.status, 404);
+    assert.deepEqual(await getResponse.json(), await patchResponse.json());
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});

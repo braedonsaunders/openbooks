@@ -2,11 +2,7 @@ import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
-import type {
-  FlowExecCtx,
-  FlowSubjectAdapter,
-  FlowSubjectContext,
-} from "./types.ts";
+import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
@@ -84,109 +80,109 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
   // the submitter outside withOrg, and every caller scopes the subject
   // through its own org-scoped gate row. findCandidateIds below is the
   // tenant-bounded entry point and keeps the explicit boundary.
-  const result = await db.execute<RequestRow>(sql`
+  const result = await db.execute<RequestRow>(
+    sql`
     select org_id,public.leave_request_approval_fingerprint(hrm_leave_requests) as fingerprint, employment_id, leave_type_id,
            starts_on::text as starts_on, ends_on::text as ends_on,
            status, created_by, reason
       from hrm_leave_requests
      where id = ${subjectId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return result[0] ?? null;
 }
 
-export const hrmLeaveRequestFlowAdapter: FlowSubjectAdapter =
-  defineTableSubjectAdapter({
-    subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
-    // A leave request belongs to the employer entity of its employment.
-    permissions: {
-      read: "hrm.leave.read",
-      edit: "hrm.leave.manage",
-      approve: "hrm.leave.approve",
-    },
-    scope: tableScope("employment", "hrm_leave_requests", "employment_id"),
-    profile: hrmLeaveRequestSubjectProfile,
-    // releaseApproval below delegates to the registered engine handler.
-    releaseViaHandler: true,
-    // A flow must not rewrite the range it is approving: the request freezes
-    // on submit, so no header field is flow-writable.
+export const hrmLeaveRequestFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
+  subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
+  // A leave request belongs to the employer entity of its employment.
+  permissions: {
+    read: "hrm.leave.read",
+    edit: "hrm.leave.manage",
+    approve: "hrm.leave.approve",
+  },
+  scope: tableScope("employment", "hrm_leave_requests", "employment_id"),
+  profile: hrmLeaveRequestSubjectProfile,
+  // releaseApproval below delegates to the registered engine handler.
+  releaseViaHandler: true,
+  // A flow must not rewrite the range it is approving: the request freezes
+  // on submit, so no header field is flow-writable.
 
-    async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
-      const request = await loadRequest(subjectId);
-      if (!request) return null;
-      return {
-        values: {
-          id: subjectId,
-          approvalFingerprint: request.fingerprint,
-          requestId: subjectId,
-          employmentId: request.employment_id,
-          leaveTypeId: request.leave_type_id,
-          startsOn: String(request.starts_on).slice(0, 10),
-          endsOn: String(request.ends_on).slice(0, 10),
-          status: request.status,
-          submittedBy: request.created_by,
-          reason: request.reason,
-        },
-        submitterUserId: request.created_by,
-      };
-    },
+  async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
+    const request = await loadRequest(subjectId);
+    if (!request) return null;
+    return {
+      values: {
+        id: subjectId,
+        approvalFingerprint: request.fingerprint,
+        requestId: subjectId,
+        employmentId: request.employment_id,
+        leaveTypeId: request.leave_type_id,
+        startsOn: String(request.starts_on).slice(0, 10),
+        endsOn: String(request.ends_on).slice(0, 10),
+        status: request.status,
+        submittedBy: request.created_by,
+        reason: request.reason,
+      },
+      submitterUserId: request.created_by,
+    };
+  },
 
-    label(subjectId: string, values: Record<string, unknown>): string {
-      const range =
-        typeof values.startsOn === "string" ? values.startsOn : "leave";
-      return `Leave ${range} ${subjectId.slice(0, 8)}`;
-    },
+  label(subjectId: string, values: Record<string, unknown>): string {
+    const range = typeof values.startsOn === "string" ? values.startsOn : "leave";
+    return `Leave ${range} ${subjectId.slice(0, 8)}`;
+  },
 
-    deepLink(subjectId: string): string {
-      return `/hrm/leave?request=${subjectId}`;
-    },
+  deepLink(subjectId: string): string {
+    return `/hrm/leave?request=${subjectId}`;
+  },
 
-    async getStatus(subjectId: string): Promise<string | null> {
-      return (await loadRequest(subjectId))?.status ?? null;
-    },
+  async getStatus(subjectId: string): Promise<string | null> {
+    return (await loadRequest(subjectId))?.status ?? null;
+  },
 
-    async changeStatus(): Promise<void> {
+  async changeStatus(): Promise<void> {
+    throw new Error("leave-request status is released by the approval engine, not a flow action");
+  },
+
+  async releaseApproval(
+    subjectId: string,
+    outcome: "approved" | "rejected",
+    ctx: FlowExecCtx,
+    detail?: { comment?: string | null },
+    run?: { id: string; dispatchValues: Record<string, unknown> | null },
+  ): Promise<void> {
+    await releaseFlowApproval({
+      subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
+      subjectId,
+      outcome,
+      comment: detail?.comment,
+      ctx,
+      approvalRunId: run?.id,
+    });
+  },
+
+  async setField(): Promise<void> {
+    throw new Error("leave requests are frozen on submit; withdraw and file a new request");
+  },
+
+  /** Recent non-terminal requests, for scheduled fan-out (reminders). */
+  async findCandidateIds(limit: number): Promise<string[]> {
+    const orgId = ambientTenantOrgId();
+    if (!orgId) {
       throw new Error(
-        "leave-request status is released by the approval engine, not a flow action",
+        `findCandidateIds for "${HRM_LEAVE_REQUEST_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
       );
-    },
-
-    async releaseApproval(
-      subjectId: string,
-      outcome: "approved" | "rejected",
-      ctx: FlowExecCtx,
-      detail?: { comment?: string | null },
-      run?: { id: string; dispatchValues: Record<string, unknown> | null },
-    ): Promise<void> {
-      await releaseFlowApproval({
-        subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
-        subjectId,
-        outcome,
-        comment: detail?.comment,
-        ctx,
-        approvalRunId: run?.id,
-      });
-    },
-
-    async setField(): Promise<void> {
-      throw new Error(
-        "leave requests are frozen on submit; withdraw and file a new request",
-      );
-    },
-
-    /** Recent non-terminal requests, for scheduled fan-out (reminders). */
-    async findCandidateIds(limit: number): Promise<string[]> {
-      const orgId = ambientTenantOrgId();
-      if (!orgId) {
-        throw new Error(
-          `findCandidateIds for "${HRM_LEAVE_REQUEST_SUBJECT_KIND}" requires an ambient tenant context (withOrg)`,
-        );
-      }
-      const result = await db.execute<{ id: string }>(sql`
+    }
+    const result = await db.execute<{ id: string }>(
+      sql`
       select id::text as id from hrm_leave_requests
        where org_id = ${orgId} and status in ('draft', 'submitted')
        order by created_at desc
        limit ${limit}
-    `, "objects");
-      return result.map((row) => row.id);
-    },
-  });
+    `,
+      "objects",
+    );
+    return result.map((row) => row.id);
+  },
+});

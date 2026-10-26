@@ -66,7 +66,9 @@ async function seedClosedPeriodFixture(org: ScratchOrg): Promise<void> {
         (${org.orgId},${capital},1,${org.accounts.bank},${childId},'1000','USD','1000','1'),
         (${org.orgId},${capital},2,${accounts.get("childEquity")!},${childId},'-1000','USD','-1000','1')
     `);
-  await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${capital}`);
+  await db.execute(
+    sql`update journal_entries set status='posted', posted_at=now() where id=${capital}`,
+  );
   await db.execute(sql`
       insert into fx_rates (org_id,from_currency,to_currency,as_of,rate_type,rate,source)
       values (${org.orgId},'USD','CAD','2026-07-15','spot','1.3500000000','manual')
@@ -96,48 +98,52 @@ async function seedClosedPeriodFixture(org: ScratchOrg): Promise<void> {
     `);
 }
 
-test("consolidation journal phases refuse a closed GL with ConsolidationError", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await seedClosedPeriodFixture(org);
-    await deriveConsolidatedRates(org.orgId, org.periodId, actorId);
-    const baseline = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
-    assert.equal(baseline.entryIds.length, 1);
+test(
+  "consolidation journal phases refuse a closed GL with ConsolidationError",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await seedClosedPeriodFixture(org);
+      await deriveConsolidatedRates(org.orgId, org.periodId, actorId);
+      const baseline = await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
+      assert.equal(baseline.entryIds.length, 1);
 
-    await db.execute(sql`
+      await db.execute(sql`
       insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
       values (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl', 'closed', now(), 'controller sign-off')
     `);
 
-    // Rate derivation names the locked scope and the route out, so the API
-    // boundary can link the controlled reopen request prefilled for it.
-    const derivation = await deriveConsolidatedRates(org.orgId, org.periodId, actorId).then(
-      () => null,
-      (error: unknown) => error,
-    );
-    assert.ok(derivation instanceof ConsolidationError);
-    assert.equal(derivation.code, "period-closed");
-    assert.equal(typeof derivation.remedy, "string");
-    assert.deepEqual(derivation.details, {
-      kind: "period-closed",
-      periodId: org.periodId,
-      bookId: org.bookId,
-      subsidiaryId: null,
-      module: "gl",
-    });
+      // Rate derivation names the locked scope and the route out, so the API
+      // boundary can link the controlled reopen request prefilled for it.
+      const derivation = await deriveConsolidatedRates(org.orgId, org.periodId, actorId).then(
+        () => null,
+        (error: unknown) => error,
+      );
+      assert.ok(derivation instanceof ConsolidationError);
+      assert.equal(derivation.code, "period-closed");
+      assert.equal(typeof derivation.remedy, "string");
+      assert.deepEqual(derivation.details, {
+        kind: "period-closed",
+        periodId: org.periodId,
+        bookId: org.bookId,
+        subsidiaryId: null,
+        module: "gl",
+      });
 
-    await assert.rejects(
-      runOwnershipConsolidation(org.orgId, org.periodId, actorId),
-      ConsolidationError,
-      "ownership consolidation posts into a closed period instead of refusing",
-    );
-    await assert.rejects(
-      runAutoElimination(org.orgId, org.periodId, actorId),
-      ConsolidationError,
-      "auto-elimination posts into a closed period instead of refusing",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        runOwnershipConsolidation(org.orgId, org.periodId, actorId),
+        ConsolidationError,
+        "ownership consolidation posts into a closed period instead of refusing",
+      );
+      await assert.rejects(
+        runAutoElimination(org.orgId, org.periodId, actorId),
+        ConsolidationError,
+        "auto-elimination posts into a closed period instead of refusing",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

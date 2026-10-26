@@ -32,11 +32,15 @@ test("every refusal code maps to its status with the message intact", () => {
 
 test("authorization refusals distinguish probing from forbidden", async () => {
   const hidden = changeRequestErrorResponse(
-    new HrmAuthorizationError("Employment is not visible in this organization and legal-entity scope."),
+    new HrmAuthorizationError(
+      "Employment is not visible in this organization and legal-entity scope.",
+    ),
   );
   assert.equal(hidden.status, 404);
   const forbidden = changeRequestErrorResponse(
-    new HrmAuthorizationError("Employment access requires the hrm.employment.manage permission — ask an administrator to grant it in /admin/roles."),
+    new HrmAuthorizationError(
+      "Employment access requires the hrm.employment.manage permission — ask an administrator to grant it in /admin/roles.",
+    ),
   );
   assert.equal(forbidden.status, 403);
 });

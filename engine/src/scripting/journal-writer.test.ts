@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { installEngineSeams } from "../composition/install.ts";
 import { runScript, type ScriptContext } from "./scripting.ts";
-import {
-  installedScriptJournalWriter,
-  registerScriptJournalWriter,
-} from "./journal-writer.ts";
+import { installedScriptJournalWriter, registerScriptJournalWriter } from "./journal-writer.ts";
 
 // Unit tests for the installed script-journal writer seam. The production
 // runner and real QuickJS realm, no database: the
@@ -38,7 +35,10 @@ test("an unattended run with no accountable user never reaches the installed wri
   });
   const outcome = await runScript(CREATE_SOURCE, context, 2_000, {});
   assert.equal(outcome.status, "error");
-  assert.match(outcome.abortReason ?? "", /no signed-in user and the script has no run-as user; save the script again as a user who holds gl\.post/);
+  assert.match(
+    outcome.abortReason ?? "",
+    /no signed-in user and the script has no run-as user; save the script again as a user who holds gl\.post/,
+  );
   assert.deepEqual(calls, []);
 });
 

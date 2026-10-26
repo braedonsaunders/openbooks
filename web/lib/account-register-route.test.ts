@@ -1,26 +1,34 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
-import test, { after } from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import { pathToFileURL } from "node:url";
+import test, { after } from "node:test";
 
 // Absolute file URL of the real @openbooks/pdf surface, interpolated into the
 // mock below. A bare or relative specifier cannot be used there: the mock
 // module's base is the opaque `mock:` URL, so only an absolute URL reaches
 // the real file without being re-intercepted by these same hooks.
-const pdfIndexUrl = pathToFileURL(
-  `${process.cwd()}/packages/pdf/src/index.ts`,
-).href
+const pdfIndexUrl = pathToFileURL(`${process.cwd()}/packages/pdf/src/index.ts`).href;
 
-const stateKey = Symbol.for('openbooks.account-register-route-test')
-const routeState = { accountRegisterCalls: 0, lastBook: undefined as string | undefined, permissions: ['gl.read'] }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
+const stateKey = Symbol.for("openbooks.account-register-route-test");
+const routeState = {
+  accountRegisterCalls: 0,
+  lastBook: undefined as string | undefined,
+  permissions: ["gl.read"],
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
-  ['mock:intl', `export async function getTranslations() { return (key) => key }
-    export async function getLocale() { return 'en' }`],
-  ['mock:report-books', `class ReportBookSelectionError extends Error { constructor() { super('Accounting book unavailable'); this.name = 'ReportBookSelectionError'; this.status = 422 } } export async function reportBookSelection(org, id) { if (id !== 'tax-book') throw new ReportBookSelectionError(); return { selectedBook: { id, code: 'TAX', name: 'Tax book' } } }`],
   [
-    'mock:authz',
+    "mock:intl",
+    `export async function getTranslations() { return (key) => key }
+    export async function getLocale() { return 'en' }`,
+  ],
+  [
+    "mock:report-books",
+    `class ReportBookSelectionError extends Error { constructor() { super('Accounting book unavailable'); this.name = 'ReportBookSelectionError'; this.status = 422 } } export async function reportBookSelection(org, id) { if (id !== 'tax-book') throw new ReportBookSelectionError(); return { selectedBook: { id, code: 'TAX', name: 'Tax book' } } }`,
+  ],
+  [
+    "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.account-register-route-test')]
       export async function getAuthz() {
@@ -30,7 +38,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:reports',
+    "mock:reports",
     `
       const state = globalThis[Symbol.for('openbooks.account-register-route-test')]
       export async function accountRegister(...args) {
@@ -41,14 +49,14 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:account-register-export',
+    "mock:account-register-export",
     `
       export function accountRegisterDocTypeLabel() { return '' }
       export function accountRegisterExportData() { return { title: 'Register', dateRangeLabel: '', groups: [], summary: [] } }
     `,
   ],
   [
-    'mock:report-pdf',
+    "mock:report-pdf",
     `
       export function exportDataToCsv() { return '' }
       export async function exportDataToPdf() { return Buffer.from([]) }
@@ -56,12 +64,9 @@ const mockSources = new Map<string, string>([
       export async function orgBranding() { return {} }
     `,
   ],
+  ["mock:report-labels", `export async function reportCsvOptions() { return {} }`],
   [
-    'mock:report-labels',
-    `export async function reportCsvOptions() { return {} }`,
-  ],
-  [
-    'mock:export',
+    "mock:export",
     `
       export function csvResponse() { return new Response('') }
       export function pdfResponse() { return new Response('') }
@@ -70,116 +75,120 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:statement-format',
+    "mock:statement-format",
     `
       export function decimalCmp() { return 0 }
       export function decimalSum() { return '0' }
     `,
   ],
   [
-    'mock:business-date',
-    `export * from '${import.meta.resolve('@openbooks/engine/platform/business-date/module')}'
-      export { addCalendarDays, civilDateFromParts, endOfMonth } from '${import.meta.resolve('@openbooks/engine/platform/business-date/module')}'
+    "mock:business-date",
+    `export * from '${import.meta.resolve("@openbooks/engine/platform/business-date/module")}'
+      export { addCalendarDays, civilDateFromParts, endOfMonth } from '${import.meta.resolve("@openbooks/engine/platform/business-date/module")}'
       export async function businessToday() { return '2026-08-28' }`,
   ],
   [
     // Thin re-export-plus-override of the real @openbooks/pdf surface: a
     // future export added to the package rides the star instead of breaking
     // this double's link. Importing the real index never launches Chromium.
-    'mock:pdf',
+    "mock:pdf",
     `export * from '${pdfIndexUrl}'
       export { RendererUnavailableError } from '${pdfIndexUrl}'
       export function resolvePdfPageSetup() { return {} }`,
   ],
-])
+]);
 
 const mockUrls = new Map<string, string>([
-  ['next-intl/server', 'mock:intl'],
-  ['../../../../../lib/report-books', 'mock:report-books'],
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:authz'],
-  ['../../../../../lib/reports', 'mock:reports'],
-  ['../../../../../lib/account-register-export', 'mock:account-register-export'],
-  ['../../../../../lib/report-pdf', 'mock:report-pdf'],
-  ['../../../../../lib/report-labels', 'mock:report-labels'],
-  ['../../../../../lib/export', 'mock:export'],
-  ['../../../../../lib/statement-format', 'mock:statement-format'],
-  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
-  ['@openbooks/pdf', 'mock:pdf'],
-])
+  ["next-intl/server", "mock:intl"],
+  ["../../../../../lib/report-books", "mock:report-books"],
+  ["../../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+  ["../../../../../lib/reports", "mock:reports"],
+  ["../../../../../lib/account-register-export", "mock:account-register-export"],
+  ["../../../../../lib/report-pdf", "mock:report-pdf"],
+  ["../../../../../lib/report-labels", "mock:report-labels"],
+  ["../../../../../lib/export", "mock:export"],
+  ["../../../../../lib/statement-format", "mock:statement-format"],
+  ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
+  ["@openbooks/pdf", "mock:pdf"],
+]);
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, _context)
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier, _context);
   },
   load(url, _context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, _context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, _context);
   },
-})
+});
 
-const routeUrl = '../app/api/accounts/[id]/register/route.ts?account-register-date-test'
-const { GET } = (await import(routeUrl)) as typeof import('../app/api/accounts/[id]/register/route.ts')
-after(() => hooks.deregister())
+const routeUrl = "../app/api/accounts/[id]/register/route.ts?account-register-date-test";
+const { GET } = (await import(
+  routeUrl
+)) as typeof import("../app/api/accounts/[id]/register/route.ts");
+after(() => hooks.deregister());
 
-const ACCOUNT_ID = '00000000-0000-4000-8000-00000000a001'
+const ACCOUNT_ID = "00000000-0000-4000-8000-00000000a001";
 
 function reset(): void {
-  routeState.accountRegisterCalls = 0
+  routeState.accountRegisterCalls = 0;
 }
 
-function get(query = ''): Promise<Response> {
-  return GET(
-    new Request(`http://openbooks.test/api/accounts/${ACCOUNT_ID}/register${query}`),
-    { params: Promise.resolve({ id: ACCOUNT_ID }) },
-  )
+function get(query = ""): Promise<Response> {
+  return GET(new Request(`http://openbooks.test/api/accounts/${ACCOUNT_ID}/register${query}`), {
+    params: Promise.resolve({ id: ACCOUNT_ID }),
+  });
 }
 
-test('GET rejects an impossible date before account-register SQL runs', async () => {
-  reset()
+test("GET rejects an impossible date before account-register SQL runs", async () => {
+  reset();
 
-  const response = await get('?from=2026-99-99')
+  const response = await get("?from=2026-99-99");
 
-  assert.equal(response.status, 400)
-  assert.deepEqual(await response.json(), { error: 'invalid_period' })
-  assert.equal(routeState.accountRegisterCalls, 0)
-})
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "invalid_period" });
+  assert.equal(routeState.accountRegisterCalls, 0);
+});
 
-test('GET accepts a real date and returns the register payload', async () => {
-  reset()
+test("GET accepts a real date and returns the register payload", async () => {
+  reset();
 
-  const response = await get('?from=2026-02-28&to=2026-02-28')
+  const response = await get("?from=2026-02-28&to=2026-02-28");
 
-  assert.equal(response.status, 200)
-  assert.equal(routeState.accountRegisterCalls, 1)
-  assert.equal((await response.json()).page, 1)
-})
+  assert.equal(response.status, 200);
+  assert.equal(routeState.accountRegisterCalls, 1);
+  assert.equal((await response.json()).page, 1);
+});
 
-
-test('register JSON and export preserve an explicit book for reports-only callers', async () => {
-  routeState.permissions = ['reports.read'];
+test("register JSON and export preserve an explicit book for reports-only callers", async () => {
+  routeState.permissions = ["reports.read"];
   try {
-    for (const suffix of ['', '&format=csv']) {
+    for (const suffix of ["", "&format=csv"]) {
       routeState.lastBook = undefined;
       const response = await get(`?book=tax-book${suffix}`);
       assert.equal(response.status, 200);
-      assert.equal(routeState.lastBook, 'tax-book');
+      assert.equal(routeState.lastBook, "tax-book");
     }
-  } finally { routeState.permissions = ['gl.read']; }
+  } finally {
+    routeState.permissions = ["gl.read"];
+  }
 });
 
-test('unavailable book and unrelated permissions refuse before ledger reads', async () => {
+test("unavailable book and unrelated permissions refuse before ledger reads", async () => {
   routeState.accountRegisterCalls = 0;
-  const response = await get('?book=foreign');
+  const response = await get("?book=foreign");
   assert.equal(response.status, 422);
   assert.equal(routeState.accountRegisterCalls, 0);
-  routeState.permissions = ['ap.read'];
+  routeState.permissions = ["ap.read"];
   try {
     const denied = await get();
     assert.equal(denied.status, 403);
     assert.equal(routeState.accountRegisterCalls, 0);
-  } finally { routeState.permissions = ['gl.read']; }
+  } finally {
+    routeState.permissions = ["gl.read"];
+  }
 });

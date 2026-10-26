@@ -8,7 +8,8 @@ import { verifyOidcIdToken } from "./auth-oidc-token";
 // marker package gates only RSC bundling; shimming it to an empty module lets
 // these tests exercise the production flow directly. node's test runner
 // isolates each file in its own process, so the hook cannot leak elsewhere.
-const { beginOidcAuthorization, completeOidcAuthorization, oidcEnabled } = await import("./auth-oidc");
+const { beginOidcAuthorization, completeOidcAuthorization, oidcEnabled } =
+  await import("./auth-oidc");
 
 // auth-oidc reads its config live from process.env (never the engine db.ts
 // module-evaluation snapshot); the fixed test command supplies no OIDC
@@ -22,19 +23,25 @@ process.env.OPENBOOKS_APP_URL = "https://books.example.test";
 
 function token(claimOverrides: Record<string, unknown> = {}) {
   const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-  const header = Buffer.from(JSON.stringify({ alg: "RS256", kid: "test-key", typ: "JWT" })).toString("base64url");
-  const claims = Buffer.from(JSON.stringify({
-    iss: "https://id.example.test",
-    sub: "subject-1",
-    aud: "openbooks",
-    exp: 2_000_000_000,
-    iat: 1_900_000_000,
-    nonce: "nonce-1",
-    email: "user@example.test",
-    email_verified: true,
-    ...claimOverrides,
-  })).toString("base64url");
-  const signature = sign("sha256", Buffer.from(`${header}.${claims}`), privateKey).toString("base64url");
+  const header = Buffer.from(
+    JSON.stringify({ alg: "RS256", kid: "test-key", typ: "JWT" }),
+  ).toString("base64url");
+  const claims = Buffer.from(
+    JSON.stringify({
+      iss: "https://id.example.test",
+      sub: "subject-1",
+      aud: "openbooks",
+      exp: 2_000_000_000,
+      iat: 1_900_000_000,
+      nonce: "nonce-1",
+      email: "user@example.test",
+      email_verified: true,
+      ...claimOverrides,
+    }),
+  ).toString("base64url");
+  const signature = sign("sha256", Buffer.from(`${header}.${claims}`), privateKey).toString(
+    "base64url",
+  );
   return {
     idToken: `${header}.${claims}.${signature}`,
     keys: [{ ...publicKey.export({ format: "jwk" }), kid: "test-key", alg: "RS256" }],
@@ -51,16 +58,22 @@ test("OIDC refuses an HTTP app URL when NODE_ENV is unset or misspelled", () => 
   assert.throws(() => oidcEnabled({ ...configured, NODE_ENV: "" }), /HTTPS/);
   assert.throws(() => oidcEnabled({ ...configured, NODE_ENV: "prodction" }), /HTTPS/);
   assert.throws(() => oidcEnabled({ ...configured, NODE_ENV: "production" }), /HTTPS/);
-  assert.equal(oidcEnabled({
-    ...configured,
-    NODE_ENV: "development",
-    OPENBOOKS_APP_URL: "http://localhost:4780",
-  }), true);
-  assert.equal(oidcEnabled({
-    ...configured,
-    NODE_ENV: "test",
-    OPENBOOKS_APP_URL: "http://127.0.0.1:4780",
-  }), true);
+  assert.equal(
+    oidcEnabled({
+      ...configured,
+      NODE_ENV: "development",
+      OPENBOOKS_APP_URL: "http://localhost:4780",
+    }),
+    true,
+  );
+  assert.equal(
+    oidcEnabled({
+      ...configured,
+      NODE_ENV: "test",
+      OPENBOOKS_APP_URL: "http://127.0.0.1:4780",
+    }),
+    true,
+  );
 });
 
 test("OIDC refuses HTTP loopback issuers unless a non-production environment is named", () => {
@@ -76,18 +89,21 @@ test("OIDC refuses HTTP loopback issuers unless a non-production environment is 
 
 test("OIDC ID-token validation verifies signature and security claims", () => {
   const fixture = token();
-  assert.deepEqual(verifyOidcIdToken({
-    ...fixture,
-    issuer: "https://id.example.test",
-    clientId: "openbooks",
-    nonce: "nonce-1",
-    nowEpoch: 1_900_000_100,
-  }), {
-    issuer: "https://id.example.test",
-    subject: "subject-1",
-    email: "user@example.test",
-    emailVerified: true,
-  });
+  assert.deepEqual(
+    verifyOidcIdToken({
+      ...fixture,
+      issuer: "https://id.example.test",
+      clientId: "openbooks",
+      nonce: "nonce-1",
+      nowEpoch: 1_900_000_100,
+    }),
+    {
+      issuer: "https://id.example.test",
+      subject: "subject-1",
+      email: "user@example.test",
+      emailVerified: true,
+    },
+  );
 });
 
 test("OIDC ID-token validation rejects unverified email, nonce and audience", () => {
@@ -96,13 +112,16 @@ test("OIDC ID-token validation rejects unverified email, nonce and audience", ()
     token({ nonce: "wrong" }),
     token({ aud: "another-client" }),
   ]) {
-    assert.equal(verifyOidcIdToken({
-      ...fixture,
-      issuer: "https://id.example.test",
-      clientId: "openbooks",
-      nonce: "nonce-1",
-      nowEpoch: 1_900_000_100,
-    }), null);
+    assert.equal(
+      verifyOidcIdToken({
+        ...fixture,
+        issuer: "https://id.example.test",
+        clientId: "openbooks",
+        nonce: "nonce-1",
+        nowEpoch: 1_900_000_100,
+      }),
+      null,
+    );
   }
 });
 
@@ -110,14 +129,17 @@ test("OIDC ID-token validation rejects a modified signed payload", () => {
   const fixture = token();
   const segments = fixture.idToken.split(".");
   segments[1] = Buffer.from(JSON.stringify({ sub: "attacker" })).toString("base64url");
-  assert.equal(verifyOidcIdToken({
-    ...fixture,
-    idToken: segments.join("."),
-    issuer: "https://id.example.test",
-    clientId: "openbooks",
-    nonce: "nonce-1",
-    nowEpoch: 1_900_000_100,
-  }), null);
+  assert.equal(
+    verifyOidcIdToken({
+      ...fixture,
+      idToken: segments.join("."),
+      issuer: "https://id.example.test",
+      clientId: "openbooks",
+      nonce: "nonce-1",
+      nowEpoch: 1_900_000_100,
+    }),
+    null,
+  );
 });
 
 async function listen(server: Server): Promise<string> {
@@ -130,7 +152,8 @@ async function listen(server: Server): Promise<string> {
     });
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("test server did not bind a TCP port");
+  if (!address || typeof address === "string")
+    throw new Error("test server did not bind a TCP port");
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -183,15 +206,17 @@ test("OIDC token exchange refuses redirects without forwarding the client secret
       const provider = createServer((req, res) => {
         if (req.method === "GET" && req.url === "/.well-known/openid-configuration") {
           res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({
-            issuer: issuerOrigin,
-            authorization_endpoint: `${issuerOrigin}/authorize`,
-            token_endpoint: `${issuerOrigin}/token`,
-            jwks_uri: `${issuerOrigin}/jwks`,
-            ...(branch === "client_secret_post"
-              ? { token_endpoint_auth_methods_supported: ["client_secret_post"] }
-              : {}),
-          }));
+          res.end(
+            JSON.stringify({
+              issuer: issuerOrigin,
+              authorization_endpoint: `${issuerOrigin}/authorize`,
+              token_endpoint: `${issuerOrigin}/token`,
+              jwks_uri: `${issuerOrigin}/jwks`,
+              ...(branch === "client_secret_post"
+                ? { token_endpoint_auth_methods_supported: ["client_secret_post"] }
+                : {}),
+            }),
+          );
           return;
         }
         // Cycle the status so each exchange meets a different redirect class.
@@ -212,7 +237,11 @@ test("OIDC token exchange refuses redirects without forwarding the client secret
       // Exactly one request per exchange reaches the allowlisted provider —
       // never a second, followed hop — with every fetch refusing redirects.
       assert.equal(tokenRequests, redirectStatuses.length, `${branch}: no followed hop`);
-      assert.equal(tokenFetchModes.length - modesBeforeBranch, redirectStatuses.length, `${branch}: call count`);
+      assert.equal(
+        tokenFetchModes.length - modesBeforeBranch,
+        redirectStatuses.length,
+        `${branch}: call count`,
+      );
       assert.ok(
         tokenFetchModes.slice(modesBeforeBranch).every((mode) => mode === "error"),
         `${branch}: redirects refused`,
@@ -250,19 +279,24 @@ async function startProvider(options: ProviderOptions) {
     req.on("end", () => {
       if (req.method === "GET" && req.url === "/.well-known/openid-configuration") {
         res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify({
-          issuer: issuerOrigin,
-          authorization_endpoint: `${issuerOrigin}/authorize`,
-          token_endpoint: `${issuerOrigin}/token`,
-          jwks_uri: `${issuerOrigin}/jwks`,
-          ...(options.branch === "client_secret_post"
-            ? { token_endpoint_auth_methods_supported: ["client_secret_post"] }
-            : {}),
-        }));
+        res.end(
+          JSON.stringify({
+            issuer: issuerOrigin,
+            authorization_endpoint: `${issuerOrigin}/authorize`,
+            token_endpoint: `${issuerOrigin}/token`,
+            jwks_uri: `${issuerOrigin}/jwks`,
+            ...(options.branch === "client_secret_post"
+              ? { token_endpoint_auth_methods_supported: ["client_secret_post"] }
+              : {}),
+          }),
+        );
         return;
       }
       if (req.method === "POST" && req.url === "/token") {
-        tokenRequests.push({ authorization: req.headers.authorization ?? "", body: new URLSearchParams(raw) });
+        tokenRequests.push({
+          authorization: req.headers.authorization ?? "",
+          body: new URLSearchParams(raw),
+        });
         if (!minted) {
           res.writeHead(500).end();
           return;
@@ -273,7 +307,9 @@ async function startProvider(options: ProviderOptions) {
       }
       if (req.method === "GET" && req.url === "/jwks") {
         if ((options.jwksStatus ?? 200) !== 200) {
-          res.writeHead(options.jwksStatus!, { location: options.redirectTarget ?? `${issuerOrigin}/elsewhere` });
+          res.writeHead(options.jwksStatus!, {
+            location: options.redirectTarget ?? `${issuerOrigin}/elsewhere`,
+          });
           res.end();
           return;
         }
@@ -335,7 +371,8 @@ test("OIDC token exchange refuses redirected JWKS after the secret was sent", as
         );
       } finally {
         await provider.close();
-      }    }
+      }
+    }
     assert.equal(attackerRequests, 0, "key trust must never follow a redirect");
   } finally {
     await close(attacker);
@@ -352,7 +389,11 @@ test("normal OIDC responses pass: the client secret reaches only the token endpo
       const state = authorizeUrl.searchParams.get("state")!;
       provider.mint(authorizeUrl.searchParams.get("nonce")!);
 
-      const result = await completeOidcAuthorization({ code: "auth-code", state, flowCookie: begin.flowCookie });
+      const result = await completeOidcAuthorization({
+        code: "auth-code",
+        state,
+        flowCookie: begin.flowCookie,
+      });
       assert.deepEqual(result.claims, {
         issuer: provider.issuer,
         subject: "subject-1",

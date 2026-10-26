@@ -6,32 +6,32 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
-import {
-  claimIdempotentCreate,
-  resolveIdempotentReplay,
-} from "../../../../lib/api/idempotency";
+import { claimIdempotentCreate, resolveIdempotentReplay } from "../../../../lib/api/idempotency";
 import { auditSetupChange } from "../../../../lib/setup/audit";
-import {
-  layoutCardsVisible,
-  normalizeAllowedRoles,
-  normalizeLayout,
-  strOrNull,
-} from "../_lib";
+import { layoutCardsVisible, normalizeAllowedRoles, normalizeLayout, strOrNull } from "../_lib";
 
 export const runtime = "nodejs";
 
-const layoutBody = z.array(z.strictObject({
-  cardId: uuidString("layout.cardId must be a valid id"),
-  x: z.number().int().min(0).max(11),
-  y: z.number().int().min(0).max(999),
-  w: z.number().int().min(1).max(12),
-  h: z.number().int().min(1).max(24),
-}), { error: "layout must be an array of card placements" }).max(1000, "layout cannot contain more than 1000 cards");
+const layoutBody = z
+  .array(
+    z.strictObject({
+      cardId: uuidString("layout.cardId must be a valid id"),
+      x: z.number().int().min(0).max(11),
+      y: z.number().int().min(0).max(999),
+      w: z.number().int().min(1).max(12),
+      h: z.number().int().min(1).max(24),
+    }),
+    { error: "layout must be an array of card placements" },
+  )
+  .max(1000, "layout cannot contain more than 1000 cards");
 const createDashboardBodySchema = z.strictObject({
   name: z.string().trim().max(200).optional(),
   description: z.string().trim().max(2000).nullable().optional(),
   layout: layoutBody.optional(),
-  allowedRoles: z.array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys")).nullable().optional(),
+  allowedRoles: z
+    .array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys"))
+    .nullable()
+    .optional(),
 });
 
 function bad(error: string) {
@@ -69,10 +69,7 @@ export const POST = defineRoute({
 
     const requestId = req.headers.get("Idempotency-Key")?.trim() ?? "";
     if (!isUuid(requestId)) {
-      return NextResponse.json(
-        { error: "invalid_idempotency_key" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 400 });
     }
 
     const body = routeBody;
@@ -128,7 +125,8 @@ export const POST = defineRoute({
         if (!(await layoutCardsVisible(tx, gate, layout))) {
           throw new DashboardCardRefusal();
         }
-        const inserted = await tx.execute<{ id: string }>(sql`
+        const inserted = await tx.execute<{ id: string }>(
+          sql`
       insert into insight_dashboards
         (id, org_id, name, description, layout, status, allowed_roles, created_by, updated_by)
       values
@@ -139,7 +137,9 @@ export const POST = defineRoute({
       -- A retry resolves the existing audited payload below; conflicting input is refused.
       on conflict (id) do nothing
       returning id
-    `, "objects");
+    `,
+          "objects",
+        );
         if (!inserted[0]) {
           return resolveIdempotentReplay(tx, {
             orgId: user.orgId,
@@ -167,14 +167,8 @@ export const POST = defineRoute({
       throw e;
     }
     if (outcome === "conflict") {
-      return NextResponse.json(
-        { error: "invalid_idempotency_key" },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 409 });
     }
-    return NextResponse.json(
-      { id: requestId },
-      { status: outcome === "fresh" ? 201 : 200 },
-    );
+    return NextResponse.json({ id: requestId }, { status: outcome === "fresh" ? 201 : 200 });
   },
 });

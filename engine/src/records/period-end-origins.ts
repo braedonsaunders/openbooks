@@ -15,7 +15,9 @@ import { sql, type SQL } from "drizzle-orm";
 export const PERIOD_END_JOURNAL_ORIGINS = ["closing", "opening"] as const;
 
 /** The origins as a SQL literal list, for statements composed as text. */
-export const PERIOD_END_JOURNAL_ORIGIN_LITERALS = PERIOD_END_JOURNAL_ORIGINS.map((origin) => `'${origin}'`).join(", ");
+export const PERIOD_END_JOURNAL_ORIGIN_LITERALS = PERIOD_END_JOURNAL_ORIGINS.map(
+  (origin) => `'${origin}'`,
+).join(", ");
 
 export type PeriodEndJournalOrigin = (typeof PERIOD_END_JOURNAL_ORIGINS)[number];
 
@@ -31,7 +33,6 @@ export function isPeriodEndJournalOrigin(origin: string): origin is PeriodEndJou
 export function excludePeriodEndJournals(origin: SQL): SQL {
   return sql`${origin} not in (${sql.raw(PERIOD_END_JOURNAL_ORIGIN_LITERALS)})`;
 }
-
 
 /**
  * The gl_month_activity relation on the statement basis: the maintained

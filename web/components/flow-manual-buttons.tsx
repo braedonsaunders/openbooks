@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 // Manual flow-trigger buttons for a record flyout — the author-defined
 // "record buttons" (manual trigger nodes on an enabled flow graph). Fetches
@@ -8,96 +8,104 @@
 // Renders nothing while loading or when no flow offers a button, so the
 // drawer header is untouched for orgs without flows.
 
-import { useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { toast } from 'sonner'
-import { useTranslations } from 'next-intl'
-import { Button } from '@openbooks/ui'
-import { confirmDialog } from '../lib/confirm'
-import { refreshApprovalState } from './approval-actions'
-import { readApiErrorMessage, refusalMessageFromBody } from '../lib/api-error'
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { useTranslations } from "next-intl";
+import { Button } from "@openbooks/ui";
+import { confirmDialog } from "../lib/confirm";
+import { refreshApprovalState } from "./approval-actions";
+import { readApiErrorMessage, refusalMessageFromBody } from "../lib/api-error";
 
 interface ManualButton {
-  buttonId: string
-  label: string
-  confirm?: string
+  buttonId: string;
+  label: string;
+  confirm?: string;
 }
 
 export function FlowManualButtons({
   subjectKind,
   subjectId,
 }: {
-  subjectKind: string
-  subjectId: string
+  subjectKind: string;
+  subjectId: string;
 }) {
-  const tc = useTranslations('common')
-  const router = useRouter()
-  const [buttons, setButtons] = useState<ManualButton[]>([])
-  const [busyButtonId, setBusyButtonId] = useState<string | null>(null)
+  const tc = useTranslations("common");
+  const router = useRouter();
+  const [buttons, setButtons] = useState<ManualButton[]>([]);
+  const [busyButtonId, setBusyButtonId] = useState<string | null>(null);
 
   const loadButtons = useCallback(async () => {
     const res = await fetch(
       `/api/flows/manual?subjectKind=${encodeURIComponent(subjectKind)}&subjectId=${encodeURIComponent(subjectId)}`,
-    )
-    const data = res.ok ? await res.json() : { buttons: [] }
-    return Array.isArray(data.buttons) ? data.buttons as ManualButton[] : []
-  }, [subjectKind, subjectId])
+    );
+    const data = res.ok ? await res.json() : { buttons: [] };
+    return Array.isArray(data.buttons) ? (data.buttons as ManualButton[]) : [];
+  }, [subjectKind, subjectId]);
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
     loadButtons()
       .then((next) => {
-        if (!cancelled) setButtons(next)
+        if (!cancelled) setButtons(next);
       })
-      .catch(() => {})
+      .catch(() => {});
     return () => {
-      cancelled = true
-    }
-  }, [loadButtons])
+      cancelled = true;
+    };
+  }, [loadButtons]);
 
-  if (buttons.length === 0) return null
+  if (buttons.length === 0) return null;
 
   async function run(button: ManualButton) {
-    if (button.confirm && !(await confirmDialog({ message: button.confirm }))) return
-    setBusyButtonId(button.buttonId)
+    if (button.confirm && !(await confirmDialog({ message: button.confirm }))) return;
+    setBusyButtonId(button.buttonId);
     try {
-      const res = await fetch('/api/flows/manual', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/flows/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subjectKind, subjectId, buttonId: button.buttonId }),
-      })
+      });
       // The refusal is in the body, so check the status BEFORE parsing: parsing
       // an error body first turns refusals with unparsable bodies into parse
       // errors instead of the operator-visible message.
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of a bare fallback.
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, tc('feedback.somethingWentWrong')))
-        return
+        toast.error(await readApiErrorMessage(res, tc("feedback.somethingWentWrong")));
+        return;
       }
-      const data = await res.json().catch(() => ({}))
+      const data = await res.json().catch(() => ({}));
       if (data.ok === false) {
-        toast.error(refusalMessageFromBody(data, { fallback: tc('feedback.somethingWentWrong') }) ?? tc('feedback.somethingWentWrong'))
-        return
+        toast.error(
+          refusalMessageFromBody(data, { fallback: tc("feedback.somethingWentWrong") }) ??
+            tc("feedback.somethingWentWrong"),
+        );
+        return;
       }
-      toast.success(tc('feedback.flowActionDone'))
-      setButtons(await loadButtons().catch(() => []))
-      refreshApprovalState()
-      router.refresh()
+      toast.success(tc("feedback.flowActionDone"));
+      setButtons(await loadButtons().catch(() => []));
+      refreshApprovalState();
+      router.refresh();
     } catch {
-      toast.error(tc('feedback.somethingWentWrong'))
+      toast.error(tc("feedback.somethingWentWrong"));
     } finally {
-      setBusyButtonId(null)
+      setBusyButtonId(null);
     }
   }
 
   return (
     <>
       {buttons.map((b) => (
-        <Button key={b.buttonId} variant="outline" disabled={busyButtonId !== null} onClick={() => run(b)}>
+        <Button
+          key={b.buttonId}
+          variant="outline"
+          disabled={busyButtonId !== null}
+          onClick={() => run(b)}
+        >
           {b.label}
         </Button>
       ))}
     </>
-  )
+  );
 }

@@ -1,9 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  listPostings,
-  publishPosting,
-} from "@openbooks/engine/hrm/recruiting/postings";
+import { listPostings, publishPosting } from "@openbooks/engine/hrm/recruiting/postings";
 
 import { recruitingErrorResponse } from "../_lib";
 import { publishPostingBody } from "./bodies";
@@ -20,8 +17,7 @@ export const GET = defineRoute({
   feature: "hrmRecruiting",
   handler: async ({ request: req, authz: gate }) => {
     try {
-      const requisitionId =
-        new URL(req.url).searchParams.get("requisitionId") ?? undefined;
+      const requisitionId = new URL(req.url).searchParams.get("requisitionId") ?? undefined;
       const postings = await listPostings({
         orgId: gate.user.orgId,
         actorId: gate.user.id,

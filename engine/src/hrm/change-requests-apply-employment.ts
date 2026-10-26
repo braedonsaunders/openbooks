@@ -2,14 +2,8 @@ import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../platform/db.ts";
 import { recordPositionAssignmentEvent } from "./positions.ts";
 import { assertEmploymentHireWorker } from "./employment-worker.ts";
-import {
-  makeEffectiveInterval,
-  parseCivilDate,
-} from "./temporal.ts";
-import {
-  autoOpenProcessForChange,
-  processTriggerForApply,
-} from "./processes.ts";
+import { makeEffectiveInterval, parseCivilDate } from "./temporal.ts";
+import { autoOpenProcessForChange, processTriggerForApply } from "./processes.ts";
 import { endEnrollmentsForTermination } from "./benefits/enrollments.ts";
 import {
   HrmChangeRequestError,
@@ -87,7 +81,10 @@ export async function applyHire(
   // (no template, duplicate open) rolls the version back with it, so a hire
   // without its checklist cannot exist while hrm is on. No-op while hrm is
   // off (payroll stays independent of the checklist module).
-  const hireTrigger = processTriggerForApply({ kind: "hire", effectiveFrom: payload.effectiveFrom });
+  const hireTrigger = processTriggerForApply({
+    kind: "hire",
+    effectiveFrom: payload.effectiveFrom,
+  });
   if (hireTrigger !== null) {
     await autoOpenProcessForChange(exec, {
       orgId,
@@ -99,7 +96,13 @@ export async function applyHire(
   }
   if (payload.initialAssignment === undefined) {
     await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
-    await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+    await bumpAggregateRevision(exec, {
+      orgId,
+      actorId,
+      request,
+      expected: newRevision - 1,
+      next: newRevision,
+    });
     return;
   }
   const assignmentRevision = newRevision + 1;
@@ -116,8 +119,20 @@ export async function applyHire(
     recordedAt,
     recordedAtIso,
   });
-  await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision: assignmentRevision, changeId: assignmentChangeId });
-  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: assignmentRevision });
+  await linkAppliedEvidence(exec, {
+    orgId,
+    actorId,
+    request,
+    newRevision: assignmentRevision,
+    changeId: assignmentChangeId,
+  });
+  await bumpAggregateRevision(exec, {
+    orgId,
+    actorId,
+    request,
+    expected: newRevision - 1,
+    next: assignmentRevision,
+  });
 }
 
 /**
@@ -144,7 +159,8 @@ async function applyInitialAssignment(
   // Returns the assignment event id: the caller links the request to the
   // event carrying the stamped revision (never the hire's own event, one
   // revision back).
-  const { orgId, actorId, request, hire, assignment, newRevision, recordedAt, recordedAtIso } = args;
+  const { orgId, actorId, request, hire, assignment, newRevision, recordedAt, recordedAtIso } =
+    args;
   const windowStart = hire.effectiveFrom;
   const windowEnd = hire.effectiveTo;
   makeEffectiveInterval(windowStart, windowEnd);
@@ -158,9 +174,15 @@ async function applyInitialAssignment(
     isPrimary: assignment.isPrimary,
     effectiveFrom: windowStart,
     ...(windowEnd === null ? {} : { effectiveTo: windowEnd }),
-    ...(assignment.managerEmploymentId === undefined ? {} : { managerEmploymentId: assignment.managerEmploymentId }),
+    ...(assignment.managerEmploymentId === undefined
+      ? {}
+      : { managerEmploymentId: assignment.managerEmploymentId }),
   };
-  await assertAssignmentRefs(exec, { orgId, employmentId: request.employment_id, payload: asAssignment });
+  await assertAssignmentRefs(exec, {
+    orgId,
+    employmentId: request.employment_id,
+    payload: asAssignment,
+  });
   const isPrimary = assignment.isPrimary;
   await assertNoPrimaryConflict(exec, {
     orgId,
@@ -175,10 +197,15 @@ async function applyInitialAssignment(
   // against concurrent closes and assignments on the same establishment.
   let target: { id: string; position_code: string; revision: number } | null = null;
   if (assignment.positionId) {
-    const found = (await exec.execute<{ id: string; position_code: string; revision: number }>(sql`
+    const found = (
+      await exec.execute<{ id: string; position_code: string; revision: number }>(
+        sql`
       select id, position_code, revision from positions
        where org_id = ${orgId} and id = ${assignment.positionId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!found) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -187,11 +214,16 @@ async function applyInitialAssignment(
     }
     target = found;
   }
-  const slotId = (await exec.execute<{ id: string }>(sql`
+  const slotId = (
+    await exec.execute<{ id: string }>(
+      sql`
     insert into employment_assignments (org_id, employment_id, assignment_key, created_by, updated_by)
     values (${orgId}, ${request.employment_id}, ${assignment.assignmentKey}, ${actorId}, ${actorId})
     returning id
-  `, "objects"))[0]?.id;
+  `,
+      "objects",
+    )
+  )[0]?.id;
   if (!slotId) {
     throw new HrmChangeRequestError(
       "REFUSED",
@@ -264,20 +296,37 @@ async function applyInitialAssignment(
 
 /** Status corrections cannot reinterpret payroll already committed for their window. */
 /** Sequence allocation covers the entire recorded chain, including disjoint windows. */
-async function nextEmploymentVersionNumber(exec: SqlExecutor, orgId: string, employmentId: string): Promise<number> {
-  const next = (await exec.execute<{ next: number }>(sql`
+async function nextEmploymentVersionNumber(
+  exec: SqlExecutor,
+  orgId: string,
+  employmentId: string,
+): Promise<number> {
+  const next = (
+    await exec.execute<{ next: number }>(
+      sql`
     select coalesce(max(version_no),0)+1 as next from worker_employment_versions
     where org_id=${orgId} and employment_id=${employmentId}
-  `, "objects"))[0]?.next;
-  if (!next) throw new HrmChangeRequestError("REFUSED", "The employment version sequence is unavailable; reload the history.");
+  `,
+      "objects",
+    )
+  )[0]?.next;
+  if (!next)
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "The employment version sequence is unavailable; reload the history.",
+    );
   return next;
 }
 
 export async function applyHistoricalStatusObservation(
   exec: SqlExecutor,
   args: {
-    orgId: string; actorId: string; request: RequestRow; payload: StatusChangePayload;
-    newRevision: number; recordedAt: DbInstant;
+    orgId: string;
+    actorId: string;
+    request: RequestRow;
+    payload: StatusChangePayload;
+    newRevision: number;
+    recordedAt: DbInstant;
   },
 ): Promise<void> {
   const { orgId, actorId, request, payload, newRevision, recordedAt } = args;
@@ -286,28 +335,67 @@ export async function applyHistoricalStatusObservation(
   await assertHistoricalStatusWindow(exec, orgId, request.employment_id, payload);
   const sequence = await nextEmploymentVersionNumber(exec, orgId, request.employment_id);
   const changeId = await insertEmploymentChange(exec, {
-    orgId, employmentId: request.employment_id, assignmentId: null, revision: newRevision,
-    changeKind: "status_changed", closedVersions: [],
-    priorSnapshot: { historicalObservation: payload.historicalObservation,
-      observedStatus: payload.status, effectiveFrom: payload.effectiveFrom, effectiveTo: payload.effectiveTo },
-    reason: request.reason ?? "", action: request.action ?? null, reasonCode: request.reason_code ?? null, actorId,
+    orgId,
+    employmentId: request.employment_id,
+    assignmentId: null,
+    revision: newRevision,
+    changeKind: "status_changed",
+    closedVersions: [],
+    priorSnapshot: {
+      historicalObservation: payload.historicalObservation,
+      observedStatus: payload.status,
+      effectiveFrom: payload.effectiveFrom,
+      effectiveTo: payload.effectiveTo,
+    },
+    reason: request.reason ?? "",
+    action: request.action ?? null,
+    reasonCode: request.reason_code ?? null,
+    actorId,
   });
-  const inserted = (await exec.execute<{ id: string; after: Record<string, unknown> }>(sql`
+  const inserted = (
+    await exec.execute<{ id: string; after: Record<string, unknown> }>(
+      sql`
     insert into worker_employment_versions
       (org_id,employment_id,version_no,status,effective_from,effective_to,recorded_at,created_by,updated_by)
     values (${orgId},${request.employment_id},${sequence},${payload.status},${payload.effectiveFrom}::date,
       ${payload.effectiveTo}::date,${recordedAt},${actorId},${actorId})
     returning id,to_jsonb(worker_employment_versions) as after
-  `, "objects"))[0];
-  if (!inserted) throw new HrmChangeRequestError("REFUSED", "The historical status observation was not saved; nothing applied.");
-  const audited = await exec.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+  `,
+      "objects",
+    )
+  )[0];
+  if (!inserted)
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "The historical status observation was not saved; nothing applied.",
+    );
+  const audited = await exec.execute<{ id: string }>(
+    sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
     values (${orgId},'worker_employment_versions',${inserted.id},'insert',
-      ${JSON.stringify({ before: null, after: inserted.after, kind: "historical_status_observation",
-        sourceReference: payload.historicalObservation!.sourceReference, reason: request.reason,
-        employmentChangeId: changeId, requestId: request.id })}::jsonb,${actorId}) returning id`, "objects");
-  if (audited.length !== 1) throw new HrmChangeRequestError("REFUSED", "The historical status audit was not recorded; nothing applied.");
+      ${JSON.stringify({
+        before: null,
+        after: inserted.after,
+        kind: "historical_status_observation",
+        sourceReference: payload.historicalObservation!.sourceReference,
+        reason: request.reason,
+        employmentChangeId: changeId,
+        requestId: request.id,
+      })}::jsonb,${actorId}) returning id`,
+    "objects",
+  );
+  if (audited.length !== 1)
+    throw new HrmChangeRequestError(
+      "REFUSED",
+      "The historical status audit was not recorded; nothing applied.",
+    );
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
-  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+  await bumpAggregateRevision(exec, {
+    orgId,
+    actorId,
+    request,
+    expected: newRevision - 1,
+    next: newRevision,
+  });
 }
 
 /**
@@ -329,7 +417,8 @@ export async function applyEmploymentVersionChange(
 ): Promise<void> {
   const { orgId, actorId, request, payload, newRevision, recordedAt } = args;
   const successorStatus = payload.kind === "termination" ? "terminated" : payload.status;
-  const windowStart = payload.kind === "termination" ? payload.effectiveDate : payload.effectiveFrom;
+  const windowStart =
+    payload.kind === "termination" ? payload.effectiveDate : payload.effectiveFrom;
   const windowEnd = payload.kind === "termination" ? null : payload.effectiveTo;
   const live = await liveEmploymentVersions(exec, orgId, request.employment_id);
   const overlapping = live.filter((version) => effectiveOverlaps(version, windowStart, windowEnd));
@@ -350,22 +439,30 @@ export async function applyEmploymentVersionChange(
       "the proposal changes nothing — file a new request only when status or dates actually change",
     );
   }
-  if (payload.kind === "termination" && overlapping.every((version) => version.status === "terminated")) {
+  if (
+    payload.kind === "termination" &&
+    overlapping.every((version) => version.status === "terminated")
+  ) {
     throw new HrmChangeRequestError(
       "BAD_STATE",
       "this employment is already terminated — a second termination is a duplicate, not an update",
     );
   }
-  const retainedIntervals = overlapping.flatMap(version => {
-    const portions: { status: string; from: string; to: string | null }[] = [];
-    if (version.effective_from < windowStart) {
-      portions.push({ status: version.status, from: version.effective_from, to: windowStart });
-    }
-    if (windowEnd !== null && (version.effective_to === null || version.effective_to > windowEnd)) {
-      portions.push({ status: version.status, from: windowEnd, to: version.effective_to });
-    }
-    return portions;
-  }).sort((left, right) => left.from.localeCompare(right.from));
+  const retainedIntervals = overlapping
+    .flatMap((version) => {
+      const portions: { status: string; from: string; to: string | null }[] = [];
+      if (version.effective_from < windowStart) {
+        portions.push({ status: version.status, from: version.effective_from, to: windowStart });
+      }
+      if (
+        windowEnd !== null &&
+        (version.effective_to === null || version.effective_to > windowEnd)
+      ) {
+        portions.push({ status: version.status, from: windowEnd, to: version.effective_to });
+      }
+      return portions;
+    })
+    .sort((left, right) => left.from.localeCompare(right.from));
   const successorNo = await nextEmploymentVersionNumber(exec, orgId, request.employment_id);
   const changeId = await insertEmploymentChange(exec, {
     orgId,
@@ -394,13 +491,16 @@ export async function applyEmploymentVersionChange(
     actorId,
   });
   for (const version of overlapping) {
-    const closed = await exec.execute(sql`
+    const closed = await exec.execute(
+      sql`
       update worker_employment_versions
          set recorded_until = ${recordedAt}, superseded_by = ${successorNo},
              closed_by_change_id = ${changeId}
        where org_id = ${orgId} and id = ${version.id} and recorded_until is null
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (closed.length !== 1) {
       throw new HrmChangeRequestError(
         "REFUSED",
@@ -408,9 +508,13 @@ export async function applyEmploymentVersionChange(
       );
     }
   }
-  const successors = [{ status: successorStatus, from: windowStart, to: windowEnd }, ...retainedIntervals];
+  const successors = [
+    { status: successorStatus, from: windowStart, to: windowEnd },
+    ...retainedIntervals,
+  ];
   for (const [offset, successor] of successors.entries()) {
-    const inserted = await exec.execute(sql`
+    const inserted = await exec.execute(
+      sql`
       insert into worker_employment_versions
         (org_id, employment_id, version_no, status, effective_from, effective_to,
          recorded_at, created_by, updated_by)
@@ -418,9 +522,14 @@ export async function applyEmploymentVersionChange(
               ${successor.from}::date, ${successor.to}::date,
               ${recordedAt}, ${actorId}, ${actorId})
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (inserted.length !== 1) {
-      throw new HrmChangeRequestError("REFUSED", "The employment status interval was not saved; nothing applied.");
+      throw new HrmChangeRequestError(
+        "REFUSED",
+        "The employment status interval was not saved; nothing applied.",
+      );
     }
   }
   // A termination owes its offboarding checklist in this same transaction
@@ -462,7 +571,13 @@ export async function applyEmploymentVersionChange(
     `);
   }
   await linkAppliedEvidence(exec, { orgId, actorId, request, newRevision, changeId });
-  await bumpAggregateRevision(exec, { orgId, actorId, request, expected: newRevision - 1, next: newRevision });
+  await bumpAggregateRevision(exec, {
+    orgId,
+    actorId,
+    request,
+    expected: newRevision - 1,
+    next: newRevision,
+  });
 }
 
 /**

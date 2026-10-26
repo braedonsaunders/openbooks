@@ -104,10 +104,19 @@ async function requireFieldTime(orgId: string): Promise<void> {
 async function checkPhotoRequirement(input: RecordClockInput): Promise<void> {
   let kioskRequires = false;
   if (input.kioskId) {
-    const kiosk = (await db.execute<{ photo_required: boolean }>(sql`
+    const kiosk = (
+      await db.execute<{ photo_required: boolean }>(
+        sql`
       select photo_required from time_kiosks
-       where org_id = ${input.orgId} and id = ${input.kioskId} and is_active`, "objects"))[0];
-    if (!kiosk) refuse("kiosk_unknown", "The kiosk is unknown or retired — re-register the kiosk device before clocking");
+       where org_id = ${input.orgId} and id = ${input.kioskId} and is_active`,
+        "objects",
+      )
+    )[0];
+    if (!kiosk)
+      refuse(
+        "kiosk_unknown",
+        "The kiosk is unknown or retired — re-register the kiosk device before clocking",
+      );
     kioskRequires = kiosk.photo_required;
   }
   // The org-wide rule lives in Timesheets setup; a kiosk may require a
@@ -120,12 +129,18 @@ async function checkPhotoRequirement(input: RecordClockInput): Promise<void> {
     );
   }
   if (input.photoFileId) {
-    const file = (await db.execute<{ valid: boolean }>(sql`
-      select ${isClockPhotoSql(sql`${input.orgId}`, sql`${input.photoFileId}`)} as valid`, "objects"))[0];
-    if (!file?.valid) refuse(
-      "photo_invalid",
-      "The attached file is not a live image in the Field time photos folder — upload a current image there and retry",
-    );
+    const file = (
+      await db.execute<{ valid: boolean }>(
+        sql`
+      select ${isClockPhotoSql(sql`${input.orgId}`, sql`${input.photoFileId}`)} as valid`,
+        "objects",
+      )
+    )[0];
+    if (!file?.valid)
+      refuse(
+        "photo_invalid",
+        "The attached file is not a live image in the Field time photos folder — upload a current image there and retry",
+      );
   }
 }
 
@@ -137,27 +152,38 @@ async function checkClockProjectEntity(
   if (!projectId) return;
   // One row proves both halves: a missing project reads as a null id,
   // distinct from a present project with no subsidiary.
-  const entity = (await db.execute<{
-    employee_sub: string | null;
-    project_sub: string | null;
-    project_id: string | null;
-  }>(sql`
+  const entity = (
+    await db.execute<{
+      employee_sub: string | null;
+      project_sub: string | null;
+      project_id: string | null;
+    }>(
+      sql`
     select (select subsidiary_id from parties
              where org_id = ${orgId} and id = ${employeePartyId}) as employee_sub,
            (select subsidiary_id from projects
              where org_id = ${orgId} and id = ${projectId}) as project_sub,
            (select id::text from projects
              where org_id = ${orgId} and id = ${projectId}) as project_id
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!entity?.project_id) {
-    refuse("project_unknown", "The project is unknown in this organization — pick it from the picker and retry");
+    refuse(
+      "project_unknown",
+      "The project is unknown in this organization — pick it from the picker and retry",
+    );
   }
   if (
     entity.employee_sub != null &&
     entity.project_sub != null &&
     entity.employee_sub !== entity.project_sub
   ) {
-    refuse("project_wrong_entity", "The project belongs to a different legal entity than the employee — clock onto a project in the employee's legal entity");
+    refuse(
+      "project_wrong_entity",
+      "The project belongs to a different legal entity than the employee — clock onto a project in the employee's legal entity",
+    );
   }
 }
 
@@ -183,10 +209,16 @@ async function checkClockTaskPairing(
       refuse(code, "The task is unknown in this organization — pick it from the picker and retry");
     }
     if (code === "task_without_project") {
-      refuse(code, "The clock event names a task but no project — pick the project the task belongs to and retry");
+      refuse(
+        code,
+        "The clock event names a task but no project — pick the project the task belongs to and retry",
+      );
     }
     if (code === "task_wrong_project") {
-      refuse(code, "The task does not belong to the event's project — pick a task from that project and retry");
+      refuse(
+        code,
+        "The task does not belong to the event's project — pick a task from that project and retry",
+      );
     }
     return;
   }
@@ -196,7 +228,10 @@ async function checkClockTaskPairing(
       refuse(code, "The task is unknown in this organization — pick it from the picker and retry");
     }
     if (code === "task_wrong_project") {
-      refuse(code, "The open entry's task does not belong to the new project — pick a task from that project and retry");
+      refuse(
+        code,
+        "The open entry's task does not belong to the new project — pick a task from that project and retry",
+      );
     }
   }
 }
@@ -209,17 +244,30 @@ async function checkGeofence(
   // Geofences are declared per project: a project with no active fence
   // is simply not checked, so the declaration is the configuration.
   if (!projectId) return "not_required";
-  const fences = await db.execute<{ kind: string; center: unknown; radius_m: number | null; polygon: unknown }>(sql`
+  const fences = await db.execute<{
+    kind: string;
+    center: unknown;
+    radius_m: number | null;
+    polygon: unknown;
+  }>(
+    sql`
     select kind, center, radius_m, polygon from project_geofences
-     where org_id = ${orgId} and project_id = ${projectId} and is_active`, "objects");
+     where org_id = ${orgId} and project_id = ${projectId} and is_active`,
+    "objects",
+  );
   if (fences.length === 0) return "not_required";
   if (!geo || !Number.isFinite(geo.lat) || !Number.isFinite(geo.lng)) return "unavailable";
   const point: LatLng = { lat: geo.lat, lng: geo.lng };
   for (const fence of fences) {
     if (fence.kind === "circle") {
       const center = fence.center as { lat: number; lng: number } | null;
-      if (center && Number.isFinite(center.lat) && Number.isFinite(center.lng) &&
-          fence.radius_m && insideCircle(point, center, fence.radius_m)) {
+      if (
+        center &&
+        Number.isFinite(center.lat) &&
+        Number.isFinite(center.lng) &&
+        fence.radius_m &&
+        insideCircle(point, center, fence.radius_m)
+      ) {
         return "inside";
       }
     } else {
@@ -238,7 +286,8 @@ async function openPair(
   // excludeId is the idempotency-claimed row of the event being
   // recorded: the claim lands before validation, so the open lookup
   // must not see the event itself as its own open pair.
-  const rows = await db.execute<EventRow>(sql`
+  const rows = await db.execute<EventRow>(
+    sql`
     select i.id::text as id, i.kind, i.occurred_at::text as occurred_at,
            case when switched.id is null then i.project_id::text else switched.project_id::text end as project_id,
            case when switched.id is null then i.project_task_id::text else switched.project_task_id::text end as project_task_id,
@@ -256,17 +305,26 @@ async function openPair(
      where i.org_id = ${orgId} and i.employee_party_id = ${employeePartyId}
        and i.kind = 'clock_in' and i.status = 'recorded'
        and (${excludeId ?? null}::text is null or i.id::text != ${excludeId ?? null}::text)
-     order by i.occurred_at desc limit 1`, "objects");
+     order by i.occurred_at desc limit 1`,
+    "objects",
+  );
   return rows[0] ?? null;
 }
 
-async function breakOpen(orgId: string, employeePartyId: string, sinceId: string): Promise<boolean> {
-  const rows = await db.execute<{ kind: string }>(sql`
+async function breakOpen(
+  orgId: string,
+  employeePartyId: string,
+  sinceId: string,
+): Promise<boolean> {
+  const rows = await db.execute<{ kind: string }>(
+    sql`
     select kind from time_clock_events
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
        and kind in ('break_start', 'break_end')
        and (occurred_at, id) > ((select occurred_at from time_clock_events where id = ${sinceId}), ${sinceId})
-     order by occurred_at desc, id desc limit 1`, "objects");
+     order by occurred_at desc, id desc limit 1`,
+    "objects",
+  );
   return (rows[0]?.kind ?? null) === "break_start";
 }
 
@@ -277,7 +335,12 @@ function sundayOf(dateIso: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function ensureWeek(orgId: string, employeePartyId: string, dateIso: string, actorUserId: string | null): Promise<void> {
+async function ensureWeek(
+  orgId: string,
+  employeePartyId: string,
+  dateIso: string,
+  actorUserId: string | null,
+): Promise<void> {
   const weekStart = sundayOf(dateIso);
   // Get-or-create: a conflict means a concurrent clock already opened the
   // week, which is the expected benign case — the week exists either way.
@@ -308,7 +371,8 @@ async function pairAndPostEntries(input: {
 }): Promise<string[]> {
   const settings = await loadFieldTimeSettings(input.orgId);
   const pairId = input.open.id;
-  const events = await db.execute<EventRow>(sql`
+  const events = await db.execute<EventRow>(
+    sql`
     select id::text as id, kind, occurred_at::text as occurred_at,
            project_id::text as project_id, project_task_id::text as project_task_id,
            cost_code_ref, pair_id::text as pair_id, status, geo_check, auto_closed
@@ -316,7 +380,9 @@ async function pairAndPostEntries(input: {
      where org_id = ${input.orgId} and employee_party_id = ${input.employeePartyId}
        and ((id = ${pairId}) or (occurred_at, id) > ((select occurred_at from time_clock_events where id = ${pairId}), ${pairId}))
        and occurred_at <= ${input.closeOccurredAt}::timestamptz
-     order by occurred_at, id`, "objects");
+     order by occurred_at, id`,
+    "objects",
+  );
   const clockIn = events.find((event) => event.id === pairId);
   if (!clockIn) {
     throw new FieldTimeError(
@@ -401,19 +467,30 @@ async function pairAndPostEntries(input: {
     if (grossMs <= 0) continue;
     const netMs = shiftNets[si]!;
     if (netMs <= 0) continue;
-    const refs = si === segments.length - 1
-      ? input.closeRefs
-      : { projectId: segment.projectId, projectTaskId: segment.projectTaskId, costCodeRef: segment.costCodeRef };
+    const refs =
+      si === segments.length - 1
+        ? input.closeRefs
+        : {
+            projectId: segment.projectId,
+            projectTaskId: segment.projectTaskId,
+            costCodeRef: segment.costCodeRef,
+          };
     // Business midnights: time-entry dates are business dates, the
     // same basis businessToday days on — a UTC split would date a
     // UTC-5 evening shift partly on the next day.
     const pieces = splitZoneDays(segment.fromMs, segment.toMs, timeZone);
-    const dealt = distributeProRata(netMs, pieces.map((p) => p.ms));
+    const dealt = distributeProRata(
+      netMs,
+      pieces.map((p) => p.ms),
+    );
     pieces.forEach((piece, i) => {
       if (dealt[i]! > 0) cells.push({ date: piece.date, ms: dealt[i]!, refs });
     });
   }
-  const cellUnits = distributeProRata(totalUnits, cells.map((c) => c.ms));
+  const cellUnits = distributeProRata(
+    totalUnits,
+    cells.map((c) => c.ms),
+  );
   const entryIds: string[] = [];
   for (let ci = 0; ci < cells.length; ci++) {
     const cell = cells[ci]!;
@@ -449,7 +526,9 @@ async function pairAndPostEntries(input: {
       sourceId: pairId,
     });
     await ensureWeek(input.orgId, input.employeePartyId, cell.date, input.actorUserId);
-    const inserted = (await db.execute<{ id: string }>(sql`
+    const inserted = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into time_entries
         (org_id, employee_party_id, worked_on, hours, project_id, project_task_id,
          cost_code_ref, status, started_at, wage_rate, wage_currency,
@@ -460,8 +539,15 @@ async function pairAndPostEntries(input: {
          'draft', ${input.open.occurred_at}::timestamptz,
          ${wageRate}, ${wageCurrency}, ${pairId},
          ${input.actorUserId}, ${input.actorUserId})
-      returning id`, "objects"))[0];
-    if (!inserted) throw new FieldTimeError("entry_not_stored", "The clock pairing produced no entry row — retry the clock-out");
+      returning id`,
+        "objects",
+      )
+    )[0];
+    if (!inserted)
+      throw new FieldTimeError(
+        "entry_not_stored",
+        "The clock pairing produced no entry row — retry the clock-out",
+      );
     entryIds.push(inserted.id);
   }
   if (entryIds.length === 0) {
@@ -495,7 +581,9 @@ async function autoCloseStale(
   if (!open) return null;
   const ageHours = (nowMs - Date.parse(open.occurred_at)) / 3_600_000;
   if (!(ageHours > settings.autoCloseHours)) return null;
-  const closeAt = new Date(Date.parse(open.occurred_at) + settings.autoCloseHours * 3_600_000).toISOString();
+  const closeAt = new Date(
+    Date.parse(open.occurred_at) + settings.autoCloseHours * 3_600_000,
+  ).toISOString();
   await db.execute(sql`
     insert into time_clock_events
       (org_id, employee_party_id, kind, occurred_at, source, project_id, project_task_id,
@@ -511,7 +599,11 @@ async function autoCloseStale(
     employeePartyId,
     open,
     closeOccurredAt: closeAt,
-    closeRefs: { projectId: open.project_id, projectTaskId: open.project_task_id, costCodeRef: open.cost_code_ref },
+    closeRefs: {
+      projectId: open.project_id,
+      projectTaskId: open.project_task_id,
+      costCodeRef: open.cost_code_ref,
+    },
     autoClosed: true,
   });
   return open.id;
@@ -520,18 +612,33 @@ async function autoCloseStale(
 export async function recordClockEvent(input: RecordClockInput): Promise<ClockRecordResult> {
   await requireFieldTime(input.orgId);
   if (!isUuid(input.clientEventId)) {
-    refuse("invalid_client_event", "The clock event carries no offline id — retry with a client-generated UUID so replay stays idempotent");
+    refuse(
+      "invalid_client_event",
+      "The clock event carries no offline id — retry with a client-generated UUID so replay stays idempotent",
+    );
   }
   const occurredMs = Date.parse(input.occurredAt);
-  if (!Number.isFinite(occurredMs)) refuse("invalid_occurred_at", "The clock time is not a valid instant — retry with the device time as ISO");
+  if (!Number.isFinite(occurredMs))
+    refuse(
+      "invalid_occurred_at",
+      "The clock time is not a valid instant — retry with the device time as ISO",
+    );
   if (occurredMs > Date.now() + 15 * 60_000) {
     refuse("future_clock", "The clock time is in the future — check the device clock and retry");
   }
 
   return withOrgTransaction(input.orgId, async () => {
     if (input.kioskId) {
-      if (!input.kioskDeviceToken) refuse("kiosk_unknown", "This kiosk link is unknown or retired — ask a manager for a current kiosk link");
-      await lockActiveKioskToken({ orgId: input.orgId, kioskId: input.kioskId, deviceToken: input.kioskDeviceToken });
+      if (!input.kioskDeviceToken)
+        refuse(
+          "kiosk_unknown",
+          "This kiosk link is unknown or retired — ask a manager for a current kiosk link",
+        );
+      await lockActiveKioskToken({
+        orgId: input.orgId,
+        kioskId: input.kioskId,
+        deviceToken: input.kioskDeviceToken,
+      });
     }
     // Every transition for one worker shares this transaction lock. Acquire it
     // before claiming the event id or reading the open pair so distinct device
@@ -557,7 +664,12 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
       // insert would poison the transaction and every statement after
       // it — including the validation read that must still refuse by
       // name — would die with an aborted-transaction error instead.
-      attempted = await withTransactionSavepoint(db, async () => (await db.execute<{ id: string }>(sql`
+      attempted = await withTransactionSavepoint(
+        db,
+        async () =>
+          (
+            await db.execute<{ id: string }>(
+              sql`
         insert into time_clock_events
           (org_id, employee_party_id, kind, occurred_at, device_id, source,
            project_id, project_task_id, cost_code_ref, geo, geo_check,
@@ -571,13 +683,21 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
            ${input.actorUserId}, ${input.actorUserId})
         -- A repeated client event is selected below and verified against the same employee and source.
         on conflict (org_id, client_event_id) do nothing
-        returning id::text as id`, "objects"))[0]);
+        returning id::text as id`,
+              "objects",
+            )
+          )[0],
+      );
     } catch (error) {
       if (!isForeignKeyViolation(error)) throw error;
       claimError = error;
     }
     if (!attempted && !claimError) {
-      const existing = (await db.execute<EventRow & { entries: string[]; employee_party_id: string; source: string }>(sql`
+      const existing = (
+        await db.execute<
+          EventRow & { entries: string[]; employee_party_id: string; source: string }
+        >(
+          sql`
         select e.id::text as id, e.kind, e.occurred_at::text as occurred_at,
                e.employee_party_id::text as employee_party_id, e.source as source,
                e.project_id::text as project_id, e.project_task_id::text as project_task_id,
@@ -586,9 +706,15 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
           from time_clock_events e
           left join time_entries t on t.org_id = e.org_id and t.clock_pair_id = e.pair_id
          where e.org_id = ${input.orgId} and e.client_event_id = ${input.clientEventId}
-         group by e.id limit 1`, "objects"))[0];
+         group by e.id limit 1`,
+          "objects",
+        )
+      )[0];
       if (!existing) {
-        throw new FieldTimeError("event_not_stored", "The clock event was not stored — no row was written; retry the clock action");
+        throw new FieldTimeError(
+          "event_not_stored",
+          "The clock event was not stored — no row was written; retry the clock action",
+        );
       }
       const winner: ClockPayload = {
         kind: existing.kind as ClockKind,
@@ -635,14 +761,24 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
     // at all. That is precisely the case auto-close exists for.
     let autoClosedPairId: string | null = null;
     if (input.kind === "clock_in" && open) {
-      autoClosedPairId = await autoCloseStale(input.orgId, input.employeePartyId, input.actorUserId, occurredMs, attempted?.id ?? null);
+      autoClosedPairId = await autoCloseStale(
+        input.orgId,
+        input.employeePartyId,
+        input.actorUserId,
+        occurredMs,
+        attempted?.id ?? null,
+      );
     }
 
     // Re-read only when something closed: a pair inside the window is
     // still open and must still refuse, which is the sequence rule doing
     // its job rather than being skipped.
-    const current = autoClosedPairId ? await openPair(input.orgId, input.employeePartyId, attempted?.id ?? null) : open;
-    const onBreak = current ? await breakOpen(input.orgId, input.employeePartyId, current.id) : false;
+    const current = autoClosedPairId
+      ? await openPair(input.orgId, input.employeePartyId, attempted?.id ?? null)
+      : open;
+    const onBreak = current
+      ? await breakOpen(input.orgId, input.employeePartyId, current.id)
+      : false;
     validateClockSequence(input.kind, { clockedIn: !!current, onBreak });
     if (current) {
       // Chronology is judged before anything mutates: a close at or
@@ -657,7 +793,12 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
     // is unknown in this organization refuses by name instead of persisting
     // a dangling pointer (project_id carries no foreign key).
     await checkClockProjectEntity(input.orgId, input.employeePartyId, input.projectId ?? null);
-    await checkClockTaskPairing(input.orgId, input.projectId ?? null, input.projectTaskId ?? null, current);
+    await checkClockTaskPairing(
+      input.orgId,
+      input.projectId ?? null,
+      input.projectTaskId ?? null,
+      current,
+    );
     await checkPhotoRequirement(input);
     const geoCheck = await checkGeofence(input.orgId, input.projectId ?? null, input.geo ?? null);
 
@@ -668,11 +809,20 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
     // The row was claimed up front for idempotency; stamp the evaluated
     // geofence verdict onto it. A zero-row update means the claimed row
     // is gone — fail, never continue on a phantom event.
-    const claimed = (await db.execute<{ id: string }>(sql`
+    const claimed = (
+      await db.execute<{ id: string }>(
+        sql`
       update time_clock_events set geo_check = ${geoCheck}, updated_at = now()
        where org_id = ${input.orgId} and id = ${attempted.id}
-      returning id::text as id`, "objects"))[0];
-    if (!claimed) throw new FieldTimeError("event_not_stored", "The clock event was not stored — no row was written; retry the clock action");
+      returning id::text as id`,
+        "objects",
+      )
+    )[0];
+    if (!claimed)
+      throw new FieldTimeError(
+        "event_not_stored",
+        "The clock event was not stored — no row was written; retry the clock action",
+      );
     const inserted = claimed;
 
     let entryIds: string[] = [];
@@ -714,7 +864,12 @@ export async function replayClockEvents(
     try {
       out.push(await recordClockEvent(input));
     } catch (e) {
-      out.push({ error: e instanceof FieldTimeError ? e.message : "The clock event failed — fix the event and replay it" });
+      out.push({
+        error:
+          e instanceof FieldTimeError
+            ? e.message
+            : "The clock event failed — fix the event and replay it",
+      });
     }
   }
   return out;
@@ -735,7 +890,14 @@ export async function clockStatus(
   await requireFieldTime(orgId);
   const current = await openPair(orgId, employeePartyId);
   if (!current) {
-    return { clockedIn: false, since: null, projectId: null, costCodeRef: null, onBreak: false, queuedNote: false };
+    return {
+      clockedIn: false,
+      since: null,
+      projectId: null,
+      costCodeRef: null,
+      onBreak: false,
+      queuedNote: false,
+    };
   }
   return {
     clockedIn: true,

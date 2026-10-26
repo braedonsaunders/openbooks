@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -34,7 +34,11 @@ export function ChannelActions({
       confirmLabel: t(`home.${action}Confirm`),
     });
     if (!reason) return;
-    if (action === "disconnect" && !(await confirmDialog(t("home.disconnectVerify", { name: channelName })))) return;
+    if (
+      action === "disconnect" &&
+      !(await confirmDialog(t("home.disconnectVerify", { name: channelName })))
+    )
+      return;
     setBusy(action);
     try {
       const res = await fetch(`/api/channels/${channelId}/lifecycle`, {
@@ -43,7 +47,9 @@ export function ChannelActions({
         body: JSON.stringify({ action, reason }),
       });
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t("home.toast.actionFailed", { status: res.status })));
+        toast.error(
+          await readApiErrorMessage(res, t("home.toast.actionFailed", { status: res.status })),
+        );
         return;
       }
       toast.success(t(`home.toast.${action}d`));
@@ -85,7 +91,12 @@ function ChannelActionButtons({
         </Button>
       ) : null}
       {status !== "disconnected" ? (
-        <Button size="sm" variant="outline" disabled={busy != null} onClick={() => onAct("disconnect")}>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy != null}
+          onClick={() => onAct("disconnect")}
+        >
           <Unplug size={14} /> {t("home.disconnect")}
         </Button>
       ) : null}

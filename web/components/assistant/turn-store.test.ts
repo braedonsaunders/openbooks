@@ -19,7 +19,11 @@ import {
   writeTurnParts,
 } from "./turn-store";
 
-const bubbles = (text: string) => ({ userId: `u-${text}`, assistantId: `a-${text}`, userText: text });
+const bubbles = (text: string) => ({
+  userId: `u-${text}`,
+  assistantId: `a-${text}`,
+  userText: text,
+});
 
 test("a begun turn streams parts under its key with rising revisions", () => {
   const key = "conv-stream-1";
@@ -76,17 +80,37 @@ test("reattach polls adopt newer server snapshots and drop terminal ones", () =>
   const key = "conv-sync-1";
   dropTurn(key);
   // Discovered mid-run with no local entry: adopt.
-  syncTurn({ conversationId: key, status: "running", parts: [{ type: "text", text: "v1" }], revision: 3 });
+  syncTurn({
+    conversationId: key,
+    status: "running",
+    parts: [{ type: "text", text: "v1" }],
+    revision: 3,
+  });
   assert.deepEqual(readTurn(key)?.parts, [{ type: "text", text: "v1" }]);
   assert.equal(readTurn(key)?.streaming, true);
   // Stale poll never clobbers.
-  syncTurn({ conversationId: key, status: "running", parts: [{ type: "text", text: "v0" }], revision: 2 });
+  syncTurn({
+    conversationId: key,
+    status: "running",
+    parts: [{ type: "text", text: "v0" }],
+    revision: 2,
+  });
   assert.deepEqual(readTurn(key)?.parts, [{ type: "text", text: "v1" }]);
   // Newer poll adopts.
-  syncTurn({ conversationId: key, status: "running", parts: [{ type: "text", text: "v2" }], revision: 4 });
+  syncTurn({
+    conversationId: key,
+    status: "running",
+    parts: [{ type: "text", text: "v2" }],
+    revision: 4,
+  });
   assert.deepEqual(readTurn(key)?.parts, [{ type: "text", text: "v2" }]);
   // Terminal server state drops the tail (transcript is truth).
-  syncTurn({ conversationId: key, status: "complete", parts: [{ type: "text", text: "v3" }], revision: 5 });
+  syncTurn({
+    conversationId: key,
+    status: "complete",
+    parts: [{ type: "text", text: "v3" }],
+    revision: 5,
+  });
   assert.equal(readTurn(key), undefined);
 });
 

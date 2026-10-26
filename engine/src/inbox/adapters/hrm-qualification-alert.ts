@@ -62,12 +62,15 @@ export const hrmQualificationAlertAdapter: InboxAdapter = {
     // inside the alert window, through the actor's employments (never a
     // caller-supplied worker). Expired rows sort first — they already
     // refuse gated work.
-    const rows = await db.execute<AlertRow>(sql`
+    const rows = await db.execute<AlertRow>(
+      sql`
       select q.id::text as id, t.name as name, q.expires_on::text as expiry_on
         ${source}
        order by q.expires_on, q.id
        limit 20
-    `, "objects");
+    `,
+      "objects",
+    );
     return rows.map((row) => {
       const dueAt = new Date(`${row.expiry_on}T00:00:00Z`).toISOString();
       return {
@@ -87,10 +90,15 @@ export const hrmQualificationAlertAdapter: InboxAdapter = {
   async count(ctx: InboxListContext): Promise<number> {
     const source = await qualificationAlertSource(ctx);
     if (!source) return 0;
-    const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n ${source}`, "objects");
+    const rows = await db.execute<{ n: number }>(
+      sql`select count(*)::int as n ${source}`,
+      "objects",
+    );
     return rows[0]?.n ?? 0;
   },
   async act(): Promise<void> {
-    throw new Error("qualification renewal happens in the qualifications surface — open it and renew there");
+    throw new Error(
+      "qualification renewal happens in the qualifications surface — open it and renew there",
+    );
   },
 };

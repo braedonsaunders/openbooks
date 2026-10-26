@@ -49,7 +49,9 @@ async function draftCredit(
 test("a negative-total credit memo cannot post as a shadow invoice", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit sign guard", "admin"));
+    const userId = await withBypass(() =>
+      createScratchUser(org.orgId, "Credit sign guard", "admin"),
+    );
     // A credit memo stated against its own direction: posting this would
     // debit AR and credit income — a receivable the collections ladder would
     // never chase, typed as a credit. Debit memos are invoices.
@@ -64,11 +66,14 @@ test("a negative-total credit memo cannot post as a shadow invoice", { skip: !DB
           error.message,
         ),
     );
-    const untouched = await db.execute<{ status: string; entries: number }>(sql`
+    const untouched = await db.execute<{ status: string; entries: number }>(
+      sql`
       select status,
              (select count(*)::int from journal_entries where source_document_id = ${id}) as entries
         from documents where id = ${id} and org_id = ${org.orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.deepEqual(untouched[0], { status: "approved", entries: 0 });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
@@ -78,7 +83,9 @@ test("a negative-total credit memo cannot post as a shadow invoice", { skip: !DB
 test("a negative-total vendor credit cannot post as a shadow bill", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit sign guard", "admin"));
+    const userId = await withBypass(() =>
+      createScratchUser(org.orgId, "Credit sign guard", "admin"),
+    );
     // The AP mirror of the shadow invoice: a vendor "credit" stated against
     // its own direction would debit expense and credit AP — a payable typed
     // as a credit. Amounts owed to a vendor are bills, not credits.
@@ -93,11 +100,14 @@ test("a negative-total vendor credit cannot post as a shadow bill", { skip: !DB 
           error.message,
         ),
     );
-    const untouched = await db.execute<{ status: string; entries: number }>(sql`
+    const untouched = await db.execute<{ status: string; entries: number }>(
+      sql`
       select status,
              (select count(*)::int from journal_entries where source_document_id = ${id}) as entries
         from documents where id = ${id} and org_id = ${org.orgId}
-    `, "objects");
+    `,
+      "objects",
+    );
     assert.deepEqual(untouched[0], { status: "approved", entries: 0 });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
@@ -107,23 +117,29 @@ test("a negative-total vendor credit cannot post as a shadow bill", { skip: !DB 
 test("a mixed-sign credit memo with a positive total still posts", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
-    const userId = await withBypass(() => createScratchUser(org.orgId, "Credit sign guard", "admin"));
+    const userId = await withBypass(() =>
+      createScratchUser(org.orgId, "Credit sign guard", "admin"),
+    );
     // A restocking fee netted inside a genuine credit stays postable: only
     // the inverted document direction is refused.
     const id = await draftCredit(org, userId, "CM-MIXED-POS", ["100", "-20"]);
     const entryId = await postDocument(id, {
       control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
     });
-    const legs = (await db.execute<{ accountId: string; amount: string }>(sql`
+    const legs = await db.execute<{ accountId: string; amount: string }>(
+      sql`
       select account_id as "accountId", amount::text as amount from journal_lines
        where entry_id = ${entryId} order by line_number
-    `, "objects"));
+    `,
+      "objects",
+    );
     assert.deepEqual(
-      legs.map((l) => [
-        l.accountId === org.accounts.ar ? "ar" : "income",
-        l.amount,
-      ]),
-      [["ar", "-80.0000"], ["income", "100.0000"], ["income", "-20.0000"]],
+      legs.map((l) => [l.accountId === org.accounts.ar ? "ar" : "income", l.amount]),
+      [
+        ["ar", "-80.0000"],
+        ["income", "100.0000"],
+        ["income", "-20.0000"],
+      ],
     );
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));

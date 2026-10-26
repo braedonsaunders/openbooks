@@ -42,8 +42,19 @@ export interface IncentiveTransactionFact {
  */
 export type TransactionIncentiveLimit =
   | { readonly kind: "none" }
-  | { readonly kind: "amount"; readonly amount: string; readonly previouslyAwarded: string; readonly consumption?: "awarded" | "measured" }
-  | { readonly kind: "percent_of_base"; readonly base: string; readonly rate: string; readonly previouslyAwarded: string; readonly consumption?: "awarded" | "measured" };
+  | {
+      readonly kind: "amount";
+      readonly amount: string;
+      readonly previouslyAwarded: string;
+      readonly consumption?: "awarded" | "measured";
+    }
+  | {
+      readonly kind: "percent_of_base";
+      readonly base: string;
+      readonly rate: string;
+      readonly previouslyAwarded: string;
+      readonly consumption?: "awarded" | "measured";
+    };
 
 export interface TransactionIncentiveGroup {
   readonly groupId: string;
@@ -68,12 +79,18 @@ export function applyTransactionGroupLimitOverrides(
     if (!override) return group;
     if (override.kind === "none") {
       if (override.amount !== null) {
-        throw new BenefitsError("INVALID_INPUT", `Group ${group.groupId} has a no-limit decision with a ceiling amount — correct the Setup rule before settlement.`);
+        throw new BenefitsError(
+          "INVALID_INPUT",
+          `Group ${group.groupId} has a no-limit decision with a ceiling amount — correct the Setup rule before settlement.`,
+        );
       }
       return { groupId: group.groupId, limit: { kind: "none" } };
     }
     if (override.amount === null) {
-      throw new BenefitsError("INVALID_INPUT", `Group ${group.groupId} has an amount ceiling without a value — correct the Setup rule before settlement.`);
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        `Group ${group.groupId} has an amount ceiling without a value — correct the Setup rule before settlement.`,
+      );
     }
     return {
       groupId: group.groupId,
@@ -109,23 +126,33 @@ function refuse(message: string): never {
 function units(value: string, label: string): bigint {
   const canonical = canonicalDecimal(value, 4);
   if (canonical === null) {
-    throw new BenefitsError("INVALID_INPUT", decimalNullRefusal(label, "an exact decimal", value, 4));
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      decimalNullRefusal(label, "an exact decimal", value, 4),
+    );
   }
   return toUnits(canonical);
 }
 
 function key(value: string, label: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new BenefitsError("INVALID_INPUT", `${label} is missing — select an explicit native source, grouping and recipient position`);
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      `${label} is missing — select an explicit native source, grouping and recipient position`,
+    );
   }
   return value;
 }
 
 function day(value: string, label: string): string {
-  try { return parseCivilDate(value); }
-  catch (error) {
+  try {
+    return parseCivilDate(value);
+  } catch (error) {
     if (!(error instanceof InvalidCivilDateError)) throw error;
-    throw new BenefitsError("INVALID_INPUT", `${label} is not a real YYYY-MM-DD date — correct the recorded period or transaction date`);
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      `${label} is not a real YYYY-MM-DD date — correct the recorded period or transaction date`,
+    );
   }
 }
 
@@ -148,88 +175,191 @@ export function computeTransactionIncentive(
   facts: readonly IncentiveTransactionFact[],
   groups: readonly TransactionIncentiveGroup[],
 ): TransactionIncentiveResult {
-  if (!/^[A-Z]{3}$/.test(policy.currency) || !Number.isInteger(policy.minorUnits) || policy.minorUnits < 0 || policy.minorUnits > 4) {
-    throw new BenefitsError("INVALID_INPUT", "resolve an ISO currency and its registered zero-to-four minor units before valuing transaction incentives");
+  if (
+    !/^[A-Z]{3}$/.test(policy.currency) ||
+    !Number.isInteger(policy.minorUnits) ||
+    policy.minorUnits < 0 ||
+    policy.minorUnits > 4
+  ) {
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "resolve an ISO currency and its registered zero-to-four minor units before valuing transaction incentives",
+    );
   }
-  const from = day(policy.periodFrom, "period start"), to = day(policy.periodTo, "period end");
-  if (from > to) refuse("the transaction period ends before it starts — correct the period selection");
+  const from = day(policy.periodFrom, "period start"),
+    to = day(policy.periodTo, "period end");
+  if (from > to)
+    refuse("the transaction period ends before it starts — correct the period selection");
   if (policy.valuation !== "percent_of_amount" && policy.valuation !== "amount_per_unit") {
-    throw new BenefitsError("INVALID_INPUT", "select percent of amount or amount per unit before valuing transactions");
+    throw new BenefitsError(
+      "INVALID_INPUT",
+      "select percent of amount or amount per unit before valuing transactions",
+    );
   }
   const rate = units(policy.rate, "valuation rate");
-  if (rate <= 0n) refuse("the valuation rate must be positive — configure the program rate before valuing transactions");
+  if (rate <= 0n)
+    refuse(
+      "the valuation rate must be positive — configure the program rate before valuing transactions",
+    );
   const shares = new Map<string, bigint>();
   for (const share of policy.recipientShares) {
-    const shareKey = key(share.key, "recipient position"), weight = units(share.weight, `weight for ${shareKey}`);
-    if (shares.has(shareKey)) refuse(`recipient position ${shareKey} is configured twice — keep one share per position`);
-    if (weight <= 0n) refuse(`recipient position ${shareKey} has no positive share — configure its weight or remove the position`);
+    const shareKey = key(share.key, "recipient position"),
+      weight = units(share.weight, `weight for ${shareKey}`);
+    if (shares.has(shareKey))
+      refuse(`recipient position ${shareKey} is configured twice — keep one share per position`);
+    if (weight <= 0n)
+      refuse(
+        `recipient position ${shareKey} has no positive share — configure its weight or remove the position`,
+      );
     shares.set(shareKey, weight);
   }
-  if (shares.size === 0) refuse("no recipient shares are configured — add the positions that receive the transaction incentive");
+  if (shares.size === 0)
+    refuse(
+      "no recipient shares are configured — add the positions that receive the transaction incentive",
+    );
   const limits = new Map<string, TransactionIncentiveLimit>();
   const quantum = 10n ** BigInt(4 - policy.minorUnits);
   const available = new Map<string, bigint | null>();
   for (const group of groups) {
     const groupId = key(group.groupId, "group identity");
-    if (limits.has(groupId)) refuse(`group ${groupId} has overlapping limits — retain one explicit limit decision per group`);
+    if (limits.has(groupId))
+      refuse(
+        `group ${groupId} has overlapping limits — retain one explicit limit decision per group`,
+      );
     limits.set(groupId, group.limit);
     const limit = group.limit;
-    if (limit.kind === "none") { available.set(groupId, null); continue; }
+    if (limit.kind === "none") {
+      available.set(groupId, null);
+      continue;
+    }
     if (limit.kind !== "amount" && limit.kind !== "percent_of_base") {
-      throw new BenefitsError("INVALID_INPUT", `group ${groupId} needs an explicit limit kind — select no limit, a monetary ceiling, or a percentage of a recorded base`);
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        `group ${groupId} needs an explicit limit kind — select no limit, a monetary ceiling, or a percentage of a recorded base`,
+      );
     }
     const prior = units(limit.previouslyAwarded, `prior awards for ${groupId}`);
-    const base = units(limit.kind === "amount" ? limit.amount : limit.base, `limit base for ${groupId}`);
-    if (prior < 0n || base < 0n) refuse(`group ${groupId} has a negative ceiling or consumption — reconcile its adjusting awards and limit evidence`);
-    if (limit.consumption !== "measured" && prior % quantum !== 0n) refuse(`group ${groupId} has prior awards finer than payable precision — reconcile its stored currency evidence`);
+    const base = units(
+      limit.kind === "amount" ? limit.amount : limit.base,
+      `limit base for ${groupId}`,
+    );
+    if (prior < 0n || base < 0n)
+      refuse(
+        `group ${groupId} has a negative ceiling or consumption — reconcile its adjusting awards and limit evidence`,
+      );
+    if (limit.consumption !== "measured" && prior % quantum !== 0n)
+      refuse(
+        `group ${groupId} has prior awards finer than payable precision — reconcile its stored currency evidence`,
+      );
     let ceiling: bigint;
     if (limit.kind === "amount") {
-      if (base % quantum !== 0n) refuse(`group ${groupId} has a ceiling finer than payable precision — configure a payable monetary ceiling`);
+      if (base % quantum !== 0n)
+        refuse(
+          `group ${groupId} has a ceiling finer than payable precision — configure a payable monetary ceiling`,
+        );
       ceiling = base;
     } else {
       const capRate = units(limit.rate, `limit rate for ${groupId}`);
-      if (capRate < 0n) refuse(`group ${groupId} has a negative limit rate — configure a non-negative percentage`);
+      if (capRate < 0n)
+        refuse(`group ${groupId} has a negative limit rate — configure a non-negative percentage`);
       // A measured ceiling keeps full precision; the payable result rounds once.
-      ceiling = limit.consumption === "measured" ? base * capRate / 1_000_000n : base * capRate / (1_000_000n * quantum) * quantum;
+      ceiling =
+        limit.consumption === "measured"
+          ? (base * capRate) / 1_000_000n
+          : ((base * capRate) / (1_000_000n * quantum)) * quantum;
     }
     available.set(groupId, ceiling > prior ? ceiling - prior : 0n);
   }
   const sourceIds = new Set<string>();
-  const byGroup = new Map<string, { base: bigint; sourceIds: string[]; weights: Map<string, bigint>; facts: { base: bigint; bindings: Map<string, string> }[] }>();
+  const byGroup = new Map<
+    string,
+    {
+      base: bigint;
+      sourceIds: string[];
+      weights: Map<string, bigint>;
+      facts: { base: bigint; bindings: Map<string, string> }[];
+    }
+  >();
   const excluded: { sourceId: string; reason: string }[] = [];
-  for (const fact of [...facts].sort((a, b) => a.sourceId < b.sourceId ? -1 : a.sourceId > b.sourceId ? 1 : 0)) {
-    const sourceId = key(fact.sourceId, "transaction identity"), groupId = key(fact.groupId, "transaction group");
-    if (sourceIds.has(sourceId)) refuse(`transaction ${sourceId} appears more than once — resolve the duplicated source before settlement`);
+  for (const fact of [...facts].sort((a, b) =>
+    a.sourceId < b.sourceId ? -1 : a.sourceId > b.sourceId ? 1 : 0,
+  )) {
+    const sourceId = key(fact.sourceId, "transaction identity"),
+      groupId = key(fact.groupId, "transaction group");
+    if (sourceIds.has(sourceId))
+      refuse(
+        `transaction ${sourceId} appears more than once — resolve the duplicated source before settlement`,
+      );
     sourceIds.add(sourceId);
     const occurredOn = day(fact.occurredOn, `date for ${sourceId}`);
-    if (occurredOn < from || occurredOn > to) refuse(`transaction ${sourceId} is outside the selected period — reselect the source period`);
-    if (fact.currency !== policy.currency) refuse(`transaction ${sourceId} uses ${fact.currency}, not ${policy.currency} — select a program in that currency; an incentive never invents an exchange rate`);
-    if (!limits.has(groupId)) refuse(`group ${groupId} has no limit decision — configure its ceiling or explicitly select no limit`);
-    const amount = units(fact.amount, `amount for ${sourceId}`), canonicalQuantity = canonicalDecimal(fact.quantity, 8);
-    if (canonicalQuantity === null) throw new BenefitsError("INVALID_INPUT", decimalNullRefusal(`quantity for ${sourceId}`, "an exact quantity", fact.quantity, 8));
+    if (occurredOn < from || occurredOn > to)
+      refuse(`transaction ${sourceId} is outside the selected period — reselect the source period`);
+    if (fact.currency !== policy.currency)
+      refuse(
+        `transaction ${sourceId} uses ${fact.currency}, not ${policy.currency} — select a program in that currency; an incentive never invents an exchange rate`,
+      );
+    if (!limits.has(groupId))
+      refuse(
+        `group ${groupId} has no limit decision — configure its ceiling or explicitly select no limit`,
+      );
+    const amount = units(fact.amount, `amount for ${sourceId}`),
+      canonicalQuantity = canonicalDecimal(fact.quantity, 8);
+    if (canonicalQuantity === null)
+      throw new BenefitsError(
+        "INVALID_INPUT",
+        decimalNullRefusal(`quantity for ${sourceId}`, "an exact quantity", fact.quantity, 8),
+      );
     const quantity = toQuantityUnits(canonicalQuantity);
-    if (amount < 0n || quantity < 0n) refuse(`transaction ${sourceId} is a credit or reversal — review its original award and create an adjusting award; a fresh positive settlement cannot reinterpret negative sources`);
+    if (amount < 0n || quantity < 0n)
+      refuse(
+        `transaction ${sourceId} is a credit or reversal — review its original award and create an adjusting award; a fresh positive settlement cannot reinterpret negative sources`,
+      );
     const base = policy.valuation === "percent_of_amount" ? amount : quantity;
-    if (base === 0n) { excluded.push({ sourceId, reason: "The explicitly selected valuation base is zero; no award is owed." }); continue; }
+    if (base === 0n) {
+      excluded.push({
+        sourceId,
+        reason: "The explicitly selected valuation base is zero; no award is owed.",
+      });
+      continue;
+    }
     const bindings = new Map<string, string>();
     for (const recipient of fact.recipients) {
-      const shareKey = key(recipient.shareKey, "recipient position"), employmentId = key(recipient.employmentId, "recipient employment");
-      if (!shares.has(shareKey) || bindings.has(shareKey)) refuse(`transaction ${sourceId} has an unknown or repeated recipient position ${shareKey} — reconcile its dated responsibility assignments`);
+      const shareKey = key(recipient.shareKey, "recipient position"),
+        employmentId = key(recipient.employmentId, "recipient employment");
+      if (!shares.has(shareKey) || bindings.has(shareKey))
+        refuse(
+          `transaction ${sourceId} has an unknown or repeated recipient position ${shareKey} — reconcile its dated responsibility assignments`,
+        );
       bindings.set(shareKey, employmentId);
     }
     for (const shareKey of shares.keys()) {
-      if (!bindings.has(shareKey) && policy.unassignedShare !== "forfeit") refuse(`transaction ${sourceId} has no recipient for ${shareKey} — record its dated responsibility and program membership; an absent share is never silently redistributed`);
+      if (!bindings.has(shareKey) && policy.unassignedShare !== "forfeit")
+        refuse(
+          `transaction ${sourceId} has no recipient for ${shareKey} — record its dated responsibility and program membership; an absent share is never silently redistributed`,
+        );
     }
-    const group = byGroup.get(groupId) ?? { base: 0n, sourceIds: [], weights: new Map<string, bigint>(), facts: [] };
+    const group = byGroup.get(groupId) ?? {
+      base: 0n,
+      sourceIds: [],
+      weights: new Map<string, bigint>(),
+      facts: [],
+    };
     group.base += base;
     group.sourceIds.push(sourceId);
     for (const [shareKey, employmentId] of bindings) {
-      group.weights.set(employmentId, (group.weights.get(employmentId) ?? 0n) + base * shares.get(shareKey)!);
+      group.weights.set(
+        employmentId,
+        (group.weights.get(employmentId) ?? 0n) + base * shares.get(shareKey)!,
+      );
     }
     // A forfeited position keeps its weight so the remaining recipients are
     // never enlarged by it; its share is simply not paid.
     for (const shareKey of shares.keys()) {
-      if (!bindings.has(shareKey)) group.weights.set(FORFEITED, (group.weights.get(FORFEITED) ?? 0n) + base * shares.get(shareKey)!);
+      if (!bindings.has(shareKey))
+        group.weights.set(
+          FORFEITED,
+          (group.weights.get(FORFEITED) ?? 0n) + base * shares.get(shareKey)!,
+        );
     }
     group.facts.push({ base, bindings });
     byGroup.set(groupId, group);
@@ -242,32 +372,51 @@ export function computeTransactionIncentive(
     // Exact shares in ledger units scaled by EXACT, summed per recipient
     // across every group, then rounded once to the currency quantum.
     const exact = new Map<string, bigint>();
-    for (const [groupId, group] of [...byGroup].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
-      const potential = group.base * rate * EXACT / divisor;
+    for (const [groupId, group] of [...byGroup].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
+      const potential = (group.base * rate * EXACT) / divisor;
       const roomUnits = available.get(groupId)!;
-      const payable = roomUnits === null || potential <= roomUnits * EXACT ? potential : roomUnits * EXACT;
+      const payable =
+        roomUnits === null || potential <= roomUnits * EXACT ? potential : roomUnits * EXACT;
       const groupShares = new Map<string, bigint>();
       for (const fact of group.facts) {
         for (const [shareKey, employmentId] of fact.bindings) {
-          const value = payable * fact.base * shares.get(shareKey)! / (group.base * totalShareWeight);
+          const value =
+            (payable * fact.base * shares.get(shareKey)!) / (group.base * totalShareWeight);
           groupShares.set(employmentId, (groupShares.get(employmentId) ?? 0n) + value);
         }
       }
-      const recipients = [...groupShares].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([employmentId, value]) => {
-        exact.set(employmentId, (exact.get(employmentId) ?? 0n) + value);
-        return { employmentId, value: fromUnits(roundDiv(value, EXACT)) };
-      });
+      const recipients = [...groupShares]
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([employmentId, value]) => {
+          exact.set(employmentId, (exact.get(employmentId) ?? 0n) + value);
+          return { employmentId, value: fromUnits(roundDiv(value, EXACT)) };
+        });
       const paid = [...groupShares.values()].reduce((sum, value) => sum + value, 0n);
-      results.push({ groupId, sourceIds: group.sourceIds, measuredValue: policy.valuation === "percent_of_amount" ? fromUnits(group.base) : fromQuantityUnits(group.base), potentialAward: fromUnits(roundDiv(potential, EXACT)), availableLimit: roomUnits === null ? null : fromUnits(roomUnits), awarded: fromUnits(roundDiv(paid, EXACT)), recipients });
+      results.push({
+        groupId,
+        sourceIds: group.sourceIds,
+        measuredValue:
+          policy.valuation === "percent_of_amount"
+            ? fromUnits(group.base)
+            : fromQuantityUnits(group.base),
+        potentialAward: fromUnits(roundDiv(potential, EXACT)),
+        availableLimit: roomUnits === null ? null : fromUnits(roomUnits),
+        awarded: fromUnits(roundDiv(paid, EXACT)),
+        recipients,
+      });
     }
-    for (const [employmentId, value] of exact) totals.set(employmentId, roundDiv(value, EXACT * quantum) * quantum);
+    for (const [employmentId, value] of exact)
+      totals.set(employmentId, roundDiv(value, EXACT * quantum) * quantum);
   } else {
-    for (const [groupId, group] of [...byGroup].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+    for (const [groupId, group] of [...byGroup].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) {
       const potential = roundDiv(group.base * rate, divisor * quantum);
       const room = available.get(groupId)!;
       const payable = room === null || potential * quantum <= room ? potential : room / quantum;
-      const weights = [...group.weights].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
-      const amounts = apportion(payable, weights.map(([, weight]) => weight));
+      const weights = [...group.weights].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+      const amounts = apportion(
+        payable,
+        weights.map(([, weight]) => weight),
+      );
       const recipients = weights.flatMap(([employmentId], i) => {
         if (employmentId === FORFEITED) return [];
         const value = amounts[i]! * quantum;
@@ -275,13 +424,27 @@ export function computeTransactionIncentive(
         return [{ employmentId, value: fromUnits(value) }];
       });
       const paid = recipients.reduce((sum, r) => sum + toUnits(r.value), 0n);
-      results.push({ groupId, sourceIds: group.sourceIds, measuredValue: policy.valuation === "percent_of_amount" ? fromUnits(group.base) : fromQuantityUnits(group.base), potentialAward: fromUnits(potential * quantum), availableLimit: room === null ? null : fromUnits(room), awarded: fromUnits(paid), recipients });
+      results.push({
+        groupId,
+        sourceIds: group.sourceIds,
+        measuredValue:
+          policy.valuation === "percent_of_amount"
+            ? fromUnits(group.base)
+            : fromQuantityUnits(group.base),
+        potentialAward: fromUnits(potential * quantum),
+        availableLimit: room === null ? null : fromUnits(room),
+        awarded: fromUnits(paid),
+        recipients,
+      });
     }
   }
   return {
     currency: policy.currency,
     totalAwarded: fromUnits([...totals.values()].reduce((sum, value) => sum + value, 0n)),
-    recipients: [...totals].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).filter(([, value]) => value !== 0n).map(([employmentId, value]) => ({ employmentId, value: fromUnits(value) })),
+    recipients: [...totals]
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .filter(([, value]) => value !== 0n)
+      .map(([employmentId, value]) => ({ employmentId, value: fromUnits(value) })),
     groups: results,
     excluded,
   };

@@ -1,122 +1,178 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // Account PATCH validates employeeCount as a non-negative integer and
 // annualRevenue to 4dp but bounds neither, so an out-of-int32 headcount or a
 // pasted 20-digit revenue sails through and dies in Postgres as a raw storage
 // failure (HTTP 500 — the verb has no catch) instead of failing closed with a
 // named 422. annual_revenue is numeric(19,4); employee_count is integer.
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __crmAccountMagnitudeState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __crmAccountMagnitudeState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
-    if (specifier === '../../../../../lib/authz') return virtual(`
+    if (specifier === "next/navigation")
+      return virtual(
+        'export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }',
+      );
+    if (specifier === "../../../../../lib/authz")
+      return virtual(`
       export async function guardPermission() {
         const s = globalThis.__crmAccountMagnitudeState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
-    `)
+    `);
     // The route factory resolves its session gate through the "@/lib/…"
     // spellings at request time; they must see the same test session as the
     // route file's relative imports. Identical sources share one module
     // instance across both spellings.
-    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
+    if (specifier === "../../../../../lib/feature-gates" || specifier === "@/lib/feature-gates")
+      return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__crmAccountMagnitudeState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { PATCH } = await import('./route.ts')
+});
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { PATCH } = await import("./route.ts");
 
 async function fixture() {
-  const org = await withBypassContext(() => createScratchOrg())
-  state.orgId = org.orgId
-  state.actorId = randomUUID()
-  await withBypassContext(() => db.execute(sql`
+  const org = await withBypassContext(() => createScratchOrg());
+  state.orgId = org.orgId;
+  state.actorId = randomUUID();
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
-     where id = ${org.orgId}`))
-  const partyId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+     where id = ${org.orgId}`),
+  );
+  const partyId = (
+    await withBypassContext(() =>
+      db.execute<{ id: string }>(
+        sql`
     insert into parties (org_id, kind, display_name, is_active)
     values (${org.orgId}, 'company', 'Magnitude Account', true)
-    returning id`, 'objects')))[0]!.id
-  await withBypassContext(() => db.execute(sql`
+    returning id`,
+        "objects",
+      ),
+    )
+  )[0]!.id;
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into crm_account_profiles (org_id, party_id, lifecycle_stage, annual_revenue, employee_count)
-    values (${org.orgId}, ${partyId}, 'lead', '100.0000', 10)`))
-  return { org, partyId }
+    values (${org.orgId}, ${partyId}, 'lead', '100.0000', 10)`),
+  );
+  return { org, partyId };
 }
 
 async function patch(id: string, body: unknown): Promise<{ status: number; json: unknown }> {
   try {
-    const response = await withOrgContext(state.orgId, () => PATCH(
-      new Request(`http://crm.test/api/crm/accounts/${id}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      }),
-      { params: Promise.resolve({ id }) },
-    ))
-    return { status: response.status, json: await response.json().catch(() => null) }
+    const response = await withOrgContext(state.orgId, () =>
+      PATCH(
+        new Request(`http://crm.test/api/crm/accounts/${id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+        { params: Promise.resolve({ id }) },
+      ),
+    );
+    return { status: response.status, json: await response.json().catch(() => null) };
   } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
+    return {
+      status: 500,
+      json: { thrown: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
 
 async function profile(partyId: string) {
-  const rows = await withOrgContext(state.orgId, () => db.execute<{ annual_revenue: string | null; employee_count: number | null }>(sql`
+  const rows = await withOrgContext(state.orgId, () =>
+    db.execute<{ annual_revenue: string | null; employee_count: number | null }>(
+      sql`
     select annual_revenue::text as annual_revenue, employee_count
-      from crm_account_profiles where party_id = ${partyId}`, 'objects'))
-  return rows[0]!
+      from crm_account_profiles where party_id = ${partyId}`,
+      "objects",
+    ),
+  );
+  return rows[0]!;
 }
-
 
 // The revision token PATCH mandates (F3-97): every pre-existing call below
 // targets other behavior, so each carries a fresh token to reach it.
 async function revisionFor(partyId: string): Promise<string> {
-  return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
+  return (
+    await withBypassContext(() =>
+      db.execute<{ revision: string }>(
+        sql`
     select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
-      from crm_account_profiles where party_id = ${partyId}`, 'objects')))[0]!.revision
+      from crm_account_profiles where party_id = ${partyId}`,
+        "objects",
+      ),
+    )
+  )[0]!.revision;
 }
 
-test('PATCH refuses an employee count outside int32 without writing', async () => {
-  const { org, partyId } = await fixture()
+test("PATCH refuses an employee count outside int32 without writing", async () => {
+  const { org, partyId } = await fixture();
   try {
-    const result = await patch(partyId, { employeeCount: '99999999999999999999', expectedUpdatedAt: await revisionFor(partyId) })
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.deepEqual(await profile(partyId), { annual_revenue: '100.0000', employee_count: 10 })
+    const result = await patch(partyId, {
+      employeeCount: "99999999999999999999",
+      expectedUpdatedAt: await revisionFor(partyId),
+    });
+    assert.equal(
+      result.status,
+      422,
+      `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
+    assert.deepEqual(await profile(partyId), { annual_revenue: "100.0000", employee_count: 10 });
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('PATCH refuses an annual revenue wider than numeric(19,4) without writing', async () => {
-  const { org, partyId } = await fixture()
+test("PATCH refuses an annual revenue wider than numeric(19,4) without writing", async () => {
+  const { org, partyId } = await fixture();
   try {
-    const result = await patch(partyId, { annualRevenue: '99999999999999999999', expectedUpdatedAt: await revisionFor(partyId) })
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.deepEqual(await profile(partyId), { annual_revenue: '100.0000', employee_count: 10 })
+    const result = await patch(partyId, {
+      annualRevenue: "99999999999999999999",
+      expectedUpdatedAt: await revisionFor(partyId),
+    });
+    assert.equal(
+      result.status,
+      422,
+      `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
+    assert.deepEqual(await profile(partyId), { annual_revenue: "100.0000", employee_count: 10 });
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('PATCH still saves column-maximum figures with identical read-back', async () => {
-  const { org, partyId } = await fixture()
+test("PATCH still saves column-maximum figures with identical read-back", async () => {
+  const { org, partyId } = await fixture();
   try {
-    const result = await patch(partyId, { annualRevenue: '999999999999999.9999', employeeCount: 2147483647, expectedUpdatedAt: await revisionFor(partyId) })
-    assert.equal(result.status, 200, JSON.stringify(result.json))
-    assert.deepEqual(await profile(partyId), { annual_revenue: '999999999999999.9999', employee_count: 2147483647 })
+    const result = await patch(partyId, {
+      annualRevenue: "999999999999999.9999",
+      employeeCount: 2147483647,
+      expectedUpdatedAt: await revisionFor(partyId),
+    });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    assert.deepEqual(await profile(partyId), {
+      annual_revenue: "999999999999999.9999",
+      employee_count: 2147483647,
+    });
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});

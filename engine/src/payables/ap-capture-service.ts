@@ -1,6 +1,12 @@
 import { extractNativeInvoice } from "./ap-einvoice.ts";
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
+import {
+  db,
+  type SqlExecutor,
+  withBypassContext,
+  withOrgContext,
+  withOrgTransaction,
+} from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import {
   lineRequiresReceipt,
@@ -55,7 +61,8 @@ type CaptureRow = {
 /** A live extraction refreshes its item lease once a minute; an unrefreshed ten-minute claim is recoverable. */
 export const AP_CAPTURE_STALE_CLAIM_MS = 10 * 60_000;
 const AP_CAPTURE_HEARTBEAT_MS = 60_000;
-const AP_CAPTURE_STALE_ERROR = "Extraction worker stopped before finalizing this attempt; reprocess the capture to try again.";
+const AP_CAPTURE_STALE_ERROR =
+  "Extraction worker stopped before finalizing this attempt; reprocess the capture to try again.";
 
 /**
  * Release claims left by a dead extraction worker. The item row is the lease:
@@ -65,34 +72,47 @@ const AP_CAPTURE_STALE_ERROR = "Extraction worker stopped before finalizing this
 export async function recoverStaleApCaptureClaims(now = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - AP_CAPTURE_STALE_CLAIM_MS);
   // bypass: scheduler-tick — stale extraction claims are found across every organization.
-  const candidates = await withBypassContext(() => db.execute<{ id: string; org_id: string; attempts: number }>(sql`
+  const candidates = await withBypassContext(() =>
+    db.execute<{ id: string; org_id: string; attempts: number }>(
+      sql`
     select id, org_id, attempts from ap_capture_items
      where status = 'extracting' and updated_at < ${cutoff.toISOString()}
      order by updated_at limit 50
-  `, "objects"));
+  `,
+      "objects",
+    ),
+  );
   let recovered = 0;
   for (const candidate of candidates) {
     const didRecover = await withOrgTransaction(candidate.org_id, async () => {
-      const current = (await db.execute<{ id: string; attempts: number }>(sql`
+      const current = (
+        await db.execute<{ id: string; attempts: number }>(
+          sql`
         select id, attempts from ap_capture_items
          where id = ${candidate.id} and org_id = ${candidate.org_id}
            and status = 'extracting' and attempts = ${candidate.attempts}
            and updated_at < ${cutoff.toISOString()}
          for update
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!current) return false;
       await db.execute(sql`
         update ap_capture_runs set status = 'failed', error_message = ${AP_CAPTURE_STALE_ERROR}, finished_at = now()
          where org_id = ${candidate.org_id} and capture_item_id = ${candidate.id}
            and attempt = ${current.attempts} and status = 'running'
       `);
-      const failed = await db.execute<{ id: string }>(sql`
+      const failed = await db.execute<{ id: string }>(
+        sql`
         update ap_capture_items
            set status = 'failed', last_error = ${AP_CAPTURE_STALE_ERROR}, updated_at = now()
          where id = ${candidate.id} and org_id = ${candidate.org_id}
            and status = 'extracting' and attempts = ${current.attempts}
          returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (!failed[0]) return false;
       await db.execute(sql`
         insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
@@ -109,7 +129,11 @@ export async function recoverStaleApCaptureClaims(now = new Date()): Promise<num
 
 const normalizedKey = vendorMatchKey;
 
-function issue(code: string, severity: "blocking" | "warning", extra: Partial<CaptureIssue> = {}): CaptureIssue {
+function issue(
+  code: string,
+  severity: "blocking" | "warning",
+  extra: Partial<CaptureIssue> = {},
+): CaptureIssue {
   return { code, severity, ...extra };
 }
 
@@ -119,14 +143,17 @@ async function resolvePurchaseOrder(
   vendorId: string | null,
 ): Promise<string | null> {
   if (!capture.purchaseOrderNumber) return null;
-  const result = (await db.execute<{ id: string }>(sql`
+  const result = await db.execute<{ id: string }>(
+    sql`
     select id from documents
      where org_id = ${orgId} and kind = 'purchase_order' and status = 'approved'
        and (document_number = ${capture.purchaseOrderNumber} or reference_number = ${capture.purchaseOrderNumber})
        and (${vendorId}::uuid is null or party_id = ${vendorId})
        and (${capture.currency}::text is null or currency = ${capture.currency})
      limit 2
-  `, "objects"));
+  `,
+    "objects",
+  );
   return result.length === 1 ? result[0]!.id : null;
 }
 
@@ -183,25 +210,26 @@ export function matchPurchaseOrderLine(input: {
 }): PurchaseOrderMatchIssue[] {
   const invoiceQuantityUnits = toQuantityUnits(input.invoiceQuantity);
   const invoiceQuantity = fromQuantityUnits(invoiceQuantityUnits);
-  const issues: PurchaseOrderMatchIssue[] = input.documentKind === "vendor_credit"
-    ? (() => {
-        // A credit releases quantity that a prior bill consumed. It is
-        // therefore bounded by the already-billed quantity, not by the
-        // remaining ordered/received headroom used by a vendor bill.
-        const billedUnits = toQuantityUnits(input.billedQuantity);
-        const billed = fromQuantityUnits(billedUnits);
-        return invoiceQuantityUnits <= 0n || invoiceQuantityUnits > billedUnits
-          ? [{ code: "po_quantity_exceeded" as const, expected: billed, actual: invoiceQuantity }]
-          : [];
-      })()
-    : validatePurchaseOrderQuantities({
-        invoiceQuantity,
-        orderedQuantity: input.orderedQuantity,
-        cancelledQuantity: input.cancelledQuantity,
-        billedQuantity: input.billedQuantity,
-        fulfilledQuantity: input.fulfilledQuantity,
-        requiresReceipt: input.itemId !== null && lineRequiresReceipt(input.itemKind),
-      });
+  const issues: PurchaseOrderMatchIssue[] =
+    input.documentKind === "vendor_credit"
+      ? (() => {
+          // A credit releases quantity that a prior bill consumed. It is
+          // therefore bounded by the already-billed quantity, not by the
+          // remaining ordered/received headroom used by a vendor bill.
+          const billedUnits = toQuantityUnits(input.billedQuantity);
+          const billed = fromQuantityUnits(billedUnits);
+          return invoiceQuantityUnits <= 0n || invoiceQuantityUnits > billedUnits
+            ? [{ code: "po_quantity_exceeded" as const, expected: billed, actual: invoiceQuantity }]
+            : [];
+        })()
+      : validatePurchaseOrderQuantities({
+          invoiceQuantity,
+          orderedQuantity: input.orderedQuantity,
+          cancelledQuantity: input.cancelledQuantity,
+          billedQuantity: input.billedQuantity,
+          fulfilledQuantity: input.fulfilledQuantity,
+          requiresReceipt: input.itemId !== null && lineRequiresReceipt(input.itemKind),
+        });
   if (!priceWithinTolerance(input.poUnitPrice, input.invoiceUnitPrice)) {
     issues.push({
       code: "po_price_variance",
@@ -236,9 +264,10 @@ export function billableRemainderUnits(input: {
   itemId: string | null;
   itemKind: string | null;
 }): bigint {
-  const remaining = toQuantityUnits(input.orderedQuantity)
-    - toQuantityUnits(input.cancelledQuantity)
-    - toQuantityUnits(input.billedQuantity);
+  const remaining =
+    toQuantityUnits(input.orderedQuantity) -
+    toQuantityUnits(input.cancelledQuantity) -
+    toQuantityUnits(input.billedQuantity);
   if (remaining <= 0n) return 0n;
   if (input.itemId === null || !lineRequiresReceipt(input.itemKind)) return remaining;
   const cover = toQuantityUnits(input.fulfilledQuantity) - toQuantityUnits(input.billedQuantity);
@@ -269,7 +298,8 @@ async function mapLines(
 ): Promise<{ lines: CaptureLine[]; issues: CaptureIssue[] }> {
   const issues: CaptureIssue[] = [];
   if (purchaseOrderId) {
-    const source = (await db.execute<PoLine>(sql`
+    const source = await db.execute<PoLine>(
+      sql`
       select dl.id, dl.item_id, coalesce(dl.account_id, i.expense_account_id) as account_id,
              i.code as item_code, dl.description,
              dl.quantity, dl.quantity_cancelled, dl.quantity_billed, dl.quantity_fulfilled, dl.unit_price,
@@ -277,18 +307,23 @@ async function mapLines(
         from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
        where dl.org_id = ${orgId} and dl.document_id = ${purchaseOrderId}
        order by dl.line_number
-    `, "objects"));
+    `,
+      "objects",
+    );
     const used = new Set<string>();
     const lines = capture.lines.map((line, lineIndex) => {
       const key = line.productCode ? normalizedKey(line.productCode) : "";
       let candidates = key
-        ? source.filter((row) => row.item_code && normalizedKey(row.item_code) === key && !used.has(row.id))
+        ? source.filter(
+            (row) => row.item_code && normalizedKey(row.item_code) === key && !used.has(row.id),
+          )
         : [];
       // The single-line positional fallback is load-bearing for codeless
       // lines, which carry no code to match on. An explicit product code
       // that matches no purchase-order line refuses below as
       // po_line_unmatched instead of force-binding the wrong line.
-      if (!key && candidates.length !== 1 && source.length === 1 && capture.lines.length === 1) candidates = source;
+      if (!key && candidates.length !== 1 && source.length === 1 && capture.lines.length === 1)
+        candidates = source;
       if (candidates.length !== 1) {
         issues.push(issue("po_line_unmatched", "blocking", { lineIndex }));
         return line;
@@ -298,21 +333,29 @@ async function mapLines(
       // Refused OCR text cannot be three-way-matched: its exact decimals never
       // entered the capture, so matching would throw instead of refusing.
       // validateNormalizedCapture already reports the named refusal as blocking.
-      const matchable = canonicalDecimal(line.quantity, 8) !== null
-        && canonicalDecimal(line.unitPrice, 4) !== null;
-      for (const matchIssue of (matchable ? matchPurchaseOrderLine({
-        invoiceQuantity: line.quantity,
-        invoiceUnitPrice: line.unitPrice,
-        orderedQuantity: po.quantity,
-        cancelledQuantity: po.quantity_cancelled,
-        billedQuantity: po.quantity_billed,
-        fulfilledQuantity: po.quantity_fulfilled,
-        poUnitPrice: String(po.unit_price),
-        itemId: po.item_id,
-        itemKind: po.item_kind,
-        documentKind,
-      }) : [])) {
-        issues.push(issue(matchIssue.code, "blocking", { lineIndex, expected: matchIssue.expected, actual: matchIssue.actual }));
+      const matchable =
+        canonicalDecimal(line.quantity, 8) !== null && canonicalDecimal(line.unitPrice, 4) !== null;
+      for (const matchIssue of matchable
+        ? matchPurchaseOrderLine({
+            invoiceQuantity: line.quantity,
+            invoiceUnitPrice: line.unitPrice,
+            orderedQuantity: po.quantity,
+            cancelledQuantity: po.quantity_cancelled,
+            billedQuantity: po.quantity_billed,
+            fulfilledQuantity: po.quantity_fulfilled,
+            poUnitPrice: String(po.unit_price),
+            itemId: po.item_id,
+            itemKind: po.item_kind,
+            documentKind,
+          })
+        : []) {
+        issues.push(
+          issue(matchIssue.code, "blocking", {
+            lineIndex,
+            expected: matchIssue.expected,
+            actual: matchIssue.actual,
+          }),
+        );
       }
       if (!po.account_id) issues.push(issue("account_unresolved", "blocking", { lineIndex }));
       return {
@@ -326,41 +369,67 @@ async function mapLines(
   }
 
   const defaultAccount = vendorId
-    ? (await db.execute<{ id: string | null }>(sql`
+    ? ((
+        await db.execute<{ id: string | null }>(
+          sql`
         select default_expense_account_id as id from vendor_roles
          where org_id = ${orgId} and party_id = ${vendorId} and is_active
-      `, "objects"))[0]?.id ?? null
+      `,
+          "objects",
+        )
+      )[0]?.id ?? null)
     : null;
-  const requestedItemIds = [...new Set(capture.lines.map((line) => line.itemId).filter((id): id is string => Boolean(id)))];
+  const requestedItemIds = [
+    ...new Set(capture.lines.map((line) => line.itemId).filter((id): id is string => Boolean(id))),
+  ];
   const itemResult = requestedItemIds.length
-    ? (await db.execute<{ id: string; expense_account_id: string | null }>(sql`
+    ? await db.execute<{ id: string; expense_account_id: string | null }>(
+        sql`
         select id, expense_account_id from items
          where org_id = ${orgId} and is_active
-           and id in (${sql.join(requestedItemIds.map((id) => sql`${id}`), sql`, `)})
-      `, "objects"))
+           and id in (${sql.join(
+             requestedItemIds.map((id) => sql`${id}`),
+             sql`, `,
+           )})
+      `,
+        "objects",
+      )
     : [];
   const itemAccounts = new Map(itemResult.map((row) => [row.id, row.expense_account_id]));
   const learnedResult = vendorId
-    ? (await db.execute<{ description: string; account_id: string }>(sql`
+    ? await db.execute<{ description: string; account_id: string }>(
+        sql`
         select match->>'description' as description, output->>'accountId' as account_id
           from ap_capture_rules
          where org_id = ${orgId} and rule_kind = 'vendor_account' and is_active
            and match->>'partyId' = ${vendorId}
-      `, "objects"))
+      `,
+        "objects",
+      )
     : [];
   const learnedAccounts = new Map(learnedResult.map((row) => [row.description, row.account_id]));
-  const requestedAccountIds = [...new Set([
-    defaultAccount,
-    ...capture.lines.map((line) => line.accountId),
-    ...itemResult.map((row) => row.expense_account_id),
-    ...learnedResult.map((row) => row.account_id),
-  ].filter((id): id is string => Boolean(id)))];
+  const requestedAccountIds = [
+    ...new Set(
+      [
+        defaultAccount,
+        ...capture.lines.map((line) => line.accountId),
+        ...itemResult.map((row) => row.expense_account_id),
+        ...learnedResult.map((row) => row.account_id),
+      ].filter((id): id is string => Boolean(id)),
+    ),
+  ];
   const accountResult = requestedAccountIds.length
-    ? (await db.execute<{ id: string }>(sql`
+    ? await db.execute<{ id: string }>(
+        sql`
         select id from accounts
          where org_id = ${orgId} and is_active and not is_summary
-           and id in (${sql.join(requestedAccountIds.map((id) => sql`${id}`), sql`, `)})
-      `, "objects"))
+           and id in (${sql.join(
+             requestedAccountIds.map((id) => sql`${id}`),
+             sql`, `,
+           )})
+      `,
+        "objects",
+      )
     : [];
   const validAccounts = new Set(accountResult.map((row) => row.id));
   const lines: CaptureLine[] = [];
@@ -373,7 +442,8 @@ async function mapLines(
       learnedAccounts.get(normalizedKey(line.description)),
       defaultAccount,
     ];
-    const accountId = candidates.find((id): id is string => Boolean(id && validAccounts.has(id))) ?? null;
+    const accountId =
+      candidates.find((id): id is string => Boolean(id && validAccounts.has(id))) ?? null;
     if (!accountId) issues.push(issue("account_unresolved", "blocking", { lineIndex }));
     lines.push({ ...line, itemId, accountId, purchaseOrderLineId: null });
   }
@@ -398,39 +468,70 @@ export async function resolveAndValidateCapture(input: {
   // Review PATCHes historically omitted the kind from this helper's input.
   // Read the persisted kind in that case so a previously selected vendor
   // credit receives credit matching during re-resolution as well.
-  const documentKind = input.documentKind ?? (await db.execute<{ document_kind: CaptureDocumentKind }>(sql`
+  const documentKind =
+    input.documentKind ??
+    (
+      await db.execute<{ document_kind: CaptureDocumentKind }>(
+        sql`
     select document_kind from ap_capture_items
      where org_id = ${input.orgId} and id = ${input.captureItemId}
-  `, "objects"))[0]?.document_kind ?? "vendor_bill";
-  let vendorId = input.vendorId === undefined ? await resolveVendorParty(input.orgId, { name: input.normalized.vendorName, taxId: input.normalized.vendorTaxId }) : input.vendorId;
+  `,
+        "objects",
+      )
+    )[0]?.document_kind ??
+    "vendor_bill";
+  let vendorId =
+    input.vendorId === undefined
+      ? await resolveVendorParty(input.orgId, {
+          name: input.normalized.vendorName,
+          taxId: input.normalized.vendorTaxId,
+        })
+      : input.vendorId;
   if (vendorId) {
-    const valid = (await db.execute(sql`
+    const valid = await db.execute(
+      sql`
       select 1 from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
        where p.org_id = ${input.orgId} and p.id = ${vendorId} and p.is_active and vr.is_active
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!valid[0]) vendorId = null;
   }
-  let purchaseOrderId = input.purchaseOrderId === undefined
-    ? await resolvePurchaseOrder(input.orgId, input.normalized, vendorId)
-    : input.purchaseOrderId;
+  let purchaseOrderId =
+    input.purchaseOrderId === undefined
+      ? await resolvePurchaseOrder(input.orgId, input.normalized, vendorId)
+      : input.purchaseOrderId;
   if (purchaseOrderId) {
-    const valid = (await db.execute<{ party_id: string | null; currency: string }>(sql`
+    const valid = await db.execute<{ party_id: string | null; currency: string }>(
+      sql`
       select party_id, currency from documents where org_id = ${input.orgId} and id = ${purchaseOrderId}
         and kind = 'purchase_order' and status = 'approved'
         and (${vendorId}::uuid is null or party_id = ${vendorId})
         and (${input.normalized.currency}::text is null or currency = ${input.normalized.currency})
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!valid[0]) purchaseOrderId = null;
     else if (!vendorId && valid[0].party_id) vendorId = valid[0].party_id;
   }
-  const mapped = await mapLines(input.orgId, input.normalized, vendorId, purchaseOrderId, documentKind);
+  const mapped = await mapLines(
+    input.orgId,
+    input.normalized,
+    vendorId,
+    purchaseOrderId,
+    documentKind,
+  );
   const normalized = { ...input.normalized, lines: mapped.lines };
-  const issues = [...validateNormalizedCapture(normalized, input.confidenceThreshold), ...mapped.issues];
+  const issues = [
+    ...validateNormalizedCapture(normalized, input.confidenceThreshold),
+    ...mapped.issues,
+  ];
   if (!vendorId) issues.push(issue("vendor_unresolved", "blocking", { field: "vendorName" }));
   if (input.normalized.purchaseOrderNumber && !purchaseOrderId) {
     issues.push(issue("purchase_order_unresolved", "blocking", { field: "purchaseOrderNumber" }));
   }
-  const duplicateResult = (await db.execute<{ "?column?": number }>(sql`
+  const duplicateResult = await db.execute<{ "?column?": number }>(
+    sql`
     select 1 from ap_capture_items ci
      where ci.org_id = ${input.orgId} and ci.id <> ${input.captureItemId}
        and ci.status not in ('rejected','failed')
@@ -447,7 +548,9 @@ export async function resolveAndValidateCapture(input: {
        and ${normalizedDocumentReferenceSql(sql`d.reference_number`)}
            = ${normalizedDocumentReferenceSql(sql`${normalized.invoiceNumber}::text`)}
     limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const duplicate = duplicateResult.length > 0;
   if (duplicate) issues.push(issue("possible_duplicate", "blocking", { field: "invoiceNumber" }));
   return { normalized, vendorId, purchaseOrderId, issues, duplicate };
@@ -467,12 +570,15 @@ export async function processCaptureItem(input: {
   fetchImpl?: typeof fetch;
   lookup?: AddressLookup;
 }): Promise<void> {
-  const claimed = (await db.execute<CaptureRow>(sql`
+  const claimed = await db.execute<CaptureRow>(
+    sql`
     update ap_capture_items set status = 'extracting', attempts = attempts + 1,
            last_error = null, updated_at = now(), updated_by = ${input.actorId ?? null}
      where org_id = ${input.orgId} and id = ${input.captureItemId} and status in ('queued','failed')
     returning *
-  `, "objects"));
+  `,
+    "objects",
+  );
   const item = claimed[0];
   if (!item) return;
   const attempt = Number((item as unknown as { attempts: number }).attempts);
@@ -481,15 +587,22 @@ export async function processCaptureItem(input: {
   const heartbeat = setInterval(() => {
     if (heartbeatBusy) return;
     heartbeatBusy = true;
-    void withOrgContext(input.orgId, () => db.execute(sql`
+    void withOrgContext(input.orgId, () =>
+      db.execute(sql`
       update ap_capture_items set updated_at = now()
        where id = ${item.id} and org_id = ${input.orgId}
          and status = 'extracting' and attempts = ${attempt}
-    `)).catch((error) => {
-      console.error(`[ap-capture] item ${item.id}: extraction heartbeat failed:`, (error as Error).message);
-    }).finally(() => {
-      heartbeatBusy = false;
-    });
+    `),
+    )
+      .catch((error) => {
+        console.error(
+          `[ap-capture] item ${item.id}: extraction heartbeat failed:`,
+          (error as Error).message,
+        );
+      })
+      .finally(() => {
+        heartbeatBusy = false;
+      });
   }, AP_CAPTURE_HEARTBEAT_MS);
   heartbeat.unref?.();
   try {
@@ -497,26 +610,46 @@ export async function processCaptureItem(input: {
     // configuration or run-ledger insert error must not strand extracting.
     const blob = await loadCaptureBlob(input.orgId, item.file_id);
     const nativeEnabled = await orgFeatureEnabled(input.orgId, "einvoicing");
-    if (!nativeEnabled && ['application/xml','text/xml'].includes(blob.contentType)) throw new Error('Enable E-invoicing in Company Settings → Features before processing this XML invoice.');
+    if (!nativeEnabled && ["application/xml", "text/xml"].includes(blob.contentType))
+      throw new Error(
+        "Enable E-invoicing in Company Settings → Features before processing this XML invoice.",
+      );
     const native = nativeEnabled ? await extractNativeInvoice(blob.bytes, blob.contentType) : null;
-    const settings = native ? null : await getDocumentCaptureRuntimeConfig(input.orgId, input.lookup);
+    const settings = native
+      ? null
+      : await getDocumentCaptureRuntimeConfig(input.orgId, input.lookup);
     // The run records the reader that produced it: the native e-invoice
     // parser, Azure Document Intelligence, or the organization's AI model.
     const reader = native
-      ? { provider: 'en16931', model: 'native', apiVersion: 'EN16931:2017' }
+      ? { provider: "en16931", model: "native", apiVersion: "EN16931:2017" }
       : settings
         ? { provider: settings.provider, model: settings.model, apiVersion: settings.apiVersion }
-        : { provider: 'azure_document_intelligence', model: 'prebuilt-invoice', apiVersion: AZURE_DOCUMENT_INTELLIGENCE_API_VERSION };
-    const run = await db.execute<{ id: string }>(sql`
+        : {
+            provider: "azure_document_intelligence",
+            model: "prebuilt-invoice",
+            apiVersion: AZURE_DOCUMENT_INTELLIGENCE_API_VERSION,
+          };
+    const run = await db.execute<{ id: string }>(
+      sql`
       insert into ap_capture_runs (org_id, capture_item_id, attempt, provider, model, api_version, created_by)
       values (${input.orgId}, ${item.id}, ${attempt}, ${reader.provider},
               ${reader.model}, ${reader.apiVersion}, ${input.actorId ?? item.created_by})
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     runId = run[0]!.id;
-    if (!native && !settings) throw new Error("Document capture is disabled or not configured under Platform → AI");
-    const extracted: { raw: unknown; normalized: NormalizedCapture; evidence: CaptureEvidence[]; overallConfidence: string | null; issues?: CaptureIssue[] } = native
-      ?? (settings!.provider === 'llm_vision'
+    if (!native && !settings)
+      throw new Error("Document capture is disabled or not configured under Platform → AI");
+    const extracted: {
+      raw: unknown;
+      normalized: NormalizedCapture;
+      evidence: CaptureEvidence[];
+      overallConfidence: string | null;
+      issues?: CaptureIssue[];
+    } =
+      native ??
+      (settings!.provider === "llm_vision"
         ? await extractLlmInvoice({
             config: settings!.llm,
             confidenceThreshold: settings!.confidenceThreshold,
@@ -541,19 +674,28 @@ export async function processCaptureItem(input: {
       confidenceThreshold: settings?.confidenceThreshold ?? "1.0000",
       documentKind: native?.documentKind ?? item.document_kind,
     });
-    if (extracted.overallConfidence && cmp(extracted.overallConfidence, settings?.confidenceThreshold ?? "1.0000") < 0) {
+    if (
+      extracted.overallConfidence &&
+      cmp(extracted.overallConfidence, settings?.confidenceThreshold ?? "1.0000") < 0
+    ) {
       resolved.issues.push(issue("document_low_confidence", "warning", { field: "document" }));
     }
     // Fields the reader left blank for low confidence are flagged by name.
     resolved.issues.push(...(extracted.issues ?? []));
     await db.transaction(async (tx) => {
-      const owner = (await tx.execute<{ attempts: number }>(sql`
+      const owner = (
+        await tx.execute<{ attempts: number }>(
+          sql`
         select attempts from ap_capture_items
          where id = ${item.id} and org_id = ${input.orgId}
            and status = 'extracting' and attempts = ${attempt}
          for update
-      `, "objects"))[0];
-      if (!owner) throw new Error("capture extraction claim expired before its result could be saved");
+      `,
+          "objects",
+        )
+      )[0];
+      if (!owner)
+        throw new Error("capture extraction claim expired before its result could be saved");
       for (const field of extracted.evidence) {
         await tx.execute(sql`
           insert into ap_capture_fields (org_id, run_id, field_key, line_index, raw_value,
@@ -568,8 +710,13 @@ export async function processCaptureItem(input: {
                normalized_snapshot = ${JSON.stringify(resolved.normalized)}::jsonb, finished_at = now()
          where id = ${runId} and org_id = ${input.orgId} and status = 'running'
       `);
-      const status = resolved.duplicate ? "duplicate" : resolved.issues.length ? "needs_review" : "ready";
-      const completed = await tx.execute<{ id: string }>(sql`
+      const status = resolved.duplicate
+        ? "duplicate"
+        : resolved.issues.length
+          ? "needs_review"
+          : "ready";
+      const completed = await tx.execute<{ id: string }>(
+        sql`
         update ap_capture_items set status = ${status}, document_kind = ${native?.documentKind ?? item.document_kind}, normalized = ${JSON.stringify(resolved.normalized)}::jsonb,
                validation_issues = ${JSON.stringify(resolved.issues)}::jsonb,
                overall_confidence = ${extracted.overallConfidence}, vendor_candidate_id = ${resolved.vendorId},
@@ -577,7 +724,9 @@ export async function processCaptureItem(input: {
          where id = ${item.id} and org_id = ${input.orgId}
            and status = 'extracting' and attempts = ${attempt}
          returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (!completed[0]) throw new Error("capture extraction claim changed before completion");
       await tx.execute(sql`
         insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
@@ -595,15 +744,18 @@ export async function processCaptureItem(input: {
         orgId: input.orgId,
         captureItemId: item.id,
         actorId: input.actorId ?? item.created_by,
-        materialize: () => materializeCapture({
-          orgId: input.orgId,
-          captureItemId: item.id,
-          actorId: input.actorId ?? item.created_by,
-          allowedSubsidiaryIds: input.allowedSubsidiaryIds,
-        }),
+        materialize: () =>
+          materializeCapture({
+            orgId: input.orgId,
+            captureItemId: item.id,
+            actorId: input.actorId ?? item.created_by,
+            allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+          }),
       });
-      autoPostCreatedDraft = autoPost.kind === "posted" || autoPost.kind === "pending_approval"
-        || (autoPost.kind === "refused" && autoPost.documentId !== null);
+      autoPostCreatedDraft =
+        autoPost.kind === "posted" ||
+        autoPost.kind === "pending_approval" ||
+        (autoPost.kind === "refused" && autoPost.documentId !== null);
     } catch (error) {
       await db.execute(sql`
         insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
@@ -612,8 +764,13 @@ export async function processCaptureItem(input: {
                 ${input.actorId ?? item.created_by})
       `);
     }
-    if (!autoPostCreatedDraft && settings?.autoCreatePoMatchedDrafts && resolved.purchaseOrderId && !resolved.duplicate
-        && resolved.issues.length === 0) {
+    if (
+      !autoPostCreatedDraft &&
+      settings?.autoCreatePoMatchedDrafts &&
+      resolved.purchaseOrderId &&
+      !resolved.duplicate &&
+      resolved.issues.length === 0
+    ) {
       try {
         await materializeCapture({
           orgId: input.orgId,
@@ -649,12 +806,15 @@ export async function processCaptureItem(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "Capture failed";
     await db.transaction(async (tx) => {
-      const failed = await tx.execute<{ id: string }>(sql`
+      const failed = await tx.execute<{ id: string }>(
+        sql`
         update ap_capture_items set status = 'failed', last_error = ${message}, updated_at = now()
          where id = ${item.id} and org_id = ${input.orgId}
            and status = 'extracting' and attempts = ${attempt}
          returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (!failed[0]) return; // a recovery or newer attempt owns the item now
       if (runId) {
         await tx.execute(sql`
@@ -742,24 +902,32 @@ export async function releaseCaptureMaterialization(
   documentId: string,
   audit: { actorId: string | null; reason: string },
 ): Promise<void> {
-  const items = await tx.execute<{ id: string; status: string }>(sql`
+  const items = await tx.execute<{ id: string; status: string }>(
+    sql`
     select id, status from ap_capture_items
      where org_id = ${orgId} and document_id = ${documentId}
      for update
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const item of items) {
     if (item.status !== "materialized") {
       throw new CaptureMaterializationError(
         "this document's capture item is no longer materialized — resolve the capture before deleting",
       );
     }
-    const released = (await tx.execute<{ id: string }>(sql`
+    const released = (
+      await tx.execute<{ id: string }>(
+        sql`
       update ap_capture_items
          set status = 'needs_review', document_id = null, materialized_at = null,
              updated_at = now(), updated_by = ${audit.actorId}
        where id = ${item.id} and org_id = ${orgId} and status = 'materialized'
        returning id
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!released) {
       throw new CaptureMaterializationError("the capture item changed while it was being released");
     }
@@ -791,22 +959,35 @@ async function assertLockedCaptureAssociationsVisible(
   if (allowed.size === 0) throw new CaptureScopeDeniedError();
   if (item.subsidiary_id && !allowed.has(item.subsidiary_id)) throw new CaptureScopeDeniedError();
   if (item.vendor_candidate_id) {
-    const vendor = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+    const vendor = (
+      await tx.execute<{ subsidiaryId: string | null }>(
+        sql`
       select subsidiary_id as "subsidiaryId" from parties
        where org_id = ${orgId} and id = ${item.vendor_candidate_id}
        for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!vendor || (vendor.subsidiaryId != null && !allowed.has(vendor.subsidiaryId))) {
       throw new CaptureScopeDeniedError();
     }
   }
   if (item.purchase_order_id) {
-    const purchaseOrder = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+    const purchaseOrder = (
+      await tx.execute<{ subsidiaryId: string | null }>(
+        sql`
       select subsidiary_id as "subsidiaryId" from documents
        where org_id = ${orgId} and id = ${item.purchase_order_id}
        for update
-    `, "objects"))[0];
-    if (!purchaseOrder || (purchaseOrder.subsidiaryId != null && !allowed.has(purchaseOrder.subsidiaryId))) {
+    `,
+        "objects",
+      )
+    )[0];
+    if (
+      !purchaseOrder ||
+      (purchaseOrder.subsidiaryId != null && !allowed.has(purchaseOrder.subsidiaryId))
+    ) {
       throw new CaptureScopeDeniedError();
     }
   }
@@ -860,7 +1041,12 @@ async function recordRuleActivation(
     values (${orgId}, ${captureItemId}, 'rule_activated',
             ${JSON.stringify(detail)}::jsonb, ${actorId})
   `);
-  activated.push({ ruleKind, ruleId: confirmed.id, match: confirmed.match, output: confirmed.output });
+  activated.push({
+    ruleKind,
+    ruleId: confirmed.id,
+    match: confirmed.match,
+    output: confirmed.output,
+  });
 }
 
 export async function materializeCapture(input: {
@@ -871,11 +1057,18 @@ export async function materializeCapture(input: {
   priceOverride?: boolean;
   /** REQUIRED, no default: null is the explicit unrestricted sentinel. */
   allowedSubsidiaryIds: ReadonlySet<string> | null;
-}): Promise<{ documentId: string; documentNumber: string; rulesActivated: ActivatedCaptureRule[] }> {
+}): Promise<{
+  documentId: string;
+  documentNumber: string;
+  rulesActivated: ActivatedCaptureRule[];
+}> {
   const result = await db.transaction(async (tx) => {
-    const loaded = (await tx.execute<CaptureRow>(sql`
+    const loaded = await tx.execute<CaptureRow>(
+      sql`
       select * from ap_capture_items where org_id = ${input.orgId} and id = ${input.captureItemId} for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const item = loaded[0];
     if (!item) throw new CaptureMaterializationError("Capture item not found");
     await assertLockedCaptureAssociationsVisible(tx, input.orgId, item, input.allowedSubsidiaryIds);
@@ -883,20 +1076,36 @@ export async function materializeCapture(input: {
     // the caller can surface what future bills will auto-code to.
     const rulesActivated: ActivatedCaptureRule[] = [];
     if (item.document_id) {
-      const existing = (await tx.execute<{ document_number: string }>(sql`select document_number from documents where id = ${item.document_id} and org_id = ${input.orgId}`, "objects"));
-      return { documentId: item.document_id, documentNumber: existing[0]?.document_number ?? "", rulesActivated };
+      const existing = await tx.execute<{ document_number: string }>(
+        sql`select document_number from documents where id = ${item.document_id} and org_id = ${input.orgId}`,
+        "objects",
+      );
+      return {
+        documentId: item.document_id,
+        documentNumber: existing[0]?.document_number ?? "",
+        rulesActivated,
+      };
     }
-    if (!['ready', 'needs_review'].includes(item.status)) {
+    if (!["ready", "needs_review"].includes(item.status)) {
       throw new CaptureMaterializationError("Capture item is not ready to create a draft");
     }
     const capture = item.normalized;
     assertCapturePurchaseOrderMatches(capture, item.purchase_order_id);
     const vendorId = item.vendor_candidate_id;
-    if (!vendorId || !capture.invoiceNumber || !capture.invoiceDate || !capture.total || capture.lines.length === 0) {
-      throw new CaptureMaterializationError("Vendor, invoice number, date, total and lines are required");
+    if (
+      !vendorId ||
+      !capture.invoiceNumber ||
+      !capture.invoiceDate ||
+      !capture.total ||
+      capture.lines.length === 0
+    ) {
+      throw new CaptureMaterializationError(
+        "Vendor, invoice number, date, total and lines are required",
+      );
     }
     const unresolved = capture.lines.findIndex((line) => !line.accountId);
-    if (unresolved >= 0) throw new CaptureMaterializationError(`Line ${unresolved + 1} needs an account`);
+    if (unresolved >= 0)
+      throw new CaptureMaterializationError(`Line ${unresolved + 1} needs an account`);
     // Serialize on BOTH the vendor invoice identity and the source file, in
     // canonical (sorted) key order so concurrent materializes never take the
     // two fences in opposite orders and deadlock:
@@ -923,20 +1132,35 @@ export async function materializeCapture(input: {
         select pg_advisory_xact_lock(hashtextextended(${fence}, 0))
       `);
     }
-    const validVendor = (await tx.execute(sql`
+    const validVendor = await tx.execute(
+      sql`
       select 1 from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
        where p.org_id = ${input.orgId} and p.id = ${vendorId} and p.is_active and vr.is_active
-    `, "objects"));
-    if (!validVendor[0]) throw new CaptureMaterializationError("The selected vendor is no longer active");
-    const accountIds = [...new Set(capture.lines.map((line) => line.accountId).filter((id): id is string => Boolean(id)))];
-    const validAccounts = (await tx.execute<{ id: string }>(sql`
+    `,
+      "objects",
+    );
+    if (!validVendor[0])
+      throw new CaptureMaterializationError("The selected vendor is no longer active");
+    const accountIds = [
+      ...new Set(
+        capture.lines.map((line) => line.accountId).filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const validAccounts = await tx.execute<{ id: string }>(
+      sql`
       select id from accounts where org_id = ${input.orgId} and is_active and not is_summary
-        and id in (${sql.join(accountIds.map((id) => sql`${id}`), sql`, `)})
-    `, "objects"));
+        and id in (${sql.join(
+          accountIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})
+    `,
+      "objects",
+    );
     if (validAccounts.length !== accountIds.length) {
       throw new CaptureMaterializationError("One or more selected accounts are no longer postable");
     }
-    const duplicate = (await tx.execute(sql`
+    const duplicate = await tx.execute(
+      sql`
       select 1 from ap_capture_items
        where org_id = ${input.orgId} and id <> ${item.id} and content_hash = ${item.content_hash}
          and document_id is not null
@@ -947,16 +1171,21 @@ export async function materializeCapture(input: {
          and ${normalizedDocumentReferenceSql(sql`reference_number`)}
              = ${normalizedDocumentReferenceSql(sql`${capture.invoiceNumber}::text`)}
       limit 1
-    `, "objects"));
-    if (duplicate[0]) throw new CaptureMaterializationError("A draft or posted document already uses this source or vendor invoice number");
+    `,
+      "objects",
+    );
+    if (duplicate[0])
+      throw new CaptureMaterializationError(
+        "A draft or posted document already uses this source or vendor invoice number",
+      );
     const issues = validateNormalizedCapture(capture);
     const blocking = issues.filter((value) => value.severity === "blocking");
     if (blocking.length > 0) {
       // Prefer the named refusal (ambiguous capture text carries its remedy in
       // `message`); fall back to the long-standing generic math text.
       throw new CaptureMaterializationError(
-        blocking.find((value) => value.message)?.message
-          ?? "Resolve the capture math errors before creating a draft",
+        blocking.find((value) => value.message)?.message ??
+          "Resolve the capture math errors before creating a draft",
       );
     }
     // Re-run the shared three-way match against fresh purchase-order rows at
@@ -971,16 +1200,33 @@ export async function materializeCapture(input: {
     let poSubsidiaryId: string | null | undefined;
     let poCurrency: string | undefined;
     if (item.purchase_order_id) {
-      const purchaseOrder = (await tx.execute<{ id: string; kind: string; status: string; subsidiaryId: string | null; currency: string | null }>(sql`
+      const purchaseOrder = (
+        await tx.execute<{
+          id: string;
+          kind: string;
+          status: string;
+          subsidiaryId: string | null;
+          currency: string | null;
+        }>(
+          sql`
         select id, kind, status, subsidiary_id as "subsidiaryId", currency from documents
          where org_id = ${input.orgId} and id = ${item.purchase_order_id}
          for update
-      `, "objects"))[0];
-      if (!purchaseOrder || purchaseOrder.kind !== "purchase_order" || purchaseOrder.status !== "approved") {
+      `,
+          "objects",
+        )
+      )[0];
+      if (
+        !purchaseOrder ||
+        purchaseOrder.kind !== "purchase_order" ||
+        purchaseOrder.status !== "approved"
+      ) {
         throw new CaptureMaterializationError("The purchase order is no longer approved");
       }
       if (!purchaseOrder.currency) {
-        throw new CaptureMaterializationError("The purchase order has no currency — resolve it before creating a draft");
+        throw new CaptureMaterializationError(
+          "The purchase order has no currency — resolve it before creating a draft",
+        );
       }
       if (capture.currency && capture.currency !== purchaseOrder.currency) {
         throw new CaptureMaterializationError(
@@ -997,24 +1243,29 @@ export async function materializeCapture(input: {
          for update
       `);
       const poLines = new Map(
-        (await tx.execute<{
-          id: string;
-          quantity: string;
-          quantity_cancelled: string;
-          quantity_billed: string;
-          quantity_fulfilled: string;
-          unit_price: string;
-          item_id: string | null;
-          item_kind: string | null;
-          stock_location_id: string | null;
-        }>(sql`
+        (
+          await tx.execute<{
+            id: string;
+            quantity: string;
+            quantity_cancelled: string;
+            quantity_billed: string;
+            quantity_fulfilled: string;
+            unit_price: string;
+            item_id: string | null;
+            item_kind: string | null;
+            stock_location_id: string | null;
+          }>(
+            sql`
           select dl.id, dl.quantity::text as quantity, dl.quantity_cancelled::text as quantity_cancelled,
                  dl.quantity_billed::text as quantity_billed,
                  dl.quantity_fulfilled::text as quantity_fulfilled, dl.unit_price::text as unit_price,
                  dl.item_id, i.kind as item_kind, dl.stock_location_id
             from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
            where dl.org_id = ${input.orgId} and dl.document_id = ${item.purchase_order_id}
-        `, "objects")).map((row) => [row.id, row]),
+        `,
+            "objects",
+          )
+        ).map((row) => [row.id, row]),
       );
       for (const poLine of poLines.values()) {
         poLineLocations.set(poLine.id, poLine.stock_location_id);
@@ -1022,7 +1273,10 @@ export async function materializeCapture(input: {
       capture.lines.forEach((line, lineIndex) => {
         if (!line.purchaseOrderLineId) return;
         const po = poLines.get(line.purchaseOrderLineId);
-        if (!po) throw new CaptureMaterializationError(`Purchase order line ${lineIndex + 1} no longer exists`);
+        if (!po)
+          throw new CaptureMaterializationError(
+            `Purchase order line ${lineIndex + 1} no longer exists`,
+          );
         for (const matchIssue of matchPurchaseOrderLine({
           invoiceQuantity: line.quantity,
           invoiceUnitPrice: line.unitPrice,
@@ -1036,7 +1290,11 @@ export async function materializeCapture(input: {
           documentKind: item.document_kind,
         })) {
           if (matchIssue.code === "po_price_variance") {
-            priceVariances.push({ lineIndex, expected: matchIssue.expected, actual: matchIssue.actual });
+            priceVariances.push({
+              lineIndex,
+              expected: matchIssue.expected,
+              actual: matchIssue.actual,
+            });
             continue;
           }
           throw new CaptureMaterializationError(
@@ -1053,7 +1311,10 @@ export async function materializeCapture(input: {
             `Line ${variance.lineIndex + 1} price ${variance.actual} differs from the ordered ${variance.expected} by more than the ${PRICE_TOLERANCE_PERCENT}% tolerance`,
           );
         }
-        if (!input.actorId || !(await actorHasPermission(tx, input.orgId, input.actorId, "ap.approve"))) {
+        if (
+          !input.actorId ||
+          !(await actorHasPermission(tx, input.orgId, input.actorId, "ap.approve"))
+        ) {
           throw new CaptureMaterializationError(
             "Overriding the purchase order price match requires AP approval permission",
             403,
@@ -1067,7 +1328,12 @@ export async function materializeCapture(input: {
         `);
       }
     }
-    const org = (await tx.execute<{ org_currency: string | null; subsidiary_id: string | null; subsidiary_currency: string | null }>(sql`
+    const org = await tx.execute<{
+      org_currency: string | null;
+      subsidiary_id: string | null;
+      subsidiary_currency: string | null;
+    }>(
+      sql`
       select o.base_currency as org_currency, s.id as subsidiary_id,
              s.base_currency as subsidiary_currency
         from orgs o left join lateral (
@@ -1075,7 +1341,9 @@ export async function materializeCapture(input: {
            where org_id = o.id and parent_id is null and is_active
            limit 1
         ) s on true where o.id = ${input.orgId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const company = org[0];
     if (!company) throw new CaptureMaterializationError("The company no longer exists");
     // A PO-matched bill inherits the order's subsidiary and currency, exactly
@@ -1091,19 +1359,30 @@ export async function materializeCapture(input: {
     if (!subsidiaryId) {
       throw new CaptureMaterializationError("The company has no active root subsidiary");
     }
-    const entityCount = (await tx.execute<{ n: number }>(sql`
+    const entityCount =
+      (
+        await tx.execute<{ n: number }>(
+          sql`
       select count(*)::int as n from subsidiaries
        where org_id = ${input.orgId} and is_active and not is_elimination
-    `, "objects"))[0]?.n ?? 0;
+    `,
+          "objects",
+        )
+      )[0]?.n ?? 0;
     const multiEntity = entityCount > 1;
     // An emailed capture names its receiving entity: each inbound address
     // belongs to one legal entity, so the bill books there. A matched order
     // in another entity is a conflict to resolve, never a silent override.
     const intakeEntity = item.subsidiary_id
-      ? (await tx.execute<{ id: string; base_currency: string | null }>(sql`
+      ? ((
+          await tx.execute<{ id: string; base_currency: string | null }>(
+            sql`
           select id, base_currency from subsidiaries
            where org_id = ${input.orgId} and id = ${item.subsidiary_id} and is_active and not is_elimination
-        `, 'objects'))[0] ?? null
+        `,
+            "objects",
+          )
+        )[0] ?? null)
       : null;
     if (item.subsidiary_id && !intakeEntity) {
       throw new CaptureMaterializationError(
@@ -1111,7 +1390,12 @@ export async function materializeCapture(input: {
       );
     }
     let currency: string | null | undefined;
-    if (poCurrency !== undefined && intakeEntity && poSubsidiaryId && poSubsidiaryId !== intakeEntity.id) {
+    if (
+      poCurrency !== undefined &&
+      intakeEntity &&
+      poSubsidiaryId &&
+      poSubsidiaryId !== intakeEntity.id
+    ) {
       throw new CaptureMaterializationError(
         "The purchase order belongs to a different legal entity than the address that received this bill — match a purchase order of the receiving entity or clear the match",
       );
@@ -1120,7 +1404,9 @@ export async function materializeCapture(input: {
       subsidiaryId = intakeEntity.id;
       currency = capture.currency ?? intakeEntity.base_currency ?? company.org_currency;
       if (!currency) {
-        throw new CaptureMaterializationError("The receiving legal entity has no configured base currency");
+        throw new CaptureMaterializationError(
+          "The receiving legal entity has no configured base currency",
+        );
       }
     } else if (poCurrency !== undefined) {
       currency = poCurrency;
@@ -1148,37 +1434,102 @@ export async function materializeCapture(input: {
         throw new CaptureMaterializationError("The company has no configured base currency");
       }
     }
-    const nativeSource = (await tx.execute<{ raw_provider_payload: { invoice?: { buyer?: { name?: string; address?: {countryCode?: string | null} | null; vatId?: string | null; electronicAddress?: { id?: string; schemeId?: string } | null } } } }>(sql`select raw_provider_payload from ap_capture_runs where org_id = ${input.orgId} and capture_item_id = ${item.id} and status = 'succeeded' and provider = 'en16931' order by attempt desc limit 1`, "objects"))[0];
+    const nativeSource = (
+      await tx.execute<{
+        raw_provider_payload: {
+          invoice?: {
+            buyer?: {
+              name?: string;
+              address?: { countryCode?: string | null } | null;
+              vatId?: string | null;
+              electronicAddress?: { id?: string; schemeId?: string } | null;
+            };
+          };
+        };
+      }>(
+        sql`select raw_provider_payload from ap_capture_runs where org_id = ${input.orgId} and capture_item_id = ${item.id} and status = 'succeeded' and provider = 'en16931' order by attempt desc limit 1`,
+        "objects",
+      )
+    )[0];
     if (nativeSource) {
-      if (!(await orgFeatureEnabled(input.orgId, "einvoicing", tx))) throw new CaptureMaterializationError("Enable E-invoicing in Company Settings → Features before creating this draft.");
+      if (!(await orgFeatureEnabled(input.orgId, "einvoicing", tx)))
+        throw new CaptureMaterializationError(
+          "Enable E-invoicing in Company Settings → Features before creating this draft.",
+        );
       const buyer = nativeSource.raw_provider_payload.invoice?.buyer;
-      if (!buyer) throw new CaptureMaterializationError("The source e-invoice does not identify its receiving legal entity.");
-      const entity = (await tx.execute<{ name: string; legal_name: string | null; country: string }>(sql`select name, legal_name,country from subsidiaries where org_id = ${input.orgId} and id = ${subsidiaryId}`, "objects"))[0];
-      const namesMatch = normalizedKey(buyer.name ?? '') === normalizedKey(entity?.legal_name ?? entity?.name ?? '');
-      if (buyer.address?.countryCode && buyer.address.countryCode !== entity?.country) throw new CaptureMaterializationError("The source invoice buyer country differs from the selected receiving legal entity.");
+      if (!buyer)
+        throw new CaptureMaterializationError(
+          "The source e-invoice does not identify its receiving legal entity.",
+        );
+      const entity = (
+        await tx.execute<{ name: string; legal_name: string | null; country: string }>(
+          sql`select name, legal_name,country from subsidiaries where org_id = ${input.orgId} and id = ${subsidiaryId}`,
+          "objects",
+        )
+      )[0];
+      const namesMatch =
+        normalizedKey(buyer.name ?? "") === normalizedKey(entity?.legal_name ?? entity?.name ?? "");
+      if (buyer.address?.countryCode && buyer.address.countryCode !== entity?.country)
+        throw new CaptureMaterializationError(
+          "The source invoice buyer country differs from the selected receiving legal entity.",
+        );
       if (!buyer.vatId && !buyer.electronicAddress) {
-        const named = (await tx.execute<{ name: string }>(sql`select coalesce(legal_name,name) as name from subsidiaries where org_id=${input.orgId} and is_active and country=${entity?.country ?? ''}`, "objects")).filter(row => normalizedKey(row.name) === normalizedKey(buyer.name ?? ''));
-        if (named.length !== 1 || !buyer.address?.countryCode) throw new CaptureMaterializationError("The source buyer identity is ambiguous. Request the receiving entity's tax identifier or electronic address on the e-invoice.");
+        const named = (
+          await tx.execute<{ name: string }>(
+            sql`select coalesce(legal_name,name) as name from subsidiaries where org_id=${input.orgId} and is_active and country=${entity?.country ?? ""}`,
+            "objects",
+          )
+        ).filter((row) => normalizedKey(row.name) === normalizedKey(buyer.name ?? ""));
+        if (named.length !== 1 || !buyer.address?.countryCode)
+          throw new CaptureMaterializationError(
+            "The source buyer identity is ambiguous. Request the receiving entity's tax identifier or electronic address on the e-invoice.",
+          );
       }
-      if (!namesMatch) throw new CaptureMaterializationError("The supplier e-invoice names a different receiving legal entity. Match it to that entity's purchase order or request a corrected invoice.");
+      if (!namesMatch)
+        throw new CaptureMaterializationError(
+          "The supplier e-invoice names a different receiving legal entity. Match it to that entity's purchase order or request a corrected invoice.",
+        );
       if (buyer.vatId) {
-        const registration = (await tx.execute(sql`select 1 from tax_registrations where org_id = ${input.orgId} and subsidiary_id = ${subsidiaryId} and is_active and registration_number = ${buyer.vatId} and effective_from <= ${capture.invoiceDate}::date and (effective_to is null or effective_to >= ${capture.invoiceDate}::date)`, "objects"))[0];
-        if (!registration) throw new CaptureMaterializationError("The buyer VAT identifier does not belong to the receiving legal entity on the invoice date.");
+        const registration = (
+          await tx.execute(
+            sql`select 1 from tax_registrations where org_id = ${input.orgId} and subsidiary_id = ${subsidiaryId} and is_active and registration_number = ${buyer.vatId} and effective_from <= ${capture.invoiceDate}::date and (effective_to is null or effective_to >= ${capture.invoiceDate}::date)`,
+            "objects",
+          )
+        )[0];
+        if (!registration)
+          throw new CaptureMaterializationError(
+            "The buyer VAT identifier does not belong to the receiving legal entity on the invoice date.",
+          );
       }
       if (buyer.electronicAddress) {
-        const address = (await tx.execute(sql`select 1 from einvoice_settings where org_id = ${input.orgId} and subsidiary_id = ${subsidiaryId} and electronic_address = ${buyer.electronicAddress.id ?? ''} and electronic_address_scheme = ${buyer.electronicAddress.schemeId ?? ''}`, "objects"))[0];
-        if (!address) throw new CaptureMaterializationError("The buyer electronic address does not belong to the receiving legal entity.");
+        const address = (
+          await tx.execute(
+            sql`select 1 from einvoice_settings where org_id = ${input.orgId} and subsidiary_id = ${subsidiaryId} and electronic_address = ${buyer.electronicAddress.id ?? ""} and electronic_address_scheme = ${buyer.electronicAddress.schemeId ?? ""}`,
+            "objects",
+          )
+        )[0];
+        if (!address)
+          throw new CaptureMaterializationError(
+            "The buyer electronic address does not belong to the receiving legal entity.",
+          );
       }
     }
     // Stored captures and existing bills stay. Turning Inventory off must
     // refuse a materialize that would persist inventory / assembly / kit.
     if (!(await inventoryFeatureEnabled(tx, input.orgId))) {
-      const itemIds = [...new Set(
-        capture.lines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
-      )];
+      const itemIds = [
+        ...new Set(
+          capture.lines
+            .map((line) => line.itemId)
+            .filter((itemId): itemId is string => Boolean(itemId)),
+        ),
+      ];
       for (const itemId of itemIds) {
-        const kindRow = (await tx.execute<{ kind: string }>(sql`
-          select kind from items where id = ${itemId} and org_id = ${input.orgId}`, "objects"));
+        const kindRow = await tx.execute<{ kind: string }>(
+          sql`
+          select kind from items where id = ${itemId} and org_id = ${input.orgId}`,
+          "objects",
+        );
         if (kindRow[0] && INVENTORY_ITEM_KINDS.has(kindRow[0].kind)) {
           throw new CaptureMaterializationError("Inventory is disabled", 404);
         }
@@ -1189,19 +1540,27 @@ export async function materializeCapture(input: {
     // Canonical switchboard read (::boolean casts threw on non-boolean imports).
     const equipmentOn = await orgFeatureEnabled(input.orgId, "equipment", tx as SqlExecutor);
     if (!equipmentOn) {
-      const itemIds = [...new Set(
-        capture.lines.map((line) => line.itemId).filter((itemId): itemId is string => Boolean(itemId)),
-      )];
+      const itemIds = [
+        ...new Set(
+          capture.lines
+            .map((line) => line.itemId)
+            .filter((itemId): itemId is string => Boolean(itemId)),
+        ),
+      ];
       for (const itemId of itemIds) {
-        const kindRow = (await tx.execute<{ kind: string }>(sql`
-          select kind from items where id = ${itemId} and org_id = ${input.orgId}`, "objects"));
+        const kindRow = await tx.execute<{ kind: string }>(
+          sql`
+          select kind from items where id = ${itemId} and org_id = ${input.orgId}`,
+          "objects",
+        );
         if (kindRow[0] && kindRow[0].kind === "equipment_charge") {
           throw new CaptureMaterializationError("Equipment is disabled", 404);
         }
       }
     }
     const documentNumber = await nextDocumentNumber(tx, input.orgId, item.document_kind);
-    const inserted = (await tx.execute<{ id: string }>(sql`
+    const inserted = await tx.execute<{ id: string }>(
+      sql`
       insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                              due_date, currency, status, reference_number, memo,
                              subtotal, tax_total, total, created_by, updated_by)
@@ -1212,22 +1571,36 @@ export async function materializeCapture(input: {
               ${capture.taxTotal ?? sum(capture.lines.map((line) => line.taxAmount))},
               ${capture.total}, ${input.actorId}, ${input.actorId})
       returning id
-    `, "objects"));
+    `,
+      "objects",
+    );
     const documentId = inserted[0]!.id;
-    const hasPoLineAdvances = item.purchase_order_id !== null
-      && capture.lines.some((line) => line.purchaseOrderLineId !== null && line.purchaseOrderLineId !== undefined);
+    const hasPoLineAdvances =
+      item.purchase_order_id !== null &&
+      capture.lines.some(
+        (line) => line.purchaseOrderLineId !== null && line.purchaseOrderLineId !== undefined,
+      );
     if (hasPoLineAdvances) {
       // Migration 0034 protects approved source lines as immutable commercial
       // facts. quantity_billed is operational reconciliation state, so reopen
       // the already-locked PO only for these advances, then restore approved
       // before commit. Any failure rolls the status and the whole materialize
       // back together.
-      const reopened = (await tx.execute<{ id: string }>(sql`
+      const reopened = (
+        await tx.execute<{ id: string }>(
+          sql`
         update documents set status = 'draft', updated_at = now(), updated_by = ${input.actorId}
          where id = ${item.purchase_order_id} and org_id = ${input.orgId} and status = 'approved'
          returning id
-      `, "objects"))[0];
-      if (!reopened) throw new CaptureMaterializationError("The purchase order changed while it was being materialized", 409);
+      `,
+          "objects",
+        )
+      )[0];
+      if (!reopened)
+        throw new CaptureMaterializationError(
+          "The purchase order changed while it was being materialized",
+          409,
+        );
     }
     for (let index = 0; index < capture.lines.length; index += 1) {
       const line = capture.lines[index]!;
@@ -1235,7 +1608,7 @@ export async function materializeCapture(input: {
       // line. Unlinked capture lines remain explicit-null and posting will
       // require a resolvable warehouse before treating an item as inventory.
       const stockLocationId = line.purchaseOrderLineId
-        ? poLineLocations.get(line.purchaseOrderLineId) ?? null
+        ? (poLineLocations.get(line.purchaseOrderLineId) ?? null)
         : null;
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
@@ -1257,22 +1630,26 @@ export async function materializeCapture(input: {
             `Purchase order line ${index + 1} quantity must be positive`,
           );
         }
-        const billedGuard = item.document_kind === "vendor_credit"
-          ? sql`and dl.quantity_billed + ${billedDelta} >= 0`
-          : sql`and dl.quantity_billed + ${billedDelta} <= ${orderedNetOfCancelledSql("dl")}
+        const billedGuard =
+          item.document_kind === "vendor_credit"
+            ? sql`and dl.quantity_billed + ${billedDelta} >= 0`
+            : sql`and dl.quantity_billed + ${billedDelta} <= ${orderedNetOfCancelledSql("dl")}
              and (dl.item_id is null or exists (
                select 1 from items i
                 where i.id = dl.item_id and i.org_id = ${input.orgId}
                   and (i.kind in (${receiptExemptItemKindsSql})
                        or dl.quantity_fulfilled - dl.quantity_billed >= ${billedDelta})
              ))`;
-        const advanced = (await tx.execute<{ id: string }>(sql`
+        const advanced = await tx.execute<{ id: string }>(
+          sql`
           update document_lines dl set quantity_billed = dl.quantity_billed + ${billedDelta},
                  updated_at = now(), updated_by = ${input.actorId}
            where dl.id = ${line.purchaseOrderLineId} and dl.org_id = ${input.orgId}
              ${billedGuard}
           returning id
-        `, "objects"));
+        `,
+          "objects",
+        );
         if (!advanced[0]) {
           throw new CaptureMaterializationError(
             item.document_kind === "vendor_credit"
@@ -1283,12 +1660,21 @@ export async function materializeCapture(input: {
       }
     }
     if (hasPoLineAdvances) {
-      const restored = (await tx.execute<{ id: string }>(sql`
+      const restored = (
+        await tx.execute<{ id: string }>(
+          sql`
         update documents set status = 'approved', updated_at = now(), updated_by = ${input.actorId}
          where id = ${item.purchase_order_id} and org_id = ${input.orgId} and status = 'draft'
          returning id
-      `, "objects"))[0];
-      if (!restored) throw new CaptureMaterializationError("The purchase order changed while it was being materialized", 409);
+      `,
+          "objects",
+        )
+      )[0];
+      if (!restored)
+        throw new CaptureMaterializationError(
+          "The purchase order changed while it was being materialized",
+          409,
+        );
     }
     if (item.purchase_order_id) {
       await tx.execute(sql`
@@ -1315,26 +1701,44 @@ export async function materializeCapture(input: {
     `);
     if (capture.vendorName) {
       const alias = normalizedKey(capture.vendorName);
-      const existing = (await tx.execute<{ id: string }>(sql`
+      const existing = await tx.execute<{ id: string }>(
+        sql`
         select id from ap_capture_rules where org_id = ${input.orgId} and rule_kind = 'vendor_alias'
           and match->>'alias' = ${alias} and output->>'partyId' = ${vendorId} for update
-      `, "objects"));
+      `,
+        "objects",
+      );
       if (existing[0]) {
-        const confirmed = (await tx.execute<ConfirmedCaptureRule>(sql`
+        const confirmed = (
+          await tx.execute<ConfirmedCaptureRule>(
+            sql`
           update ap_capture_rules set confirmation_count = confirmation_count + 1,
                  is_active = confirmation_count + 1 >= 3, updated_at = now(), updated_by = ${input.actorId}
            where id = ${existing[0].id} and org_id = ${input.orgId}
           returning id, confirmation_count as "confirmationCount", is_active as "isActive",
                     match, output
-        `, "objects"))[0]!;
-        await recordRuleActivation(tx, input.orgId, item.id, input.actorId, "vendor_alias", confirmed, rulesActivated);
+        `,
+            "objects",
+          )
+        )[0]!;
+        await recordRuleActivation(
+          tx,
+          input.orgId,
+          item.id,
+          input.actorId,
+          "vendor_alias",
+          confirmed,
+          rulesActivated,
+        );
       } else {
         // A concurrent capture of the same alias can win the insert race —
         // the select FOR UPDATE above matched nothing, so no lock is held —
         // and a dropped conflict silently stalled the confirmation count
         // that gates auto-activation. The upsert mirrors the update branch
         // exactly, so the confirmation always counts.
-        const confirmed = (await tx.execute<ConfirmedCaptureRule>(sql`
+        const confirmed = (
+          await tx.execute<ConfirmedCaptureRule>(
+            sql`
           insert into ap_capture_rules (org_id, rule_kind, match, output, created_by, updated_by)
           values (${input.orgId}, 'vendor_alias', ${JSON.stringify({ alias })}::jsonb,
                   ${JSON.stringify({ partyId: vendorId })}::jsonb, ${input.actorId}, ${input.actorId})
@@ -1345,8 +1749,19 @@ export async function materializeCapture(input: {
                 updated_by = ${input.actorId}
           returning id, confirmation_count as "confirmationCount", is_active as "isActive",
                     match, output
-        `, "objects"))[0]!;
-        await recordRuleActivation(tx, input.orgId, item.id, input.actorId, "vendor_alias", confirmed, rulesActivated);
+        `,
+            "objects",
+          )
+        )[0]!;
+        await recordRuleActivation(
+          tx,
+          input.orgId,
+          item.id,
+          input.actorId,
+          "vendor_alias",
+          confirmed,
+          rulesActivated,
+        );
       }
     }
     if (!item.purchase_order_id) {
@@ -1360,24 +1775,42 @@ export async function materializeCapture(input: {
         const ruleKey = `${description}|${line.accountId}`;
         if (confirmedAccountRules.has(ruleKey)) continue;
         confirmedAccountRules.add(ruleKey);
-        const existing = (await tx.execute<{ id: string }>(sql`
+        const existing = await tx.execute<{ id: string }>(
+          sql`
           select id from ap_capture_rules where org_id = ${input.orgId} and rule_kind = 'vendor_account'
             and match->>'partyId' = ${vendorId} and match->>'description' = ${description}
             and output->>'accountId' = ${line.accountId} for update
-        `, "objects"));
+        `,
+          "objects",
+        );
         if (existing[0]) {
-          const confirmed = (await tx.execute<ConfirmedCaptureRule>(sql`
+          const confirmed = (
+            await tx.execute<ConfirmedCaptureRule>(
+              sql`
             update ap_capture_rules set confirmation_count = confirmation_count + 1,
                    is_active = confirmation_count + 1 >= 3, updated_at = now(), updated_by = ${input.actorId}
              where id = ${existing[0].id} and org_id = ${input.orgId}
             returning id, confirmation_count as "confirmationCount", is_active as "isActive",
                       match, output
-          `, "objects"))[0]!;
-          await recordRuleActivation(tx, input.orgId, item.id, input.actorId, "vendor_account", confirmed, rulesActivated);
+          `,
+              "objects",
+            )
+          )[0]!;
+          await recordRuleActivation(
+            tx,
+            input.orgId,
+            item.id,
+            input.actorId,
+            "vendor_account",
+            confirmed,
+            rulesActivated,
+          );
         } else {
           // Same race and same remedy as the vendor_alias upsert above: the
           // concurrent winner's confirmation must still count.
-          const confirmed = (await tx.execute<ConfirmedCaptureRule>(sql`
+          const confirmed = (
+            await tx.execute<ConfirmedCaptureRule>(
+              sql`
             insert into ap_capture_rules (org_id, rule_kind, match, output, created_by, updated_by)
             values (${input.orgId}, 'vendor_account',
                     ${JSON.stringify({ partyId: vendorId, description })}::jsonb,
@@ -1390,14 +1823,28 @@ export async function materializeCapture(input: {
                   updated_by = ${input.actorId}
             returning id, confirmation_count as "confirmationCount", is_active as "isActive",
                       match, output
-          `, "objects"))[0]!;
-          await recordRuleActivation(tx, input.orgId, item.id, input.actorId, "vendor_account", confirmed, rulesActivated);
+          `,
+              "objects",
+            )
+          )[0]!;
+          await recordRuleActivation(
+            tx,
+            input.orgId,
+            item.id,
+            input.actorId,
+            "vendor_account",
+            confirmed,
+            rulesActivated,
+          );
         }
       }
     }
     return { documentId, documentNumber, rulesActivated };
   });
-  const kind = (await db.execute<{ kind: string }>(sql`select kind from documents where id = ${result.documentId} and org_id = ${input.orgId}`, "objects"));
+  const kind = await db.execute<{ kind: string }>(
+    sql`select kind from documents where id = ${result.documentId} and org_id = ${input.orgId}`,
+    "objects",
+  );
   await runRecordFlows(
     { kind: "on_create", source: "api" },
     kind[0]?.kind ?? "vendor_bill",

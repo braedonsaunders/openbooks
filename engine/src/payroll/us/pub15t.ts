@@ -21,8 +21,22 @@
  * additional amounts, and Form W-4P pension withholding.
  */
 import { PayrollError } from "../error.ts";
-import { bmin, D, divIntCents, max0, mulInt, mulRateCents, U } from "../../money/payroll-decimal.ts";
-import { type FilingStatus, ratesForPayDate, type WithholdingRow, type YearRates, US_STATES } from "./rates";
+import {
+  bmin,
+  D,
+  divIntCents,
+  max0,
+  mulInt,
+  mulRateCents,
+  U,
+} from "../../money/payroll-decimal.ts";
+import {
+  type FilingStatus,
+  ratesForPayDate,
+  type WithholdingRow,
+  type YearRates,
+  US_STATES,
+} from "./rates";
 
 export interface Pub15TYtd {
   /** Social Security (OASDI) taxable wages before this period, this employer. */
@@ -227,15 +241,15 @@ function creditReductionRate(year: number, region: string): string {
   const reductions = FUTA_CREDIT_REDUCTION[year];
   if (!reductions) {
     throw new PayrollError(
-      `Form 940 year-end true-up refused: FUTA credit-reduction rates for ${year} are not transcribed from Schedule A `
-      + "(USDOL publishes the year's credit-reduction states in November) — compute the true-up once the schedule "
-      + "is transcribed — refused by name",
+      `Form 940 year-end true-up refused: FUTA credit-reduction rates for ${year} are not transcribed from Schedule A ` +
+        "(USDOL publishes the year's credit-reduction states in November) — compute the true-up once the schedule " +
+        "is transcribed — refused by name",
     );
   }
   if (!US_STATES.includes(region as (typeof US_STATES)[number])) {
     throw new PayrollError(
-      `Form 940 year-end true-up refused: FUTA credit-reduction rate cannot be resolved for jurisdiction ${region} `
-      + `in ${year}; configure a verified effective rate for the Schedule A jurisdiction — refused by name`,
+      `Form 940 year-end true-up refused: FUTA credit-reduction rate cannot be resolved for jurisdiction ${region} ` +
+        `in ${year}; configure a verified effective rate for the Schedule A jurisdiction — refused by name`,
     );
   }
   return reductions[region] ?? "0";
@@ -265,19 +279,22 @@ export function futaScheduleATrueUp(
 export function calculatePub15T(input: Pub15TInput): Pub15TResult {
   const rates: YearRates = ratesForPayDate(input.payDate);
   const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) throw new PayrollError(`invalid pay periods per year: ${P}`);
+  if (!Number.isInteger(P) || P < 1 || P > 2000)
+    throw new PayrollError(`invalid pay periods per year: ${P}`);
   if (input.nonresidentAlien) {
     // IRS Publication 15-T (2026), Nonresident alien employees, Tables 1–2:
     // https://www.irs.gov/publications/p15t
     throw new PayrollError(
-      "Federal withholding for a nonresident-alien employee requires the Pub. 15-T Table 1 or Table 2 "
-      + "payroll-period wage adjustment and the applicable student/apprentice exception review; "
-      + "this calculation path does not implement those rules, so do not calculate or post this employee's federal payroll here — refused by name",
+      "Federal withholding for a nonresident-alien employee requires the Pub. 15-T Table 1 or Table 2 " +
+        "payroll-period wage adjustment and the applicable student/apprentice exception review; " +
+        "this calculation path does not implement those rules, so do not calculate or post this employee's federal payroll here — refused by name",
     );
   }
 
   const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const trace = (key: string, value: bigint) => {
+    factors[key] = D(value);
+  };
 
   const wages = U(input.wages);
   const supplemental = opt(input.supplemental);
@@ -301,9 +318,11 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
     const deductions = opt(input.deductionsAnnual); // 1e
     const adjustment = input.multipleJobs
       ? ZERO
-      : U(input.filingStatus === "married_joint"
-          ? rates.wageAdjustment.marriedJoint
-          : rates.wageAdjustment.other); // 1g
+      : U(
+          input.filingStatus === "married_joint"
+            ? rates.wageAdjustment.marriedJoint
+            : rates.wageAdjustment.other,
+        ); // 1g
     adjusted = max0(annualWages + otherIncome - deductions - adjustment);
     schedule = (input.multipleJobs ? rates.checkbox : rates.standard)[input.filingStatus];
   }
@@ -337,16 +356,16 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
       const basis = input.supplementalRegularBasis;
       if (!basis) {
         throw new PayrollError(
-          "federal supplemental wages cannot use the optional flat rate: no FIT was withheld "
-          + "from regular wages in the current or preceding year, so Pub. 15 §7 requires method 1b. "
-          + "Provide the most recent regular wage and the FIT already withheld from it "
-          + "(supplementalRegularBasis) before calculating — refused by name",
+          "federal supplemental wages cannot use the optional flat rate: no FIT was withheld " +
+            "from regular wages in the current or preceding year, so Pub. 15 §7 requires method 1b. " +
+            "Provide the most recent regular wage and the FIT already withheld from it " +
+            "(supplementalRegularBasis) before calculating — refused by name",
         );
       }
       if (supplemental - atFlat > ZERO) {
         throw new PayrollError(
-          "federal supplemental wages exceed the $1,000,000 mandatory-37% threshold inside a "
-          + "method-1b payment; the 1b aggregate beside a mandatory excess is not transcribed — refused by name",
+          "federal supplemental wages exceed the $1,000,000 mandatory-37% threshold inside a " +
+            "method-1b payment; the 1b aggregate beside a mandatory excess is not transcribed — refused by name",
         );
       }
       const combined = calculatePub15T({
@@ -364,8 +383,8 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
     } else {
       // Pub. 15 §7 makes the 37% slice mandatory regardless of the employee's
       // W-4 exemption election; only the optional lower flat slice is waived.
-      supplementalFit = (input.fitExempt ? ZERO : mulRateCents(atFlat, rates.supplemental.flatRate))
-        + mandatory;
+      supplementalFit =
+        (input.fitExempt ? ZERO : mulRateCents(atFlat, rates.supplemental.flatRate)) + mandatory;
     }
   }
   const fit = periodicFit + supplementalFit + (input.fitExempt ? ZERO : extra);
@@ -382,8 +401,8 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
     medicare = mulRateCents(ficaWages, rates.fica.medicareRate);
     const priorMedicareWages = opt(ytd.medicareWages);
     const threshold = U(rates.fica.additionalMedicareThreshold);
-    const overThreshold = max0(priorMedicareWages + ficaWages - threshold)
-      - max0(priorMedicareWages - threshold);
+    const overThreshold =
+      max0(priorMedicareWages + ficaWages - threshold) - max0(priorMedicareWages - threshold);
     additionalMedicare = mulRateCents(overThreshold, rates.fica.additionalMedicareRate);
     // Carry the exact threshold-crossing wage slice so the quarterly Form 941
     // can report line 5d separately from ordinary Medicare wages on line 5c.

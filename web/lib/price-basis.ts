@@ -1,5 +1,5 @@
-import { canonicalDecimal } from './exact-decimal'
-import { isUuid } from '@openbooks/engine/platform/identifiers'
+import { canonicalDecimal } from "./exact-decimal";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 /**
  * Pricing provenance for a priced document line (0336). When a line's price
@@ -11,48 +11,48 @@ import { isUuid } from '@openbooks/engine/platform/identifiers'
  */
 export interface PriceBasis {
   kind:
-    | 'customer_item'
-    | 'customer_family'
-    | 'customer_level'
-    | 'family_level'
-    | 'base_level'
-    | 'family_base_level'
-    | 'simple'
-    | 'family_base'
-  scheduleId: string | null
-  levelId: string | null
-  assignmentId: string | null
-  unitPrice: string
-  resolvedAt: string
+    | "customer_item"
+    | "customer_family"
+    | "customer_level"
+    | "family_level"
+    | "base_level"
+    | "family_base_level"
+    | "simple"
+    | "family_base";
+  scheduleId: string | null;
+  levelId: string | null;
+  assignmentId: string | null;
+  unitPrice: string;
+  resolvedAt: string;
 }
 
 const KINDS = new Set([
-  'customer_item',
-  'customer_family',
-  'customer_level',
-  'family_level',
-  'base_level',
-  'family_base_level',
-  'simple',
-  'family_base',
-])
+  "customer_item",
+  "customer_family",
+  "customer_level",
+  "family_level",
+  "base_level",
+  "family_base_level",
+  "simple",
+  "family_base",
+]);
 
 /** Lineage kinds that resolve from a price schedule carry its id. */
 const SCHEDULE_KINDS = new Set([
-  'customer_item',
-  'customer_family',
-  'customer_level',
-  'family_level',
-  'base_level',
-  'family_base_level',
-])
+  "customer_item",
+  "customer_family",
+  "customer_level",
+  "family_level",
+  "base_level",
+  "family_base_level",
+]);
 
 /** Lineage kinds that resolve through a customer's level carry its ids. */
-const LEVEL_KINDS = new Set(['customer_level', 'family_level'])
+const LEVEL_KINDS = new Set(["customer_level", "family_level"]);
 
 function uuidOrNull(value: unknown): string | null | undefined {
-  if (value === null || value === undefined) return null
-  return isUuid(value) ? value : undefined
+  if (value === null || value === undefined) return null;
+  return isUuid(value) ? value : undefined;
 }
 
 /**
@@ -61,37 +61,44 @@ function uuidOrNull(value: unknown): string | null | undefined {
  * refusal: lineage that does not parse is not stored.
  */
 export function parsePriceBasis(raw: unknown): PriceBasis | null | { error: string } {
-  if (raw === null || raw === undefined) return null
-  if (typeof raw !== 'object' || Array.isArray(raw)) {
-    return { error: 'Line price basis must be an object or null' }
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    return { error: "Line price basis must be an object or null" };
   }
-  const basis = raw as Record<string, unknown>
+  const basis = raw as Record<string, unknown>;
   if (!KINDS.has(basis.kind as string)) {
-    return { error: 'Line price basis kind must be customer_item, customer_family, customer_level, family_level, base_level, family_base_level, simple or family_base' }
+    return {
+      error:
+        "Line price basis kind must be customer_item, customer_family, customer_level, family_level, base_level, family_base_level, simple or family_base",
+    };
   }
-  const scheduleId = uuidOrNull(basis.scheduleId)
-  const levelId = uuidOrNull(basis.levelId)
-  const assignmentId = uuidOrNull(basis.assignmentId)
+  const scheduleId = uuidOrNull(basis.scheduleId);
+  const levelId = uuidOrNull(basis.levelId);
+  const assignmentId = uuidOrNull(basis.assignmentId);
   if (scheduleId === undefined || levelId === undefined || assignmentId === undefined) {
-    return { error: 'Line price basis ids must be UUIDs or null' }
+    return { error: "Line price basis ids must be UUIDs or null" };
   }
-  if ((LEVEL_KINDS.has(basis.kind as string) && (levelId === null || assignmentId === null)) ||
-      (SCHEDULE_KINDS.has(basis.kind as string) && !LEVEL_KINDS.has(basis.kind as string) && scheduleId === null)) {
-    return { error: 'Line price basis is missing the id its kind resolves from' }
+  if (
+    (LEVEL_KINDS.has(basis.kind as string) && (levelId === null || assignmentId === null)) ||
+    (SCHEDULE_KINDS.has(basis.kind as string) &&
+      !LEVEL_KINDS.has(basis.kind as string) &&
+      scheduleId === null)
+  ) {
+    return { error: "Line price basis is missing the id its kind resolves from" };
   }
-  const unitPrice = canonicalDecimal(basis.unitPrice, 8)
-  if (unitPrice === null) return { error: 'Line price basis unit price must be a decimal' }
-  if (typeof basis.resolvedAt !== 'string' || Number.isNaN(Date.parse(basis.resolvedAt))) {
-    return { error: 'Line price basis resolved time must be an ISO-8601 instant' }
+  const unitPrice = canonicalDecimal(basis.unitPrice, 8);
+  if (unitPrice === null) return { error: "Line price basis unit price must be a decimal" };
+  if (typeof basis.resolvedAt !== "string" || Number.isNaN(Date.parse(basis.resolvedAt))) {
+    return { error: "Line price basis resolved time must be an ISO-8601 instant" };
   }
   return {
-    kind: basis.kind as PriceBasis['kind'],
+    kind: basis.kind as PriceBasis["kind"],
     scheduleId,
     levelId,
     assignmentId,
     unitPrice,
     resolvedAt: basis.resolvedAt,
-  }
+  };
 }
 
 /**
@@ -100,10 +107,11 @@ export function parsePriceBasis(raw: unknown): PriceBasis | null | { error: stri
  * Anything the operator touched after resolving prices by hand (null).
  */
 export function basisForResolvedRow(args: {
-  row: { itemId: string | null; unitPrice: string }
-  resolved: { itemId: string; unitPrice: string; basis: PriceBasis } | undefined
+  row: { itemId: string | null; unitPrice: string };
+  resolved: { itemId: string; unitPrice: string; basis: PriceBasis } | undefined;
 }): PriceBasis | null {
-  if (!args.resolved) return null
-  if (args.row.itemId !== args.resolved.itemId || args.row.unitPrice !== args.resolved.unitPrice) return null
-  return args.resolved.basis
+  if (!args.resolved) return null;
+  if (args.row.itemId !== args.resolved.itemId || args.row.unitPrice !== args.resolved.unitPrice)
+    return null;
+  return args.resolved.basis;
 }

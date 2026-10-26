@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { stubModules } from '../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
+import { stubModules } from "../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../testing/jsdom-env.ts";
 
 declare global {
   var __drawerRouter: { push(url: string): void; refresh(): void } | undefined;
@@ -18,7 +18,15 @@ declare global {
 const { registerHooks } = await import("node:module");
 await bootJsdomEnvironment({ url: "http://localhost:4800/ar/invoices", matchMediaMatches: false });
 
-stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return \'/ar/invoices\'}export function useSearchParams(){return new URLSearchParams()}' }, intl: false, authz: false, features: false });
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__drawerRouter}export function usePathname(){return '/ar/invoices'}export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+});
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -64,7 +72,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const SEGMENTS: never[] = [];
 const LAYOUT_WITH_POSTING_DATE = {
-  header: { groups: [{ id: "dates", label: "", fields: [{ key: "posting_date", visible: true }] }] },
+  header: {
+    groups: [{ id: "dates", label: "", fields: [{ key: "posting_date", visible: true }] }],
+  },
   lines: { columns: [] },
   actions: [],
 } as never;
@@ -76,10 +86,7 @@ function postingDateCell(): HTMLElement | null {
   return (label?.closest("div") as HTMLElement | null) ?? null;
 }
 
-async function mountInvoice(
-  t: import("node:test").TestContext,
-  status: "draft" | "posted",
-) {
+async function mountInvoice(t: import("node:test").TestContext, status: "draft" | "posted") {
   globalThis.__drawerRouter = { push() {}, refresh() {} };
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -157,7 +164,11 @@ test("a posted invoice edit shows the posting date without offering it", async (
   const cell = postingDateCell();
   assert.ok(cell, "the stored posting date must still render");
   assert.match(cell.textContent ?? "", /2026-07-15/, "the stored date stays visible");
-  assert.equal(cell.querySelector("input"), null, "no posting-date input may be offered on a posted edit");
+  assert.equal(
+    cell.querySelector("input"),
+    null,
+    "no posting-date input may be offered on a posted edit",
+  );
 });
 
 test("a draft invoice edit still offers the posting date", async (t) => {
@@ -165,6 +176,6 @@ test("a draft invoice edit still offers the posting date", async (t) => {
   await clickEdit();
   const cell = postingDateCell();
   assert.ok(cell, "the posting date field must render on a draft");
-  const input = cell.querySelector('input[data-date-field]') as HTMLInputElement | null;
+  const input = cell.querySelector("input[data-date-field]") as HTMLInputElement | null;
   assert.ok(input, "drafts keep the posting-date input");
 });

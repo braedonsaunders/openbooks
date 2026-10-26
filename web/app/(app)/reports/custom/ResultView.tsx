@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useTranslations } from 'next-intl'
-import type { ReportRunResult } from '@openbooks/reports'
-import { PaperView } from '../PaperView'
-import type { ReportDrillTarget } from '../../../../lib/report-drill'
-import { resultGroupsForPaper } from './paper-groups'
+import { useTranslations } from "next-intl";
+import type { ReportRunResult } from "@openbooks/reports";
+import { PaperView } from "../PaperView";
+import type { ReportDrillTarget } from "../../../../lib/report-drill";
+import { resultGroupsForPaper } from "./paper-groups";
 
 /**
  * Render a ReportRunResult exactly as the engine shapes it: a summary band of
@@ -20,17 +20,17 @@ export function ResultView({
   result,
   drillTarget,
 }: {
-  company: string
-  title: string
-  description?: string | null
-  result: ReportRunResult
-  drillTarget: ReportDrillTarget
+  company: string;
+  title: string;
+  description?: string | null;
+  result: ReportRunResult;
+  drillTarget: ReportDrillTarget;
 }) {
-  const t = useTranslations('reports.custom.resultView')
+  const t = useTranslations("reports.custom.resultView");
   return (
     <PaperView
       company={company}
-      emptyLabel={t('noRows')}
+      emptyLabel={t("noRows")}
       data={{
         title,
         periodPhrase: description || undefined,
@@ -41,5 +41,5 @@ export function ResultView({
         groups: resultGroupsForPaper(result, drillTarget),
       }}
     />
-  )
+  );
 }

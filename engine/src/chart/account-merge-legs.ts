@@ -39,8 +39,7 @@ export interface BalanceGroup extends BalanceDimensions {
 }
 
 export type TransferRate =
-  | { ok: true; fxRate: string }
-  | { ok: false; reason: "zero_functional" | "inconsistent_rate" };
+  { ok: true; fxRate: string } | { ok: false; reason: "zero_functional" | "inconsistent_rate" };
 
 const RATE_SCALE = 10_000_000_000n;
 /** jl_fx_consistent tolerates 0.005 between amount and round(txn × rate, 4): 50 units at four places. */
@@ -63,7 +62,9 @@ function formatRate(units: bigint): string {
  * rounding tolerance; otherwise the residue needs revaluation or an
  * adjusting entry first.
  */
-export function transferRate(group: Pick<BalanceGroup, "amount" | "txnAmount" | "currency" | "functionalCurrency">): TransferRate {
+export function transferRate(
+  group: Pick<BalanceGroup, "amount" | "txnAmount" | "currency" | "functionalCurrency">,
+): TransferRate {
   const amountUnits = toUnits(group.amount);
   if (amountUnits === 0n) return { ok: false, reason: "zero_functional" };
   if (group.currency === group.functionalCurrency) {
@@ -73,13 +74,15 @@ export function transferRate(group: Pick<BalanceGroup, "amount" | "txnAmount" | 
   }
   const txnUnits = toUnits(group.txnAmount);
   // A positive rate needs both amounts on the same side of zero.
-  if (txnUnits === 0n || (txnUnits > 0n) !== (amountUnits > 0n)) return { ok: false, reason: "inconsistent_rate" };
+  if (txnUnits === 0n || txnUnits > 0n !== amountUnits > 0n)
+    return { ok: false, reason: "inconsistent_rate" };
   const magnitude = (units: bigint) => (units < 0n ? -units : units);
   const rateUnits = roundDiv(magnitude(amountUnits) * RATE_SCALE, magnitude(txnUnits));
   if (rateUnits <= 0n) return { ok: false, reason: "inconsistent_rate" };
   const reproduced = roundDiv(txnUnits * rateUnits, RATE_SCALE);
   const drift = reproduced - amountUnits;
-  if (drift > FX_TOLERANCE_UNITS || drift < -FX_TOLERANCE_UNITS) return { ok: false, reason: "inconsistent_rate" };
+  if (drift > FX_TOLERANCE_UNITS || drift < -FX_TOLERANCE_UNITS)
+    return { ok: false, reason: "inconsistent_rate" };
   return { ok: true, fxRate: formatRate(rateUnits) };
 }
 
@@ -127,13 +130,19 @@ export function buildReclassEntries(
   targetAccountId: string,
 ): ReclassEntry[] {
   const entries = new Map<string, ReclassEntry>();
-  const ordered = [...groups].sort((a, b) =>
-    a.bookId.localeCompare(b.bookId)
-    || a.subsidiaryId.localeCompare(b.subsidiaryId)
-    || dimensionKey(a).localeCompare(dimensionKey(b)));
+  const ordered = [...groups].sort(
+    (a, b) =>
+      a.bookId.localeCompare(b.bookId) ||
+      a.subsidiaryId.localeCompare(b.subsidiaryId) ||
+      dimensionKey(a).localeCompare(dimensionKey(b)),
+  );
   for (const group of ordered) {
     const key = `${group.bookId}|${group.subsidiaryId}`;
-    const entry = entries.get(key) ?? { bookId: group.bookId, subsidiaryId: group.subsidiaryId, lines: [] };
+    const entry = entries.get(key) ?? {
+      bookId: group.bookId,
+      subsidiaryId: group.subsidiaryId,
+      lines: [],
+    };
     const dims: BalanceDimensions = {
       departmentId: group.departmentId,
       projectId: group.projectId,

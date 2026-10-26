@@ -24,11 +24,14 @@ const writeEffectHarness = {
   responses: [] as Array<{ rows: unknown[] } | ((queryText: string) => { rows: unknown[] })>,
   queries: [] as Array<{ text: string }>,
   execute(query: { text?: string }, mode?: string) {
-    const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+    const inMode = <T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result;
     const text = String(query.text ?? "");
     this.queries.push({ text });
     const response = this.responses.shift();
-    return Promise.resolve(typeof response === "function" ? response(text) : response ?? { rows: [] }).then(inMode);
+    return Promise.resolve(
+      typeof response === "function" ? response(text) : (response ?? { rows: [] }),
+    ).then(inMode);
   },
   reset() {
     this.responses.length = 0;
@@ -36,16 +39,19 @@ const writeEffectHarness = {
   },
 };
 
-(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.email-log-write-effect-test")] =
-  writeEffectHarness;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[
+  Symbol.for("openbooks.email-log-write-effect-test")
+] = writeEffectHarness;
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
     // Scope the mock to the cache-busted graph only so other files in this
     // process still load the real email-config database binding.
     if (!context.parentURL?.includes("write-effect-audit")) return nextResolve(specifier, context);
-    if (specifier === "drizzle-orm") return { url: "mock:email-log-write-effect-drizzle", shortCircuit: true };
-    if (specifier === "../platform/db.ts") return { url: "mock:email-log-write-effect-db", shortCircuit: true };
+    if (specifier === "drizzle-orm")
+      return { url: "mock:email-log-write-effect-drizzle", shortCircuit: true };
+    if (specifier === "../platform/db.ts")
+      return { url: "mock:email-log-write-effect-db", shortCircuit: true };
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -97,13 +103,24 @@ function lastWriteEffectSql(): string {
 // cannot finish the initial queue while later tests are still being loaded.
 
 test("redactEmailConfig strips the sealed secret and reports whether one exists", () => {
-  const withSecret = redactEmailConfig({ provider: "resend", fromEmail: "billing@example.test", ...SEALED });
+  const withSecret = redactEmailConfig({
+    provider: "resend",
+    fromEmail: "billing@example.test",
+    ...SEALED,
+  });
   assert.equal(withSecret.hasSecret, true);
-  assert.equal("keyCiphertext" in withSecret, false, "the seal ciphertext must never leave the store");
+  assert.equal(
+    "keyCiphertext" in withSecret,
+    false,
+    "the seal ciphertext must never leave the store",
+  );
   assert.equal("keyNonce" in withSecret, false, "the seal nonce must never leave the store");
   assert.equal(withSecret.provider, "resend");
 
-  assert.equal(redactEmailConfig({ provider: "smtp", smtpHost: "smtp.example.test" }).hasSecret, false);
+  assert.equal(
+    redactEmailConfig({ provider: "smtp", smtpHost: "smtp.example.test" }).hasSecret,
+    false,
+  );
   assert.equal(redactEmailConfig(null).hasSecret, false);
   // A half-written seal is no secret: both halves are required.
   assert.equal(redactEmailConfig({ keyCiphertext: SEALED.keyCiphertext }).hasSecret, false);
@@ -123,14 +140,32 @@ test("emailSecretChange derives the audit credential marker without secret mater
 });
 
 test("email writes refuse missing actor attribution before writing", async () => {
-  for (const userId of ["   ", ""]) await assert.rejects(saveOrgEmailConfig("org-1", { enabled: false } satisfies SaveOrgEmailInput, { kind: "user", userId }), /non-empty acting user id/u);
+  for (const userId of ["   ", ""])
+    await assert.rejects(
+      saveOrgEmailConfig("org-1", { enabled: false } satisfies SaveOrgEmailInput, {
+        kind: "user",
+        userId,
+      }),
+      /non-empty acting user id/u,
+    );
   writeEffectHarness.reset();
-  await assert.rejects(insertEmailLogUnderTest({ orgId: "org-1", recipients: ["a@b.test"], subject: "Test", status: "queued" } as never), /require a user actor/u);
+  await assert.rejects(
+    insertEmailLogUnderTest({
+      orgId: "org-1",
+      recipients: ["a@b.test"],
+      subject: "Test",
+      status: "queued",
+    } as never),
+    /require a user actor/u,
+  );
   assert.equal(writeEffectHarness.queries.length, 0);
 });
 
 test("the conflict error names both revisions so a caller can reload deterministically", () => {
-  const error = new OrgEmailConfigConflictError("2026-08-27T00:00:00.000Z", "2026-08-27T00:01:00.000Z");
+  const error = new OrgEmailConfigConflictError(
+    "2026-08-27T00:00:00.000Z",
+    "2026-08-27T00:01:00.000Z",
+  );
   assert.equal(error.name, "OrgEmailConfigConflictError");
   assert.equal(error.expectedUpdatedAt, "2026-08-27T00:00:00.000Z");
   assert.equal(error.persistedUpdatedAt, "2026-08-27T00:01:00.000Z");
@@ -157,14 +192,22 @@ test("markEmailFailed leaves a present-but-protected row alone without refusing"
   writeEffectHarness.reset();
   writeEffectHarness.responses.push({ rows: [{ status: "uncertain", written: 0 }] });
   await markEmailFailedUnderTest("org-1", "log-uncertain", "retry also failed");
-  assert.equal(writeEffectHarness.queries.length, 1, "the existence fact comes from the same statement, not a follow-up read");
+  assert.equal(
+    writeEffectHarness.queries.length,
+    1,
+    "the existence fact comes from the same statement, not a follow-up read",
+  );
 });
 
 test("markEmailUncertain leaves a present-but-protected row alone without refusing", async () => {
   writeEffectHarness.reset();
   writeEffectHarness.responses.push({ rows: [{ status: "sent", written: 0 }] });
   await markEmailUncertainUnderTest("org-1", "log-sent", "acceptance could not be confirmed");
-  assert.equal(writeEffectHarness.queries.length, 1, "the existence fact comes from the same statement, not a follow-up read");
+  assert.equal(
+    writeEffectHarness.queries.length,
+    1,
+    "the existence fact comes from the same statement, not a follow-up read",
+  );
 });
 
 test("markEmailFailed refuses when the failed-state audit update writes zero rows and no row is visible", async () => {
@@ -181,7 +224,12 @@ test("markEmailUncertain refuses when the uncertainty fence writes zero rows and
   writeEffectHarness.reset();
   writeEffectHarness.responses.push({ rows: [] }, { rows: [{ status: "queued" }] });
   await assert.rejects(
-    () => markEmailUncertainUnderTest("org-1", "log-queued", "provider acceptance could not be confirmed"),
+    () =>
+      markEmailUncertainUnderTest(
+        "org-1",
+        "log-queued",
+        "provider acceptance could not be confirmed",
+      ),
     /email_log log-queued was not marked uncertain[\s\S]*matched no row/u,
   );
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
@@ -195,7 +243,11 @@ test("markEmailFailed refuses when the failed-state update writes zero rows even
     /email_log log-uncertain was not marked failed[\s\S]*matched no row/u,
   );
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
-  assert.equal(writeEffectHarness.queries.length, 1, "a zero-row write must refuse without a follow-up success read");
+  assert.equal(
+    writeEffectHarness.queries.length,
+    1,
+    "a zero-row write must refuse without a follow-up success read",
+  );
 });
 
 test("markEmailUncertain refuses when the uncertainty update writes zero rows even if a follow-up read would see uncertain", async () => {
@@ -206,7 +258,11 @@ test("markEmailUncertain refuses when the uncertainty update writes zero rows ev
     /email_log log-uncertain was not marked uncertain[\s\S]*matched no row/u,
   );
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
-  assert.equal(writeEffectHarness.queries.length, 1, "a zero-row write must refuse without a follow-up success read");
+  assert.equal(
+    writeEffectHarness.queries.length,
+    1,
+    "a zero-row write must refuse without a follow-up success read",
+  );
 });
 
 test("markEmailSent resolves when the sent-state update returns the log id", async () => {
@@ -220,7 +276,12 @@ test("markEmailSuppressed refuses when the suppression update writes zero rows a
   writeEffectHarness.reset();
   writeEffectHarness.responses.push({ rows: [] }, { rows: [] });
   await assert.rejects(
-    () => markEmailSuppressedUnderTest("org-1", "log-missing", "sandbox environment — email egress blocked"),
+    () =>
+      markEmailSuppressedUnderTest(
+        "org-1",
+        "log-missing",
+        "sandbox environment — email egress blocked",
+      ),
     /email_log log-missing was not marked suppressed[\s\S]*matched no row/u,
   );
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
@@ -228,16 +289,27 @@ test("markEmailSuppressed refuses when the suppression update writes zero rows a
 
 test("markEmailSuppressed treats an already suppressed row as idempotent success", async () => {
   writeEffectHarness.reset();
-  writeEffectHarness.responses.push((text) => text.includes("with updated") ? { rows: [{ status: "suppressed", written: 0 }] } : { rows: [] });
-  await markEmailSuppressedUnderTest("org-1", "log-suppressed", "sandbox environment — email egress blocked");
+  writeEffectHarness.responses.push((text) =>
+    text.includes("with updated") ? { rows: [{ status: "suppressed", written: 0 }] } : { rows: [] },
+  );
+  await markEmailSuppressedUnderTest(
+    "org-1",
+    "log-suppressed",
+    "sandbox environment — email egress blocked",
+  );
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
-  assert.equal(writeEffectHarness.queries.length, 1, "the guarded transition reports existing suppression in one statement");
+  assert.equal(
+    writeEffectHarness.queries.length,
+    1,
+    "the guarded transition reports existing suppression in one statement",
+  );
 });
 
 test("appendEmailAttemptEvent refuses when the lineage update writes zero rows", async () => {
   writeEffectHarness.reset();
   await assert.rejects(
-    () => appendEmailAttemptEventUnderTest("org-1", "log-missing", { outcome: "started", attempt: 1 }),
+    () =>
+      appendEmailAttemptEventUnderTest("org-1", "log-missing", { outcome: "started", attempt: 1 }),
     /email_log log-missing attempt lineage was not appended[\s\S]*matched no row/u,
   );
   assert.match(lastWriteEffectSql(), /returning/u);
@@ -261,7 +333,11 @@ test("markPaymentRemittanceAttempt refuses when the pending stamp writes zero ro
     /payment remittance remit-sent was not marked attempted[\s\S]*matched no row/u,
   );
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
-  assert.equal(writeEffectHarness.queries.length, 1, "a zero-row write must refuse without a follow-up success read");
+  assert.equal(
+    writeEffectHarness.queries.length,
+    1,
+    "a zero-row write must refuse without a follow-up success read",
+  );
 });
 
 test("markPaymentRemittanceFailed refuses when the pending update writes zero rows and the remittance is still pending", async () => {
@@ -277,7 +353,17 @@ test("markPaymentRemittanceFailed refuses when the pending update writes zero ro
 test("markPaymentRemittanceFailed preserves a remittance already sent by the worker", async () => {
   writeEffectHarness.reset();
   writeEffectHarness.responses.push({ rows: [{ status: "sent", written: 0 }] });
-  await markPaymentRemittanceFailedUnderTest("org-1", "remit-sent", "enqueue acknowledgement lost", 1, true);
+  await markPaymentRemittanceFailedUnderTest(
+    "org-1",
+    "remit-sent",
+    "enqueue acknowledgement lost",
+    1,
+    true,
+  );
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
-  assert.equal(writeEffectHarness.queries.length, 1, "terminal state is resolved from the guarded write itself");
+  assert.equal(
+    writeEffectHarness.queries.length,
+    1,
+    "terminal state is resolved from the guarded write itself",
+  );
 });

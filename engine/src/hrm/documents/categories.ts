@@ -43,7 +43,10 @@ export function validateCategoryKey(key: unknown): string {
     );
   }
   if (/\s/.test(clean)) {
-    throw new HrmDocumentsError("VALIDATION", "category key must not contain whitespace — use a code like contract");
+    throw new HrmDocumentsError(
+      "VALIDATION",
+      "category key must not contain whitespace — use a code like contract",
+    );
   }
   if (clean.length > 80) {
     throw new HrmDocumentsError("VALIDATION", "category key must be 80 characters or fewer");
@@ -57,10 +60,13 @@ export async function assertCategoryDeclared(
   orgId: string,
   categoryKey: string,
 ): Promise<void> {
-  const rows = await exec.execute<{ id: string }>(sql`
+  const rows = await exec.execute<{ id: string }>(
+    sql`
     select id from hrm_document_categories
      where org_id = ${orgId} and key = ${categoryKey} and is_active
-  `, "objects");
+  `,
+    "objects",
+  );
   if (rows.length === 0) {
     throw new HrmDocumentsError(
       "VALIDATION",
@@ -75,13 +81,16 @@ export async function listCategories(query: {
   includeInactive?: boolean;
 }): Promise<DocumentCategoryDTO[]> {
   await requireHrmDocumentsRead(db, query.orgId, query.actorId);
-  const rows = await db.execute<CategoryRow>(sql`
+  const rows = await db.execute<CategoryRow>(
+    sql`
     select id, key, label, is_active
       from hrm_document_categories
      where org_id = ${query.orgId}
        ${query.includeInactive ? sql`` : sql`and is_active`}
      order by label
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map(toDTO);
 }
 
@@ -99,13 +108,18 @@ export async function saveCategory(input: {
   return withOrgTransaction(input.orgId, async () => {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
     if (input.categoryId) {
-      const updated = (await db.execute<CategoryRow>(sql`
+      const updated = (
+        await db.execute<CategoryRow>(
+          sql`
         update hrm_document_categories
            set key = ${key}, label = ${label}, is_active = ${input.isActive ?? true},
                updated_at = now(), updated_by = ${input.actorId}
          where org_id = ${input.orgId} and id = ${input.categoryId}
         returning id, key, label, is_active
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       // Zero matched rows is a failure: unknown id or another org's row.
       if (!updated) {
         throw new HrmDocumentsError(
@@ -116,13 +130,18 @@ export async function saveCategory(input: {
       return toDTO(updated);
     }
     try {
-      const inserted = (await db.execute<CategoryRow>(sql`
+      const inserted = (
+        await db.execute<CategoryRow>(
+          sql`
         insert into hrm_document_categories
           (org_id, key, label, is_active, created_by, updated_by)
         values (${input.orgId}, ${key}, ${label}, ${input.isActive ?? true},
                 ${input.actorId}, ${input.actorId})
         returning id, key, label, is_active
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!inserted) {
         throw new HrmDocumentsError(
           "REFUSED",
@@ -139,7 +158,11 @@ export async function saveCategory(input: {
         const cause = (cursor as { cause?: unknown }).cause;
         cursor = cause instanceof Error ? cause : null;
       }
-      if (/duplicate key|unique violation|23505|hrm_document_categories_org_key/i.test(chain.join("\n"))) {
+      if (
+        /duplicate key|unique violation|23505|hrm_document_categories_org_key/i.test(
+          chain.join("\n"),
+        )
+      ) {
         throw new HrmDocumentsError(
           "REFUSED",
           `category ${JSON.stringify(key)} is already declared — edit it instead of adding a second`,

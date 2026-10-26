@@ -78,7 +78,10 @@ export function yearFraction(dayCount: DayCount, from: string, to: string): Rati
         const year = Number(cursor.slice(0, 4));
         const nextYear = `${String(year + 1).padStart(4, "0")}-01-01`;
         const end = nextYear < to ? nextYear : to;
-        total = addRational(total, rational(BigInt(calendarDaysBetween(cursor, end)), isLeap(year) ? 366n : 365n));
+        total = addRational(
+          total,
+          rational(BigInt(calendarDaysBetween(cursor, end)), isLeap(year) ? 366n : 365n),
+        );
         cursor = end;
       }
       return total;
@@ -106,13 +109,21 @@ export function noteInterest(terms: InterestTerms, asOf: string): Rational {
   }
   const dayCount = terms.interestDayCount as DayCount;
   const months = COMPOUNDING_MONTHS[terms.interestBasis];
-  if (months === null) return multiplyRational(principal, multiplyRational(rate, yearFraction(dayCount, terms.issueDate, asOf)));
+  if (months === null)
+    return multiplyRational(
+      principal,
+      multiplyRational(rate, yearFraction(dayCount, terms.issueDate, asOf)),
+    );
   const periods = Math.floor(completedMonths(terms.issueDate, asOf) / months);
   const last = addMonthsClamped(terms.issueDate, periods * months);
   const growth = addRational(ONE, multiplyRational(rate, rational(BigInt(months), 12n)));
   let value = principal;
   const scale = 10n ** BigInt(PRICE_SCALE);
-  for (let period = 0; period < periods; period += 1) value = rational(quantize(multiplyRational(value, growth), PRICE_SCALE, "half_up"), scale);
-  value = multiplyRational(value, addRational(ONE, multiplyRational(rate, yearFraction(dayCount, last, asOf))));
+  for (let period = 0; period < periods; period += 1)
+    value = rational(quantize(multiplyRational(value, growth), PRICE_SCALE, "half_up"), scale);
+  value = multiplyRational(
+    value,
+    addRational(ONE, multiplyRational(rate, yearFraction(dayCount, last, asOf))),
+  );
   return subtractRational(value, principal);
 }

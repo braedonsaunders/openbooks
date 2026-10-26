@@ -1,7 +1,7 @@
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import type { PageLayoutPrefs } from '@openbooks/schema'
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import type { PageLayoutPrefs } from "@openbooks/schema";
 
 /**
  * Per-user page layout preferences (user_page_layouts) — reorder + show/hide
@@ -9,9 +9,12 @@ import type { PageLayoutPrefs } from '@openbooks/schema'
  * /api/me/page-layout. Absent row = product default layout.
  */
 export async function userPageLayout(userId: string, page: string): Promise<PageLayoutPrefs> {
-  const r = (await db.execute<{ layout: PageLayoutPrefs }>(sql`
+  const r = await db.execute<{ layout: PageLayoutPrefs }>(
+    sql`
     select layout from user_page_layouts where user_id = ${userId} and page = ${page} limit 1
-  `, 'objects'))
-  const layout = r[0]?.layout
-  return layout && typeof layout === 'object' ? layout : {}
+  `,
+    "objects",
+  );
+  const layout = r[0]?.layout;
+  return layout && typeof layout === "object" ? layout : {};
 }

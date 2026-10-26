@@ -11,10 +11,16 @@ import test from "node:test";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __bankRulePriorityState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/feature-gates"))
       return virtual(`
         export async function guardFeaturePermission() {
@@ -27,12 +33,16 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 const CRITERIA = {
   version: 2,
-  match: { combinator: "and", rules: [{ field: "description", op: "contains", value: "TIM HORTONS" }] },
+  match: {
+    combinator: "and",
+    rules: [{ field: "description", op: "contains", value: "TIM HORTONS" }],
+  },
 };
 const OUTCOME = { action: "exclude" };
 
@@ -46,32 +56,58 @@ async function fixture() {
 
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () =>
-    POST(new Request("http://bank.test/api/banking/rules", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    })),
+    POST(
+      new Request("http://bank.test/api/banking/rules", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
 
 async function ruleCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from bank_match_rules where org_id = ${orgId}`, "objects"));
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from bank_match_rules where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
 async function priorities(orgId: string): Promise<number[]> {
-  return (await withBypassContext(() => db.execute<{ priority: number }>(sql`
+  return (
+    await withBypassContext(() =>
+      db.execute<{ priority: number }>(
+        sql`
     select priority from bank_match_rules where org_id = ${orgId} order by created_at
-  `, "objects"))).map((row) => row.priority);
+  `,
+        "objects",
+      ),
+    )
+  ).map((row) => row.priority);
 }
 
 test("bank-rule creation refuses an out-of-int32 priority without writing", async () => {
   const { org } = await fixture();
   try {
-    const response = await post({ name: "Probe rule", criteria: CRITERIA, outcome: OUTCOME, priority: 99999999999999999999 });
+    const response = await post({
+      name: "Probe rule",
+      criteria: CRITERIA,
+      outcome: OUTCOME,
+      priority: 99999999999999999999,
+    });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.notEqual(response.status, 500, `expected a named error, got 500: ${JSON.stringify(json)}`);
-    assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.notEqual(
+      response.status,
+      500,
+      `expected a named error, got 500: ${JSON.stringify(json)}`,
+    );
+    assert.equal(
+      response.status,
+      400,
+      `expected 400, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.equal(await ruleCount(org.orgId), 0);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -81,7 +117,12 @@ test("bank-rule creation refuses an out-of-int32 priority without writing", asyn
 test("bank-rule creation still files an ordinary priority", async () => {
   const { org } = await fixture();
   try {
-    const response = await post({ name: "Probe rule", criteria: CRITERIA, outcome: OUTCOME, priority: 50 });
+    const response = await post({
+      name: "Probe rule",
+      criteria: CRITERIA,
+      outcome: OUTCOME,
+      priority: 50,
+    });
     const json = (await response.json().catch(() => null)) as { id?: string } | null;
     assert.equal(response.status, 200, JSON.stringify(json));
     assert.equal(await ruleCount(org.orgId), 1);
@@ -93,7 +134,12 @@ test("bank-rule creation still files an ordinary priority", async () => {
 test("bank-rule creation preserves an explicitly configured zero priority", async () => {
   const { org } = await fixture();
   try {
-    const response = await post({ name: "Zero priority rule", criteria: CRITERIA, outcome: OUTCOME, priority: 0 });
+    const response = await post({
+      name: "Zero priority rule",
+      criteria: CRITERIA,
+      outcome: OUTCOME,
+      priority: 0,
+    });
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
     assert.deepEqual(await priorities(org.orgId), [0]);
   } finally {

@@ -57,7 +57,10 @@ export const promotions = pgTable(
     // One code per organization, matched case-insensitively.
     uniqueIndex("promotions_org_code_ci").on(t.orgId, sql`lower(${t.code})`),
     index("promotions_org_status").on(t.orgId, t.status),
-    check("promotions_kind_valid", sql`${t.kind} in ('percent', 'amount', 'free_shipping', 'buy_x_get_y')`),
+    check(
+      "promotions_kind_valid",
+      sql`${t.kind} in ('percent', 'amount', 'free_shipping', 'buy_x_get_y')`,
+    ),
     check("promotions_status_valid", sql`${t.status} in ('draft', 'active', 'archived')`),
     foreignKey({
       columns: [t.orgId, t.discountAccountId],
@@ -106,4 +109,3 @@ export const restockingFeePolicies = pgTable(
     }),
   ],
 );
-

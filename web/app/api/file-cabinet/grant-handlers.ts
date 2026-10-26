@@ -1,6 +1,6 @@
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
 import {
   cabinetResourceExists,
   GrantScopeRefusal,
@@ -9,10 +9,10 @@ import {
   removeGrant,
   setGrant,
   type ResourceType,
-} from '../../../lib/file-cabinet'
-import { isUuid } from '../../../lib/list-params'
-import type { Authz } from '../../../lib/authz'
-import { fileViewer, requireFileAccess, requireFolderAccess } from './lib'
+} from "../../../lib/file-cabinet";
+import { isUuid } from "../../../lib/list-params";
+import type { Authz } from "../../../lib/authz";
+import { fileViewer, requireFileAccess, requireFolderAccess } from "./lib";
 import { notFound } from "@/lib/api/responses";
 
 /** Manager on the resource is required to view or edit its sharing. */
@@ -22,9 +22,9 @@ async function requireManager(
   resourceType: ResourceType,
   resourceId: string,
 ): Promise<NextResponse | null> {
-  return resourceType === 'folder'
-    ? requireFolderAccess(authz, resourceId, 'manager')
-    : requireFileAccess(authz, resourceId, 'manager')
+  return resourceType === "folder"
+    ? requireFolderAccess(authz, resourceId, "manager")
+    : requireFileAccess(authz, resourceId, "manager");
 }
 
 /** Confirm the principal (user or role) exists inside the caller's org. */
@@ -33,11 +33,14 @@ async function principalExists(
   principalType: string,
   principalId: string,
 ): Promise<boolean> {
-  const table = principalType === 'user' ? sql`users` : sql`app_roles`
-  const r = (await db.execute(sql`
+  const table = principalType === "user" ? sql`users` : sql`app_roles`;
+  const r = await db.execute(
+    sql`
     select 1 from ${table} where id = ${principalId} and org_id = ${orgId} limit 1
-  `, 'objects'))
-  return r.length > 0
+  `,
+    "objects",
+  );
+  return r.length > 0;
 }
 
 /** A grant anchor the caller's org cannot observe reads as not found. */
@@ -47,9 +50,9 @@ async function requireAnchor(
   resourceId: string,
 ): Promise<NextResponse | null> {
   if (!(await cabinetResourceExists(authz.user.orgId, resourceType, resourceId))) {
-    return notFound("record")
+    return notFound("record");
   }
-  return null
+  return null;
 }
 
 /** GET — list the grants on a resource. */
@@ -58,13 +61,13 @@ export async function getGrants(
   resourceType: ResourceType,
   resourceId: string,
 ): Promise<NextResponse> {
-  if (!isUuid(resourceId)) return notFound("record")
-  const anchor = await requireAnchor(authz, resourceType, resourceId)
-  if (anchor) return anchor
-  const gate = await requireManager(authz, resourceType, resourceId)
-  if (gate) return gate
-  const grants = await listGrants(authz.user.orgId, resourceType, resourceId)
-  return NextResponse.json({ grants })
+  if (!isUuid(resourceId)) return notFound("record");
+  const anchor = await requireAnchor(authz, resourceType, resourceId);
+  if (anchor) return anchor;
+  const gate = await requireManager(authz, resourceType, resourceId);
+  if (gate) return gate;
+  const grants = await listGrants(authz.user.orgId, resourceType, resourceId);
+  return NextResponse.json({ grants });
 }
 
 /** POST — create/update a grant. Body: { principalType, principalId, access }. */
@@ -74,27 +77,30 @@ export async function postGrant(
   resourceId: string,
   body: unknown,
 ): Promise<NextResponse> {
-  if (!isUuid(resourceId)) return notFound("record")
-  const anchor = await requireAnchor(authz, resourceType, resourceId)
-  if (anchor) return anchor
-  const gate = await requireManager(authz, resourceType, resourceId)
-  if (gate) return gate
+  if (!isUuid(resourceId)) return notFound("record");
+  const anchor = await requireAnchor(authz, resourceType, resourceId);
+  if (anchor) return anchor;
+  const gate = await requireManager(authz, resourceType, resourceId);
+  if (gate) return gate;
 
-  const b = (body ?? {}) as Record<string, unknown>
-  const principalType = b.principalType
-  const principalId = b.principalId
-  const access = b.access
-  if (principalType !== 'user' && principalType !== 'role') {
-    return NextResponse.json({ error: 'principalType must be user or role' }, { status: 400 })
+  const b = (body ?? {}) as Record<string, unknown>;
+  const principalType = b.principalType;
+  const principalId = b.principalId;
+  const access = b.access;
+  if (principalType !== "user" && principalType !== "role") {
+    return NextResponse.json({ error: "principalType must be user or role" }, { status: 400 });
   }
-  if (typeof principalId !== 'string' || !isUuid(principalId)) {
-    return NextResponse.json({ error: 'valid principalId is required' }, { status: 400 })
+  if (typeof principalId !== "string" || !isUuid(principalId)) {
+    return NextResponse.json({ error: "valid principalId is required" }, { status: 400 });
   }
   if (!isAccessLevel(access)) {
-    return NextResponse.json({ error: 'access must be viewer, editor, or manager' }, { status: 400 })
+    return NextResponse.json(
+      { error: "access must be viewer, editor, or manager" },
+      { status: 400 },
+    );
   }
   if (!(await principalExists(authz.user.orgId, principalType, principalId))) {
-    return NextResponse.json({ error: 'principal not found' }, { status: 404 })
+    return NextResponse.json({ error: "principal not found" }, { status: 404 });
   }
 
   try {
@@ -107,12 +113,13 @@ export async function postGrant(
       access,
       actorId: authz.user.id,
       audit: { actorId: authz.user.id, viewer: fileViewer(authz) },
-    })
+    });
   } catch (error) {
-    if (error instanceof GrantScopeRefusal) return NextResponse.json({ error: error.message }, { status: 403 })
-    throw error
+    if (error instanceof GrantScopeRefusal)
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    throw error;
   }
-  return NextResponse.json({ ok: true }, { status: 201 })
+  return NextResponse.json({ ok: true }, { status: 201 });
 }
 
 /** DELETE — remove a grant by id. */
@@ -123,19 +130,16 @@ export async function deleteGrant(
   grantId: string,
 ): Promise<NextResponse> {
   if (!isUuid(resourceId) || !isUuid(grantId)) {
-    return notFound("record")
+    return notFound("record");
   }
-  const anchor = await requireAnchor(authz, resourceType, resourceId)
-  if (anchor) return anchor
-  const gate = await requireManager(authz, resourceType, resourceId)
-  if (gate) return gate
-  const ok = await removeGrant(
-    authz.user.orgId,
-    grantId,
-    resourceType,
-    resourceId,
-    { actorId: authz.user.id, viewer: fileViewer(authz) },
-  )
-  if (!ok) return notFound("record")
-  return NextResponse.json({ ok: true })
+  const anchor = await requireAnchor(authz, resourceType, resourceId);
+  if (anchor) return anchor;
+  const gate = await requireManager(authz, resourceType, resourceId);
+  if (gate) return gate;
+  const ok = await removeGrant(authz.user.orgId, grantId, resourceType, resourceId, {
+    actorId: authz.user.id,
+    viewer: fileViewer(authz),
+  });
+  if (!ok) return notFound("record");
+  return NextResponse.json({ ok: true });
 }

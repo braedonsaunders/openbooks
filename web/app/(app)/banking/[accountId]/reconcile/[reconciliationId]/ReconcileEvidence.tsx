@@ -1,15 +1,23 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { useTranslations } from 'next-intl'
-import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
-import type { HistoryRow, StatementEvidenceRow } from './evidence-format'
-import { EVIDENCE_MISSING } from './evidence-format'
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import {
+  Badge,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@openbooks/ui";
+import type { HistoryRow, StatementEvidenceRow } from "./evidence-format";
+import { EVIDENCE_MISSING } from "./evidence-format";
 
-const paneTitle = 'text-sm font-semibold text-slate-900 dark:text-slate-100'
+const paneTitle = "text-sm font-semibold text-slate-900 dark:text-slate-100";
 
 /** Column count of the statement table, for the excluded-line sub-rows. */
-const STATEMENT_COLUMNS = 11
+const STATEMENT_COLUMNS = 11;
 
 /**
  * Every bank statement that supports the session's balance. Excluded lines
@@ -23,44 +31,46 @@ export function SupportingStatements({
   throughDate,
   statements,
 }: {
-  accountPath: string
-  sourceEvidence: boolean
-  windowStart: string | null
-  throughDate: string
-  statements: StatementEvidenceRow[]
+  accountPath: string;
+  sourceEvidence: boolean;
+  windowStart: string | null;
+  throughDate: string;
+  statements: StatementEvidenceRow[];
 }) {
-  const t = useTranslations('banking.reconcileEvidence')
+  const t = useTranslations("banking.reconcileEvidence");
   return (
     <section className="space-y-3" aria-labelledby="reconcile-statements-title">
       <div className="space-y-1">
-        <h2 id="reconcile-statements-title" className={paneTitle}>{t('statements.title')}</h2>
+        <h2 id="reconcile-statements-title" className={paneTitle}>
+          {t("statements.title")}
+        </h2>
         <p className="text-sm text-slate-600 dark:text-slate-300">
           {windowStart
-            ? t('statements.windowAfter', { start: windowStart, end: throughDate })
-            : t('statements.windowThrough', { end: throughDate })}
+            ? t("statements.windowAfter", { start: windowStart, end: throughDate })
+            : t("statements.windowThrough", { end: throughDate })}
         </p>
       </div>
       {statements.length === 0 ? (
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          {sourceEvidence ? t('statements.sourceEmpty') : t('statements.empty')}
+          {sourceEvidence ? t("statements.sourceEmpty") : t("statements.empty")}
         </p>
       ) : (
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t('statements.columns.date')}</TableHead>
-                <TableHead>{t('statements.columns.source')}</TableHead>
-                <TableHead>{t('statements.columns.imported')}</TableHead>
-                <TableHead className="text-right">{t('statements.columns.opening')}</TableHead>
-                <TableHead className="text-right">{t('statements.columns.closing')}</TableHead>
-                <TableHead className="text-right">{t('statements.columns.lines')}</TableHead>
-                <TableHead className="text-right">{t('statements.columns.matched')}</TableHead>
-                <TableHead className="text-right">{t('statements.columns.excluded')}</TableHead>
-                <TableHead className="text-right">{t('statements.columns.unmatched')}</TableHead>
-                <TableHead className="text-right">{t('statements.columns.total')}</TableHead>
+                <TableHead>{t("statements.columns.date")}</TableHead>
+                <TableHead>{t("statements.columns.source")}</TableHead>
+                <TableHead>{t("statements.columns.imported")}</TableHead>
+                <TableHead className="text-right">{t("statements.columns.opening")}</TableHead>
+                <TableHead className="text-right">{t("statements.columns.closing")}</TableHead>
+                <TableHead className="text-right">{t("statements.columns.lines")}</TableHead>
+                <TableHead className="text-right">{t("statements.columns.matched")}</TableHead>
+                <TableHead className="text-right">{t("statements.columns.excluded")}</TableHead>
+                <TableHead className="text-right">{t("statements.columns.unmatched")}</TableHead>
+                <TableHead className="text-right">{t("statements.columns.total")}</TableHead>
                 <TableHead>
-                  <span className="sr-only">{t('statements.columns.open')}</span>
+                  <span className="sr-only">{t("statements.columns.open")}</span>
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -73,11 +83,17 @@ export function SupportingStatements({
         </div>
       )}
     </section>
-  )
+  );
 }
 
-function StatementRows({ accountPath, statement }: { accountPath: string; statement: StatementEvidenceRow }) {
-  const t = useTranslations('banking.reconcileEvidence')
+function StatementRows({
+  accountPath,
+  statement,
+}: {
+  accountPath: string;
+  statement: StatementEvidenceRow;
+}) {
+  const t = useTranslations("banking.reconcileEvidence");
   return (
     <>
       <TableRow>
@@ -96,7 +112,7 @@ function StatementRows({ accountPath, statement }: { accountPath: string; statem
             href={`${accountPath}?statement=${statement.id}`}
             className="text-sm font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300"
           >
-            {t('statements.columns.open')}
+            {t("statements.columns.open")}
           </Link>
         </TableCell>
       </TableRow>
@@ -104,21 +120,24 @@ function StatementRows({ accountPath, statement }: { accountPath: string; statem
         <TableRow key={line.id} className="bg-amber-50/60 dark:bg-amber-950/20">
           <TableCell colSpan={STATEMENT_COLUMNS}>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-1 text-sm">
-              <Badge variant="warning">{t('statements.excludedBadge')}</Badge>
+              <Badge variant="warning">{t("statements.excludedBadge")}</Badge>
               <span className="tabular-nums">{line.postedOn}</span>
               <span className="font-medium tabular-nums">{line.amount}</span>
               <span className="min-w-0 break-words">{line.description ?? EVIDENCE_MISSING}</span>
-              <span>{t('statements.reason', { reason: line.reason })}</span>
+              <span>{t("statements.reason", { reason: line.reason })}</span>
               {line.duplicateOf ? (
                 <span className="text-slate-600 dark:text-slate-300">
-                  {t('statements.duplicateOf', { date: line.duplicateOf.postedOn, amount: line.duplicateOf.amount })}
+                  {t("statements.duplicateOf", {
+                    date: line.duplicateOf.postedOn,
+                    amount: line.duplicateOf.amount,
+                  })}
                 </span>
               ) : null}
               {line.excludedAt ? (
                 <span className="text-slate-600 dark:text-slate-300">
                   {line.excludedBy
-                    ? t('statements.excludedByAt', { name: line.excludedBy, at: line.excludedAt })
-                    : t('statements.excludedAt', { at: line.excludedAt })}
+                    ? t("statements.excludedByAt", { name: line.excludedBy, at: line.excludedAt })
+                    : t("statements.excludedAt", { at: line.excludedAt })}
                 </span>
               ) : null}
             </div>
@@ -126,7 +145,7 @@ function StatementRows({ accountPath, statement }: { accountPath: string; statem
         </TableRow>
       ))}
     </>
-  )
+  );
 }
 
 /**
@@ -136,24 +155,26 @@ function StatementRows({ accountPath, statement }: { accountPath: string; statem
  * why the signed figure changed.
  */
 export function ReconcileHistory({ rows }: { rows: HistoryRow[] }) {
-  const t = useTranslations('banking.reconcileEvidence')
+  const t = useTranslations("banking.reconcileEvidence");
   return (
     <section className="space-y-3" aria-labelledby="reconcile-history-title">
       <div className="space-y-1">
-        <h2 id="reconcile-history-title" className={paneTitle}>{t('history.title')}</h2>
-        <p className="text-sm text-slate-600 dark:text-slate-300">{t('history.description')}</p>
+        <h2 id="reconcile-history-title" className={paneTitle}>
+          {t("history.title")}
+        </h2>
+        <p className="text-sm text-slate-600 dark:text-slate-300">{t("history.description")}</p>
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-slate-600 dark:text-slate-300">{t('history.empty')}</p>
+        <p className="text-sm text-slate-600 dark:text-slate-300">{t("history.empty")}</p>
       ) : (
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>{t('history.columns.when')}</TableHead>
-                <TableHead>{t('history.columns.event')}</TableHead>
-                <TableHead>{t('history.columns.by')}</TableHead>
-                <TableHead>{t('history.columns.details')}</TableHead>
+                <TableHead>{t("history.columns.when")}</TableHead>
+                <TableHead>{t("history.columns.event")}</TableHead>
+                <TableHead>{t("history.columns.by")}</TableHead>
+                <TableHead>{t("history.columns.details")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -174,89 +195,100 @@ export function ReconcileHistory({ rows }: { rows: HistoryRow[] }) {
         </div>
       )}
     </section>
-  )
+  );
 }
 
-function HistoryEventLabel({ kind }: { kind: HistoryRow['event']['kind'] }) {
-  const t = useTranslations('banking.reconcileEvidence')
-  return <>{t(`history.events.${kind}`)}</>
+function HistoryEventLabel({ kind }: { kind: HistoryRow["event"]["kind"] }) {
+  const t = useTranslations("banking.reconcileEvidence");
+  return <>{t(`history.events.${kind}`)}</>;
 }
 
 function HistoryDetail({ row }: { row: HistoryRow }) {
-  const t = useTranslations('banking.reconcileEvidence')
-  const event = row.event
+  const t = useTranslations("banking.reconcileEvidence");
+  const event = row.event;
   switch (event.kind) {
-    case 'revalidate_sign_off':
-      return <div className="space-y-1">
-        <p>{t('history.revalidationReason',{reason:event.reason})}</p>
-        <p>{t('history.revalidationBasis',{date:event.throughDate,balance:event.statementBalance,
-          entries:event.reviewedEntries,original:event.originalSignedOffAt})}</p>
-        <p className="break-all font-mono text-xs">{event.evidenceDigest}</p>
-      </div>
-    case 'sign_off':
+    case "revalidate_sign_off":
+      return (
+        <div className="space-y-1">
+          <p>{t("history.revalidationReason", { reason: event.reason })}</p>
+          <p>
+            {t("history.revalidationBasis", {
+              date: event.throughDate,
+              balance: event.statementBalance,
+              entries: event.reviewedEntries,
+              original: event.originalSignedOffAt,
+            })}
+          </p>
+          <p className="break-all font-mono text-xs">{event.evidenceDigest}</p>
+        </div>
+      );
+    case "sign_off":
       return (
         <span>
-          {event.evidence === 'source'
-            ? t('history.signOffSource', {
+          {event.evidence === "source"
+            ? t("history.signOffSource", {
                 balance: event.statementBalance,
                 date: event.throughDate,
                 matched: event.matchedJournalLines,
               })
-            : t('history.signOffStatement', {
+            : t("history.signOffStatement", {
                 balance: event.statementBalance,
                 date: event.throughDate,
                 matched: event.matchedJournalLines,
                 excluded: event.excludedStatementLines,
               })}
         </span>
-      )
-    case 'withdraw_sign_off':
+      );
+    case "withdraw_sign_off":
       return (
         <div className="space-y-1">
-          <p>{t('history.withdrawReason', { reason: event.reason })}</p>
+          <p>{t("history.withdrawReason", { reason: event.reason })}</p>
           <p>
-            {t('history.withdrawPrior', {
+            {t("history.withdrawPrior", {
               balance: event.priorStatementBalance,
               at: event.priorSignedOffAt,
               by: event.priorSignedOffBy,
             })}
           </p>
           <p className="text-slate-600 dark:text-slate-300">
-            {t('history.withdrawReleased', { count: event.releasedJournalLines, status: event.status })}
+            {t("history.withdrawReleased", {
+              count: event.releasedJournalLines,
+              status: event.status,
+            })}
           </p>
         </div>
-      )
-    case 'discard':
+      );
+    case "discard":
       return (
         <span>
-          {t('history.discardDetail', {
+          {t("history.discardDetail", {
             date: event.throughDate,
             balance: event.statementBalance,
             matches: event.releasedMatches,
             lines: event.releasedStatementLines,
           })}
         </span>
-      )
-    case 'confirm_opening':
+      );
+    case "confirm_opening":
       return (
         <span>
-          {t('history.confirmDetail', {
+          {t("history.confirmDetail", {
             amount: event.amount,
             date: event.startDate,
             reason: event.reason,
           })}
         </span>
-      )
-    case 'session_adjustment':
+      );
+    case "session_adjustment":
       return (
         <span>
-          {t('history.adjustDetail', {
+          {t("history.adjustDetail", {
             beforeDate: event.before?.throughDate ?? EVIDENCE_MISSING,
             afterDate: event.after?.throughDate ?? EVIDENCE_MISSING,
             beforeBalance: event.before?.statementBalance ?? EVIDENCE_MISSING,
             afterBalance: event.after?.statementBalance ?? EVIDENCE_MISSING,
           })}
         </span>
-      )
+      );
   }
 }

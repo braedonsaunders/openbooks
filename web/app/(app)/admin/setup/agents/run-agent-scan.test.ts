@@ -36,7 +36,10 @@ test("a 409 claim loss resolves already-running", async () => {
   });
   try {
     assert.deepEqual(await postAgentScan("collections", "scan failed"), {
-      ok: false, alreadyRunning: true, code: null, error: "scan failed (status 409)",
+      ok: false,
+      alreadyRunning: true,
+      code: null,
+      error: "scan failed (status 409)",
     });
     assert.ok(seen[0]!.endsWith("/api/admin/setup/agents/collections/run"));
   } finally {
@@ -45,10 +48,15 @@ test("a 409 claim loss resolves already-running", async () => {
 });
 
 test("other rejections resolve generic failure", async () => {
-  const restore = mockFetch(() => Response.json({ status: "skipped", detected: 0 }, { status: 409 }));
+  const restore = mockFetch(() =>
+    Response.json({ status: "skipped", detected: 0 }, { status: 409 }),
+  );
   try {
     assert.deepEqual(await postAgentScan("collections", "scan failed"), {
-      ok: false, alreadyRunning: false, code: null, error: "scan failed (status 409)",
+      ok: false,
+      alreadyRunning: false,
+      code: null,
+      error: "scan failed (status 409)",
     });
   } finally {
     restore();

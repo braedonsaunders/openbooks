@@ -53,7 +53,10 @@ export const itemFamilyOptions = pgTable(
     familyId: uuid("family_id").notNull(),
     position: integer("position").notNull(),
     name: text("name").notNull(),
-    values: text("values").array().notNull().default(sql`'{}'`),
+    values: text("values")
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     ...auditColumns,
   },
   (t) => [

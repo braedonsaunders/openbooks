@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  buildEmailJobs,
-  newEmailIntentKey,
-  resolveEmailDeliveryKey,
-} from "./email";
+import { buildEmailJobs, newEmailIntentKey, resolveEmailDeliveryKey } from "./email";
 
 const ORG = "018f6b2a-7c1d-7d3e-9f4a-2b8c4d5e6f70";
 
@@ -35,7 +31,10 @@ test("delivery keys are deterministic per intent and distinct otherwise", () => 
   assert.equal(first[0]!.data.deliveryKey, replayed[0]!.data.deliveryKey);
   assert.match(first[0]!.data.deliveryKey, /^obem_[0-9a-f]{40}$/);
 
-  const otherIntent = buildEmailJobs({ ...base, to: "dana@example.com" }, { jobId: "remittance|2" });
+  const otherIntent = buildEmailJobs(
+    { ...base, to: "dana@example.com" },
+    { jobId: "remittance|2" },
+  );
   assert.notEqual(first[0]!.data.deliveryKey, otherIntent[0]!.data.deliveryKey);
   const otherOrg = buildEmailJobs(
     { ...base, orgId: "018f6b2a-0000-7000-8000-000000000001", to: "dana@example.com" },
@@ -91,7 +90,10 @@ test("the worker key never depends on the queue-assigned job id", () => {
   // with old sent-log rows. Stored keys must be immune to the queue id —
   // and with the legacy fallback removed, there is no derivation left that
   // could realign them.
-  const [job] = buildEmailJobs({ ...base, to: "dana@example.com" }, { jobId: "gate-reminder|org|g|u|uuid-1" });
+  const [job] = buildEmailJobs(
+    { ...base, to: "dana@example.com" },
+    { jobId: "gate-reminder|org|g|u|uuid-1" },
+  );
   assert.equal(resolveEmailDeliveryKey(job!.data), job!.data.deliveryKey);
 });
 

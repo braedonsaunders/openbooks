@@ -1,55 +1,62 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
-import { db } from '@openbooks/engine/platform/database'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { db } from "@openbooks/engine/platform/database";
 import {
   getShipmentRates,
   listBulkCandidates,
   selectRateByRule,
   ShippingRefusal,
-} from '@openbooks/engine/sales/shipping-labels'
-import { defineRoute } from '@/lib/api/route'
+} from "@openbooks/engine/sales/shipping-labels";
+import { defineRoute } from "@/lib/api/route";
 
 /** Draft, open shipments without a purchased label, for the bulk buyer. */
 export const GET = defineRoute({
-  permission: 'orders.fulfill',
-  feature: 'shippingHub',
+  permission: "orders.fulfill",
+  feature: "shippingHub",
   handler: async ({ authz }) => {
-    const candidates = await listBulkCandidates(db, authz.user.orgId, authz.allowedSubsidiaryIds)
-    return NextResponse.json({ candidates })
+    const candidates = await listBulkCandidates(db, authz.user.orgId, authz.allowedSubsidiaryIds);
+    return NextResponse.json({ candidates });
   },
-})
+});
 
 const bulkBody = z.object({
-  items:z.array(z.object({shipmentId:uuidString(),handlingUnitId:uuidString()})).min(1).max(100),
-  presetId:uuidString().nullable().optional(),
+  items: z
+    .array(z.object({ shipmentId: uuidString(), handlingUnitId: uuidString() }))
+    .min(1)
+    .max(100),
+  presetId: uuidString().nullable().optional(),
   accountId: uuidString().nullable().optional(),
-  rule: z.enum(['cheapest', 'fastest', 'cheapest_by_date']).default('cheapest'),
-  promisedDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-})
+  rule: z.enum(["cheapest", "fastest", "cheapest_by_date"]).default("cheapest"),
+  promisedDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
+});
 
 type PreviewRow =
   | {
-    shipmentId: string
-    handlingUnitId:string
-    documentNumber: string
-    ok: true
-    providerRateId: string
-    carrier: string
-    service: string
-    amount: string
-    currency: string
-    deliveryDate: string | null
-  }
+      shipmentId: string;
+      handlingUnitId: string;
+      documentNumber: string;
+      ok: true;
+      providerRateId: string;
+      carrier: string;
+      service: string;
+      amount: string;
+      currency: string;
+      deliveryDate: string | null;
+    }
   | {
-    shipmentId: string
-    handlingUnitId:string
-    documentNumber: string | null
-    ok: false
-    code: string
-    message: string
-    remedy?: string
-  }
+      shipmentId: string;
+      handlingUnitId: string;
+      documentNumber: string | null;
+      ok: false;
+      code: string;
+      message: string;
+      remedy?: string;
+    };
 
 /**
  * Preview bulk buying: one rate per shipment under the buying rule, the
@@ -57,36 +64,40 @@ type PreviewRow =
  * reason — so the operator fixes data in place instead of buying blind.
  */
 export const POST = defineRoute({
-  permission: 'orders.fulfill',
-  feature: 'shippingHub',
+  permission: "orders.fulfill",
+  feature: "shippingHub",
   body: bulkBody,
   handler: async ({ authz, body }) => {
-    const orgId = authz.user.orgId
-    const rows: PreviewRow[] = []
+    const orgId = authz.user.orgId;
+    const rows: PreviewRow[] = [];
     for (const item of body.items) {
-      const {shipmentId,handlingUnitId}=item
+      const { shipmentId, handlingUnitId } = item;
       try {
         const quote = await db.transaction((tx) =>
           getShipmentRates(tx, orgId, authz.user.id, {
-            shipmentId,handlingUnitId,presetId:body.presetId,
+            shipmentId,
+            handlingUnitId,
+            presetId: body.presetId,
             accountId: body.accountId,
             allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
           }),
-        )
-        const chosen = selectRateByRule(quote.rates, body.rule, body.promisedDate)
+        );
+        const chosen = selectRateByRule(quote.rates, body.rule, body.promisedDate);
         if (!chosen) {
           rows.push({
-            shipmentId,handlingUnitId,
+            shipmentId,
+            handlingUnitId,
             documentNumber: quote.documentNumber,
             ok: false,
-            code: 'no_rate_on_time',
+            code: "no_rate_on_time",
             message: `No rate for ${quote.documentNumber} arrives by ${body.promisedDate}`,
-            remedy: 'Pick a later promised date or buy the fastest rate instead',
-          })
-          continue
+            remedy: "Pick a later promised date or buy the fastest rate instead",
+          });
+          continue;
         }
         rows.push({
-          shipmentId,handlingUnitId,
+          shipmentId,
+          handlingUnitId,
           documentNumber: quote.documentNumber,
           ok: true,
           providerRateId: chosen.providerRateId,
@@ -95,18 +106,19 @@ export const POST = defineRoute({
           amount: chosen.amount,
           currency: chosen.currency,
           deliveryDate: chosen.deliveryDate,
-        })
+        });
       } catch (error) {
         rows.push({
-          shipmentId,handlingUnitId,
+          shipmentId,
+          handlingUnitId,
           documentNumber: null,
           ok: false,
-          code: error instanceof ShippingRefusal ? error.code : 'failed',
-          message: error instanceof Error ? error.message : 'Rating failed',
+          code: error instanceof ShippingRefusal ? error.code : "failed",
+          message: error instanceof Error ? error.message : "Rating failed",
           remedy: error instanceof ShippingRefusal ? error.remedy : undefined,
-        })
+        });
       }
     }
-    return NextResponse.json({ rows })
+    return NextResponse.json({ rows });
   },
-})
+});

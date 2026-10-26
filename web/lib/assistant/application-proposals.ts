@@ -14,13 +14,15 @@ function commandKey(): Buffer {
   if (!secret) {
     throw new Error("SESSION_SECRET is required to sign assistant application commands");
   }
-  cachedKey = Buffer.from(hkdfSync(
-    "sha256",
-    Buffer.from(secret),
-    Buffer.alloc(0),
-    Buffer.from("openbooks.assistant-application-command.v1"),
-    32,
-  ));
+  cachedKey = Buffer.from(
+    hkdfSync(
+      "sha256",
+      Buffer.from(secret),
+      Buffer.alloc(0),
+      Buffer.from("openbooks.assistant-application-command.v1"),
+      32,
+    ),
+  );
   return cachedKey;
 }
 const TTL_MS = 10 * 60 * 1000;
@@ -76,17 +78,24 @@ export function verifyApplicationCommand(
   } catch {
     return false;
   }
-  if (!Number.isSafeInteger(body.exp) || body.exp < Date.now() || typeof body.signature !== "string") {
+  if (
+    !Number.isSafeInteger(body.exp) ||
+    body.exp < Date.now() ||
+    typeof body.signature !== "string"
+  ) {
     return false;
   }
-  const expected = Buffer.from(signature({
-    toolName,
-    input,
-    userId: authz.user.id,
-    orgId: authz.user.orgId,
-    exp: body.exp,
-    binding,
-  }), "hex");
+  const expected = Buffer.from(
+    signature({
+      toolName,
+      input,
+      userId: authz.user.id,
+      orgId: authz.user.orgId,
+      exp: body.exp,
+      binding,
+    }),
+    "hex",
+  );
   const received = Buffer.from(body.signature, "hex");
   return expected.length === received.length && timingSafeEqual(expected, received);
 }

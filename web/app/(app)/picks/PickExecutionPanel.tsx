@@ -15,9 +15,7 @@ function localCutoff(value: string | null | undefined): string {
   if (!value) return "";
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "";
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-    .toISOString()
-    .slice(0, 16);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
 }
 
 export function PickExecutionPanel({
@@ -28,9 +26,7 @@ export function PickExecutionPanel({
   canManage: boolean;
 }) {
   const router = useRouter(),
-    execution = useDirectedExecution("/api/fulfillment/execution", () =>
-      router.refresh(),
-    );
+    execution = useDirectedExecution("/api/fulfillment/execution", () => router.refresh());
   const [quantities, setQuantities] = useState<Record<string, string>>({}),
     [reasons, setReasons] = useState<Record<string, string>>({});
   const [priority, setPriority] = useState(String(pick.pickPriority ?? 0)),
@@ -67,9 +63,7 @@ export function PickExecutionPanel({
       if (action === "release") setCommandKey(crypto.randomUUID());
       router.refresh();
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Pick dispatch was refused",
-      );
+      setError(cause instanceof Error ? cause.message : "Pick dispatch was refused");
     } finally {
       setBusy(false);
     }
@@ -123,10 +117,7 @@ export function PickExecutionPanel({
         {dispatchTab === "wave" ? (
           <Label>
             Wave sequence
-            <Select
-              value={mode}
-              onChange={(event) => setMode(event.target.value)}
-            >
+            <Select value={mode} onChange={(event) => setMode(event.target.value)}>
               <option value="cutoff">Cutoff</option>
               <option value="priority">Priority</option>
             </Select>
@@ -140,13 +131,9 @@ export function PickExecutionPanel({
         {canManage ? (
           <Button
             disabled={busy}
-            onClick={() =>
-              dispatch(dispatchTab === "policy" ? "policy" : "release")
-            }
+            onClick={() => dispatch(dispatchTab === "policy" ? "policy" : "release")}
           >
-            {dispatchTab === "policy"
-              ? "Save dispatch policy"
-              : "Release warehouse wave"}
+            {dispatchTab === "policy" ? "Save dispatch policy" : "Release warehouse wave"}
           </Button>
         ) : null}
       </div>
@@ -220,9 +207,7 @@ export function PickExecutionPanel({
                       action: "pick",
                       lineId: line.lineId,
                       quantity: quantities[line.lineId] ?? line.quantity,
-                      ...(reasons[line.lineId]
-                        ? { reason: reasons[line.lineId] }
-                        : {}),
+                      ...(reasons[line.lineId] ? { reason: reasons[line.lineId] } : {}),
                     })
                   }
                 >

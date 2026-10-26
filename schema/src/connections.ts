@@ -48,9 +48,7 @@ function sanitizeConfigValue(value: unknown): unknown {
   if (value && typeof value === "object") {
     const sanitized: Record<string, unknown> = {};
     for (const [key, nested] of Object.entries(value)) {
-      sanitized[key] = SENSITIVE_CONFIG_KEY.test(key)
-        ? "[redacted]"
-        : sanitizeConfigValue(nested);
+      sanitized[key] = SENSITIVE_CONFIG_KEY.test(key) ? "[redacted]" : sanitizeConfigValue(nested);
     }
     return sanitized;
   }
@@ -58,15 +56,11 @@ function sanitizeConfigValue(value: unknown): unknown {
 }
 
 /** Defense in depth for legacy or malformed config rows that contain secrets. */
-export function sanitizeConnectionConfig(
-  config: unknown,
-): unknown {
+export function sanitizeConnectionConfig(config: unknown): unknown {
   return sanitizeConfigValue(config);
 }
 
-export function connectionAuditSnapshot(
-  row: ConnectionAuditRow,
-): ConnectionAuditSnapshot {
+export function connectionAuditSnapshot(row: ConnectionAuditRow): ConnectionAuditSnapshot {
   const authorizedAt = row.postedChangeAuthorizedAt;
   return {
     source: row.source,
@@ -84,9 +78,7 @@ export function connectionAuditSnapshot(
       policy: row.postedChangePolicy,
       authorizedBy: row.postedChangeAuthorizedBy ?? null,
       authorizedAt:
-        authorizedAt instanceof Date
-          ? authorizedAt.toISOString()
-          : authorizedAt ?? null,
+        authorizedAt instanceof Date ? authorizedAt.toISOString() : (authorizedAt ?? null),
     },
     outOfPeriodDates: row.outOfPeriodDatePolicy ?? null,
   };

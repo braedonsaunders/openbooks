@@ -1,34 +1,34 @@
-'use client'
+"use client";
 
-import { Suspense, useEffect, useState } from 'react'
-import type { CSSProperties } from 'react'
-import Link from 'next/link'
-import { useRouter, useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { safeNextPath } from '../../lib/login-return-path'
-import { Button, Card, CardContent, Input, Label, cn } from '@openbooks/ui'
+import { Suspense, useEffect, useState } from "react";
+import type { CSSProperties } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { safeNextPath } from "../../lib/login-return-path";
+import { Button, Card, CardContent, Input, Label, cn } from "@openbooks/ui";
 
 // Hero book that physically opens on load: the spine draws in, both covers
 // swing open around it, then the ledger lines write themselves onto the pages.
 // It plays once and rests. Geometry matches the brand mark; stroke weights are
 // tuned lighter because this renders large. Animation lives in globals.css
 // under "Login stage"; the .book-* class hooks drive each part.
-const SPINE = 'M24 13 V 40'
-const LEFT_COVER = 'M24 13 C 18 7.5 10 6 4.5 8.5 V 35.5 C 10 33.5 18 34.5 24 40'
-const RIGHT_COVER = 'M24 13 C 30 7.5 38 6 43.5 8.5 V 35.5 C 38 33.5 30 34.5 24 40'
+const SPINE = "M24 13 V 40";
+const LEFT_COVER = "M24 13 C 18 7.5 10 6 4.5 8.5 V 35.5 C 10 33.5 18 34.5 24 40";
+const RIGHT_COVER = "M24 13 C 30 7.5 38 6 43.5 8.5 V 35.5 C 38 33.5 30 34.5 24 40";
 const LEFT_ENTRIES = [
-  'M9.5 15.5 C 13 14.8 17 15.6 20 17.4',
-  'M9.5 21.5 C 13 20.8 17 21.6 20 23.4',
-  'M9.5 27.5 C 13 26.8 17 27.6 20 29.4',
-]
+  "M9.5 15.5 C 13 14.8 17 15.6 20 17.4",
+  "M9.5 21.5 C 13 20.8 17 21.6 20 23.4",
+  "M9.5 27.5 C 13 26.8 17 27.6 20 29.4",
+];
 const RIGHT_ENTRIES = [
-  'M28 17.4 C 31 15.6 35 14.8 38.5 15.5',
-  'M28 23.4 C 31 21.6 35 20.8 38.5 21.5',
-  'M28 29.4 C 31 27.6 35 26.8 38.5 27.5',
-]
+  "M28 17.4 C 31 15.6 35 14.8 38.5 15.5",
+  "M28 23.4 C 31 21.6 35 20.8 38.5 21.5",
+  "M28 29.4 C 31 27.6 35 26.8 38.5 27.5",
+];
 
 // Entries fade in one-by-one once the covers finish opening (~1.05s).
-const entryDelay = (i: number): CSSProperties => ({ animationDelay: `${1.0 + i * 0.1}s` })
+const entryDelay = (i: number): CSSProperties => ({ animationDelay: `${1.0 + i * 0.1}s` });
 
 function HeroBook({ className }: { className?: string }) {
   return (
@@ -36,10 +36,16 @@ function HeroBook({ className }: { className?: string }) {
       viewBox="3 5 42 37"
       role="img"
       aria-label="openbooks"
-      className={cn('login-book text-slate-900', className)}
+      className={cn("login-book text-slate-900", className)}
     >
       {/* covers + spine — ink strokes */}
-      <g fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
+      <g
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path className="book-spine" d={SPINE} pathLength={1} />
         <g className="book-cover-l">
           {/* white page behind the ledger lines — closes along the spine */}
@@ -72,73 +78,81 @@ function HeroBook({ className }: { className?: string }) {
         </g>
       </g>
     </svg>
-  )
+  );
 }
 
 function LoginForm() {
-  const t = useTranslations('login')
-  const tCommon = useTranslations('common')
-  const router = useRouter()
-  const params = useSearchParams()
-  const nextPath = safeNextPath(params.get('next'))
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [mfaCode, setMfaCode] = useState('')
-  const [mfaRequired, setMfaRequired] = useState(params.get('mfa') === '1')
-  const [oidc, setOidc] = useState<{ enabled: boolean; label: string }>({ enabled: false, label: '' })
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("login");
+  const tCommon = useTranslations("common");
+  const router = useRouter();
+  const params = useSearchParams();
+  const nextPath = safeNextPath(params.get("next"));
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaRequired, setMfaRequired] = useState(params.get("mfa") === "1");
+  const [oidc, setOidc] = useState<{ enabled: boolean; label: string }>({
+    enabled: false,
+    label: "",
+  });
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   // Surface an SSO failure on arrival, during render (same committed value, no
   // extra render). Keyed on the error param and translator, like the fetch
   // below — a later submit still owns the error state afterwards.
-  const ssoErrorParam = params.get('error')
-  const [prevSsoErrorKey, setPrevSsoErrorKey] = useState(() => ({ param: ssoErrorParam, t }))
+  const ssoErrorParam = params.get("error");
+  const [prevSsoErrorKey, setPrevSsoErrorKey] = useState(() => ({ param: ssoErrorParam, t }));
   if (prevSsoErrorKey.param !== ssoErrorParam || prevSsoErrorKey.t !== t) {
-    setPrevSsoErrorKey({ param: ssoErrorParam, t })
-    if (ssoErrorParam === 'sso') setError(t('ssoFailed'))
+    setPrevSsoErrorKey({ param: ssoErrorParam, t });
+    if (ssoErrorParam === "sso") setError(t("ssoFailed"));
   }
 
   useEffect(() => {
-    let active = true
-    fetch('/api/auth/methods', { cache: 'no-store' })
-      .then((response) => response.ok ? response.json() : null)
+    let active = true;
+    fetch("/api/auth/methods", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
       .then((methods) => {
-        if (active && methods?.oidc) setOidc({ enabled: true, label: methods.oidcLabel || t('sso') })
+        if (active && methods?.oidc)
+          setOidc({ enabled: true, label: methods.oidcLabel || t("sso") });
       })
-      .catch(() => undefined)
-    return () => { active = false }
-  }, [params, t])
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [params, t]);
 
   async function submit(e: React.FormEvent) {
-    e.preventDefault()
-    setBusy(true)
-    setError(null)
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
     try {
-      const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(mfaRequired ? { mfaCode } : { email, password }),
-      })
+      });
       if (res.status === 202) {
-        setMfaRequired(true)
-        setPassword('')
+        setMfaRequired(true);
+        setPassword("");
       } else if (res.ok) {
-        router.push(nextPath)
-        router.refresh()
+        router.push(nextPath);
+        router.refresh();
       } else if (res.status === 429) {
-        const retryAfter = Number(res.headers.get('Retry-After') ?? 0)
-        setError(retryAfter > 0 ? t('tooManyAttempts', { seconds: retryAfter }) : t('busyTryAgain'))
+        const retryAfter = Number(res.headers.get("Retry-After") ?? 0);
+        setError(
+          retryAfter > 0 ? t("tooManyAttempts", { seconds: retryAfter }) : t("busyTryAgain"),
+        );
       } else if (res.status === 401) {
-        setError(mfaRequired ? t('invalidMfa') : t('invalidCredentials'))
+        setError(mfaRequired ? t("invalidMfa") : t("invalidCredentials"));
       } else {
         // Origin refusals and server failures are not credential verdicts.
-        setError(t('signInUnavailable'))
+        setError(t("signInUnavailable"));
       }
     } catch {
-      setError(t('signInUnavailable'))
+      setError(t("signInUnavailable"));
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
@@ -155,13 +169,13 @@ function LoginForm() {
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
               open<span className="text-teal-600 dark:text-teal-400">books</span>
             </h1>
-            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{t('tagline')}</p>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{t("tagline")}</p>
           </div>
 
           <form onSubmit={submit} className="space-y-4">
             {mfaRequired ? (
               <div className="space-y-2">
-                <Label htmlFor="mfa-code">{t('mfaCode')}</Label>
+                <Label htmlFor="mfa-code">{t("mfaCode")}</Label>
                 <Input
                   id="mfa-code"
                   autoComplete="one-time-code"
@@ -169,15 +183,15 @@ function LoginForm() {
                   required
                   value={mfaCode}
                   onChange={(e) => setMfaCode(e.target.value)}
-                  placeholder={t('mfaPlaceholder')}
+                  placeholder={t("mfaPlaceholder")}
                   className="h-11 font-mono tracking-wider"
                 />
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('mfaHelp')}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t("mfaHelp")}</p>
               </div>
             ) : (
               <>
                 <div className="space-y-1.5">
-                  <Label htmlFor="email">{tCommon('labels.email')}</Label>
+                  <Label htmlFor="email">{tCommon("labels.email")}</Label>
                   <Input
                     id="email"
                     type="email"
@@ -191,12 +205,12 @@ function LoginForm() {
                 </div>
                 <div className="space-y-1.5">
                   <div className="flex items-baseline justify-between">
-                    <Label htmlFor="password">{t('password')}</Label>
+                    <Label htmlFor="password">{t("password")}</Label>
                     <Link
                       href="/login/reset"
                       className="text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300"
                     >
-                      {t('forgotPassword')}
+                      {t("forgotPassword")}
                     </Link>
                   </div>
                   <Input
@@ -217,13 +231,13 @@ function LoginForm() {
               </p>
             ) : null}
             <Button type="submit" disabled={busy} className="h-11 w-full text-base font-semibold">
-              {busy ? t('signingIn') : mfaRequired ? t('verify') : t('signIn')}
+              {busy ? t("signingIn") : mfaRequired ? t("verify") : t("signIn")}
             </Button>
             {!mfaRequired && oidc.enabled ? (
               <>
                 <div className="flex items-center gap-3 text-xs uppercase tracking-wider text-slate-400">
                   <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-                  {t('or')}
+                  {t("or")}
                   <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
                 </div>
                 <a
@@ -238,7 +252,7 @@ function LoginForm() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
 export default function Login() {
@@ -252,7 +266,7 @@ export default function Login() {
         <LoginForm />
       </Suspense>
     </main>
-  )
+  );
 }
 
 /** Static twin of LoginForm's chrome, shown while the form boundary resolves. */
@@ -277,5 +291,5 @@ function LoginShell() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

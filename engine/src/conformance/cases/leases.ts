@@ -1,5 +1,8 @@
 import { measureLeaseChange } from "../../revenue/lease-changes.ts";
-import { presentValueOfLevelStream, periodRateFromAnnualPercent } from "../../money/present-value.ts";
+import {
+  presentValueOfLevelStream,
+  periodRateFromAnnualPercent,
+} from "../../money/present-value.ts";
 /**
  * Leases — ASC 842 and IFRS 16.
  *
@@ -68,8 +71,7 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
         standard: "IFRS 16",
         reference: "IFRS 16.23",
         kind: "requirement",
-        requirement:
-          "At the commencement date a lessee measures the right-of-use asset at cost.",
+        requirement: "At the commencement date a lessee measures the right-of-use asset at cost.",
       },
     ],
     support: "supported",
@@ -113,9 +115,12 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
         commenced = await commenceLease(ledger.orgId, leaseId, ledger.actorId);
       });
 
-      const schedule = (await db.execute<{ total: string }>(sql`
+      const schedule = await db.execute<{ total: string }>(
+        sql`
         select coalesce(sum(payment), 0)::text as total from lease_agreement_schedule_lines
-         where org_id = ${ledger.orgId} and lease_id = ${leaseId}`, "objects"));
+         where org_id = ${ledger.orgId} and lease_id = ${leaseId}`,
+        "objects",
+      );
       return {
         entries: [entry],
         values: {
@@ -253,7 +258,12 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
     },
     run: (ctx) => {
       const classification = classifyLease(
-        { leaseTermMonths: 60, economicLifeMonths: 300, pvOfPayments: "86589.5334", fairValue: "400000" },
+        {
+          leaseTermMonths: 60,
+          economicLifeMonths: 300,
+          pvOfPayments: "86589.5334",
+          fairValue: "400000",
+        },
         "us_gaap",
       );
       const m = measureLesseeLease({
@@ -549,7 +559,8 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
 
   {
     id: "lease-remeasurement",
-    title: "A change in the lease payments or term remeasures the liability and the right-of-use asset",
+    title:
+      "A change in the lease payments or term remeasures the liability and the right-of-use asset",
     citations: [
       {
         standard: "ASC 842",
@@ -584,9 +595,26 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
       },
     },
     run: () => {
-      const liability = presentValueOfLevelStream({ payment:"22000",periods:4,rate:periodRateFromAnnualPercent("5",1),timing:"arrears" });
-      const change = measureLeaseChange({liability:"70919.0101",rouAsset:"69271.6267",scopeReductionPercent:"0",newLiability:liability,settlementPayment:"0"});
-      return {values:{liabilityAfterYearOne:"70919.0101",remeasuredLiability:change.newLiability,rouAdjustment:change.rouDelta}};
+      const liability = presentValueOfLevelStream({
+        payment: "22000",
+        periods: 4,
+        rate: periodRateFromAnnualPercent("5", 1),
+        timing: "arrears",
+      });
+      const change = measureLeaseChange({
+        liability: "70919.0101",
+        rouAsset: "69271.6267",
+        scopeReductionPercent: "0",
+        newLiability: liability,
+        settlementPayment: "0",
+      });
+      return {
+        values: {
+          liabilityAfterYearOne: "70919.0101",
+          remeasuredLiability: change.newLiability,
+          rouAdjustment: change.rouDelta,
+        },
+      };
     },
   },
 
@@ -628,14 +656,28 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
       },
     },
     run: () => {
-      const change = measureLeaseChange({liability:"37188.2086",rouAsset:"34635.8133",scopeReductionPercent:"100",newLiability:"0",settlementPayment:"3000"});
-      return {values:{liabilityDerecognised:change.removedLiability,rouAssetDerecognised:change.removedRou,terminationPenalty:change.settlement,terminationLoss:neg(change.gain)}};
+      const change = measureLeaseChange({
+        liability: "37188.2086",
+        rouAsset: "34635.8133",
+        scopeReductionPercent: "100",
+        newLiability: "0",
+        settlementPayment: "3000",
+      });
+      return {
+        values: {
+          liabilityDerecognised: change.removedLiability,
+          rouAssetDerecognised: change.removedRou,
+          terminationPenalty: change.settlement,
+          terminationLoss: neg(change.gain),
+        },
+      };
     },
   },
 
   {
     id: "lease-onboarding-continues-from-opening",
-    title: "A mid-life lease onboards its opening liability and right-of-use balance and continues from those figures",
+    title:
+      "A mid-life lease onboards its opening liability and right-of-use balance and continues from those figures",
     citations: [
       {
         standard: "IFRS 16",
@@ -677,9 +719,14 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
       const ledger = ctx.ledger!;
       // July 2025 is outside the tenant's 2026 spine, so the payment month is
       // provisioned the way any operator would provision a new open period.
-      const calendarId = (await db.execute<{ id: string }>(sql`
+      const calendarId = (
+        await db.execute<{ id: string }>(
+          sql`
         select fiscal_calendar_id as id from accounting_periods
-         where org_id = ${ledger.orgId} limit 1`, "objects"))[0]!.id;
+         where org_id = ${ledger.orgId} limit 1`,
+          "objects",
+        )
+      )[0]!.id;
       await db.execute(sql`
         insert into accounting_periods
           (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -704,19 +751,27 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
         },
       });
       await commenceLease(ledger.orgId, leaseId, ledger.actorId);
-      const journals = (await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from journal_entries where org_id = ${ledger.orgId}`, "objects"))[0]!.n;
+      const journals = (
+        await db.execute<{ n: string }>(
+          sql`
+        select count(*)::text as n from journal_entries where org_id = ${ledger.orgId}`,
+          "objects",
+        )
+      )[0]!.n;
       const rows = await db.execute<{
         sequence: number;
         opening: string;
         principal: string;
         closing: string;
-      }>(sql`
+      }>(
+        sql`
         select sequence, opening_liability::text as opening,
                principal::text as principal, closing_liability::text as closing
           from lease_agreement_schedule_lines
          where org_id = ${ledger.orgId} and lease_id = ${leaseId}
-         order by sequence`, "objects");
+         order by sequence`,
+        "objects",
+      );
       const run = await postDueLeaseSchedules(ledger.orgId, "2025-07-31", ledger.actorId);
       return {
         values: {

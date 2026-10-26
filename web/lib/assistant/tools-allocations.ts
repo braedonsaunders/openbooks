@@ -35,10 +35,7 @@ import {
   DriverNotAvailableError,
   previewDriverVector,
 } from "@openbooks/engine/allocations/drivers";
-import {
-  postDriverResolver,
-  runDriverReport,
-} from "@openbooks/engine/allocations/report-runner";
+import { postDriverResolver, runDriverReport } from "@openbooks/engine/allocations/report-runner";
 import { previewAllocationRun } from "@openbooks/engine/allocations/period-run";
 import {
   allocationScopeVisible,
@@ -80,9 +77,13 @@ async function allocationsOff(authz: Authz): Promise<ToolResult | null> {
   return null;
 }
 
-const ruleKeyInput = z.string().max(120)
+const ruleKeyInput = z
+  .string()
+  .max(120)
   .describe("Rule key slug from list_allocation_rules; exactly one of ruleId or ruleKey");
-const driverKeyInput = z.string().max(120)
+const driverKeyInput = z
+  .string()
+  .max(120)
   .describe("Driver key slug from list_allocation_drivers; exactly one of driverId or driverKey");
 
 /** Rule id from either address form (the drawer links by id, prose by key). */
@@ -121,10 +122,7 @@ async function resolveDriverId(
 }
 
 /** End date of a fiscal preset window, resolved like the other date tools. */
-async function resolvePresetEnd(
-  orgId: string,
-  preset: string,
-): Promise<string | ToolResult> {
+async function resolvePresetEnd(orgId: string, preset: string): Promise<string | ToolResult> {
   const range = await resolveToolRange(orgId, { period: preset } as RangeArgs);
   if ("error" in range) return { ok: false, error: range.error };
   return range.to;
@@ -146,10 +144,13 @@ async function resolveAllocationPeriodId(
   if (a.periodId !== undefined) return a.periodId;
   const end = await resolvePresetEnd(orgId, a.period!);
   if (typeof end !== "string") return end;
-  const rows = await db.execute<{ id: string }>(sql`
+  const rows = await db.execute<{ id: string }>(
+    sql`
     select id::text as id from accounting_periods
      where org_id = ${orgId} and starts_on <= ${end} and ${end} <= ends_on
-     order by is_adjustment, starts_on desc limit 1`, "objects");
+     order by is_adjustment, starts_on desc limit 1`,
+    "objects",
+  );
   const found = rows[0];
   if (!found) return { ok: false, error: "period_not_found" };
   return found.id;
@@ -162,18 +163,24 @@ async function resolveAllocationPeriodId(
  * opaque tool_failed. Identity failures become stable not-found codes.
  */
 function previewFailure(error: unknown): ToolResult {
-  if (error instanceof ReportBookSelectionError) return { ok: false, error: "accounting_book_not_found" };
+  if (error instanceof ReportBookSelectionError)
+    return { ok: false, error: "accounting_book_not_found" };
   if (error instanceof DriverAdminError) {
     if (error.code === "not_found") return { ok: false, error: "allocation_driver_not_found" };
     return { ok: false, error: error.message.slice(0, 400) };
   }
-  if (error instanceof DriverNotAvailableError) return { ok: false, error: error.message.slice(0, 400) };
+  if (error instanceof DriverNotAvailableError)
+    return { ok: false, error: error.message.slice(0, 400) };
   if (error instanceof Error) {
     const message = error.message;
-    if (/^allocation rule .* does not belong/.test(message)) return { ok: false, error: "allocation_rule_not_found" };
-    if (/^accounting period .* does not belong/.test(message)) return { ok: false, error: "period_not_found" };
-    if (/^accounting book .* does not belong/.test(message)) return { ok: false, error: "accounting_book_not_found" };
-    if (/^subsidiary .* does not belong/.test(message)) return { ok: false, error: "subsidiary_not_found" };
+    if (/^allocation rule .* does not belong/.test(message))
+      return { ok: false, error: "allocation_rule_not_found" };
+    if (/^accounting period .* does not belong/.test(message))
+      return { ok: false, error: "period_not_found" };
+    if (/^accounting book .* does not belong/.test(message))
+      return { ok: false, error: "accounting_book_not_found" };
+    if (/^subsidiary .* does not belong/.test(message))
+      return { ok: false, error: "subsidiary_not_found" };
     if (/^allocation driver .* does not belong/.test(message)) {
       return { ok: false, error: "allocation_driver_not_found" };
     }
@@ -191,8 +198,14 @@ const listAllocationRules: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["allocations.read"] },
   feature: "allocations",
   inputSchema: z.object({
-    mode: z.enum(["entry", "post", "period"]).optional().describe("Only rules bound at this moment; omit for all modes"),
-    activeOnly: z.boolean().optional().describe("Only active rules; default lists active and inactive"),
+    mode: z
+      .enum(["entry", "post", "period"])
+      .optional()
+      .describe("Only rules bound at this moment; omit for all modes"),
+    activeOnly: z
+      .boolean()
+      .optional()
+      .describe("Only active rules; default lists active and inactive"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const off = await allocationsOff(authz);
@@ -298,7 +311,10 @@ const listAllocationDrivers: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["allocations.read"] },
   feature: "allocations",
   inputSchema: z.object({
-    includeInactive: z.boolean().optional().describe("Include inactive drivers; needs allocations.manage like the drivers tab"),
+    includeInactive: z
+      .boolean()
+      .optional()
+      .describe("Include inactive drivers; needs allocations.manage like the drivers tab"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const off = await allocationsOff(authz);
@@ -308,7 +324,9 @@ const listAllocationDrivers: AssistantToolDef = {
     if (a.includeInactive === true && !can(authz, "allocations.manage")) {
       return { ok: false, error: "forbidden" };
     }
-    const drivers = await listDrivers(authz.user.orgId, { includeInactive: a.includeInactive === true });
+    const drivers = await listDrivers(authz.user.orgId, {
+      includeInactive: a.includeInactive === true,
+    });
     const rows = drivers.map((driver) => ({
       id: driver.id,
       key: driver.key,
@@ -338,13 +356,18 @@ const previewDriverVectorTool: AssistantToolDef = {
   inputSchema: z.object({
     driverId: uuidInput.optional().describe("Driver id from list_allocation_drivers"),
     driverKey: driverKeyInput.optional(),
-    periodId: uuidInput.optional().describe("Accounting period id; exactly one of periodId or period"),
-    period: periodPresetInput.optional().describe("Fiscal preset; the driver reads the window ending on its end date"),
+    periodId: uuidInput
+      .optional()
+      .describe("Accounting period id; exactly one of periodId or period"),
+    period: periodPresetInput
+      .optional()
+      .describe("Fiscal preset; the driver reads the window ending on its end date"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const off = await allocationsOff(authz);
     if (off) return off;
-    if (guardUnrestrictedScope(authz)) return { ok: false, error: "requires unrestricted subsidiary access" };
+    if (guardUnrestrictedScope(authz))
+      return { ok: false, error: "requires unrestricted subsidiary access" };
     const a = raw as { driverId?: string; driverKey?: string; periodId?: string; period?: string };
     const driverId = await resolveDriverId(authz.user.orgId, authz.allowedSubsidiaryIds, a);
     if (typeof driverId !== "string") return driverId;
@@ -364,7 +387,13 @@ const previewDriverVectorTool: AssistantToolDef = {
       // with the engine report runner, so report_definition drivers read
       // the same numbers a run would apportion on.
       const result = await previewDriverVector(
-        { orgId: authz.user.orgId, driverId, asOf, actorId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+        {
+          orgId: authz.user.orgId,
+          driverId,
+          asOf,
+          actorId: authz.user.id,
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        },
         { reportRunner: { runReport: runDriverReport } },
       );
       const labels = await getDimensionValueLabels(
@@ -372,7 +401,9 @@ const previewDriverVectorTool: AssistantToolDef = {
         result.driver.dimension,
         result.vector.map((entry) => entry.key),
       );
-      const shares = vectorShares(new Map(result.vector.map((entry) => [entry.key, entry.value] as [string, string])));
+      const shares = vectorShares(
+        new Map(result.vector.map((entry) => [entry.key, entry.value] as [string, string])),
+      );
       const rows = result.vector.map((entry) => ({
         id: entry.key,
         label: labels.get(entry.key) ?? entry.key,
@@ -406,7 +437,14 @@ const previewDriverVectorTool: AssistantToolDef = {
   },
 };
 
-const RUN_STATUSES = ["previewed", "pending_approval", "posted", "reversed", "failed", "superseded"] as const;
+const RUN_STATUSES = [
+  "previewed",
+  "pending_approval",
+  "posted",
+  "reversed",
+  "failed",
+  "superseded",
+] as const;
 
 const listAllocationRuns: AssistantToolDef = {
   name: "list_allocation_runs",
@@ -417,19 +455,31 @@ const listAllocationRuns: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["allocations.read"] },
   feature: "allocations",
   inputSchema: z.object({
-    ruleId: uuidInput.optional().describe("Only runs of this rule; resolve the key with list_allocation_rules"),
+    ruleId: uuidInput
+      .optional()
+      .describe("Only runs of this rule; resolve the key with list_allocation_rules"),
     periodId: uuidInput.optional().describe("Only runs for this accounting period"),
     bookId: uuidInput.optional().describe("Only runs posted to this accounting book"),
     subsidiaryId: uuidInput.optional().describe("Only runs pinned to this subsidiary"),
     status: z.enum(RUN_STATUSES).optional().describe("Only runs in this lifecycle status"),
-    limit: z.number().int().min(1).max(100).optional().describe("Maximum runs to return (default 25)"),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .optional()
+      .describe("Maximum runs to return (default 25)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const off = await allocationsOff(authz);
     if (off) return off;
     const a = raw as {
-      ruleId?: string; periodId?: string; bookId?: string;
-      subsidiaryId?: string; status?: (typeof RUN_STATUSES)[number]; limit?: number;
+      ruleId?: string;
+      periodId?: string;
+      bookId?: string;
+      subsidiaryId?: string;
+      status?: (typeof RUN_STATUSES)[number];
+      limit?: number;
     };
     try {
       // Same read as the runs-tab list route: the caller's subsidiary
@@ -485,10 +535,18 @@ const previewAllocation: AssistantToolDef = {
   inputSchema: z.object({
     ruleId: uuidInput.optional().describe("Rule id from list_allocation_rules"),
     ruleKey: ruleKeyInput.optional(),
-    periodId: uuidInput.optional().describe("Accounting period id; exactly one of periodId or period"),
-    period: periodPresetInput.optional().describe("Fiscal preset; sweeps the accounting period holding its end date"),
-    bookId: uuidInput.optional().describe("Accounting book; defaults to the primary book like the runs tab"),
-    subsidiaryId: uuidInput.optional().describe("Pin the sweep to one subsidiary; must be inside your scope"),
+    periodId: uuidInput
+      .optional()
+      .describe("Accounting period id; exactly one of periodId or period"),
+    period: periodPresetInput
+      .optional()
+      .describe("Fiscal preset; sweeps the accounting period holding its end date"),
+    bookId: uuidInput
+      .optional()
+      .describe("Accounting book; defaults to the primary book like the runs tab"),
+    subsidiaryId: uuidInput
+      .optional()
+      .describe("Pin the sweep to one subsidiary; must be inside your scope"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     // HTTP parity: POST /api/allocations/runs/preview is allocations.run.
@@ -498,8 +556,12 @@ const previewAllocation: AssistantToolDef = {
       return { ok: false, error: "forbidden" };
     }
     const a = raw as {
-      ruleId?: string; ruleKey?: string; periodId?: string; period?: string;
-      bookId?: string; subsidiaryId?: string;
+      ruleId?: string;
+      ruleKey?: string;
+      periodId?: string;
+      period?: string;
+      bookId?: string;
+      subsidiaryId?: string;
     };
     // Restricted callers must pin a subsidiary they can see. Omitting the pin
     // would pass null into previewAllocationRun and sweep every legal entity.
@@ -587,14 +649,27 @@ const explainAllocation: AssistantToolDef = {
   inputSchema: z.object({
     runId: uuidInput.optional().describe("Allocation run id from list_allocation_runs"),
     journalEntryId: uuidInput.optional().describe("Journal entry holding allocated lines"),
-    documentId: uuidInput.optional().describe("Source document whose lines were split or contributed"),
+    documentId: uuidInput
+      .optional()
+      .describe("Source document whose lines were split or contributed"),
     limit: z.number().int().min(1).max(200).optional().describe("Page size (default 200)"),
-    offset: z.number().int().min(0).optional().describe("Zero-based lineage row offset (default 0)"),
+    offset: z
+      .number()
+      .int()
+      .min(0)
+      .optional()
+      .describe("Zero-based lineage row offset (default 0)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const off = await allocationsOff(authz);
     if (off) return off;
-    const a = raw as { runId?: string; journalEntryId?: string; documentId?: string; limit?: number; offset?: number };
+    const a = raw as {
+      runId?: string;
+      journalEntryId?: string;
+      documentId?: string;
+      limit?: number;
+      offset?: number;
+    };
     let anchor;
     try {
       anchor = validateLineageAnchor(a);
@@ -607,19 +682,29 @@ const explainAllocation: AssistantToolDef = {
       // not-found (not empty lineage): run drawer, get_journal_entry, get_document.
       if (anchor.kind === "run") {
         const run = await getRun(authz.user.orgId, anchor.id);
-        if (!allocationScopeVisible(authz.allowedSubsidiaryIds, run.subsidiaryId, run.computation)) {
+        if (
+          !allocationScopeVisible(authz.allowedSubsidiaryIds, run.subsidiaryId, run.computation)
+        ) {
           return { ok: false, error: "allocation_run_not_found" };
         }
       } else if (anchor.kind === "journalEntry") {
-        const seen = await entryDetail(authz.user.orgId, anchor.id, authz.allowedSubsidiaryIds, can(authz, "payroll.read"));
+        const seen = await entryDetail(
+          authz.user.orgId,
+          anchor.id,
+          authz.allowedSubsidiaryIds,
+          can(authz, "payroll.read"),
+        );
         if (!seen.entry) return { ok: false, error: "entry_not_found" };
       } else if (anchor.kind === "document") {
-        const seen = await db.execute<{ id: string }>(sql`
+        const seen = await db.execute<{ id: string }>(
+          sql`
           select d.id::text as id
             from documents d
            where d.id = ${anchor.id} and d.org_id = ${authz.user.orgId}
              ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
-           limit 1`, "objects");
+           limit 1`,
+          "objects",
+        );
         if (!seen[0]) return { ok: false, error: "document_not_found" };
       }
       const result = await queryLineage(
@@ -629,7 +714,11 @@ const explainAllocation: AssistantToolDef = {
           journalEntryId: a.journalEntryId,
           documentId: a.documentId,
         },
-        { allowedSubsidiaryIds: authz.allowedSubsidiaryIds, limit: a.limit ?? 200, offset: a.offset ?? 0 },
+        {
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+          limit: a.limit ?? 200,
+          offset: a.offset ?? 0,
+        },
       );
       const rows = result.rows.map((row) => ({
         id: row.id,

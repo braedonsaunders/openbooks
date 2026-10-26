@@ -5,7 +5,9 @@ export function assertProductionSandboxSource<T extends { env_kind: string }>(
 ): asserts source is T {
   if (!source) throw new Error(`production org not found: ${sourceOrgId}`);
   if (source.env_kind !== "production") {
-    throw new Error(`sandbox source ${sourceOrgId} must be a production organization; sandbox and template organizations cannot be cloned`);
+    throw new Error(
+      `sandbox source ${sourceOrgId} must be a production organization; sandbox and template organizations cannot be cloned`,
+    );
   }
 }
 
@@ -16,9 +18,15 @@ export function assertProductionSandboxSource<T extends { env_kind: string }>(
  * the same predicate the template lookup uses) — there is no 'template'
  * env_kind.
  */
-export function isSampleTemplateSource(settings: Record<string, unknown> | null | undefined): boolean {
+export function isSampleTemplateSource(
+  settings: Record<string, unknown> | null | undefined,
+): boolean {
   const marker = (settings ?? {})["sampleTemplate"];
-  return !!marker && typeof marker === "object" && (marker as Record<string, unknown>)["enabled"] === true;
+  return (
+    !!marker &&
+    typeof marker === "object" &&
+    (marker as Record<string, unknown>)["enabled"] === true
+  );
 }
 
 /**
@@ -31,12 +39,11 @@ export function isSampleTemplateSource(settings: Record<string, unknown> | null 
  */
 export function assertTemplateSandboxSource<
   T extends { env_kind: string; settings: Record<string, unknown> | null },
->(
-  source: T | null | undefined,
-  sourceOrgId: string,
-): asserts source is T {
+>(source: T | null | undefined, sourceOrgId: string): asserts source is T {
   if (!source) throw new Error(`template org not found: ${sourceOrgId}`);
   if (!isSampleTemplateSource(source.settings)) {
-    throw new Error(`sample source ${sourceOrgId} must be a promoted sample template; ordinary sandbox and production organizations cannot provision a sample company`);
+    throw new Error(
+      `sample source ${sourceOrgId} must be a promoted sample template; ordinary sandbox and production organizations cannot provision a sample company`,
+    );
   }
 }

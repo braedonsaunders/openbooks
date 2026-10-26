@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import { useTranslations } from 'next-intl'
-import type { ChecklistStepDesign } from '@openbooks/forms-core'
-import { ChatMarkdown } from './assistant/markdown'
-import { RecordFields } from './record-fields'
-import type { ReactNode } from 'react'
+import { useTranslations } from "next-intl";
+import type { ChecklistStepDesign } from "@openbooks/forms-core";
+import { ChatMarkdown } from "./assistant/markdown";
+import { RecordFields } from "./record-fields";
+import type { ReactNode } from "react";
 
 /** The same instructions and form render in the designer preview and live work. */
 export function ChecklistStepContent({
@@ -16,15 +16,15 @@ export function ChecklistStepContent({
   disabled,
   attachment,
 }: {
-  step: { description: string | null; evidenceKind: string; design?: ChecklistStepDesign }
-  values: Record<string, unknown>
-  onChange: (key: string, value: unknown) => void
-  acknowledged?: boolean
-  onAcknowledge?: (value: boolean) => void
-  disabled?: boolean
-  attachment?: ReactNode
+  step: { description: string | null; evidenceKind: string; design?: ChecklistStepDesign };
+  values: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
+  acknowledged?: boolean;
+  onAcknowledge?: (value: boolean) => void;
+  disabled?: boolean;
+  attachment?: ReactNode;
 }) {
-  const t = useTranslations('hrm.processes.designer')
+  const t = useTranslations("hrm.processes.designer");
   return (
     <div className="space-y-5">
       {step.description ? <ChatMarkdown>{step.description}</ChatMarkdown> : null}
@@ -49,7 +49,7 @@ export function ChecklistStepContent({
           disabled={disabled}
         />
       ) : null}
-      {step.evidenceKind === 'acknowledgement' && onAcknowledge ? (
+      {step.evidenceKind === "acknowledgement" && onAcknowledge ? (
         <label className="flex items-start gap-3 rounded-lg border border-teal-200 bg-teal-50/40 p-4 text-sm dark:border-teal-900 dark:bg-teal-950/30">
           <input
             type="checkbox"
@@ -58,10 +58,10 @@ export function ChecklistStepContent({
             onChange={(e) => onAcknowledge(e.target.checked)}
             className="mt-0.5"
           />
-          {t('acknowledge')}
+          {t("acknowledge")}
         </label>
       ) : null}
       {attachment}
     </div>
-  )
+  );
 }

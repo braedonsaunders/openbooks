@@ -52,8 +52,12 @@ export async function idempotentResourcingCreate<T>(input: {
   } catch (error) {
     await db.execute(sql`rollback to savepoint resourcing_idempotent_create`);
     await db.execute(sql`release savepoint resourcing_idempotent_create`);
-    const code = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
-    const constraint = typeof error === "object" && error !== null && "constraint" in error ? String(error.constraint) : "";
+    const code =
+      typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+    const constraint =
+      typeof error === "object" && error !== null && "constraint" in error
+        ? String(error.constraint)
+        : "";
     if (code === "23505" && constraint === `${input.table}_pkey`) throw idempotencyConflict();
     throw error;
   }

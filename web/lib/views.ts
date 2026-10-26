@@ -1,8 +1,8 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { permissionSetCovers } from './permissions'
-import { auditSetupChange } from './setup/audit'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { permissionSetCovers } from "./permissions";
+import { auditSetupChange } from "./setup/audit";
 import {
   REPORT_ENTITY_MAP,
   defaultRowsQuery,
@@ -10,8 +10,8 @@ import {
   type ReportCustomQuery,
   type ReportRunLabels,
   type ReportRunResult,
-} from '@openbooks/reports'
-import { executeReport } from './custom-reports'
+} from "@openbooks/reports";
+import { executeReport } from "./custom-reports";
 
 /**
  * Views (saved, shareable queries in the Knowledge menu). A view stores a
@@ -25,41 +25,48 @@ import { executeReport } from './custom-reports'
  * admins bypass). Only the owner (or an admin) may edit/delete.
  */
 
-export type ViewScope = 'private' | 'shared'
+export type ViewScope = "private" | "shared";
 
 export type ViewRow = {
-  id: string
-  org_id: string
-  slug: string
-  name: string
-  description: string | null
-  query: ReportCustomQuery
-  layout: Record<string, unknown> | null
-  scope: ViewScope
-  owner_id: string
-  allowed_roles: string[] | null
-  created_at: string
-  updated_at: string
-}
+  id: string;
+  org_id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  query: ReportCustomQuery;
+  layout: Record<string, unknown> | null;
+  scope: ViewScope;
+  owner_id: string;
+  allowed_roles: string[] | null;
+  created_at: string;
+  updated_at: string;
+};
 
 export type ViewVisibility = {
-  roleKeys: string[]
-  isAdmin: boolean
-}
+  roleKeys: string[];
+  isAdmin: boolean;
+};
 
-async function userVisibility(orgId: string, userId: string, perms: Set<string>): Promise<ViewVisibility> {
-  const isAdmin = permissionSetCovers(perms, '*')
-  let roleKeys: string[] = []
+async function userVisibility(
+  orgId: string,
+  userId: string,
+  perms: Set<string>,
+): Promise<ViewVisibility> {
+  const isAdmin = permissionSetCovers(perms, "*");
+  let roleKeys: string[] = [];
   if (!isAdmin) {
-    const r = (await db.execute<{ key: string }>(sql`
+    const r = await db.execute<{ key: string }>(
+      sql`
       select r.key
         from role_assignments a
         join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where a.user_id = ${userId} and a.org_id = ${orgId}
-    `, 'objects'))
-    roleKeys = r.map((x) => x.key)
+    `,
+      "objects",
+    );
+    roleKeys = r.map((x) => x.key);
   }
-  return { roleKeys, isAdmin }
+  return { roleKeys, isAdmin };
 }
 
 /**
@@ -68,7 +75,7 @@ async function userVisibility(orgId: string, userId: string, perms: Set<string>)
  */
 function visiblePredicate(userId: string, vis: ViewVisibility): SQL {
   // Admins see every shared and private view.
-  if (vis.isAdmin) return sql`sv.scope in ('shared', 'private')`
+  if (vis.isAdmin) return sql`sv.scope in ('shared', 'private')`;
   // allowedRoles gating: a shared view with a non-empty allowed_roles array
   // is visible only to holders of one of those roles (admins bypass).
   // NB: interpolating a JS array into drizzle `sql` EXPANDS it into a value
@@ -77,19 +84,19 @@ function visiblePredicate(userId: string, vis: ViewVisibility): SQL {
   const noRoleRestriction = sql`(
     sv.allowed_roles is null
     or jsonb_array_length(coalesce(sv.allowed_roles,'[]'::jsonb)) = 0
-  )`
+  )`;
   const allowedClause =
     vis.roleKeys.length === 0
       ? noRoleRestriction
       : sql`(${noRoleRestriction} or exists (
           select 1 from jsonb_array_elements_text(coalesce(sv.allowed_roles,'[]'::jsonb)) k
            where k in (select jsonb_array_elements_text(${JSON.stringify(vis.roleKeys)}::jsonb))
-        ))`
+        ))`;
   // The owner always retains access to their own views: without this, an
   // owner sharing a view with roles that exclude their own role locks
   // themselves out (every later GET/PATCH/DELETE 404s) while still holding
   // the edit grant — visibility and mutation must agree on ownership.
-  return sql`(sv.owner_id = ${userId}) or (sv.scope = 'shared' and ${allowedClause})`
+  return sql`(sv.owner_id = ${userId}) or (sv.scope = 'shared' and ${allowedClause})`;
 }
 
 export async function loadViews(
@@ -97,16 +104,19 @@ export async function loadViews(
   userId: string,
   perms: Set<string>,
 ): Promise<ViewRow[]> {
-  const vis = await userVisibility(orgId, userId, perms)
-  const r = (await db.execute<ViewRow>(sql`
+  const vis = await userVisibility(orgId, userId, perms);
+  const r = await db.execute<ViewRow>(
+    sql`
     select sv.id, sv.org_id, sv.slug, sv.name, sv.description, sv.query, sv.layout,
            sv.scope, sv.owner_id, sv.allowed_roles, sv.created_at, sv.updated_at
       from saved_views sv
      where sv.org_id = ${orgId}
        and (${visiblePredicate(userId, vis)})
      order by sv.updated_at desc
-  `, 'objects'))
-  return r.map(normalize)
+  `,
+    "objects",
+  );
+  return r.map(normalize);
 }
 
 export async function loadView(
@@ -115,16 +125,19 @@ export async function loadView(
   userId: string,
   perms: Set<string>,
 ): Promise<ViewRow | null> {
-  const vis = await userVisibility(orgId, userId, perms)
-  const r = (await db.execute<ViewRow>(sql`
+  const vis = await userVisibility(orgId, userId, perms);
+  const r = await db.execute<ViewRow>(
+    sql`
     select sv.id, sv.org_id, sv.slug, sv.name, sv.description, sv.query, sv.layout,
            sv.scope, sv.owner_id, sv.allowed_roles, sv.created_at, sv.updated_at
       from saved_views sv
      where sv.org_id = ${orgId} and sv.id = ${id}
        and (${visiblePredicate(userId, vis)})
      limit 1
-  `, 'objects'))
-  return r[0] ? normalize(r[0]) : null
+  `,
+    "objects",
+  );
+  return r[0] ? normalize(r[0]) : null;
 }
 
 /** The owner (or an admin) may edit/delete — checked before any mutation. */
@@ -133,32 +146,38 @@ async function assertCanMutate(
   id: string,
   userId: string,
   isAdmin: boolean,
-  runner: Pick<typeof db, 'execute'> = db,
+  runner: Pick<typeof db, "execute"> = db,
 ): Promise<boolean> {
-  if (isAdmin) return true
-  const r = (await runner.execute(sql`
+  if (isAdmin) return true;
+  const r = await runner.execute(
+    sql`
     select 1 from saved_views
      where org_id = ${orgId} and id = ${id} and owner_id = ${userId}
      limit 1
-  `, 'objects'))
-  return r.length > 0
+  `,
+    "objects",
+  );
+  return r.length > 0;
 }
 
 export async function createView(args: {
-  orgId: string
-  userId: string
-  name?: string
+  orgId: string;
+  userId: string;
+  name?: string;
 }): Promise<{ id: string; slug: string }> {
-  const name = args.name?.trim() || 'Untitled view'
-  const slug = await uniqueViewSlug(args.orgId, slugifyViewName(name))
-  const query = defaultRowsQuery(REPORT_ENTITY_MAP.ledger_lines!)
-  const r = (await db.execute<{ id: string; slug: string }>(sql`
+  const name = args.name?.trim() || "Untitled view";
+  const slug = await uniqueViewSlug(args.orgId, slugifyViewName(name));
+  const query = defaultRowsQuery(REPORT_ENTITY_MAP.ledger_lines!);
+  const r = await db.execute<{ id: string; slug: string }>(
+    sql`
     insert into saved_views (org_id, slug, name, query, scope, owner_id, created_by, updated_by)
     values (${args.orgId}, ${slug}, ${name}, ${query as unknown as Record<string, unknown>}, 'private',
             ${args.userId}, ${args.userId}, ${args.userId})
     returning id, slug
-  `, 'objects'))
-  return r[0]!
+  `,
+    "objects",
+  );
+  return r[0]!;
 }
 
 export async function updateView(
@@ -167,44 +186,51 @@ export async function updateView(
   userId: string,
   isAdmin: boolean,
   patch: {
-    name?: unknown
-    slug?: unknown
-    description?: unknown
-    query?: unknown
-    layout?: unknown
-    scope?: unknown
-    allowedRoles?: unknown
+    name?: unknown;
+    slug?: unknown;
+    description?: unknown;
+    query?: unknown;
+    layout?: unknown;
+    scope?: unknown;
+    allowedRoles?: unknown;
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   // Every field is validated by TYPE here, not just by shape upstream: the
   // route parses a bare JSON object and type-asserts, so {"name": 42} would
   // otherwise reach name.trim() and 500. Each refusal names its field.
-  if (patch.name !== undefined && (typeof patch.name !== 'string' || !patch.name.trim())) {
-    return { ok: false, error: 'Invalid name' }
+  if (patch.name !== undefined && (typeof patch.name !== "string" || !patch.name.trim())) {
+    return { ok: false, error: "Invalid name" };
   }
-  if (patch.slug !== undefined && (typeof patch.slug !== 'string' || !patch.slug)) {
-    return { ok: false, error: 'Invalid slug' }
+  if (patch.slug !== undefined && (typeof patch.slug !== "string" || !patch.slug)) {
+    return { ok: false, error: "Invalid slug" };
   }
-  if (patch.description !== undefined && patch.description !== null && typeof patch.description !== 'string') {
-    return { ok: false, error: 'Invalid description' }
+  if (
+    patch.description !== undefined &&
+    patch.description !== null &&
+    typeof patch.description !== "string"
+  ) {
+    return { ok: false, error: "Invalid description" };
   }
-  let validatedQuery: ReportCustomQuery | undefined
+  let validatedQuery: ReportCustomQuery | undefined;
   if (patch.query !== undefined) {
     try {
-      validatedQuery = validateCustomQuery(patch.query as ReportCustomQuery)
+      validatedQuery = validateCustomQuery(patch.query as ReportCustomQuery);
     } catch (err) {
-      return { ok: false, error: err instanceof Error ? err.message : 'Invalid query' }
+      return { ok: false, error: err instanceof Error ? err.message : "Invalid query" };
     }
   }
-  if (patch.layout !== undefined && patch.layout !== null &&
-      (typeof patch.layout !== 'object' || Array.isArray(patch.layout))) {
-    return { ok: false, error: 'Invalid layout' }
+  if (
+    patch.layout !== undefined &&
+    patch.layout !== null &&
+    (typeof patch.layout !== "object" || Array.isArray(patch.layout))
+  ) {
+    return { ok: false, error: "Invalid layout" };
   }
   if (patch.scope !== undefined) {
     // The scope drives the visibility predicate — an unexpected value would
     // make the row invisible to everyone (including its owner). Whitelist it.
-    if (patch.scope !== 'private' && patch.scope !== 'shared') {
-      return { ok: false, error: 'Invalid scope' }
+    if (patch.scope !== "private" && patch.scope !== "shared") {
+      return { ok: false, error: "Invalid scope" };
     }
   }
   if (patch.allowedRoles !== undefined) {
@@ -212,63 +238,78 @@ export async function updateView(
     // array would be serialized by node-postgres as a Postgres array literal,
     // which is invalid jsonb). Whitelist the shape: null or string[].
     if (patch.allowedRoles !== null) {
-      if (!Array.isArray(patch.allowedRoles) || patch.allowedRoles.some((r) => typeof r !== 'string')) {
-        return { ok: false, error: 'Invalid allowedRoles' }
+      if (
+        !Array.isArray(patch.allowedRoles) ||
+        patch.allowedRoles.some((r) => typeof r !== "string")
+      ) {
+        return { ok: false, error: "Invalid allowedRoles" };
       }
     }
   }
 
   return db.transaction(async (tx) => {
-    const canMutate = await assertCanMutate(orgId, id, userId, isAdmin, tx)
-    if (!canMutate) return { ok: false, error: 'You can only edit your own views.' } as const
-    const before = (await tx.execute<ViewRow>(sql`
+    const canMutate = await assertCanMutate(orgId, id, userId, isAdmin, tx);
+    if (!canMutate) return { ok: false, error: "You can only edit your own views." } as const;
+    const before = (
+      await tx.execute<ViewRow>(
+        sql`
       select sv.id, sv.org_id, sv.slug, sv.name, sv.description, sv.query, sv.layout,
              sv.scope, sv.owner_id, sv.allowed_roles, sv.created_at, sv.updated_at
         from saved_views sv
        where sv.org_id = ${orgId} and sv.id = ${id}
        for update
-    `, 'objects'))[0]
-    if (!before) return { ok: false, error: 'You can only edit your own views.' } as const
+    `,
+        "objects",
+      )
+    )[0];
+    if (!before) return { ok: false, error: "You can only edit your own views." } as const;
 
-    const sets: SQL[] = []
-    if (patch.name !== undefined) sets.push(sql`name = ${(patch.name as string).trim()}`)
-    if (patch.slug !== undefined) sets.push(sql`slug = ${patch.slug as string}`)
-    if (patch.description !== undefined) sets.push(sql`description = ${patch.description as string | null}`)
+    const sets: SQL[] = [];
+    if (patch.name !== undefined) sets.push(sql`name = ${(patch.name as string).trim()}`);
+    if (patch.slug !== undefined) sets.push(sql`slug = ${patch.slug as string}`);
+    if (patch.description !== undefined)
+      sets.push(sql`description = ${patch.description as string | null}`);
     if (validatedQuery !== undefined) {
-      sets.push(sql`query = ${validatedQuery as unknown as Record<string, unknown>}`)
+      sets.push(sql`query = ${validatedQuery as unknown as Record<string, unknown>}`);
     }
-    if (patch.layout !== undefined) sets.push(sql`layout = ${patch.layout as Record<string, unknown> | null}`)
-    if (patch.scope !== undefined) sets.push(sql`scope = ${patch.scope as ViewScope}`)
+    if (patch.layout !== undefined)
+      sets.push(sql`layout = ${patch.layout as Record<string, unknown> | null}`);
+    if (patch.scope !== undefined) sets.push(sql`scope = ${patch.scope as ViewScope}`);
     if (patch.allowedRoles !== undefined) {
       sets.push(
         patch.allowedRoles === null
           ? sql`allowed_roles = null`
           : sql`allowed_roles = ${JSON.stringify(patch.allowedRoles)}::jsonb`,
-      )
+      );
     }
-    if (sets.length === 0) return { ok: true } as const
-    sets.push(sql`updated_at = now()`, sql`updated_by = ${userId}`)
-    const after = (await tx.execute<ViewRow>(sql`
+    if (sets.length === 0) return { ok: true } as const;
+    sets.push(sql`updated_at = now()`, sql`updated_by = ${userId}`);
+    const after = (
+      await tx.execute<ViewRow>(
+        sql`
       update saved_views set ${sql.join(sets, sql`, `)}
        where org_id = ${orgId} and id = ${id}
       returning id, org_id, slug, name, description, query, layout, scope,
                 owner_id, allowed_roles, created_at, updated_at
-    `, 'objects'))[0]!
+    `,
+        "objects",
+      )
+    )[0]!;
     // The edit and its audit evidence commit atomically: a mutation with no
     // audit row (or an audit row with no mutation) is a half-written history.
     await auditSetupChange(
       {
         orgId,
-        table: 'saved_views',
+        table: "saved_views",
         rowId: id,
-        action: 'update',
+        action: "update",
         changes: { before: normalize(before), after: normalize(after) },
         actorId: userId,
       },
       tx,
-    )
-    return { ok: true } as const
-  })
+    );
+    return { ok: true } as const;
+  });
 }
 
 export async function deleteView(
@@ -278,34 +319,39 @@ export async function deleteView(
   isAdmin: boolean,
 ): Promise<boolean> {
   return db.transaction(async (tx) => {
-    const canMutate = await assertCanMutate(orgId, id, userId, isAdmin, tx)
-    if (!canMutate) return false
+    const canMutate = await assertCanMutate(orgId, id, userId, isAdmin, tx);
+    if (!canMutate) return false;
     // Snapshot the row before deleting: the audit trail keeps the deletion
     // evidence, in the same transaction as the delete itself.
-    const before = (await tx.execute<ViewRow>(sql`
+    const before = (
+      await tx.execute<ViewRow>(
+        sql`
       select sv.id, sv.org_id, sv.slug, sv.name, sv.description, sv.query, sv.layout,
              sv.scope, sv.owner_id, sv.allowed_roles, sv.created_at, sv.updated_at
         from saved_views sv
        where sv.org_id = ${orgId} and sv.id = ${id}
        for update
-    `, 'objects'))[0]
-    if (!before) return false
+    `,
+        "objects",
+      )
+    )[0];
+    if (!before) return false;
     await tx.execute(sql`
       delete from saved_views where org_id = ${orgId} and id = ${id}
-    `)
+    `);
     await auditSetupChange(
       {
         orgId,
-        table: 'saved_views',
+        table: "saved_views",
         rowId: id,
-        action: 'delete',
+        action: "delete",
         changes: { before: normalize(before) },
         actorId: userId,
       },
       tx,
-    )
-    return true
-  })
+    );
+    return true;
+  });
 }
 
 /** Execute a view's plan (fresh, current data) — the one shared executor. */
@@ -319,35 +365,42 @@ export async function runView(
   // through executeReport too: a `period_preset` window that reached the
   // compiler unresolved would silently drop its date bounds and return every
   // row. This also supplies fiscalStartMonth for fiscal_* breakouts.
-  return executeReport(orgId, query, maxRows, labels)
+  return executeReport(orgId, query, maxRows, labels);
 }
 
 export function slugifyViewName(name: string): string {
   const base = name
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 80)
-  return base || 'view'
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return base || "view";
 }
 
-export async function uniqueViewSlug(orgId: string, desired: string, excludeId?: string): Promise<string> {
-  let slug = desired
+export async function uniqueViewSlug(
+  orgId: string,
+  desired: string,
+  excludeId?: string,
+): Promise<string> {
+  let slug = desired;
   for (let n = 2; n < 1000; n++) {
-    const clash = (await db.execute(sql`
+    const clash = await db.execute(
+      sql`
       select 1 from saved_views
        where org_id = ${orgId} and slug = ${slug}
          ${excludeId ? sql`and id <> ${excludeId}` : sql``}
        limit 1
-    `, 'objects'))
-    if (clash.length === 0) return slug
-    slug = `${desired}-${n}`
+    `,
+      "objects",
+    );
+    if (clash.length === 0) return slug;
+    slug = `${desired}-${n}`;
   }
-  return `${desired}-${Date.now()}`
+  return `${desired}-${Date.now()}`;
 }
 
 /** Normalize a DB row: the query jsonb comes back validated-shaped. */
 function normalize(row: ViewRow): ViewRow {
-  return { ...row, query: validateCustomQuery(row.query) }
+  return { ...row, query: validateCustomQuery(row.query) };
 }

@@ -38,7 +38,10 @@ test("a posted entry opens over the current record without leaving its page", ()
 });
 
 test("on the journal page a posted entry replaces any open manual journal document", () => {
-  const href = new URL(hrefOf("/journal", "entry=doc-1&mode=edit&journalTab=drafts"), "http://localhost");
+  const href = new URL(
+    hrefOf("/journal", "entry=doc-1&mode=edit&journalTab=drafts"),
+    "http://localhost",
+  );
   assert.equal(href.pathname, "/journal");
   assert.equal(href.searchParams.get("journalEntry"), ENTRY_ID);
   assert.equal(href.searchParams.has("entry"), false, "the manual-journal document key is cleared");

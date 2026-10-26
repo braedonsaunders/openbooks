@@ -10,8 +10,8 @@
 // touched at the very end, inside Intl formatting, on a single already-rounded
 // display value.
 
-import type { ReportScale } from './report-filters'
-import type { StatementColumnKind } from './statement-matrix'
+import type { ReportScale } from "./report-filters";
+import type { StatementColumnKind } from "./statement-matrix";
 // Exact decimal arithmetic lives in exactly one place — the engine money
 // primitive. These aliases keep the presentation call sites stable while the
 // parsing, rounding, and scientific-exponent bounds stay shared.
@@ -19,61 +19,62 @@ import {
   fromUnits as moneyFromUnits,
   roundDiv as moneyRoundDiv,
   toUnits as moneyToUnits,
-} from '@openbooks/engine/money/money'
+} from "@openbooks/engine/money/money";
 
-export type ExactDecimal = string
-export type StatementValue = ExactDecimal | null | undefined
+export type ExactDecimal = string;
+export type StatementValue = ExactDecimal | null | undefined;
 
 /** Ledger minor units per whole unit (numeric(19,4)); mirrors money.ts SCALE. */
-const SCALE = 10_000n
+const SCALE = 10_000n;
 
-export const roundDiv = moneyRoundDiv
+export const roundDiv = moneyRoundDiv;
 
 export function toDecimalUnits(value: string | number): bigint {
-  return moneyToUnits(value)
+  return moneyToUnits(value);
 }
 
 export function fromDecimalUnits(units: bigint): ExactDecimal {
-  return moneyFromUnits(units)
+  return moneyFromUnits(units);
 }
 
 export function decimalAdd(a: string, b: string): ExactDecimal {
-  return fromDecimalUnits(toDecimalUnits(a) + toDecimalUnits(b))
+  return fromDecimalUnits(toDecimalUnits(a) + toDecimalUnits(b));
 }
 
 export function decimalNeg(a: string): ExactDecimal {
-  return fromDecimalUnits(-toDecimalUnits(a))
+  return fromDecimalUnits(-toDecimalUnits(a));
 }
 
 export function decimalSum(values: readonly string[]): ExactDecimal {
-  return fromDecimalUnits(values.reduce((acc, value) => acc + toDecimalUnits(value), 0n))
+  return fromDecimalUnits(values.reduce((acc, value) => acc + toDecimalUnits(value), 0n));
 }
 
 export function decimalCmp(a: string, b: string): number {
-  const diff = toDecimalUnits(a) - toDecimalUnits(b)
-  return diff < 0n ? -1 : diff > 0n ? 1 : 0
+  const diff = toDecimalUnits(a) - toDecimalUnits(b);
+  return diff < 0n ? -1 : diff > 0n ? 1 : 0;
 }
 
 export function decimalAbs(a: string): ExactDecimal {
-  const units = toDecimalUnits(a)
-  return fromDecimalUnits(units < 0n ? -units : units)
+  const units = toDecimalUnits(a);
+  return fromDecimalUnits(units < 0n ? -units : units);
 }
 
 export function decimalIsZero(a: string): boolean {
-  return toDecimalUnits(a) === 0n
+  return toDecimalUnits(a) === 0n;
 }
 
 /** True when |a| is at or above `threshold` (default half a cent) — the exact
  *  replacement for the old `Math.abs(v) >= 0.005` visibility test. */
-export function decimalIsMaterial(a: string, threshold = '0.0050'): boolean {
-  return decimalCmp(decimalAbs(a), threshold) >= 0
+export function decimalIsMaterial(a: string, threshold = "0.0050"): boolean {
+  return decimalCmp(decimalAbs(a), threshold) >= 0;
 }
 
 /** Divide an exact money value by an integer divisor (thousands/millions
  *  scaling), rounding half away from zero — no binary float division. */
 export function decimalScale(value: string, divisor: number): ExactDecimal {
-  if (!Number.isInteger(divisor) || divisor <= 0) throw new Error('divisor must be a positive integer')
-  return fromDecimalUnits(roundDiv(toDecimalUnits(value), BigInt(divisor)))
+  if (!Number.isInteger(divisor) || divisor <= 0)
+    throw new Error("divisor must be a positive integer");
+  return fromDecimalUnits(roundDiv(toDecimalUnits(value), BigInt(divisor)));
 }
 
 /** Scale by an integer divisor rounding ONCE to a whole display unit — the
@@ -82,19 +83,20 @@ export function decimalScale(value: string, divisor: number): ExactDecimal {
  *  double-rounds: 1499.9999 becomes 1.5000 thousand and prints as 2 instead
  *  of the true 1. */
 export function decimalScaleWhole(value: string, divisor: number): ExactDecimal {
-  if (!Number.isInteger(divisor) || divisor <= 0) throw new Error('divisor must be a positive integer')
-  return fromDecimalUnits(roundDiv(toDecimalUnits(value), BigInt(divisor) * SCALE) * SCALE)
+  if (!Number.isInteger(divisor) || divisor <= 0)
+    throw new Error("divisor must be a positive integer");
+  return fromDecimalUnits(roundDiv(toDecimalUnits(value), BigInt(divisor) * SCALE) * SCALE);
 }
 
 /** Percent change (current vs prior) as an exact 4dp decimal, or null when the
  *  prior is zero (undefined variance). Kept exact so combined/derived totals
  *  never accumulate float error before display. */
 export function decimalPercentChange(current: string, prior: string): ExactDecimal | null {
-  const priorUnits = toDecimalUnits(prior)
-  if (priorUnits === 0n) return null
-  const diff = toDecimalUnits(current) - priorUnits
-  const denominator = priorUnits < 0n ? -priorUnits : priorUnits
-  return fromDecimalUnits(roundDiv(diff * 100n * SCALE, denominator))
+  const priorUnits = toDecimalUnits(prior);
+  if (priorUnits === 0n) return null;
+  const diff = toDecimalUnits(current) - priorUnits;
+  const denominator = priorUnits < 0n ? -priorUnits : priorUnits;
+  return fromDecimalUnits(roundDiv(diff * 100n * SCALE, denominator));
 }
 
 /** Margin ratio → exact percent units for presentation.
@@ -107,30 +109,30 @@ export function decimalPercentChange(current: string, prior: string): ExactDecim
  *  display and export cannot diverge again. Scaling by 100 is exact in 4dp
  *  units; no rounding occurs. */
 export function marginRatioToPercent(margin: ExactDecimal): ExactDecimal {
-  return fromDecimalUnits(toDecimalUnits(margin) * 100n)
+  return fromDecimalUnits(toDecimalUnits(margin) * 100n);
 }
 
 /** Convert an exact decimal to a Number strictly for Intl formatting of a
  *  single already-rounded display cell (never for aggregation). */
 export function decimalToNumber(value: StatementValue): number {
-  return value === null || value === undefined ? NaN : Number(value)
+  return value === null || value === undefined ? NaN : Number(value);
 }
 
 export function scaleDivisor(scale: ReportScale): number {
-  return scale === 'thousands' ? 1000 : scale === 'millions' ? 1_000_000 : 1
+  return scale === "thousands" ? 1000 : scale === "millions" ? 1_000_000 : 1;
 }
 
 /** Whether a cell should read as "negative" for red-text styling. Accepts exact
  * decimal strings for money or presentation-only numbers for ratios/counts. */
 export function isNegative(value: StatementValue | number, kind: StatementColumnKind): boolean {
-  if (value === null || value === undefined) return false
-  if (typeof value === 'number') {
-    if (kind === 'variance_pct') return Number.isFinite(value) && value < 0
-    return value < -0.005
+  if (value === null || value === undefined) return false;
+  if (typeof value === "number") {
+    if (kind === "variance_pct") return Number.isFinite(value) && value < 0;
+    return value < -0.005;
   }
-  if (kind === 'variance_pct') {
-    const n = Number(value)
-    return Number.isFinite(n) && n < 0
+  if (kind === "variance_pct") {
+    const n = Number(value);
+    return Number.isFinite(n) && n < 0;
   }
-  return decimalCmp(value, '-0.0050') <= 0
+  return decimalCmp(value, "-0.0050") <= 0;
 }

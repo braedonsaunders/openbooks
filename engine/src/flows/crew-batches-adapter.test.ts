@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  CREW_TIME_BATCH_SUBJECT_KIND,
-  crewBatchFlowAdapter,
-} from "./crew-batches-adapter.ts";
+import { CREW_TIME_BATCH_SUBJECT_KIND, crewBatchFlowAdapter } from "./crew-batches-adapter.ts";
 import {
   registerFlowApprovalReleaseHandler,
   releaseFlowApproval,
@@ -11,12 +8,9 @@ import {
 
 test("crew batch release delegates to the registered web handler", async () => {
   const calls: unknown[] = [];
-  registerFlowApprovalReleaseHandler(
-    CREW_TIME_BATCH_SUBJECT_KIND,
-    async (args) => {
-      calls.push(args);
-    },
-  );
+  registerFlowApprovalReleaseHandler(CREW_TIME_BATCH_SUBJECT_KIND, async (args) => {
+    calls.push(args);
+  });
   await crewBatchFlowAdapter.releaseApproval!(
     "00000000-0000-4000-8000-000000000001",
     "approved",

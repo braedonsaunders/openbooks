@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  createMemoryOwnedRunStore,
-  executeOwnedRun,
-  type OwnedRunSnapshot,
-} from "./owned-runs";
+import { createMemoryOwnedRunStore, executeOwnedRun, type OwnedRunSnapshot } from "./owned-runs";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
@@ -13,12 +9,24 @@ function scriptedTurn(
   frames: { parts: unknown[] }[],
   opts?: { hangAfter?: number; signalSeen?: (signal: AbortSignal) => void },
 ) {
-  return async ({ signal, onChunk }: { signal: AbortSignal; onChunk: (parts: unknown[]) => void }) => {
+  return async ({
+    signal,
+    onChunk,
+  }: {
+    signal: AbortSignal;
+    onChunk: (parts: unknown[]) => void;
+  }) => {
     opts?.signalSeen?.(signal);
     let emitted = 0;
     for (const frame of frames) {
       if (signal.aborted) {
-        return { status: "stopped" as const, parts: [], content: "Response stopped.", usage: {}, finishReason: "abort" };
+        return {
+          status: "stopped" as const,
+          parts: [],
+          content: "Response stopped.",
+          usage: {},
+          finishReason: "abort",
+        };
       }
       onChunk(frame.parts);
       emitted += 1;
@@ -31,7 +39,13 @@ function scriptedTurn(
             }
           }, 5);
         });
-        return { status: "stopped" as const, parts: [], content: "Response stopped.", usage: {}, finishReason: "abort" };
+        return {
+          status: "stopped" as const,
+          parts: [],
+          content: "Response stopped.",
+          usage: {},
+          finishReason: "abort",
+        };
       }
       await tick();
     }
@@ -150,7 +164,13 @@ test("tool activity flushes immediately while text rides the throttle", async ()
       await tick();
       onChunk(toolParts);
       await tick();
-      return { status: "complete" as const, parts: toolParts, content: "done", usage: {}, finishReason: "stop" };
+      return {
+        status: "complete" as const,
+        parts: toolParts,
+        content: "done",
+        usage: {},
+        finishReason: "stop",
+      };
     },
     // A throttle no test should ever wait out: only boundaries may persist.
     progressIntervalMs: 3_600_000,

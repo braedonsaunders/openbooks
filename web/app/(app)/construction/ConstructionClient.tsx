@@ -1,8 +1,8 @@
-'use client'
+"use client";
 
-import { ApprovalActions } from '@/components/approval-actions'
+import { ApprovalActions } from "@/components/approval-actions";
 
-import { RecordTabs } from '@/components/module-home/record-tabs'
+import { RecordTabs } from "@/components/module-home/record-tabs";
 
 import { useMoney } from "@/components/money-provider";
 import {
@@ -29,7 +29,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { cmp } from "@openbooks/engine/money/money";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 
 export interface ApplicationIncomeAccount {
   id: string;
@@ -57,7 +57,7 @@ interface ChangeOrder {
   approvedOn: string | null;
   targetSovLineId: string | null;
   targetSovLineDescription: string | null;
-  incomeAccountId: string | null
+  incomeAccountId: string | null;
 }
 
 interface PayApp {
@@ -70,7 +70,7 @@ interface PayApp {
   invoiceNumber: string | null;
   invoiceTotal: string | null;
   invoiceStatus: string | null;
-  invoiceDocumentId: string | null
+  invoiceDocumentId: string | null;
 }
 
 interface Data {
@@ -109,33 +109,60 @@ function constructionRefusal(
   if (typeof error !== "string" || error === "") return fallback;
   // The draw-sequence refusal names the application and the later draws that
   // block it; carry both numbers into the localized remedy.
-  const laterDraws = /^Application #(\d+) cannot be voided while later applications? (#\d+(?:, #\d+)*) (?:is|are) not void/.exec(error);
-  if (laterDraws) return t("errors.laterApplicationsOpen", { number: laterDraws[1]!, later: laterDraws[2]! });
+  const laterDraws =
+    /^Application #(\d+) cannot be voided while later applications? (#\d+(?:, #\d+)*) (?:is|are) not void/.exec(
+      error,
+    );
+  if (laterDraws)
+    return t("errors.laterApplicationsOpen", { number: laterDraws[1]!, later: laterDraws[2]! });
   switch (error) {
-    case "not found": return t("errors.notFound");
-    case "This project's billing profile does not use applications for payment": return t("errors.notApplicationsBilling");
-    case "Projects feature is disabled": return t("errors.featureOff");
-    case "Income account not found": return t("errors.incomeAccountNotFound");
-    case "Description and a positive scheduled value are required": return t("errors.sovDescriptionValueRequired");
-    case "Retainage percent must be between 0 and 100": return t("errors.retainageRange");
-    case "Sort order must be a whole number the schedule can store": return t("errors.sortOrderWhole");
-    case "After billing begins, contract value must change through an approved change order": return t("errors.lockedAfterBilling");
-    case "Schedule line not found": return t("errors.sovLineNotFound");
-    case "A controlled schedule line cannot be deleted; use a reversing change order": return t("errors.controlledLineDelete");
+    case "not found":
+      return t("errors.notFound");
+    case "This project's billing profile does not use applications for payment":
+      return t("errors.notApplicationsBilling");
+    case "Projects feature is disabled":
+      return t("errors.featureOff");
+    case "Income account not found":
+      return t("errors.incomeAccountNotFound");
+    case "Description and a positive scheduled value are required":
+      return t("errors.sovDescriptionValueRequired");
+    case "Retainage percent must be between 0 and 100":
+      return t("errors.retainageRange");
+    case "Sort order must be a whole number the schedule can store":
+      return t("errors.sortOrderWhole");
+    case "After billing begins, contract value must change through an approved change order":
+      return t("errors.lockedAfterBilling");
+    case "Schedule line not found":
+      return t("errors.sovLineNotFound");
+    case "A controlled schedule line cannot be deleted; use a reversing change order":
+      return t("errors.controlledLineDelete");
     case "A schedule line used by an application is immutable; use a change order":
-    case "A controlled schedule line is immutable; use a change order": return t("errors.immutableLine");
-    case "Change-order number and a non-zero amount are required": return t("errors.changeOrderNumberAmountRequired");
-    case "A deductive change order must identify the schedule line it reduces": return t("errors.deductiveNeedsLine");
-    case "A change order with this number already exists for this project": return t("errors.duplicateChangeOrderNumber");
-    case "The target schedule line does not belong to this project": return t("errors.targetLineOutsideProject");
-    case "Change order not found or no longer draft": return t("errors.changeOrderNotFound");
-    case "The preparer cannot approve the same change order": return t("errors.selfApproval");
-    case "Change-order amount is out of range for the ledger": return t("errors.changeOrderOutOfRange");
-    case "Approving this change order would drive the contract value below zero": return t("errors.contractBelowZero");
-    case "Complete or void the current application before approving a change order": return t("errors.applicationInProgress");
-    case "The target schedule line no longer exists": return t("errors.targetLineGone");
-    case "An unallocated change order must be additive": return t("errors.unallocatedAdditive");
-    case "Only a draft change order can be voided": return t("errors.onlyDraftVoid");
+    case "A controlled schedule line is immutable; use a change order":
+      return t("errors.immutableLine");
+    case "Change-order number and a non-zero amount are required":
+      return t("errors.changeOrderNumberAmountRequired");
+    case "A deductive change order must identify the schedule line it reduces":
+      return t("errors.deductiveNeedsLine");
+    case "A change order with this number already exists for this project":
+      return t("errors.duplicateChangeOrderNumber");
+    case "The target schedule line does not belong to this project":
+      return t("errors.targetLineOutsideProject");
+    case "Change order not found or no longer draft":
+      return t("errors.changeOrderNotFound");
+    case "The preparer cannot approve the same change order":
+      return t("errors.selfApproval");
+    case "Change-order amount is out of range for the ledger":
+      return t("errors.changeOrderOutOfRange");
+    case "Approving this change order would drive the contract value below zero":
+      return t("errors.contractBelowZero");
+    case "Complete or void the current application before approving a change order":
+      return t("errors.applicationInProgress");
+    case "The target schedule line no longer exists":
+      return t("errors.targetLineGone");
+    case "An unallocated change order must be additive":
+      return t("errors.unallocatedAdditive");
+    case "Only a draft change order can be voided":
+      return t("errors.onlyDraftVoid");
     default:
       return DECIMAL_REFUSAL_FIELDS.some((field) => error.startsWith(field)) ? error : fallback;
   }
@@ -181,11 +208,14 @@ export function ApplicationsBillingWorkspace({
         if (!response.ok) {
           const body = (await response.json().catch(() => ({}))) as { error?: unknown };
           setData(null);
-          setError(constructionRefusal(
-            t,
-            refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: "" }) || body.error,
-            t("errors.load"),
-          ));
+          setError(
+            constructionRefusal(
+              t,
+              refusalMessageFromBody({ ...body, remedy: undefined }, { fallback: "" }) ||
+                body.error,
+              t("errors.load"),
+            ),
+          );
           return;
         }
         setData(await response.json());
@@ -236,7 +266,12 @@ export function ApplicationsBillingWorkspace({
       // A billing refusal pins here (role=alert) until the next action — the
       // workspace-top text alone never survived attention (the
       // retainage-control 422 once read as a silent no-op at the row).
-      const message = cause instanceof TypeError ? t("errors.action") : cause instanceof Error ? cause.message : t("errors.action");
+      const message =
+        cause instanceof TypeError
+          ? t("errors.action")
+          : cause instanceof Error
+            ? cause.message
+            : t("errors.action");
       setError(message);
       toast.error(message);
       return null;
@@ -255,25 +290,24 @@ export function ApplicationsBillingWorkspace({
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {t('title')}
-        </h3>
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t("title")}</h3>
         <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
-          {t('description')}
+          {t("description")}
         </p>
       </div>
 
       {error ? (
-        <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+        <p
+          role="alert"
+          className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+        >
           {error}
         </p>
       ) : null}
-      {msg ? (
-        <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p>
-      ) : null}
+      {msg ? <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p> : null}
       {loading && !data ? (
         <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">
-          {t('loading')}
+          {t("loading")}
         </p>
       ) : null}
 
@@ -291,7 +325,13 @@ export function ApplicationsBillingWorkspace({
             </p>
           ) : null}
 
-          <RecordTabs label={t("workspace.sectionsAria")} tabs={tabs} active={tab} onChange={setTab} className="border-b border-slate-200 dark:border-slate-800" />
+          <RecordTabs
+            label={t("workspace.sectionsAria")}
+            tabs={tabs}
+            active={tab}
+            onChange={setTab}
+            className="border-b border-slate-200 dark:border-slate-800"
+          />
 
           {tab === "applications" ? (
             <PayApplicationsSection
@@ -327,7 +367,10 @@ export function ApplicationsBillingWorkspace({
               onChange={post}
               canCreate={canCreate}
               busy={busy}
-              approvalBlocked={data.payApplications.some((app) => app.status === "draft" || app.status === "submitted" || app.status === "approved")}
+              approvalBlocked={data.payApplications.some(
+                (app) =>
+                  app.status === "draft" || app.status === "submitted" || app.status === "approved",
+              )}
             />
           ) : null}
           {tab === "retainage" ? (
@@ -343,7 +386,7 @@ export function ApplicationsBillingWorkspace({
         </>
       ) : null}
     </div>
-  )
+  );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -358,7 +401,7 @@ function Metric({ label, value }: { label: string; value: string }) {
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }
 
 function SectionHeader({
@@ -373,16 +416,12 @@ function SectionHeader({
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          {title}
-        </h4>
-        <p className="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400">
-          {description}
-        </p>
+        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h4>
+        <p className="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400">{description}</p>
       </div>
       {action}
     </div>
-  )
+  );
 }
 
 function ScheduleSection({
@@ -403,9 +442,9 @@ function ScheduleSection({
   /** Any application row exists (even voided): contract value is controlled. */
   billingBegan: boolean;
 }) {
-  const { money } = useMoney()
+  const { money } = useMoney();
   const t = useTranslations("applications.sov");
-  const tc = useTranslations('common')
+  const tc = useTranslations("common");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SovLine | null>(null);
   const [form, setForm] = useState({
@@ -415,20 +454,44 @@ function ScheduleSection({
     retainagePercent: "",
     incomeAccountId: "",
   });
-  const editingLocked = editing != null && (editing.changeOrderId != null || editing.usedByApplication === true);
+  const editingLocked =
+    editing != null && (editing.changeOrderId != null || editing.usedByApplication === true);
 
   function resetForm() {
-    setForm({ itemNo: "", description: "", scheduledValue: "", retainagePercent: "", incomeAccountId: "" });
+    setForm({
+      itemNo: "",
+      description: "",
+      scheduledValue: "",
+      retainagePercent: "",
+      incomeAccountId: "",
+    });
     setEditing(null);
     setFormOpen(false);
   }
-  const originalForm = editing ? {
-    itemNo: editing.itemNo ?? "", description: editing.description, scheduledValue: editing.scheduledValue,
-    retainagePercent: editing.retainagePercent ?? "", incomeAccountId: editing.incomeAccountId ?? "",
-  } : { itemNo: "", description: "", scheduledValue: "", retainagePercent: "", incomeAccountId: "" };
+  const originalForm = editing
+    ? {
+        itemNo: editing.itemNo ?? "",
+        description: editing.description,
+        scheduledValue: editing.scheduledValue,
+        retainagePercent: editing.retainagePercent ?? "",
+        incomeAccountId: editing.incomeAccountId ?? "",
+      }
+    : {
+        itemNo: "",
+        description: "",
+        scheduledValue: "",
+        retainagePercent: "",
+        incomeAccountId: "",
+      };
   const closeGuard = useDirtyClose({
-    dirty: editing !== null ? JSON.stringify(form) !== JSON.stringify(originalForm) : Object.values(form).some(Boolean),
-    busy, onClose: resetForm, message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+    dirty:
+      editing !== null
+        ? JSON.stringify(form) !== JSON.stringify(originalForm)
+        : Object.values(form).some(Boolean),
+    busy,
+    onClose: resetForm,
+    message: tc("feedback.unsavedChanges"),
+    confirmLabel: tc("confirm.discardChanges"),
   });
 
   async function addLine() {
@@ -464,12 +527,17 @@ function ScheduleSection({
   return (
     <div className="space-y-4">
       <SectionHeader
-        title={t('title')}
-        description={t('workspaceHint')}
+        title={t("title")}
+        description={t("workspaceHint")}
         action={
           canCreate ? (
-            <Button size="sm" onClick={() => setFormOpen(true)} disabled={billingBegan} title={billingBegan ? t("lockedHint") : undefined}>
-              {t('addLine')}
+            <Button
+              size="sm"
+              onClick={() => setFormOpen(true)}
+              disabled={billingBegan}
+              title={billingBegan ? t("lockedHint") : undefined}
+            >
+              {t("addLine")}
             </Button>
           ) : undefined
         }
@@ -483,14 +551,10 @@ function ScheduleSection({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t('item')}</TableHead>
+              <TableHead>{t("item")}</TableHead>
               <TableHead>{t("description")}</TableHead>
-              <TableHead className="text-right">
-                {t('scheduledValue')}
-              </TableHead>
-              <TableHead className="text-right">
-                {t('retainagePercent')}
-              </TableHead>
+              <TableHead className="text-right">{t("scheduledValue")}</TableHead>
+              <TableHead className="text-right">{t("retainagePercent")}</TableHead>
               <TableHead className="w-20" />
             </TableRow>
           </TableHeader>
@@ -498,21 +562,19 @@ function ScheduleSection({
             {lines.map((line) => (
               <TableRow key={line.id}>
                 <TableCell>
-                  {line.itemNo ?? '—'}
+                  {line.itemNo ?? "—"}
                   {line.changeOrderId ? (
                     <Badge variant="secondary" className="ml-1.5">
                       CO
                     </Badge>
                   ) : null}
                 </TableCell>
-                <TableCell className="font-medium">
-                  {line.description}
-                </TableCell>
+                <TableCell className="font-medium">{line.description}</TableCell>
                 <TableCell className="text-right tabular-nums">
                   {money(line.scheduledValue)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {line.retainagePercent ?? t('default')}
+                  {line.retainagePercent ?? t("default")}
                 </TableCell>
                 <TableCell className="text-right">
                   {canCreate ? (
@@ -541,7 +603,12 @@ function ScheduleSection({
                           variant="ghost"
                           disabled={busy}
                           onClick={async () => {
-                            if (!(await confirmDialog(t("deleteConfirm", { description: line.description })))) return
+                            if (
+                              !(await confirmDialog(
+                                t("deleteConfirm", { description: line.description }),
+                              ))
+                            )
+                              return;
                             void onChange({ action: "deleteSov", id: line.id });
                           }}
                         >
@@ -555,8 +622,11 @@ function ScheduleSection({
             ))}
             {lines.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="py-10 text-center text-slate-500 dark:text-slate-400">
-                  {t('empty')}
+                <TableCell
+                  colSpan={5}
+                  className="py-10 text-center text-slate-500 dark:text-slate-400"
+                >
+                  {t("empty")}
                 </TableCell>
               </TableRow>
             ) : null}
@@ -571,43 +641,71 @@ function ScheduleSection({
         onClose={closeGuard.close}
         title={editing ? t("editLine") : t("addLine")}
         description={
-          editing
-            ? editingLocked ? t("lockedValuesHint") : t("formHint")
-            : t('formHint')
+          editing ? (editingLocked ? t("lockedValuesHint") : t("formHint")) : t("formHint")
         }
         footer={
           <div className="flex w-full justify-end gap-2">
             <Button variant="outline" disabled={busy} onClick={closeGuard.close}>
-              {t('cancel')}
+              {t("cancel")}
             </Button>
             {editing ? (
-              <Button disabled={busy || !form.description || !form.scheduledValue} onClick={saveEdit}>
-                {tc('actions.save')}
+              <Button
+                disabled={busy || !form.description || !form.scheduledValue}
+                onClick={saveEdit}
+              >
+                {tc("actions.save")}
               </Button>
             ) : (
-              <Button disabled={busy || !form.description || !form.scheduledValue} onClick={addLine}>
-                {t('addLine')}
+              <Button
+                disabled={busy || !form.description || !form.scheduledValue}
+                onClick={addLine}
+              >
+                {t("addLine")}
               </Button>
             )}
           </div>
         }
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label={t('item')}>
-            <Input value={form.itemNo} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, itemNo: event.target.value })} />
+          <Field label={t("item")}>
+            <Input
+              value={form.itemNo}
+              disabled={busy || editingLocked}
+              onChange={(event) => setForm({ ...form, itemNo: event.target.value })}
+            />
           </Field>
-          <Field label={t('description')}>
-            <Input value={form.description} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+          <Field label={t("description")}>
+            <Input
+              value={form.description}
+              disabled={busy || editingLocked}
+              onChange={(event) => setForm({ ...form, description: event.target.value })}
+            />
           </Field>
-          <Field label={t('scheduledValue')}>
-            <Input type="number" inputMode="decimal" value={form.scheduledValue} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, scheduledValue: event.target.value })} />
+          <Field label={t("scheduledValue")}>
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={form.scheduledValue}
+              disabled={busy || editingLocked}
+              onChange={(event) => setForm({ ...form, scheduledValue: event.target.value })}
+            />
           </Field>
-          <Field label={t('retainagePercent')}>
-            <Input type="number" inputMode="decimal" value={form.retainagePercent} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, retainagePercent: event.target.value })} />
+          <Field label={t("retainagePercent")}>
+            <Input
+              type="number"
+              inputMode="decimal"
+              value={form.retainagePercent}
+              disabled={busy || editingLocked}
+              onChange={(event) => setForm({ ...form, retainagePercent: event.target.value })}
+            />
           </Field>
           <div className="sm:col-span-2">
-            <Field label={t('incomeAccount')}>
-              <Select value={form.incomeAccountId} disabled={busy || editingLocked} onChange={(event) => setForm({ ...form, incomeAccountId: event.target.value })}>
+            <Field label={t("incomeAccount")}>
+              <Select
+                value={form.incomeAccountId}
+                disabled={busy || editingLocked}
+                onChange={(event) => setForm({ ...form, incomeAccountId: event.target.value })}
+              >
                 <option value="">{t("defaultIncomeAccount")}</option>
                 {incomeAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
@@ -620,7 +718,7 @@ function ScheduleSection({
         </div>
       </Drawer>
     </div>
-  )
+  );
 }
 
 function ChangeOrdersSection({
@@ -645,48 +743,64 @@ function ChangeOrdersSection({
   /** An open application blocks change-order approval server-side. */
   approvalBlocked: boolean;
 }) {
-  const { money } = useMoney()
+  const { money } = useMoney();
   const t = useTranslations("applications.changeOrders");
-  const tc = useTranslations('common')
+  const tc = useTranslations("common");
   const [formOpen, setFormOpen] = useState(false);
   // Unallocated COs bill through the carried income account: preselect the
   // org project-revenue default so the created SOV line needs no manual edit
   // The empty option keeps the SOV dialog's "default"
   // meaning — the approval then falls back to the same default server-side.
-  const freshForm = (accountId: string | null) => ({ number: "", description: "", amount: "", targetSovLineId: "", incomeAccountId: accountId ?? "" });
+  const freshForm = (accountId: string | null) => ({
+    number: "",
+    description: "",
+    amount: "",
+    targetSovLineId: "",
+    incomeAccountId: accountId ?? "",
+  });
   const [form, setForm] = useState(() => freshForm(defaultIncomeAccountId));
   const deductive = form.amount.trim().startsWith("-");
-  function closeForm() { setForm(freshForm(defaultIncomeAccountId)); setFormOpen(false); }
+  function closeForm() {
+    setForm(freshForm(defaultIncomeAccountId));
+    setFormOpen(false);
+  }
   const closeGuard = useDirtyClose({
     dirty: JSON.stringify(form) !== JSON.stringify(freshForm(defaultIncomeAccountId)),
-    busy, onClose: closeForm, message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+    busy,
+    onClose: closeForm,
+    message: tc("feedback.unsavedChanges"),
+    confirmLabel: tc("confirm.discardChanges"),
   });
 
   async function addOrder() {
     const result = await onChange({
-      action: 'addChangeOrder',
+      action: "addChangeOrder",
       projectId,
       ...form,
       targetSovLineId: form.targetSovLineId || null,
       // A targeted order reprices its line's own account: carry none.
-      incomeAccountId: form.targetSovLineId
-        ? null
-        : form.incomeAccountId || null,
-    })
+      incomeAccountId: form.targetSovLineId ? null : form.incomeAccountId || null,
+    });
     if (result) {
-      closeForm()
+      closeForm();
     }
   }
 
   return (
     <div className="space-y-4">
       <SectionHeader
-        title={t('title')}
-        description={t('workspaceHint')}
+        title={t("title")}
+        description={t("workspaceHint")}
         action={
           canCreate ? (
-            <Button size="sm" onClick={() => { setForm(freshForm(defaultIncomeAccountId)); setFormOpen(true); }}>
-              {t('add')}
+            <Button
+              size="sm"
+              onClick={() => {
+                setForm(freshForm(defaultIncomeAccountId));
+                setFormOpen(true);
+              }}
+            >
+              {t("add")}
             </Button>
           ) : undefined
         }
@@ -711,32 +825,32 @@ function ChangeOrdersSection({
                 <TableCell className="text-slate-500 dark:text-slate-400">
                   {order.targetSovLineDescription || t("newScheduleLine")}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {money(order.amount)}
-                </TableCell>
+                <TableCell className="text-right tabular-nums">{money(order.amount)}</TableCell>
                 <TableCell>
                   <Badge variant={order.status === "approved" ? "success" : "secondary"}>
                     {t(`status.${order.status}`)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <ApprovalActions
-                    subjectKind="customer_change_order"
-                    subjectId={order.id}
-                  />
-                  {order.status === 'draft' && canCreate ? (
+                  <ApprovalActions subjectKind="customer_change_order" subjectId={order.id} />
+                  {order.status === "draft" && canCreate ? (
                     approvalBlocked ? (
                       <span className="inline-flex flex-col items-end gap-1">
                         <Button size="sm" variant="ghost" disabled title={t("approvalBlockedHint")}>
-                          {tc('actions.submit')}
+                          {tc("actions.submit")}
                         </Button>
                         <span className="max-w-36 text-xs font-normal text-slate-500 dark:text-slate-400">
-                          {t('approvalBlockedHint')}
+                          {t("approvalBlockedHint")}
                         </span>
                       </span>
                     ) : (
-                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => onChange({ action: "approveChangeOrder", id: order.id })}>
-                        {tc('actions.submit')}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => onChange({ action: "approveChangeOrder", id: order.id })}
+                      >
+                        {tc("actions.submit")}
                       </Button>
                     )
                   ) : null}
@@ -746,7 +860,8 @@ function ChangeOrdersSection({
                       variant="ghost"
                       disabled={busy}
                       onClick={async () => {
-                        if (!(await confirmDialog(t("voidConfirm", { number: order.number })))) return
+                        if (!(await confirmDialog(t("voidConfirm", { number: order.number }))))
+                          return;
                         void onChange({ action: "voidChangeOrder", id: order.id });
                       }}
                     >
@@ -758,8 +873,11 @@ function ChangeOrdersSection({
             ))}
             {orders.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-slate-500 dark:text-slate-400">
-                  {t('empty')}
+                <TableCell
+                  colSpan={6}
+                  className="py-10 text-center text-slate-500 dark:text-slate-400"
+                >
+                  {t("empty")}
                 </TableCell>
               </TableRow>
             ) : null}
@@ -772,45 +890,72 @@ function ChangeOrdersSection({
         stacked
         size="md"
         onClose={closeGuard.close}
-        title={t('add')}
-        description={t('formHint')}
+        title={t("add")}
+        description={t("formHint")}
         footer={
           <div className="flex w-full justify-end gap-2">
             <Button variant="outline" disabled={busy} onClick={closeGuard.close}>
-              {t('cancel')}
+              {t("cancel")}
             </Button>
-            <Button disabled={busy || !form.number || !form.amount || (deductive && !form.targetSovLineId)} onClick={addOrder}>
-              {t('add')}
+            <Button
+              disabled={
+                busy || !form.number || !form.amount || (deductive && !form.targetSovLineId)
+              }
+              onClick={addOrder}
+            >
+              {t("add")}
             </Button>
           </div>
         }
       >
         <div className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label={t('number')}>
-              <Input disabled={busy} value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} />
+            <Field label={t("number")}>
+              <Input
+                disabled={busy}
+                value={form.number}
+                onChange={(event) => setForm({ ...form, number: event.target.value })}
+              />
             </Field>
-            <Field label={t('amount')}>
-              <Input disabled={busy} type="number" inputMode="decimal" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
+            <Field label={t("amount")}>
+              <Input
+                disabled={busy}
+                type="number"
+                inputMode="decimal"
+                value={form.amount}
+                onChange={(event) => setForm({ ...form, amount: event.target.value })}
+              />
             </Field>
           </div>
-          <Field label={t('description')}>
-            <Input disabled={busy} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} />
+          <Field label={t("description")}>
+            <Input
+              disabled={busy}
+              value={form.description}
+              onChange={(event) => setForm({ ...form, description: event.target.value })}
+            />
           </Field>
-          <Field label={t('applyTo')}>
-            <Select value={form.targetSovLineId} disabled={busy} onChange={(event) => setForm({ ...form, targetSovLineId: event.target.value })}>
+          <Field label={t("applyTo")}>
+            <Select
+              value={form.targetSovLineId}
+              disabled={busy}
+              onChange={(event) => setForm({ ...form, targetSovLineId: event.target.value })}
+            >
               <option value="">{t("newScheduleLine")}</option>
               {sov.map((line) => (
                 <option key={line.id} value={line.id}>
-                  {line.itemNo ? `${line.itemNo} · ` : ''}
+                  {line.itemNo ? `${line.itemNo} · ` : ""}
                   {line.description}
                 </option>
               ))}
             </Select>
           </Field>
           {form.targetSovLineId ? null : (
-            <Field label={t('incomeAccount')}>
-              <Select value={form.incomeAccountId} disabled={busy} onChange={(event) => setForm({ ...form, incomeAccountId: event.target.value })}>
+            <Field label={t("incomeAccount")}>
+              <Select
+                value={form.incomeAccountId}
+                disabled={busy}
+                onChange={(event) => setForm({ ...form, incomeAccountId: event.target.value })}
+              >
                 <option value="">{t("defaultIncomeAccount")}</option>
                 {incomeAccounts.map((account) => (
                   <option key={account.id} value={account.id}>
@@ -826,17 +971,17 @@ function ChangeOrdersSection({
         </div>
       </Drawer>
     </div>
-  )
+  );
 }
 
 /** Billing/retainage actions answer untyped JSON; the fields this view reads
  *  from a successful response. */
 interface ConstructionActionResult {
-  invoiceId: string | undefined
-  documentNumber: string | undefined
-  currentDue: string | number | undefined
-  retainage: string | number | undefined
-  amount: string | number | undefined
+  invoiceId: string | undefined;
+  documentNumber: string | undefined;
+  currentDue: string | number | undefined;
+  retainage: string | number | undefined;
+  amount: string | number | undefined;
 }
 
 function asActionResult(value: unknown): ConstructionActionResult {
@@ -846,24 +991,24 @@ function asActionResult(value: unknown): ConstructionActionResult {
     currentDue: undefined,
     retainage: undefined,
     amount: undefined,
-  }
-  if (typeof value !== "object" || value === null) return blank
-  const fields = new Map<string, unknown>(Object.entries(value))
+  };
+  if (typeof value !== "object" || value === null) return blank;
+  const fields = new Map<string, unknown>(Object.entries(value));
   const text = (key: string): string | undefined => {
-    const field = fields.get(key)
-    return typeof field === "string" ? field : undefined
-  }
+    const field = fields.get(key);
+    return typeof field === "string" ? field : undefined;
+  };
   const decimal = (key: string): string | number | undefined => {
-    const field = fields.get(key)
-    return typeof field === "string" || typeof field === "number" ? field : undefined
-  }
+    const field = fields.get(key);
+    return typeof field === "string" || typeof field === "number" ? field : undefined;
+  };
   return {
     invoiceId: text("invoiceId"),
     documentNumber: text("documentNumber"),
     currentDue: decimal("currentDue"),
     retainage: decimal("retainage"),
     amount: decimal("amount"),
-  }
+  };
 }
 
 function PayApplicationsSection({
@@ -887,16 +1032,22 @@ function PayApplicationsSection({
   canInvoice: boolean;
   busy: boolean;
 }) {
-  const { money } = useMoney()
+  const { money } = useMoney();
   const t = useTranslations("applications.payApplications");
-  const tc = useTranslations('common')
+  const tc = useTranslations("common");
   const [newOpen, setNewOpen] = useState(false);
   const [periodEnd, setPeriodEnd] = useState("");
   const [drawApp, setDrawApp] = useState<PayApp | null>(null);
-  function closeNewApplication() { setPeriodEnd(""); setNewOpen(false); }
+  function closeNewApplication() {
+    setPeriodEnd("");
+    setNewOpen(false);
+  }
   const newCloseGuard = useDirtyClose({
-    dirty: periodEnd !== "", busy, onClose: closeNewApplication,
-    message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+    dirty: periodEnd !== "",
+    busy,
+    onClose: closeNewApplication,
+    message: tc("feedback.unsavedChanges"),
+    confirmLabel: tc("confirm.discardChanges"),
   });
 
   async function createApplication() {
@@ -907,25 +1058,29 @@ function PayApplicationsSection({
   }
 
   async function bill(appId: string) {
-    const result = asActionResult(await onChange({ action: "billPayApp", payApplicationId: appId }));
+    const result = asActionResult(
+      await onChange({ action: "billPayApp", payApplicationId: appId }),
+    );
     if (result.invoiceId) {
-      setMsg(t("billedMessage", {
-        number: result.documentNumber ?? "",
-        currentDue: money(result.currentDue),
-        retainage: money(result.retainage),
-      }));
+      setMsg(
+        t("billedMessage", {
+          number: result.documentNumber ?? "",
+          currentDue: money(result.currentDue),
+          retainage: money(result.retainage),
+        }),
+      );
     }
   }
 
   return (
     <div className="space-y-4">
       <SectionHeader
-        title={t('title')}
-        description={t('workspaceHint')}
+        title={t("title")}
+        description={t("workspaceHint")}
         action={
           canCreate ? (
             <Button size="sm" disabled={sov.length === 0} onClick={() => setNewOpen(true)}>
-              {t('newApplication')}
+              {t("newApplication")}
             </Button>
           ) : undefined
         }
@@ -947,48 +1102,65 @@ function PayApplicationsSection({
               <TableRow key={app.id}>
                 <TableCell className="font-medium">
                   {t("applicationNumber", { number: app.applicationNumber })}
-                  {app.kind === 'retainage_release' ? (
+                  {app.kind === "retainage_release" ? (
                     <Badge variant="secondary" className="ml-2">
-                      {t('retainage')}
+                      {t("retainage")}
                     </Badge>
                   ) : null}
                 </TableCell>
                 <TableCell>{app.periodEnd}</TableCell>
                 <TableCell>
-                  <Badge variant={app.status === "invoiced" || app.status === "posted" ? "success" : app.status === "submitted" ? "warning" : "secondary"}>
-                    {app.status === "invoiced" || app.status === "posted" ? t("status.invoiced") : t(`status.${app.status}`)}
+                  <Badge
+                    variant={
+                      app.status === "invoiced" || app.status === "posted"
+                        ? "success"
+                        : app.status === "submitted"
+                          ? "warning"
+                          : "secondary"
+                    }
+                  >
+                    {app.status === "invoiced" || app.status === "posted"
+                      ? t("status.invoiced")
+                      : t(`status.${app.status}`)}
                   </Badge>
                 </TableCell>
                 <TableCell>
                   {app.invoiceDocumentId ? (
-                    <Link className="font-medium text-teal-700 hover:underline dark:text-teal-300" href={`/ar/invoices?doc=${app.invoiceDocumentId}`}>
+                    <Link
+                      className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+                      href={`/ar/invoices?doc=${app.invoiceDocumentId}`}
+                    >
                       {app.invoiceNumber ?? t("openInvoice")}
                     </Link>
                   ) : (
-                    '—'
+                    "—"
                   )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {app.invoiceTotal ? money(app.invoiceTotal) : "—"}
                 </TableCell>
                 <TableCell className="text-right">
-                  {app.status === 'draft' && canCreate ? (
+                  {app.status === "draft" && canCreate ? (
                     <Button size="sm" variant="ghost" onClick={() => setDrawApp(app)}>
-                      {t('enterDraws')}
+                      {t("enterDraws")}
                     </Button>
                   ) : null}
-                  <ApprovalActions
-                    subjectKind="customer_pay_application"
-                    subjectId={app.id}
-                  />
-                  {app.status === 'submitted' && canCreate ? (
-                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => onChange({ action: "approvePayApp", payApplicationId: app.id })}>
-                      {tc('actions.submit')}
+                  <ApprovalActions subjectKind="customer_pay_application" subjectId={app.id} />
+                  {app.status === "submitted" && canCreate ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() =>
+                        onChange({ action: "approvePayApp", payApplicationId: app.id })
+                      }
+                    >
+                      {tc("actions.submit")}
                     </Button>
                   ) : null}
-                  {app.status === 'approved' && canInvoice ? (
+                  {app.status === "approved" && canInvoice ? (
                     <Button size="sm" variant="ghost" disabled={busy} onClick={() => bill(app.id)}>
-                      {t('createInvoice')}
+                      {t("createInvoice")}
                     </Button>
                   ) : null}
                   {["draft", "submitted", "approved"].includes(app.status) && canApprove ? (
@@ -997,7 +1169,12 @@ function PayApplicationsSection({
                       variant="ghost"
                       disabled={busy}
                       onClick={async () => {
-                        if (!(await confirmDialog(t("voidConfirm", { number: app.applicationNumber })))) return
+                        if (
+                          !(await confirmDialog(
+                            t("voidConfirm", { number: app.applicationNumber }),
+                          ))
+                        )
+                          return;
                         void onChange({ action: "voidPayApp", payApplicationId: app.id });
                       }}
                     >
@@ -1009,8 +1186,11 @@ function PayApplicationsSection({
             ))}
             {apps.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-10 text-center text-slate-500 dark:text-slate-400">
-                  {t('empty')}
+                <TableCell
+                  colSpan={6}
+                  className="py-10 text-center text-slate-500 dark:text-slate-400"
+                >
+                  {t("empty")}
                 </TableCell>
               </TableRow>
             ) : null}
@@ -1023,20 +1203,20 @@ function PayApplicationsSection({
         stacked
         size="sm"
         onClose={newCloseGuard.close}
-        title={t('newApplication')}
-        description={t('newHint')}
+        title={t("newApplication")}
+        description={t("newHint")}
         footer={
           <div className="flex w-full justify-end gap-2">
             <Button variant="outline" disabled={busy} onClick={newCloseGuard.close}>
-              {t('cancel')}
+              {t("cancel")}
             </Button>
             <Button disabled={busy || !periodEnd || sov.length === 0} onClick={createApplication}>
-              {t('create')}
+              {t("create")}
             </Button>
           </div>
         }
       >
-        <Field label={t('periodEnding')}>
+        <Field label={t("periodEnding")}>
           <DateField disabled={busy} value={periodEnd} onChange={(value) => setPeriodEnd(value)} />
         </Field>
       </Drawer>
@@ -1048,7 +1228,11 @@ function PayApplicationsSection({
           busy={busy}
           onClose={() => setDrawApp(null)}
           onSubmit={async (lines) => {
-            const result = await onChange({ action: "submitPayApp", payApplicationId: drawApp.id, lines });
+            const result = await onChange({
+              action: "submitPayApp",
+              payApplicationId: drawApp.id,
+              lines,
+            });
             if (result) {
               setMsg(t("submittedMessage"));
               setDrawApp(null);
@@ -1057,7 +1241,7 @@ function PayApplicationsSection({
         />
       ) : null}
     </div>
-  )
+  );
 }
 
 function DrawEntryDrawer({
@@ -1071,15 +1255,22 @@ function DrawEntryDrawer({
   sov: SovLine[];
   busy: boolean;
   onClose: () => void;
-  onSubmit: (lines: { sovLineId: string; thisPeriodCompleted: string; materialsStored: string }[]) => Promise<void>;
+  onSubmit: (
+    lines: { sovLineId: string; thisPeriodCompleted: string; materialsStored: string }[],
+  ) => Promise<void>;
 }) {
   const t = useTranslations("applications.payApplications");
-  const tc = useTranslations('common')
-  const [lines, setLines] = useState<Record<string, { thisPeriodCompleted: string; materialsStored: string }>>({});
+  const tc = useTranslations("common");
+  const [lines, setLines] = useState<
+    Record<string, { thisPeriodCompleted: string; materialsStored: string }>
+  >({});
   const submitLines = Object.entries(lines).map(([sovLineId, value]) => ({ sovLineId, ...value }));
   const closeGuard = useDirtyClose({
-    dirty: Object.keys(lines).length > 0, busy, onClose,
-    message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+    dirty: Object.keys(lines).length > 0,
+    busy,
+    onClose,
+    message: tc("feedback.unsavedChanges"),
+    confirmLabel: tc("confirm.discardChanges"),
   });
 
   return (
@@ -1094,10 +1285,10 @@ function DrawEntryDrawer({
       footer={
         <div className="flex w-full justify-end gap-2">
           <Button variant="outline" disabled={busy} onClick={closeGuard.close}>
-            {t('cancel')}
+            {t("cancel")}
           </Button>
           <Button disabled={busy} onClick={() => onSubmit(submitLines)}>
-            {t('submit')}
+            {t("submit")}
           </Button>
         </div>
       }
@@ -1106,23 +1297,17 @@ function DrawEntryDrawer({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{t('item')}</TableHead>
+              <TableHead>{t("item")}</TableHead>
               <TableHead>{t("description")}</TableHead>
-              <TableHead className="text-right">
-                {t('workThisPeriod')}
-              </TableHead>
-              <TableHead className="text-right">
-                {t('materialsStored')}
-              </TableHead>
+              <TableHead className="text-right">{t("workThisPeriod")}</TableHead>
+              <TableHead className="text-right">{t("materialsStored")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sov.map((line) => (
               <TableRow key={line.id}>
                 <TableCell>{line.itemNo ?? "—"}</TableCell>
-                <TableCell className="font-medium">
-                  {line.description}
-                </TableCell>
+                <TableCell className="font-medium">{line.description}</TableCell>
                 <TableCell>
                   <Input
                     disabled={busy}
@@ -1130,13 +1315,15 @@ function DrawEntryDrawer({
                     inputMode="decimal"
                     className="ml-auto w-36 text-right tabular-nums"
                     value={lines[line.id]?.thisPeriodCompleted ?? ""}
-                    onChange={(event) => setLines({
-                      ...lines,
-                      [line.id]: {
-                        ...(lines[line.id] ?? { thisPeriodCompleted: "", materialsStored: "" }),
-                        thisPeriodCompleted: event.target.value,
-                      },
-                    })}
+                    onChange={(event) =>
+                      setLines({
+                        ...lines,
+                        [line.id]: {
+                          ...(lines[line.id] ?? { thisPeriodCompleted: "", materialsStored: "" }),
+                          thisPeriodCompleted: event.target.value,
+                        },
+                      })
+                    }
                   />
                 </TableCell>
                 <TableCell>
@@ -1146,13 +1333,15 @@ function DrawEntryDrawer({
                     inputMode="decimal"
                     className="ml-auto w-36 text-right tabular-nums"
                     value={lines[line.id]?.materialsStored ?? ""}
-                    onChange={(event) => setLines({
-                      ...lines,
-                      [line.id]: {
-                        ...(lines[line.id] ?? { thisPeriodCompleted: "", materialsStored: "" }),
-                        materialsStored: event.target.value,
-                      },
-                    })}
+                    onChange={(event) =>
+                      setLines({
+                        ...lines,
+                        [line.id]: {
+                          ...(lines[line.id] ?? { thisPeriodCompleted: "", materialsStored: "" }),
+                          materialsStored: event.target.value,
+                        },
+                      })
+                    }
                   />
                 </TableCell>
               </TableRow>
@@ -1161,7 +1350,7 @@ function DrawEntryDrawer({
         </Table>
       </div>
     </Drawer>
-  )
+  );
 }
 
 function RetainageSection({
@@ -1179,22 +1368,33 @@ function RetainageSection({
   canInvoice: boolean;
   busy: boolean;
 }) {
-  const { money } = useMoney()
+  const { money } = useMoney();
   const t = useTranslations("applications.retainage");
-  const tc = useTranslations('common')
+  const tc = useTranslations("common");
   const [formOpen, setFormOpen] = useState(false);
-  const [amount, setAmount] = useState('')
+  const [amount, setAmount] = useState("");
   const [periodEnd, setPeriodEnd] = useState("");
-  function closeForm() { setAmount(""); setPeriodEnd(""); setFormOpen(false); }
+  function closeForm() {
+    setAmount("");
+    setPeriodEnd("");
+    setFormOpen(false);
+  }
   const closeGuard = useDirtyClose({
-    dirty: amount !== "" || periodEnd !== "", busy, onClose: closeForm,
-    message: tc("feedback.unsavedChanges"), confirmLabel: tc("confirm.discardChanges"),
+    dirty: amount !== "" || periodEnd !== "",
+    busy,
+    onClose: closeForm,
+    message: tc("feedback.unsavedChanges"),
+    confirmLabel: tc("confirm.discardChanges"),
   });
 
   async function release() {
-    const result = asActionResult(await onChange({ action: "releaseRetainage", projectId, amount, periodEnd }));
+    const result = asActionResult(
+      await onChange({ action: "releaseRetainage", projectId, amount, periodEnd }),
+    );
     if (result.invoiceId) {
-      setMsg(t("createdMessage", { number: result.documentNumber ?? "", amount: money(result.amount) }));
+      setMsg(
+        t("createdMessage", { number: result.documentNumber ?? "", amount: money(result.amount) }),
+      );
       closeForm();
     }
   }
@@ -1205,18 +1405,18 @@ function RetainageSection({
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
           <div>
             <div className="text-xs font-medium tracking-wide text-slate-500 uppercase dark:text-slate-400">
-              {t('heldLabel')}
+              {t("heldLabel")}
             </div>
             <div className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">
               {money(held)}
             </div>
             <p className="mt-1 max-w-xl text-xs leading-5 text-slate-500 dark:text-slate-400">
-              {t('workspaceHint')}
+              {t("workspaceHint")}
             </p>
           </div>
           {canInvoice ? (
             <Button size="sm" disabled={cmp(held, "0") <= 0} onClick={() => setFormOpen(true)}>
-              {t('release')}
+              {t("release")}
             </Button>
           ) : null}
         </CardContent>
@@ -1227,28 +1427,38 @@ function RetainageSection({
         stacked
         size="sm"
         onClose={closeGuard.close}
-        title={t('title')}
+        title={t("title")}
         description={t("description", { held: money(held) })}
         footer={
           <div className="flex w-full justify-end gap-2">
             <Button variant="outline" disabled={busy} onClick={closeGuard.close}>
-              {t('cancel')}
+              {t("cancel")}
             </Button>
             <Button disabled={busy || !amount || !periodEnd} onClick={release}>
-              {t('release')}
+              {t("release")}
             </Button>
           </div>
         }
       >
         <div className="space-y-4">
-          <Field label={t('amount')}>
-            <Input type="number" inputMode="decimal" disabled={busy} value={amount} onChange={(event) => setAmount(event.target.value)} />
+          <Field label={t("amount")}>
+            <Input
+              type="number"
+              inputMode="decimal"
+              disabled={busy}
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+            />
           </Field>
-          <Field label={t('periodEnding')}>
-            <DateField disabled={busy} value={periodEnd} onChange={(value) => setPeriodEnd(value)} />
+          <Field label={t("periodEnding")}>
+            <DateField
+              disabled={busy}
+              value={periodEnd}
+              onChange={(value) => setPeriodEnd(value)}
+            />
           </Field>
         </div>
       </Drawer>
     </>
-  )
+  );
 }

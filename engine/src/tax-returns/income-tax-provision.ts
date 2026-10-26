@@ -19,7 +19,12 @@ import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
-import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import {
+  loadSubsidiaryContext,
+  SubsidiaryError,
+  uuidArray,
+  validateSubsidiaryRestrictions,
+} from "../organization/subsidiaries.ts";
 
 /**
  * ASC 740 / IAS 12 income-tax provision. A run measures, PER LEGAL ENTITY
@@ -69,10 +74,7 @@ const DEDUCTIBLE_SIDE_CATEGORIES: ReadonlySet<DifferenceInput["category"]> = new
  * contract (positive = taxable/DTL, negative = deductible/DTA) underneath.
  */
 export function toDeductibleSide(difference: DifferenceInput): DifferenceInput {
-  if (
-    DEDUCTIBLE_SIDE_CATEGORIES.has(difference.category) &&
-    cmp(difference.difference, "0") > 0
-  ) {
+  if (DEDUCTIBLE_SIDE_CATEGORIES.has(difference.category) && cmp(difference.difference, "0") > 0) {
     return { ...difference, difference: neg(difference.difference) };
   }
   return difference;
@@ -88,9 +90,12 @@ export function toDeductibleSide(difference: DifferenceInput): DifferenceInput {
 export type TaxFramework = "asc740" | "ias12";
 
 export async function orgTaxFramework(orgId: string): Promise<TaxFramework> {
-  const r = (await db.execute<{ f: string | null }>(sql`
+  const r = await db.execute<{ f: string | null }>(
+    sql`
     select settings->>'taxFramework' as f from orgs where id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r[0]?.f === "ias12" ? "ias12" : "asc740";
 }
 
@@ -114,12 +119,7 @@ export interface PermanentDifference {
 }
 
 export interface DifferenceInput {
-  category:
-    | "fixed_assets"
-    | "revenue_recognition"
-    | "provisions"
-    | "loss_carryforward"
-    | "other";
+  category: "fixed_assets" | "revenue_recognition" | "provisions" | "loss_carryforward" | "other";
   description: string;
   subsidiaryId?: string | null;
   bookBasis?: string;
@@ -211,9 +211,7 @@ function percentOf(amount: string, base: string): string | null {
 }
 
 /** Pure: the entire provision computation for ONE legal entity, side-effect free. */
-export function buildProvision(
-  input: ProvisionComputationInput,
-): ProvisionComputation {
+export function buildProvision(input: ProvisionComputationInput): ProvisionComputation {
   // Fail closed on negative contra-inputs: subtracting a NEGATIVE loss
   // benefit would increase taxable income, and maxZero below would silently
   // store a negative valuation allowance as zero. Both refuse by field name.
@@ -237,19 +235,14 @@ export function buildProvision(
   // Loss carryforwards are tax attributes, not basis differences, and never
   // adjust the current-year return — they are excluded from the movement.
   const netTemporaryDifference = sum(
-    input.differences
-      .filter((d) => d.category !== "loss_carryforward")
-      .map((d) => d.difference),
+    input.differences.filter((d) => d.category !== "loss_carryforward").map((d) => d.difference),
   );
   const temporaryMovement = add(
     netTemporaryDifference,
     neg(input.priorNetTemporaryDifference ?? "0"),
   );
   const taxableIncome = add(
-    add(
-      add(input.pretaxBookIncome, permanentTotal),
-      neg(input.lossCarryforwardUsed),
-    ),
+    add(add(input.pretaxBookIncome, permanentTotal), neg(input.lossCarryforwardUsed)),
     neg(temporaryMovement),
   );
   const currentTax = maxZero(mulPercent(maxZero(taxableIncome), rate, 4));
@@ -280,15 +273,11 @@ export function buildProvision(
   const movement = {
     dtaGross: fromUnits(toUnits(dtaGross) - toUnits(prior.dtaGross)),
     dtlGross: fromUnits(toUnits(dtlGross) - toUnits(prior.dtlGross)),
-    valuationAllowance: fromUnits(
-      toUnits(valuationAllowance) - toUnits(prior.valuationAllowance),
-    ),
+    valuationAllowance: fromUnits(toUnits(valuationAllowance) - toUnits(prior.valuationAllowance)),
   };
   // Deferred expense = ΔDTL − ΔDTA(gross) + ΔVA.
   const deferredExpense = fromUnits(
-    toUnits(movement.dtlGross) -
-      toUnits(movement.dtaGross) +
-      toUnits(movement.valuationAllowance),
+    toUnits(movement.dtlGross) - toUnits(movement.dtaGross) + toUnits(movement.valuationAllowance),
   );
   const totalExpense = add(currentTax, deferredExpense);
 
@@ -401,9 +390,7 @@ export interface EnactedRateComponent {
  * fails closed rather than guessing; a negative blend is misconfiguration and
  * throws here. Ordering is deterministic (sorted jurisdictions).
  */
-export function stackEnactedRateComponents(
-  components: EnactedRateComponent[],
-): EnactedRate {
+export function stackEnactedRateComponents(components: EnactedRateComponent[]): EnactedRate {
   const byJurisdiction = new Map<string, EnactedRateComponent[]>();
   for (const component of components) {
     const rows = byJurisdiction.get(component.jurisdiction) ?? [];
@@ -437,14 +424,17 @@ async function applicableRateRows(
   subsidiaryId: string | null,
   onDate: string,
 ): Promise<EnactedRateComponent[]> {
-  const r = (await db.execute<{ jurisdiction: string; rate: string }>(sql`
+  const r = await db.execute<{ jurisdiction: string; rate: string }>(
+    sql`
     select jurisdiction, rate_percent::text as rate
       from income_tax_rates
      where org_id = ${orgId} and is_active
        and effective_from <= ${onDate} and (effective_to is null or effective_to >= ${onDate})
        and subsidiary_id is not distinct from ${subsidiaryId}
      order by jurisdiction, rate_percent
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r.map((row) => ({
     jurisdiction: row.jurisdiction,
     ratePercent: row.rate,
@@ -552,8 +542,7 @@ function canonicalRates(rows: RateRowFingerprint[]): RateRowFingerprint[] {
     (a, b) =>
       `${a.jurisdiction}\u0000${a.subsidiaryId ?? ""}`.localeCompare(
         `${b.jurisdiction}\u0000${b.subsidiaryId ?? ""}`,
-      ) ||
-      cmp(a.ratePercent, b.ratePercent),
+      ) || cmp(a.ratePercent, b.ratePercent),
   );
 }
 
@@ -568,14 +557,16 @@ export function detectProvisionSourceDrift(
   const sections: [string, (s: ProvisionSourceSnapshot) => unknown][] = [
     ["framework", (s) => s.framework],
     ["pretax book income", (s) => s.pretaxBySubsidiaryId],
-    ["fixed-asset temporary differences", (s) =>
-      canonicalDifferences(s.fixedAssetDifferences)],
+    ["fixed-asset temporary differences", (s) => canonicalDifferences(s.fixedAssetDifferences)],
     ["enacted income tax rates", (s) => canonicalRates(s.rateRows)],
-    ["prior-year posted baseline", (s) => ({
-      runId: s.priorPostedRunId,
-      snapshotHash: s.priorPostedSnapshotHash,
-      balances: s.priorBalancesBySubsidiaryId,
-    })],
+    [
+      "prior-year posted baseline",
+      (s) => ({
+        runId: s.priorPostedRunId,
+        snapshotHash: s.priorPostedSnapshotHash,
+        balances: s.priorBalancesBySubsidiaryId,
+      }),
+    ],
   ];
   return sections
     .filter(([, get]) => canonicalJson(get(captured)) !== canonicalJson(get(current)))
@@ -587,7 +578,8 @@ async function pretaxBookIncomeBySubsidiary(
   from: string,
   to: string,
 ): Promise<Record<string, string>> {
-  const r = (await db.execute<{ sid: string; pretax: string }>(sql`
+  const r = await db.execute<{ sid: string; pretax: string }>(
+    sql`
     select l.subsidiary_id as sid, (-coalesce(sum(l.amount), 0))::text as pretax
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -600,7 +592,9 @@ async function pretaxBookIncomeBySubsidiary(
        and ${excludePeriodEndJournals(sql`e.origin`)}
      group by l.subsidiary_id
      order by l.subsidiary_id
-  `, "objects"));
+  `,
+    "objects",
+  );
   const out: Record<string, string> = {};
   for (const row of r) {
     // A net-zero entity contributes nothing to measure; keeping it out also
@@ -620,13 +614,14 @@ export async function computeFixedAssetDifferences(
   orgId: string,
   fyEnd: string,
 ): Promise<DifferenceInput[]> {
-  const r = (await db.execute<{
-      subsidiary_id: string;
-      subsidiary_name: string;
-      cost: string;
-      book_dep: string;
-      tax_dep: string;
-    }>(sql`
+  const r = await db.execute<{
+    subsidiary_id: string;
+    subsidiary_name: string;
+    cost: string;
+    book_dep: string;
+    tax_dep: string;
+  }>(
+    sql`
     with books as (
       select (select id from accounting_books where org_id = ${orgId} and is_primary) as primary_id,
              (select id from accounting_books where org_id = ${orgId} and code = 'tax' and is_active) as tax_id
@@ -657,7 +652,9 @@ export async function computeFixedAssetDifferences(
       ) a
      group by a.subsidiary_id, a.subsidiary_name
      order by a.subsidiary_id
-  `, "objects"));
+  `,
+    "objects",
+  );
   const out: DifferenceInput[] = [];
   for (const row of r) {
     const difference = fromUnits(toUnits(row.tax_dep) - toUnits(row.book_dep));
@@ -689,9 +686,12 @@ async function applicableRateFingerprintRows(
   for (const row of await applicableRateRows(orgId, null, onDate)) {
     rows.push({ jurisdiction: row.jurisdiction, ratePercent: row.ratePercent, subsidiaryId: null });
   }
-  const subs = (await db.execute<{ id: string }>(sql`
+  const subs = await db.execute<{ id: string }>(
+    sql`
     select id from subsidiaries where org_id = ${orgId} order by id
-  `, "objects"));
+  `,
+    "objects",
+  );
   for (const { id } of subs) {
     for (const row of await applicableRateRows(orgId, id, onDate)) {
       rows.push({ jurisdiction: row.jurisdiction, ratePercent: row.ratePercent, subsidiaryId: id });
@@ -718,18 +718,21 @@ async function latestPostedBaselines(
   snapshotHash: string | null;
   bySubsidiaryId: Record<string, EntityBaseline>;
 }> {
-  const r = (await db.execute<{
+  const r = await db.execute<{
     id: string;
     snapshot_hash: string;
-    entities: {
-      subsidiaryId: string;
-      computation: Pick<ProvisionComputation, "balances" | "netTemporaryDifference">;
-    }[] | null;
+    entities:
+      | {
+          subsidiaryId: string;
+          computation: Pick<ProvisionComputation, "balances" | "netTemporaryDifference">;
+        }[]
+      | null;
     dta: string | null;
     dtl: string | null;
     va: string | null;
     net_temp: string | null;
-  }>(sql`
+  }>(
+    sql`
     select id, snapshot_hash,
            payload->'entities' as entities,
            payload->'balances'->>'dtaGross' as dta,
@@ -749,7 +752,9 @@ async function latestPostedBaselines(
       from tax_provision_runs
      where org_id = ${orgId} and status = 'posted' and fiscal_year < ${beforeFiscalYear}
      order by fiscal_year desc, version desc limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = r[0];
   if (!row) {
     return { runId: null, snapshotHash: null, bySubsidiaryId: {} };
@@ -783,24 +788,21 @@ async function captureProvisionSources(
   range: { from: string; to: string },
 ): Promise<ProvisionSourceSnapshot> {
   const framework = await orgTaxFramework(orgId);
-  const pretaxBySubsidiaryId = await pretaxBookIncomeBySubsidiary(
-    orgId,
-    range.from,
-    range.to,
-  );
+  const pretaxBySubsidiaryId = await pretaxBookIncomeBySubsidiary(orgId, range.from, range.to);
   const fixedAssetDifferences = canonicalDifferences(
     await computeFixedAssetDifferences(orgId, range.to),
   );
   const rateRows = await applicableRateFingerprintRows(orgId, range.to);
   const rootSubsidiaryId =
-    (await db.execute<{ id: string | null }>(sql`
+    (
+      await db.execute<{ id: string | null }>(
+        sql`
         select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1
-      `, "objects"))[0]?.id ?? null;
-  const prior = await latestPostedBaselines(
-    orgId,
-    fiscalYear,
-    rootSubsidiaryId,
-  );
+      `,
+        "objects",
+      )
+    )[0]?.id ?? null;
+  const prior = await latestPostedBaselines(orgId, fiscalYear, rootSubsidiaryId);
   return {
     framework,
     pretaxBySubsidiaryId,
@@ -833,14 +835,17 @@ export async function listProvisionRuns(
   orgId: string,
   allowedSubsidiaryIds?: ProvisionSubsidiaryScope,
 ): Promise<ProvisionRunRow[]> {
-  const r = (await db.execute<ProvisionRunRow & { payload: Record<string, unknown> }>(sql`
+  const r = await db.execute<ProvisionRunRow & { payload: Record<string, unknown> }>(
+    sql`
     select payload, id, fiscal_year as "fiscalYear", period_from::text as "periodFrom", period_to::text as "periodTo",
            status, version, payload->>'totalExpense' as "totalExpense",
            payload->>'effectiveRatePercent' as "effectiveRatePercent",
            journal_entry_id as "journalEntryId", created_at as "createdAt"
       from tax_provision_runs where org_id = ${orgId}
      order by fiscal_year desc, version desc
-  `, "objects"));
+  `,
+    "objects",
+  );
   const out: ProvisionRunRow[] = [];
   for (const { payload, ...row } of r) {
     if (allowedSubsidiaryIds == null) {
@@ -849,11 +854,16 @@ export async function listProvisionRuns(
     }
     const projected = projectProvisionPayload(payload, allowedSubsidiaryIds);
     if (!projected) continue;
-    out.push({ ...row,
+    out.push({
+      ...row,
       totalExpense: String(projected.totalExpense),
-      effectiveRatePercent: projected.effectiveRatePercent == null ? null : String(projected.effectiveRatePercent),
+      effectiveRatePercent:
+        projected.effectiveRatePercent == null ? null : String(projected.effectiveRatePercent),
       journalEntryId: await scopedProvisionJournalEntryId(
-        orgId, row, visibleProjectedSubsidiaryIds(projected), row.journalEntryId,
+        orgId,
+        row,
+        visibleProjectedSubsidiaryIds(projected),
+        row.journalEntryId,
       ),
     });
   }
@@ -884,11 +894,17 @@ async function scopedProvisionJournalEntryId(
   const numbers = visibleSubsidiaryIds.map((id) =>
     provisionEntryNumber(run.fiscalYear, run.version, orgId, id),
   );
-  const found = (await db.execute<{ id: string; entry_number: string }>(sql`
+  const found = await db.execute<{ id: string; entry_number: string }>(
+    sql`
     select id, entry_number from journal_entries
      where org_id = ${orgId} and origin = 'tax_provision'
-       and entry_number in (${sql.join(numbers.map((n) => sql`${n}`), sql`, `)})
-  `, "objects"));
+       and entry_number in (${sql.join(
+         numbers.map((n) => sql`${n}`),
+         sql`, `,
+       )})
+  `,
+    "objects",
+  );
   const byNumber = new Map(found.map((row) => [row.entry_number, row.id]));
   for (const n of numbers) {
     const id = byNumber.get(n);
@@ -969,11 +985,12 @@ function projectProvisionPayload(
   allowedSubsidiaryIds: ReadonlySet<string>,
 ): Record<string, unknown> | null {
   if (!Array.isArray(payload.entities)) return null;
-  const entities = payload.entities.filter((entity): entity is EntityProvisionResult =>
-    typeof entity === "object" &&
-    entity !== null &&
-    typeof (entity as { subsidiaryId?: unknown }).subsidiaryId === "string" &&
-    allowedSubsidiaryIds.has((entity as { subsidiaryId: string }).subsidiaryId),
+  const entities = payload.entities.filter(
+    (entity): entity is EntityProvisionResult =>
+      typeof entity === "object" &&
+      entity !== null &&
+      typeof (entity as { subsidiaryId?: unknown }).subsidiaryId === "string" &&
+      allowedSubsidiaryIds.has((entity as { subsidiaryId: string }).subsidiaryId),
   );
   if (entities.length === 0) return null;
 
@@ -1026,19 +1043,21 @@ function projectProvisionPayload(
             )
           : {},
       fixedAssetDifferences: Array.isArray(source.fixedAssetDifferences)
-        ? source.fixedAssetDifferences.filter((difference) =>
-            typeof difference === "object" &&
-            difference !== null &&
-            typeof (difference as { subsidiaryId?: unknown }).subsidiaryId === "string" &&
-            allowedSubsidiaryIds.has((difference as { subsidiaryId: string }).subsidiaryId),
+        ? source.fixedAssetDifferences.filter(
+            (difference) =>
+              typeof difference === "object" &&
+              difference !== null &&
+              typeof (difference as { subsidiaryId?: unknown }).subsidiaryId === "string" &&
+              allowedSubsidiaryIds.has((difference as { subsidiaryId: string }).subsidiaryId),
           )
         : [],
       rateRows: Array.isArray(source.rateRows)
-        ? source.rateRows.filter((row) =>
-            typeof row === "object" &&
-            row !== null &&
-            (typeof (row as { subsidiaryId?: unknown }).subsidiaryId !== "string" ||
-              allowedSubsidiaryIds.has((row as { subsidiaryId: string }).subsidiaryId)),
+        ? source.rateRows.filter(
+            (row) =>
+              typeof row === "object" &&
+              row !== null &&
+              (typeof (row as { subsidiaryId?: unknown }).subsidiaryId !== "string" ||
+                allowedSubsidiaryIds.has((row as { subsidiaryId: string }).subsidiaryId)),
           )
         : [],
       priorBalancesBySubsidiaryId:
@@ -1064,14 +1083,17 @@ export async function getProvisionRun(
   runId: string,
   allowedSubsidiaryIds?: ProvisionSubsidiaryScope,
 ): Promise<ProvisionRunDetail | null> {
-  const runs = (await db.execute<ProvisionRunDetail>(sql`
+  const runs = await db.execute<ProvisionRunDetail>(
+    sql`
     select id, fiscal_year as "fiscalYear", period_from::text as "periodFrom", period_to::text as "periodTo",
            status, version, payload->>'totalExpense' as "totalExpense",
            payload->>'effectiveRatePercent' as "effectiveRatePercent",
            journal_entry_id as "journalEntryId", created_at as "createdAt",
            snapshot_hash as "snapshotHash", payload
       from tax_provision_runs where org_id = ${orgId} and id = ${runId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const run = runs[0];
   if (!run) return null;
   if (allowedSubsidiaryIds != null) {
@@ -1082,22 +1104,21 @@ export async function getProvisionRun(
     run.payload = projected;
     run.totalExpense = String(projected.totalExpense);
     run.effectiveRatePercent =
-      projected.effectiveRatePercent == null
-        ? null
-        : String(projected.effectiveRatePercent);
+      projected.effectiveRatePercent == null ? null : String(projected.effectiveRatePercent);
     // The stored hash is computed over the UNPROJECTED all-entity material,
     // so handing it to a restricted caller leaks hidden-subsidiary activity
     // (their numbers stay identical while the hash moves). Re-derive it over
     // the visible projection only: same integrity purpose within the caller's
     // scope, byte-stable across hidden-entity changes. Unrestricted callers
     // below keep the stored hash untouched.
-    run.snapshotHash = createHash("sha256")
-      .update(canonicalJson(projected))
-      .digest("hex");
+    run.snapshotHash = createHash("sha256").update(canonicalJson(projected)).digest("hex");
     // The stored journal id is the first SORTED entity's entry, which may
     // belong to a hidden subsidiary — resolve the first visible one instead.
     run.journalEntryId = await scopedProvisionJournalEntryId(
-      orgId, run, visibleProjectedSubsidiaryIds(projected), run.journalEntryId,
+      orgId,
+      run,
+      visibleProjectedSubsidiaryIds(projected),
+      run.journalEntryId,
     );
   }
   const differenceScope =
@@ -1109,7 +1130,8 @@ export async function getProvisionRun(
             sql`, `,
           )})`
         : sql` and false`;
-  const diffs = (await db.execute<(ProvisionRunDetail["differences"])[number]>(sql`
+  const diffs = await db.execute<ProvisionRunDetail["differences"][number]>(
+    sql`
     select td.id, td.category, td.description, td.book_basis as "bookBasis", td.tax_basis as "taxBasis",
            td.difference, td.rate_percent as "ratePercent", td.tax_effect as "taxEffect", td.source,
            subsidiary.base_currency as currency
@@ -1119,7 +1141,9 @@ export async function getProvisionRun(
      where td.org_id = ${orgId} and td.run_id = ${runId}
        ${differenceScope}
      order by td.category, td.description
-  `, "objects"));
+  `,
+    "objects",
+  );
   run.differences = diffs;
   return run;
 }
@@ -1178,9 +1202,7 @@ export interface EntityProvisionResult {
  * order of the first entity and recomputes percentages against consolidated
  * pretax income. Pure — the arithmetic is unit-testable without a database.
  */
-export function consolidateEntityResults(
-  entities: EntityProvisionResult[],
-): {
+export function consolidateEntityResults(entities: EntityProvisionResult[]): {
   pretaxBookIncome: string;
   taxableIncome: string;
   currentTax: string;
@@ -1196,12 +1218,7 @@ export function consolidateEntityResults(
     a.subsidiaryId < b.subsidiaryId ? -1 : a.subsidiaryId > b.subsidiaryId ? 1 : 0,
   );
   const translate = (amounts: string[]) =>
-    fromUnits(
-      ordered.reduce(
-        (acc, e, i) => acc + toUnits(mulRate(amounts[i]!, e.fxRate)),
-        0n,
-      ),
-    );
+    fromUnits(ordered.reduce((acc, e, i) => acc + toUnits(mulRate(amounts[i]!, e.fxRate)), 0n));
   const field = (pick: (e: EntityProvisionResult) => string): string =>
     translate(ordered.map(pick));
 
@@ -1218,13 +1235,9 @@ export function consolidateEntityResults(
   const movement = {
     dtaGross: field((e) => e.computation.movement.dtaGross),
     dtlGross: field((e) => e.computation.movement.dtlGross),
-    valuationAllowance: field(
-      (e) => e.computation.movement.valuationAllowance,
-    ),
+    valuationAllowance: field((e) => e.computation.movement.valuationAllowance),
   };
-  const netTemporaryDifference = field(
-    (e) => e.computation.netTemporaryDifference,
-  );
+  const netTemporaryDifference = field((e) => e.computation.netTemporaryDifference);
 
   // Merge reconciliation steps by key; keys align structurally across
   // entities (statutory … total) except per-item permanent differences,
@@ -1264,15 +1277,16 @@ async function fiscalYearRange(
   orgId: string,
   fiscalYear: number,
 ): Promise<{ from: string; to: string }> {
-  const r = (await db.execute<{ from: string | null; to: string | null }>(sql`
+  const r = await db.execute<{ from: string | null; to: string | null }>(
+    sql`
     select min(starts_on)::text as "from", max(ends_on)::text as "to"
       from accounting_periods
      where org_id = ${orgId} and fiscal_year = ${fiscalYear} and not is_adjustment
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (!r[0]?.from || !r[0].to)
-    throw new IncomeTaxProvisionError(
-      `no accounting periods for fiscal year ${fiscalYear}`,
-    );
+    throw new IncomeTaxProvisionError(`no accounting periods for fiscal year ${fiscalYear}`);
   return { from: r[0].from, to: r[0].to };
 }
 
@@ -1285,18 +1299,21 @@ interface SubsidiaryRow {
 }
 
 async function loadSubsidiaries(orgId: string): Promise<SubsidiaryRow[]> {
-  const r = (await db.execute<{
+  const r = await db.execute<{
     id: string;
     name: string;
     currency: string;
     parent_id: string | null;
     control_accounts: Record<string, string> | null;
-  }>(sql`
+  }>(
+    sql`
     select id, name, base_currency as currency, parent_id,
            control_accounts as "control_accounts"
       from subsidiaries where org_id = ${orgId}
      order by id
-  `, "objects"));
+  `,
+    "objects",
+  );
   return r.map((row) => ({
     id: row.id,
     name: row.name,
@@ -1324,7 +1341,8 @@ export async function spotRateToPresentation(
   rateType = "spot",
 ): Promise<{ rate: string; asOf: string }> {
   if (fromCurrency === toCurrency) return { rate: "1", asOf: onDate };
-  const r = (await runner.execute<{ rate: string; as_of: string }>(sql`
+  const r = await runner.execute<{ rate: string; as_of: string }>(
+    sql`
     select rate::text, as_of::text from (
       select rate, as_of from fx_rates
        where org_id = ${orgId} and from_currency = ${fromCurrency}
@@ -1336,7 +1354,9 @@ export async function spotRateToPresentation(
          and to_currency = ${fromCurrency} and rate_type = ${rateType}
          and as_of <= ${onDate}
     ) candidates order by as_of desc limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = r[0];
   if (!row?.rate) {
     throw new IncomeTaxProvisionError(
@@ -1361,9 +1381,7 @@ export async function computeProvisionRun(
   scope?: ProvisionSubsidiaryScope,
 ): Promise<string> {
   if (!actorId) {
-    throw new IncomeTaxProvisionError(
-      "an attributable provision actor is required",
-    );
+    throw new IncomeTaxProvisionError("an attributable provision actor is required");
   }
   return await withOrg(orgId, async () => {
     await db.execute(sql`
@@ -1418,18 +1436,23 @@ export async function computeProvisionRun(
     assertNonNegative("valuationAllowance", opts.valuationAllowance, "");
     if (opts.entities) {
       for (const [id, entry] of Object.entries(opts.entities)) {
-        assertNonNegative("lossCarryforwardUsed", entry.lossCarryforwardUsed, ` for subsidiary ${id}`);
+        assertNonNegative(
+          "lossCarryforwardUsed",
+          entry.lossCarryforwardUsed,
+          ` for subsidiary ${id}`,
+        );
         assertNonNegative("valuationAllowance", entry.valuationAllowance, ` for subsidiary ${id}`);
       }
     }
 
-    const orgRow = (await db.execute<{ base_currency: string | null }>(sql`
+    const orgRow = await db.execute<{ base_currency: string | null }>(
+      sql`
       select base_currency from orgs where id = ${orgId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const presentationCurrency =
-      opts.presentationCurrency ??
-      orgRow[0]?.base_currency ??
-      root?.currency;
+      opts.presentationCurrency ?? orgRow[0]?.base_currency ?? root?.currency;
 
     // Capture the ENTIRE source surface once; both the measurement and the
     // stored lineage derive from this snapshot, so what was measured is
@@ -1478,14 +1501,16 @@ export async function computeProvisionRun(
     // balances are a measurement source too: even when an entity has no
     // current-year activity, its opening DTA/DTL (or cumulative basis
     // difference) must be carried into this run so the balance can unwind.
-    const entityIds = [...new Set([
-      ...Object.keys(sources.pretaxBySubsidiaryId),
-      ...autoByEntity.keys(),
-      ...manualByEntity.keys(),
-      ...permanentByEntity.keys(),
-      ...Object.keys(sources.priorBalancesBySubsidiaryId),
-      ...(opts.entities ? Object.keys(opts.entities) : []),
-    ])]
+    const entityIds = [
+      ...new Set([
+        ...Object.keys(sources.pretaxBySubsidiaryId),
+        ...autoByEntity.keys(),
+        ...manualByEntity.keys(),
+        ...permanentByEntity.keys(),
+        ...Object.keys(sources.priorBalancesBySubsidiaryId),
+        ...(opts.entities ? Object.keys(opts.entities) : []),
+      ]),
+    ]
       .filter((id) => known.has(id))
       .sort();
     const measuredEntities = entityIds.filter((id) => {
@@ -1499,18 +1524,20 @@ export async function computeProvisionRun(
         (override?.permanentDifferences?.length ?? 0) > 0 ||
         (override?.additionalDifferences?.length ?? 0) > 0 ||
         hasPriorDeferredTaxMeasurement(prior) ||
-        !isZero(override?.lossCarryforwardUsed ?? (id === root?.id ? opts.lossCarryforwardUsed ?? "0" : "0")) ||
-        !isZero(override?.valuationAllowance ?? (id === root?.id ? opts.valuationAllowance ?? "0" : "0"))
+        !isZero(
+          override?.lossCarryforwardUsed ??
+            (id === root?.id ? (opts.lossCarryforwardUsed ?? "0") : "0"),
+        ) ||
+        !isZero(
+          override?.valuationAllowance ??
+            (id === root?.id ? (opts.valuationAllowance ?? "0") : "0"),
+        )
       );
     });
     // Degenerate org (no activity anywhere): keep the historical behavior of a
     // computable zero draft on the root entity rather than failing obscurely.
     const effectiveEntityIds =
-      measuredEntities.length > 0
-        ? measuredEntities
-        : root
-          ? [root.id]
-          : [];
+      measuredEntities.length > 0 ? measuredEntities : root ? [root.id] : [];
 
     const results: EntityProvisionResult[] = [];
     for (const subsidiaryId of effectiveEntityIds) {
@@ -1530,19 +1557,14 @@ export async function computeProvisionRun(
         ...(override?.additionalDifferences ?? []),
       ].map(toDeductibleSide);
       const lossCarryforwardUsed =
-        override?.lossCarryforwardUsed ??
-        (isRoot ? opts.lossCarryforwardUsed ?? "0" : "0");
+        override?.lossCarryforwardUsed ?? (isRoot ? (opts.lossCarryforwardUsed ?? "0") : "0");
       const valuationAllowance =
-        override?.valuationAllowance ??
-        (isRoot ? opts.valuationAllowance ?? "0" : "0");
+        override?.valuationAllowance ?? (isRoot ? (opts.valuationAllowance ?? "0") : "0");
 
       // Stack this entity's applicable jurisdictions: org-wide rows always
       // apply, subsidiary rows layer on top, ambiguity fails closed.
       const components = sources.rateRows
-        .filter(
-          (row) =>
-            row.subsidiaryId === null || row.subsidiaryId === subsidiaryId,
-        )
+        .filter((row) => row.subsidiaryId === null || row.subsidiaryId === subsidiaryId)
         .map((row) => ({
           jurisdiction: row.jurisdiction,
           ratePercent: row.ratePercent,
@@ -1627,38 +1649,38 @@ export async function computeProvisionRun(
       enactedRateJurisdictions: echo?.enactedRateJurisdictions ?? [],
       // Source lineage fence: verified unchanged at posting time.
       sourceLineage: sources,
-      sourceFingerprint: createHash("sha256")
-        .update(canonicalJson(sources))
-        .digest("hex"),
+      sourceFingerprint: createHash("sha256").update(canonicalJson(sources)).digest("hex"),
     };
     // Canonical JSON: the hash survives the jsonb store/read cycle, so the
     // draft identity is reproducible from stored evidence alone.
-    const snapshotHash = createHash("sha256")
-      .update(canonicalJson(payload))
-      .digest("hex");
+    const snapshotHash = createHash("sha256").update(canonicalJson(payload)).digest("hex");
 
     // An identical retry returns the existing draft. A changed recomputation —
     // including one whose aggregate totals match but whose temporary-
     // difference DETAIL differs — hashes differently and preserves the prior
     // draft as discarded audit evidence; draft financial workpapers are never
     // physically deleted.
-    const priorDrafts = (await db.execute<{ id: string; snapshot_hash: string }>(sql`
+    const priorDrafts = await db.execute<{ id: string; snapshot_hash: string }>(
+      sql`
       select id, snapshot_hash
         from tax_provision_runs
        where org_id = ${orgId} and fiscal_year = ${fiscalYear}
          and status = 'draft'
        order by version desc
        for update
-    `, "objects"));
-    const identical = priorDrafts.find(
-      (draft) => draft.snapshot_hash === snapshotHash,
+    `,
+      "objects",
     );
+    const identical = priorDrafts.find((draft) => draft.snapshot_hash === snapshotHash);
     if (identical) {
       return identical.id;
     }
-    const versionRow = (await db.execute<{ v: number }>(sql`
+    const versionRow = await db.execute<{ v: number }>(
+      sql`
       select coalesce(max(version), 0)::int as v from tax_provision_runs where org_id = ${orgId} and fiscal_year = ${fiscalYear}
-    `, "objects"));
+    `,
+      "objects",
+    );
     const version = (versionRow[0]?.v ?? 0) + 1;
 
     const runId = randomUUID();
@@ -1720,9 +1742,7 @@ interface IncomeTaxControlAccounts {
  * keeps the organization boundary explicit even though entry numbers are
  * currently unique within an organization. */
 function provisionEntityIdentity(orgId: string, subsidiaryId: string): string {
-  return createHash("sha256")
-    .update(`${orgId}\u0000${subsidiaryId}`)
-    .digest("hex");
+  return createHash("sha256").update(`${orgId}\u0000${subsidiaryId}`).digest("hex");
 }
 
 /** Deterministic, collision-free journal numbering: the run's (fiscal year,
@@ -1764,16 +1784,17 @@ export async function postProvisionRun(
   actorId: string,
 ): Promise<{ entryId: string }> {
   if (!actorId) {
-    throw new IncomeTaxProvisionError(
-      "an attributable provision actor is required",
-    );
+    throw new IncomeTaxProvisionError("an attributable provision actor is required");
   }
   return await withOrg(orgId, async () => {
-    const scope = (await db.execute<{ fiscal_year: number }>(sql`
+    const scope = await db.execute<{ fiscal_year: number }>(
+      sql`
       select fiscal_year
         from tax_provision_runs
        where org_id = ${orgId} and id = ${runId}
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!scope[0]) {
       throw new IncomeTaxProvisionError("provision run not found");
     }
@@ -1796,28 +1817,31 @@ export async function postProvisionRun(
       return { entryId: run.journalEntryId };
     }
     if (run.status === "superseded" || run.status === "discarded") {
-      const current = (await db.execute<{ id: string }>(sql`
+      const current = await db.execute<{ id: string }>(
+        sql`
         select id from tax_provision_runs
          where org_id = ${orgId} and fiscal_year = ${run.fiscalYear} and id <> ${runId}
            and status in ('posted', 'draft')
          order by case status when 'posted' then 0 else 1 end, version desc
          limit 1
-      `, "objects"));
+      `,
+        "objects",
+      );
       const remedy = current[0]
         ? `use the current run ${current[0].id}`
         : `recompute the provision for FY${run.fiscalYear}`;
-      throw new IncomeTaxProvisionError(
-        `provision run ${runId} is ${run.status} — ${remedy}`,
-      );
+      throw new IncomeTaxProvisionError(`provision run ${runId} is ${run.status} — ${remedy}`);
     }
-    if (run.status !== "draft")
-      throw new IncomeTaxProvisionError(`provision run is ${run.status}`);
+    if (run.status !== "draft") throw new IncomeTaxProvisionError(`provision run is ${run.status}`);
     // Postings must be chronological: a later posted year would strand its
     // movement baseline if an earlier year changed underneath it.
-    const later = (await db.execute(sql`
+    const later = await db.execute(
+      sql`
       select 1 from tax_provision_runs
        where org_id = ${orgId} and status = 'posted' and fiscal_year > ${run.fiscalYear} limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (later.length > 0) {
       throw new IncomeTaxProvisionError(
         `a posted provision already exists for a later fiscal year — recompute and repost the later year after changing FY${run.fiscalYear}`,
@@ -1850,15 +1874,11 @@ export async function postProvisionRun(
     // Hold entity currency and control-account policy through replacement posting.
     await db.execute(sql`select id from orgs where id=${orgId} for share`);
     await db.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
-    const liveSources = await captureProvisionSources(
-      orgId,
-      run.fiscalYear,
-      { from: run.periodFrom, to: run.periodTo },
-    );
-    const drifted = detectProvisionSourceDrift(
-      payload.sourceLineage,
-      liveSources,
-    );
+    const liveSources = await captureProvisionSources(orgId, run.fiscalYear, {
+      from: run.periodFrom,
+      to: run.periodTo,
+    });
+    const drifted = detectProvisionSourceDrift(payload.sourceLineage, liveSources);
     if (drifted.length > 0) {
       throw new IncomeTaxProvisionError(
         `income tax provision draft for FY${run.fiscalYear} is stale: ${drifted.join(", ")} changed after computation — recompute before posting`,
@@ -1866,9 +1886,14 @@ export async function postProvisionRun(
     }
 
     const c =
-      (await db.execute<{ c: IncomeTaxControlAccounts | null }>(sql`
+      (
+        await db.execute<{ c: IncomeTaxControlAccounts | null }>(
+          sql`
       select settings->'controlAccounts' as c from orgs where id = ${orgId}
-    `, "objects"))[0]?.c ?? {};
+    `,
+          "objects",
+        )
+      )[0]?.c ?? {};
     const subsidiaries = await loadSubsidiaries(orgId);
     const accountFor = (
       key: keyof IncomeTaxControlAccounts,
@@ -1879,8 +1904,7 @@ export async function postProvisionRun(
       // Per-subsidiary control-account overrides win over the org default —
       // the same precedence every other posting surface uses.
       const account =
-        subsidiaries.find((s) => s.id === entity.subsidiaryId)?.controlAccounts[key] ??
-        c[key];
+        subsidiaries.find((s) => s.id === entity.subsidiaryId)?.controlAccounts[key] ?? c[key];
       if (!account)
         throw new IncomeTaxProvisionError(
           `income tax control account '${key}' is not configured (Company Settings)`,
@@ -1888,28 +1912,25 @@ export async function postProvisionRun(
       return account;
     };
 
-    const bookId = (await db.execute<{ id: string }>(sql`
+    const bookId = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share
-    `, "objects"))[0]?.id;
-    if (!bookId)
-      throw new IncomeTaxProvisionError("no active primary posting book");
+    `,
+        "objects",
+      )
+    )[0]?.id;
+    if (!bookId) throw new IncomeTaxProvisionError("no active primary posting book");
     // Ordinary posting: shared covering-period resolver (default calendar,
     // regular periods, deterministic).
     const periodId = (await resolveCoveringPeriod(db, orgId, run.periodTo))?.id;
-    if (!periodId)
-      throw new IncomeTaxProvisionError(
-        `no accounting period covers ${run.periodTo}`,
-      );
+    if (!periodId) throw new IncomeTaxProvisionError(`no accounting period covers ${run.periodTo}`);
 
     // Build every entity's journal plan BEFORE writing anything, so an
     // all-zero provision (or an unconfigured control account) aborts without
     // leaving a half-unwound ledger.
     const orderedEntities = [...payload.entities].sort((a, b) =>
-      a.subsidiaryId < b.subsidiaryId
-        ? -1
-        : a.subsidiaryId > b.subsidiaryId
-          ? 1
-          : 0,
+      a.subsidiaryId < b.subsidiaryId ? -1 : a.subsidiaryId > b.subsidiaryId ? 1 : 0,
     );
     interface PlannedEntry {
       entity: EntityProvisionResult;
@@ -1919,9 +1940,21 @@ export async function postProvisionRun(
     for (const entity of orderedEntities) {
       const lines: PlannedEntry["lines"] = [];
       const payable = accountFor("incomeTaxPayable", entity.computation.currentTax, entity);
-      const expenseAccount = accountFor("incomeTaxExpense", entity.computation.totalExpense, entity);
-      const dtaAccount = accountFor("deferredTaxAsset", entity.computation.movement.dtaGross, entity);
-      const dtlAccount = accountFor("deferredTaxLiability", entity.computation.movement.dtlGross, entity);
+      const expenseAccount = accountFor(
+        "incomeTaxExpense",
+        entity.computation.totalExpense,
+        entity,
+      );
+      const dtaAccount = accountFor(
+        "deferredTaxAsset",
+        entity.computation.movement.dtaGross,
+        entity,
+      );
+      const dtlAccount = accountFor(
+        "deferredTaxLiability",
+        entity.computation.movement.dtlGross,
+        entity,
+      );
       const vaAccount = accountFor(
         "valuationAllowance",
         entity.computation.movement.valuationAllowance,
@@ -1970,16 +2003,22 @@ export async function postProvisionRun(
       throw new IncomeTaxProvisionError("provision is zero — nothing to post");
 
     // Validate the complete forward replacement before unwinding prior history.
-    const policyLines = plans.flatMap((plan) => plan.lines.map((line) => ({
-      ...line, subsidiaryId: plan.entity.subsidiaryId,
-    })));
+    const policyLines = plans.flatMap((plan) =>
+      plan.lines.map((line) => ({
+        ...line,
+        subsidiaryId: plan.entity.subsidiaryId,
+      })),
+    );
     const accountIds = [...new Set(policyLines.map((line) => line.accountId))];
     await db.execute(sql`select id from accounts where org_id=${orgId}
       and id=any(${uuidArray(accountIds)}::uuid[]) order by id for share`);
     const ctx = await loadSubsidiaryContext(db, orgId);
     try {
       await validateSubsidiaryRestrictions(db, {
-        orgId, ctx, docSubsidiaryId: ctx.rootId, lines: policyLines,
+        orgId,
+        ctx,
+        docSubsidiaryId: ctx.rootId,
+        lines: policyLines,
       });
     } catch (error) {
       if (error instanceof SubsidiaryError) throw new IncomeTaxProvisionError(error.message);
@@ -1998,22 +2037,32 @@ export async function postProvisionRun(
     // Reverse the FY's previously posted run: EVERY entry that run wrote, in
     // every entity, numbered deterministically from the SUPERSEDED run's
     // version so same-year reposts never collide.
-    const priorPosted = (await db.execute<{ id: string; journal_entry_id: string | null; version: number }>(sql`
+    const priorPosted = await db.execute<{
+      id: string;
+      journal_entry_id: string | null;
+      version: number;
+    }>(
+      sql`
       select id, journal_entry_id, version from tax_provision_runs
        where org_id = ${orgId} and fiscal_year = ${run.fiscalYear} and status = 'posted' and id <> ${runId}
        order by version desc limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     const reversalEntryIds: string[] = [];
     if (priorPosted[0]) {
       const priorRun = priorPosted[0];
       const prefix = `ITX-FY${run.fiscalYear}-v${priorRun.version}`;
-      const priorEntries = (await db.execute<{ id: string; subsidiary_id: string }>(sql`
+      const priorEntries = await db.execute<{ id: string; subsidiary_id: string }>(
+        sql`
         select id, subsidiary_id from journal_entries
          -- Live entries only: an entry already reversed must not be reversed again.
          where org_id = ${orgId} and origin = 'tax_provision' and status = 'posted'
            and (entry_number = ${prefix} or entry_number like ${`${prefix}-%`})
          order by entry_number
-      `, "objects"));
+      `,
+        "objects",
+      );
       for (const priorEntry of priorEntries) {
         // Mirror-copy negates each line in place: subsidiary, currency and
         // functional amounts carry over exactly as originally posted. The
@@ -2028,19 +2077,27 @@ export async function postProvisionRun(
           txn_amount: string;
           fx_rate: string;
           memo: string | null;
-        }>(sql`
+        }>(
+          sql`
           select line_number, account_id, subsidiary_id, amount::text as amount,
                  currency, txn_amount::text as txn_amount, fx_rate::text as fx_rate, memo
             from journal_lines where org_id = ${orgId} and entry_id = ${priorEntry.id}
             order by line_number
-        `, "objects");
+        `,
+          "objects",
+        );
         const reversalEntryId = randomUUID();
         const postedReversal = await postEntry(db, {
           id: reversalEntryId,
           orgId,
           bookId,
           subsidiaryId: priorEntry.subsidiary_id,
-          entryNumber: provisionReversalEntryNumber(run.fiscalYear, priorRun.version, orgId, priorEntry.subsidiary_id),
+          entryNumber: provisionReversalEntryNumber(
+            run.fiscalYear,
+            priorRun.version,
+            orgId,
+            priorEntry.subsidiary_id,
+          ),
           postingDate: run.periodTo,
           periodId,
           memo: `Reverse income tax provision FY${run.fiscalYear}`,
@@ -2064,7 +2121,9 @@ export async function postProvisionRun(
         try {
           await markEntryReversed(db, { orgId, entryId: priorEntry.id, actorId });
         } catch {
-          throw new IncomeTaxProvisionError("prior provision entry could not be linked to its reversal");
+          throw new IncomeTaxProvisionError(
+            "prior provision entry could not be linked to its reversal",
+          );
         }
         reversalEntryIds.push(reversalEntryId);
       }
@@ -2097,7 +2156,12 @@ export async function postProvisionRun(
         orgId,
         bookId,
         subsidiaryId: plan.entity.subsidiaryId,
-        entryNumber: provisionEntryNumber(run.fiscalYear, run.version, orgId, plan.entity.subsidiaryId),
+        entryNumber: provisionEntryNumber(
+          run.fiscalYear,
+          run.version,
+          orgId,
+          plan.entity.subsidiaryId,
+        ),
         postingDate: run.periodTo,
         periodId,
         memo: `Income tax provision FY${run.fiscalYear} (v${run.version})`,

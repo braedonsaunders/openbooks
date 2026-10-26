@@ -15,10 +15,7 @@
  * Inventing a form number for them would be worse than this explicit
  * non-form declaration.
  */
-import type {
-  PayrollCertificate,
-  PayrollPackCertificates,
-} from "../certificates.ts";
+import type { PayrollCertificate, PayrollPackCertificates } from "../certificates.ts";
 
 const BR_CADASTRO: PayrollCertificate = {
   key: "br_cadastro",
@@ -29,12 +26,12 @@ const BR_CADASTRO: PayrollCertificate = {
   scope: { level: "country" },
   purpose: "withholding",
   citation:
-    "eSocial cadastro (employer-held; evento de admissão/cadastro); Lei 9.250/1995 art. 4º/10 "
-    + "(R$ 189,59 dependent deduction, 25% simplified discount); court order for pensão alimentícia",
+    "eSocial cadastro (employer-held; evento de admissão/cadastro); Lei 9.250/1995 art. 4º/10 " +
+    "(R$ 189,59 dependent deduction, 25% simplified discount); court order for pensão alimentícia",
   summary:
-    "The dependent count the R$ 189,59 IRRF deduction needs, any court-ordered monthly "
-    + "alimony reducing the IRRF base, and the qualifying-children count the R$ 67,54 "
-    + "salário-família quota needs. No employee-filed form exists for any of them.",
+    "The dependent count the R$ 189,59 IRRF deduction needs, any court-ordered monthly " +
+    "alimony reducing the IRRF base, and the qualifying-children count the R$ 67,54 " +
+    "salário-família quota needs. No employee-filed form exists for any of them.",
   storage: "profile_columns",
   fields: [
     {
@@ -47,8 +44,9 @@ const BR_CADASTRO: PayrollCertificate = {
       // UNANSWERED profile still saves, so readiness names the gap before
       // calculation rather than the save refusing an incomplete setup.
       required: true,
-      help: "The dependent count the R$ 189,59 deduction needs — copied off the eSocial cadastro, "
-        + "never defaulted.",
+      help:
+        "The dependent count the R$ 189,59 deduction needs — copied off the eSocial cadastro, " +
+        "never defaulted.",
     },
     {
       key: "pensao_mensal",
@@ -57,8 +55,9 @@ const BR_CADASTRO: PayrollCertificate = {
       decimals: 4,
       min: "0",
       storage: { kind: "column", column: "br_pensao_mensal" },
-      help: "Court-ordered monthly alimony reducing the IRRF base. Absent means none was ordered — "
-        + "accepted, not refused.",
+      help:
+        "Court-ordered monthly alimony reducing the IRRF base. Absent means none was ordered — " +
+        "accepted, not refused.",
     },
     {
       key: "salario_familia_filhos",
@@ -66,8 +65,9 @@ const BR_CADASTRO: PayrollCertificate = {
       kind: "count",
       min: "0",
       storage: { kind: "column", column: "br_salario_familia_filhos" },
-      help: "Qualifying children for the R$ 67,54 salário-família quota, copied off the eSocial cadastro. "
-        + "Absent means none declared — accepted, not refused.",
+      help:
+        "Qualifying children for the R$ 67,54 salário-família quota, copied off the eSocial cadastro. " +
+        "Absent means none declared — accepted, not refused.",
     },
   ],
 };

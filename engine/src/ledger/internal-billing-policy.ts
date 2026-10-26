@@ -126,7 +126,11 @@ export function internalBillingRuleInEffect(
   rule: Pick<InternalBillingRuleFacts, "effectiveFrom" | "effectiveTo" | "isActive">,
   date: string,
 ): boolean {
-  return rule.isActive && rule.effectiveFrom <= date && (rule.effectiveTo == null || date <= rule.effectiveTo);
+  return (
+    rule.isActive &&
+    rule.effectiveFrom <= date &&
+    (rule.effectiveTo == null || date <= rule.effectiveTo)
+  );
 }
 
 export interface InternalBillingParty {
@@ -138,10 +142,16 @@ export interface InternalBillingParty {
 }
 
 type HeaderDims = Pick<Doc, "departmentId" | "projectId" | "locationId" | "classId">;
-type LineDims = Pick<DocLine, "subsidiaryId" | "departmentId" | "projectId" | "locationId" | "classId">;
+type LineDims = Pick<
+  DocLine,
+  "subsidiaryId" | "departmentId" | "projectId" | "locationId" | "classId"
+>;
 
 /** The providing side: the document header. */
-export function internalBillingProvider(header: HeaderDims, providerSubsidiaryId: string): InternalBillingParty {
+export function internalBillingProvider(
+  header: HeaderDims,
+  providerSubsidiaryId: string,
+): InternalBillingParty {
   return {
     subsidiaryId: providerSubsidiaryId,
     departmentId: header.departmentId ?? null,
@@ -152,7 +162,10 @@ export function internalBillingProvider(header: HeaderDims, providerSubsidiaryId
 }
 
 /** The receiving side of one line: its own dimensions over the provider's. */
-export function internalBillingReceiver(provider: InternalBillingParty, line: LineDims): InternalBillingParty {
+export function internalBillingReceiver(
+  provider: InternalBillingParty,
+  line: LineDims,
+): InternalBillingParty {
   return {
     subsidiaryId: line.subsidiaryId ?? provider.subsidiaryId,
     departmentId: line.departmentId ?? provider.departmentId,
@@ -265,7 +278,9 @@ export function internalBillingKernelLines(
     }
     const amount = parseMoney(line.amount);
     if (cmp(amount, "0") <= 0) {
-      throw new InternalBillingPolicyError(`line ${line.lineNumber}: the amount must be greater than zero`);
+      throw new InternalBillingPolicyError(
+        `line ${line.lineNumber}: the amount must be greater than zero`,
+      );
     }
     const receiver = internalBillingReceiver(provider, line);
     assertInternalBillingLine({
@@ -284,7 +299,9 @@ export function internalBillingKernelLines(
       memo: line.description,
       // Only an intercompany sale lands in another entity; the kernel adds
       // the due-to/due-from legs that keep each subsidiary balanced.
-      ...(receiver.subsidiaryId !== provider.subsidiaryId ? { subsidiaryId: receiver.subsidiaryId } : {}),
+      ...(receiver.subsidiaryId !== provider.subsidiaryId
+        ? { subsidiaryId: receiver.subsidiaryId }
+        : {}),
       departmentId: receiver.departmentId,
       projectId: stampsProject ? receiver.projectId : null,
       locationId: receiver.locationId,
@@ -306,4 +323,3 @@ export function internalBillingKernelLines(
   }
   return out;
 }
-

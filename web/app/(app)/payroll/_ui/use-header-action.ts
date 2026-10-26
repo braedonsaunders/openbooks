@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 /**
  * Opens a body-owned drawer from the page header's primary action.
@@ -14,21 +14,21 @@ import { useSearchParams } from 'next/navigation'
  * header click opens it again.
  */
 export function useHeaderAction(param: string): [boolean, (open: boolean) => void] {
-  const params = useSearchParams()
-  const requested = params?.get(param) === '1'
-  const [open, setOpen] = useState(requested)
-  const [seen, setSeen] = useState(requested)
+  const params = useSearchParams();
+  const requested = params?.get(param) === "1";
+  const [open, setOpen] = useState(requested);
+  const [seen, setSeen] = useState(requested);
   if (requested !== seen) {
-    setSeen(requested)
-    if (requested) setOpen(true)
+    setSeen(requested);
+    if (requested) setOpen(true);
   }
   function change(next: boolean) {
-    setOpen(next)
+    setOpen(next);
     if (!next && requested) {
-      const url = new URL(window.location.href)
-      url.searchParams.delete(param)
-      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
+      const url = new URL(window.location.href);
+      url.searchParams.delete(param);
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
     }
   }
-  return [open, change]
+  return [open, change];
 }

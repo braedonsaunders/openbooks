@@ -20,7 +20,10 @@ installEngineSeams();
 
 function option(name: string): string | undefined {
   const prefix = `--${name}=`;
-  return process.argv.slice(3).find((arg) => arg.startsWith(prefix))?.slice(prefix.length);
+  return process.argv
+    .slice(3)
+    .find((arg) => arg.startsWith(prefix))
+    ?.slice(prefix.length);
 }
 
 function required(name: string): string {
@@ -40,7 +43,7 @@ async function main(): Promise<void> {
   const command = process.argv[2];
   if (command === "list") {
     const limitRaw = option("limit");
-    const limit = limitRaw === undefined ? 100 : (/^\d+$/.test(limitRaw) ? Number(limitRaw) : NaN);
+    const limit = limitRaw === undefined ? 100 : /^\d+$/.test(limitRaw) ? Number(limitRaw) : NaN;
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
       throw new Error("--limit must be an integer between 1 and 500");
     }

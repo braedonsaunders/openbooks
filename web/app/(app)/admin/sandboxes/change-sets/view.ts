@@ -1,12 +1,19 @@
-import 'server-only'
+import "server-only";
 
-import { notFound, redirect } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../lib/authz'
-import { pickString } from '../../../../../lib/list-params'
-import { loadChangeSetDetail } from '../../../../../lib/sandbox-change-sets'
-import type { ChangeSetDrawer } from './ChangeSetDrawer'
+import { notFound, redirect } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../../lib/authz";
+import { pickString } from "../../../../../lib/list-params";
+import { loadChangeSetDetail } from "../../../../../lib/sandbox-change-sets";
+import type { ChangeSetDrawer } from "./ChangeSetDrawer";
 
 /**
  * The sandbox change-set review list, split into a loader and a spec.
@@ -27,65 +34,63 @@ import type { ChangeSetDrawer } from './ChangeSetDrawer'
  * one of its labels.
  */
 
-type DrawerProps = Parameters<typeof ChangeSetDrawer>[0]
+type DrawerProps = Parameters<typeof ChangeSetDrawer>[0];
 
 export interface ChangeSetsData {
-  backHref: string
-  backLabel: string
-  title: string
-  description: string
-  sp: Record<string, string | string[] | undefined>
+  backHref: string;
+  backLabel: string;
+  title: string;
+  description: string;
+  sp: Record<string, string | string[] | undefined>;
   /** `null` when no `?changeSet=` is selected; the widget omits the flyout. */
-  drawer: (DrawerProps & { remountKey: string }) | null
+  drawer: (DrawerProps & { remountKey: string }) | null;
 }
 
 export async function loadChangeSets(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ChangeSetsData> {
-  const authz = await requirePermission('admin.sandboxes.manage')
-  if (authz.user.envKind !== 'production') redirect('/admin/sandboxes')
-  const t = await getTranslations('admin')
+  const authz = await requirePermission("admin.sandboxes.manage");
+  if (authz.user.envKind !== "production") redirect("/admin/sandboxes");
+  const t = await getTranslations("admin");
 
-  const id = pickString(sp.changeSet)
-  const selected = id ? await loadChangeSetDetail(authz.user.productionOrgId, id) : null
+  const id = pickString(sp.changeSet);
+  const selected = id ? await loadChangeSetDetail(authz.user.productionOrgId, id) : null;
   // A named change set that does not resolve is a 404, not an empty flyout —
   // the native contract, and the only way a bad id is distinguishable from a
   // hidden one is that it is NOT.
-  if (id && !selected) notFound()
+  if (id && !selected) notFound();
 
   return {
-    backHref: '/admin/sandboxes',
-    backLabel: t('sandboxes.changeSets.listBack'),
-    title: t('sandboxes.changeSets.listTitle'),
-    description: t('sandboxes.changeSets.listDescription'),
+    backHref: "/admin/sandboxes",
+    backLabel: t("sandboxes.changeSets.listBack"),
+    title: t("sandboxes.changeSets.listTitle"),
+    description: t("sandboxes.changeSets.listDescription"),
     sp,
-    drawer: selected
-      ? { remountKey: selected.id, detail: selected }
-      : null,
-  }
+    drawer: selected ? { remountKey: selected.id, detail: selected } : null,
+  };
 }
 
-const f = ref<ChangeSetsData>()
+const f = ref<ChangeSetsData>();
 
 export function changeSetsSpec(data: ChangeSetsData): PageSpec {
   return page({
-    route: '/admin/sandboxes/change-sets',
-    layout: 'list',
+    route: "/admin/sandboxes/change-sets",
+    layout: "list",
     header: [
       pageHeader({
-        back: { href: f('backHref'), label: f('backLabel') },
-        title: f('title'),
-        description: f('description'),
+        back: { href: f("backHref"), label: f("backLabel") },
+        title: f("title"),
+        description: f("description"),
       }),
     ],
     body: [
-      widgetBlock('entity-list-view', {
-        recordType: 'change_set',
+      widgetBlock("entity-list-view", {
+        recordType: "change_set",
         sp: data.sp,
         // The widget ref resolves to nothing when `drawer` is null, which is
         // the native `: null` exactly.
-        drawer: widget('change-set-drawer', { drawer: data.drawer }),
+        drawer: widget("change-set-drawer", { drawer: data.drawer }),
       }),
     ],
-  })
+  });
 }

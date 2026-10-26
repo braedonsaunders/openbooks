@@ -2,11 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { InventoryError } from "./contracts.ts";
 import { resolveProfile } from "./profile-policy.ts";
-import {
-  getOnHandWith,
-  lockInventoryPosition,
-  persistReceiptMoney,
-} from "./position.ts";
+import { getOnHandWith, lockInventoryPosition, persistReceiptMoney } from "./position.ts";
 import { toExactStockQuantity } from "./costing.ts";
 import { cmp } from "../money/money.ts";
 import { resolvePutawayLocation, putAwayStagedStock } from "./putaway.ts";
@@ -24,7 +20,8 @@ export async function suggestReceiptConfirmation(
   input: { lineId: string; commandKey: string },
 ) {
   return withOrgTransaction(orgId, async () => {
-    const line = (await db.execute<{
+    const line = (
+      await db.execute<{
         id: string;
         item_id: string;
         stock_location_id: string;
@@ -35,13 +32,17 @@ export async function suggestReceiptConfirmation(
         lot_id: string | null;
         serial_id: string | null;
         movement_id: string;
-      }>(sql`
+      }>(
+        sql`
       select line.id,line.item_id,line.stock_location_id,line.quantity::text,line.unit,receipt.subsidiary_id,
         receipt.document_date::text as posting_date,movement.lot_id,movement.serial_id,movement.id as movement_id
       from document_lines line join documents receipt on receipt.org_id=line.org_id and receipt.id=line.document_id
       join inventory_movements movement on movement.org_id=line.org_id and movement.document_line_id=line.id
         and movement.kind='receipt' and movement.status='posted'
-      where line.org_id=${orgId} and line.id=${input.lineId} and receipt.kind='purchase_receipt' and receipt.status='approved'`, "objects"))[0];
+      where line.org_id=${orgId} and line.id=${input.lineId} and receipt.kind='purchase_receipt' and receipt.status='approved'`,
+        "objects",
+      )
+    )[0];
     if (!line)
       throw new InventoryError(
         "Select an approved purchase receipt line with posted stock evidence",
@@ -90,24 +91,20 @@ export async function suggestPutaway(
   return withOrgTransaction(orgId, async () => {
     await lockInventoryPosition(db, input.itemId, input.stagingLocationId);
     await admitExecution(db, orgId, actorId, "putaway", input.subsidiaryId);
-    const staging = (await db.execute(sql`select id from stock_locations where org_id=${orgId}
-      and id=${input.stagingLocationId} and kind='staging' and is_active and stock_location_warehouse(${orgId}::uuid,id)=${input.warehouseId} for share`, "objects"))[0];
-    if (!staging)
-      throw new InventoryError(
-        "Select an active staging bin in this warehouse",
-      );
+    const staging = (
+      await db.execute(
+        sql`select id from stock_locations where org_id=${orgId}
+      and id=${input.stagingLocationId} and kind='staging' and is_active and stock_location_warehouse(${orgId}::uuid,id)=${input.warehouseId} for share`,
+        "objects",
+      )
+    )[0];
+    if (!staging) throw new InventoryError("Select an active staging bin in this warehouse");
     const quantity = persistReceiptMoney(input.quantity, "putaway quantity");
-    const stock = await getOnHandWith(
-      db,
-      orgId,
-      input.itemId,
-      input.stagingLocationId,
-      {
-        subsidiaryId: input.subsidiaryId,
-        lotId: input.lotId,
-        serialId: input.serialId,
-      },
-    );
+    const stock = await getOnHandWith(db, orgId, input.itemId, input.stagingLocationId, {
+      subsidiaryId: input.subsidiaryId,
+      lotId: input.lotId,
+      serialId: input.serialId,
+    });
     if (cmp(quantity, "0") <= 0 || cmp(stock.quantity, quantity) < 0)
       throw new InventoryError(
         "Refresh staged stock; the suggested quantity is no longer available",
@@ -148,7 +145,8 @@ export async function suggestCountObservation(
   },
 ) {
   return withOrgTransaction(orgId, async () => {
-    const line = (await db.execute<{
+    const line = (
+      await db.execute<{
         item_id: string;
         stock_location_id: string;
         stock_count_id: string;
@@ -158,20 +156,20 @@ export async function suggestCountObservation(
         counted_on: string;
         first_counted_quantity: string | null;
         second_counted_quantity: string | null;
-      }>(sql`
+      }>(
+        sql`
       select line.item_id,line.stock_location_id,line.stock_count_id,line.lot_id,line.serial_id,count.subsidiary_id,
         count.counted_on::text,line.first_counted_quantity::text,line.second_counted_quantity::text
       from stock_count_lines line join stock_counts count on count.org_id=line.org_id and count.id=line.stock_count_id
-      where line.org_id=${orgId} and line.id=${input.lineId} and count.status='counting'`, "objects"))[0];
-    if (!line)
-      throw new InventoryError(
-        "Select a line on a stock count that is counting",
-      );
+      where line.org_id=${orgId} and line.id=${input.lineId} and count.status='counting'`,
+        "objects",
+      )
+    )[0];
+    if (!line) throw new InventoryError("Select a line on a stock count that is counting");
     await admitExecution(db, orgId, actorId, "count", line.subsidiary_id);
     // The counter's observation is the suggested quantity; expected book stock never enters scan instructions.
     const quantity = persistReceiptMoney(input.quantity, "count observation");
-    if (cmp(quantity, "0") < 0)
-      throw new InventoryError("Count quantity cannot be negative");
+    if (cmp(quantity, "0") < 0) throw new InventoryError("Count quantity cannot be negative");
     return createExecutionSuggestion(db, orgId, actorId, {
       stage: "count",
       subsidiaryId: line.subsidiary_id,
@@ -221,13 +219,18 @@ export async function executeInventoryDirection(
       })),
     };
   if (task.stage === "count") {
-    const line = (await tx.execute<{
+    const line = (
+      await tx.execute<{
         prior: string | null;
         status: string;
-      }>(sql`select count.status,
+      }>(
+        sql`select count.status,
       case when ${task.basis.observation}='second' then line.second_counted_quantity::text else line.first_counted_quantity::text end as prior
       from stock_count_lines line join stock_counts count on count.org_id=line.org_id and count.id=line.stock_count_id
-      where line.org_id=${orgId} and line.id=${task.count_line_id} for update of count,line`, "objects"))[0];
+      where line.org_id=${orgId} and line.id=${task.count_line_id} for update of count,line`,
+        "objects",
+      )
+    )[0];
     if (!line || line.status !== "counting" || line.prior !== task.basis.prior)
       throw new InventoryError(
         "Count observation changed; refresh this line before confirming another scan",
@@ -237,9 +240,7 @@ export async function executeInventoryDirection(
       countId: String(task.basis.countId),
       lineId: task.count_line_id!,
       countedQuantity: task.quantity,
-      ...(typeof task.basis.reason === "string"
-        ? { reason: task.basis.reason }
-        : {}),
+      ...(typeof task.basis.reason === "string" ? { reason: task.basis.reason } : {}),
     };
     return {
       ...(await (task.basis.observation === "second"
@@ -248,33 +249,35 @@ export async function executeInventoryDirection(
     };
   }
   if (task.stage === "receive") {
-    const evidence = await tx.execute(sql`select movement.id from inventory_movements movement
+    const evidence = await tx.execute(
+      sql`select movement.id from inventory_movements movement
       join documents receipt on receipt.org_id=movement.org_id and receipt.id=(select document_id from document_lines
         where org_id=${orgId} and id=${task.document_line_id})
       where movement.org_id=${orgId} and movement.id=${task.basis.movementId} and movement.document_line_id=${task.document_line_id}
-        and movement.status='posted' and receipt.kind='purchase_receipt' and receipt.status='approved'`, "objects");
+        and movement.status='posted' and receipt.kind='purchase_receipt' and receipt.status='approved'`,
+      "objects",
+    );
     if (evidence.length !== 1)
       throw new InventoryError(
         "Purchase receipt changed; reopen its posted stock evidence before confirming",
       );
     if (
-      (await tx.execute(sql`select id from warehouse_execution_tasks where org_id=${orgId} and document_line_id=${task.document_line_id}
-      and stage='receive' and status='done' and id<>${task.id} limit 1`, "objects"))[0]
+      (
+        await tx.execute(
+          sql`select id from warehouse_execution_tasks where org_id=${orgId} and document_line_id=${task.document_line_id}
+      and stage='receive' and status='done' and id<>${task.id} limit 1`,
+          "objects",
+        )
+      )[0]
     )
       throw new InventoryError(
         "This purchase receipt was already confirmed; reopen its recorded receiving evidence",
       );
-    const stock = await getOnHandWith(
-      tx,
-      orgId,
-      task.item_id,
-      task.to_stock_location_id,
-      {
-        subsidiaryId: task.subsidiary_id,
-        lotId: task.lot_id,
-        serialId: task.serial_id,
-      },
-    );
+    const stock = await getOnHandWith(tx, orgId, task.item_id, task.to_stock_location_id, {
+      subsidiaryId: task.subsidiary_id,
+      lotId: task.lot_id,
+      serialId: task.serial_id,
+    });
     if (cmp(stock.quantity, task.quantity) < 0)
       throw new InventoryError(
         "Receipt stock has moved; confirm its current location through the stock inquiry",
@@ -284,7 +287,5 @@ export async function executeInventoryDirection(
       movementId: task.basis.movementId,
     };
   }
-  throw new InventoryError(
-    "This warehouse work requires the fulfillment execution command",
-  );
+  throw new InventoryError("This warehouse work requires the fulfillment execution command");
 }

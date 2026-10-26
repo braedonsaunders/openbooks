@@ -1,10 +1,10 @@
-import 'server-only'
+import "server-only";
 
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { getTranslations } from 'next-intl/server'
-import { requirePermission } from '@/lib/authz'
-import { getAppByKey } from '@/lib/apps/store'
-import type { AppFrame } from './AppFrame'
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { getTranslations } from "next-intl/server";
+import { requirePermission } from "@/lib/authz";
+import { getAppByKey } from "@/lib/apps/store";
+import type { AppFrame } from "./AppFrame";
 
 /**
  * The installed-app runtime, split into a loader and a spec.
@@ -30,37 +30,37 @@ import type { AppFrame } from './AppFrame'
  * catalog keys, in the request locale like the sibling library loader.
  */
 
-type FrameContext = Parameters<typeof AppFrame>[0]['context']
+type FrameContext = Parameters<typeof AppFrame>[0]["context"];
 
 export interface AppRuntimeData {
   /** Exactly one of these three is true. */
-  notFound: boolean
-  disabled: boolean
-  live: boolean
-  native?: boolean
-  searchParams?: Record<string, string | string[] | undefined>
-  noticeTitle: string
-  noticeDescription: string
-  backHref: string
-  backLabel: string
-  appKey: string
-  appName: string
-  appsHref: string
-  appsLabel: string
-  context: FrameContext | null
+  notFound: boolean;
+  disabled: boolean;
+  live: boolean;
+  native?: boolean;
+  searchParams?: Record<string, string | string[] | undefined>;
+  noticeTitle: string;
+  noticeDescription: string;
+  backHref: string;
+  backLabel: string;
+  appKey: string;
+  appName: string;
+  appsHref: string;
+  appsLabel: string;
+  context: FrameContext | null;
 }
 
 export async function loadAppRuntime(key: string): Promise<AppRuntimeData> {
-  const authz = await requirePermission('apps.use')
-  const t = await getTranslations('apps')
-  const app = await getAppByKey(authz.user.orgId, key)
+  const authz = await requirePermission("apps.use");
+  const t = await getTranslations("apps");
+  const app = await getAppByKey(authz.user.orgId, key);
 
   const base = {
-    backHref: '/apps',
-    backLabel: `← ${t('runtime.backToApps')}`,
-    appsHref: '/apps',
-    appsLabel: t('title'),
-  }
+    backHref: "/apps",
+    backLabel: `← ${t("runtime.backToApps")}`,
+    appsHref: "/apps",
+    appsLabel: t("title"),
+  };
 
   if (!app || !app.activeVersionId) {
     return {
@@ -68,36 +68,36 @@ export async function loadAppRuntime(key: string): Promise<AppRuntimeData> {
       notFound: true,
       disabled: false,
       live: false,
-      noticeTitle: t('runtime.notFoundTitle'),
-      noticeDescription: t('runtime.notInstalled'),
+      noticeTitle: t("runtime.notFoundTitle"),
+      noticeDescription: t("runtime.notInstalled"),
       appKey: key,
-      appName: '',
+      appName: "",
       context: null,
-    }
+    };
   }
 
-  if (app.status !== 'installed') {
+  if (app.status !== "installed") {
     return {
       ...base,
       notFound: false,
       disabled: true,
       live: false,
       noticeTitle: app.name,
-      noticeDescription: t('runtime.disabled'),
+      noticeDescription: t("runtime.disabled"),
       appKey: app.key,
       appName: app.name,
       context: null,
-    }
+    };
   }
 
   return {
     ...base,
     notFound: false,
     disabled: false,
-    live: app.manifest?.frontend.renderer !== 'native',
-    native: app.manifest?.frontend.renderer === 'native',
-    noticeTitle: '',
-    noticeDescription: '',
+    live: app.manifest?.frontend.renderer !== "native",
+    native: app.manifest?.frontend.renderer === "native",
+    noticeTitle: "",
+    noticeDescription: "",
     appKey: app.key,
     appName: app.name,
     context: {
@@ -108,47 +108,50 @@ export async function loadAppRuntime(key: string): Promise<AppRuntimeData> {
         roles: authz.user.roles.map(({ key: roleKey }) => roleKey),
       },
     },
-  }
+  };
 }
 
 export function appRuntimeSpec(data: AppRuntimeData): PageSpec {
   return page({
-    route: '/apps/[key]',
+    route: "/apps/[key]",
     // The runtime owns its own full-height flex column, and the two notice
     // branches own their own centred container. A `list` layout would nest
     // either inside a shell the native page never renders.
-    layout: 'bare',
+    layout: "bare",
     header: [],
     body: [
       {
-        ...widgetBlock('app-notice', {
+        ...widgetBlock("app-notice", {
           title: data.noticeTitle,
           description: data.noticeDescription,
           backHref: data.backHref,
           backLabel: data.backLabel,
         }),
-        when: { $: 'notFound' },
+        when: { $: "notFound" },
       },
       {
-        ...widgetBlock('app-notice', {
+        ...widgetBlock("app-notice", {
           title: data.noticeTitle,
           description: data.noticeDescription,
           backHref: data.backHref,
           backLabel: data.backLabel,
         }),
-        when: { $: 'disabled' },
+        when: { $: "disabled" },
       },
-      { ...widgetBlock('native-extension', { appKey: data.appKey, sp: data.searchParams ?? {} }), when: { $: 'native' } },
       {
-        ...widgetBlock('app-runtime-chrome', {
+        ...widgetBlock("native-extension", { appKey: data.appKey, sp: data.searchParams ?? {} }),
+        when: { $: "native" },
+      },
+      {
+        ...widgetBlock("app-runtime-chrome", {
           appKey: data.appKey,
           appName: data.appName,
           appsHref: data.appsHref,
           appsLabel: data.appsLabel,
           context: data.context,
         }),
-        when: { $: 'live' },
+        when: { $: "live" },
       },
     ],
-  })
+  });
 }

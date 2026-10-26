@@ -1,50 +1,50 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import { DateField } from '../../../../components/date-field'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button, Input, Label, Select, Textarea } from "@openbooks/ui";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import { DateField } from "../../../../components/date-field";
 
 export interface RecruitingCreateOption {
-  value: string
-  label: string
+  value: string;
+  label: string;
 }
 
 /** An active library entry the opening can start from (title + text prefill the form). */
 export interface RecruitingJobDescriptionOption {
-  value: string
-  label: string
-  title: string
-  description: string
+  value: string;
+  label: string;
+  title: string;
+  description: string;
 }
 
 export interface RecruitingCreateProps {
   /** Where a successful create navigates: the list with the new row's drawer open. */
-  basePath: string
+  basePath: string;
   /** Visible employer subsidiaries; one entry renders as a fixed value, never a picker. */
-  employers: RecruitingCreateOption[]
+  employers: RecruitingCreateOption[];
   /**
    * Set when the caller may see no legal entity: the form names the remedy
    * instead of offering an unauthorized employer. Null in the normal case.
    */
-  employerRefusal: string | null
-  departments: RecruitingCreateOption[]
-  jobDescriptions: RecruitingJobDescriptionOption[]
+  employerRefusal: string | null;
+  departments: RecruitingCreateOption[];
+  jobDescriptions: RecruitingJobDescriptionOption[];
   labels: {
-    title: string
-    jobDescription: string
-    noJobDescription: string
-    jobDescriptionNote: string
-    description: string
-    employer: string
-    department: string
-    noDepartment: string
-    headcount: string
-    targetStart: string
-    submit: string
-    failed: string
-  }
+    title: string;
+    jobDescription: string;
+    noJobDescription: string;
+    jobDescriptionNote: string;
+    description: string;
+    employer: string;
+    department: string;
+    noDepartment: string;
+    headcount: string;
+    targetStart: string;
+    submit: string;
+    failed: string;
+  };
 }
 
 /**
@@ -56,35 +56,42 @@ export interface RecruitingCreateProps {
  * Choosing a job description fills the title and text for review; the
  * server copies the entry's employment type and pay range alongside.
  */
-export function RecruitingCreateForm({ basePath, employers, employerRefusal, departments, jobDescriptions, labels }: RecruitingCreateProps) {
-  const router = useRouter()
-  const [jobDescription, setJobDescription] = useState('')
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [employer, setEmployer] = useState(employers[0]?.value ?? '')
-  const [department, setDepartment] = useState('')
-  const [headcount, setHeadcount] = useState('1')
-  const [targetStart, setTargetStart] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+export function RecruitingCreateForm({
+  basePath,
+  employers,
+  employerRefusal,
+  departments,
+  jobDescriptions,
+  labels,
+}: RecruitingCreateProps) {
+  const router = useRouter();
+  const [jobDescription, setJobDescription] = useState("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [employer, setEmployer] = useState(employers[0]?.value ?? "");
+  const [department, setDepartment] = useState("");
+  const [headcount, setHeadcount] = useState("1");
+  const [targetStart, setTargetStart] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function chooseJobDescription(value: string) {
-    setJobDescription(value)
-    const entry = jobDescriptions.find((option) => option.value === value)
+    setJobDescription(value);
+    const entry = jobDescriptions.find((option) => option.value === value);
     if (entry) {
-      setTitle(entry.title)
-      setDescription(entry.description)
+      setTitle(entry.title);
+      setDescription(entry.description);
     }
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setBusy(true)
-    setError(null)
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
     try {
-      const res = await fetch('/api/hrm/recruiting/requisitions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+      const res = await fetch("/api/hrm/recruiting/requisitions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           title: title.trim(),
           jobDescriptionId: jobDescription || null,
@@ -94,24 +101,24 @@ export function RecruitingCreateForm({ basePath, employers, employerRefusal, dep
           headcount: Number.parseInt(headcount, 10),
           targetStartOn: targetStart || null,
         }),
-      })
+      });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, labels.failed))
-        setBusy(false)
-        return
+        setError(await readApiErrorMessage(res, labels.failed));
+        setBusy(false);
+        return;
       }
-      const payload = (await res.json().catch(() => ({}))) as { requisition?: { id?: unknown } }
-      const id = typeof payload.requisition?.id === 'string' ? payload.requisition.id : null
+      const payload = (await res.json().catch(() => ({}))) as { requisition?: { id?: unknown } };
+      const id = typeof payload.requisition?.id === "string" ? payload.requisition.id : null;
       if (id === null) {
-        setError(labels.failed)
-        setBusy(false)
-        return
+        setError(labels.failed);
+        setBusy(false);
+        return;
       }
-      router.push(`${basePath}?requisition=${id}`)
-      router.refresh()
+      router.push(`${basePath}?requisition=${id}`);
+      router.refresh();
     } catch {
-      setError(labels.failed)
-      setBusy(false)
+      setError(labels.failed);
+      setBusy(false);
     }
   }
 
@@ -133,13 +140,20 @@ export function RecruitingCreateForm({ basePath, employers, employerRefusal, dep
             ))}
           </Select>
           {jobDescription ? (
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{labels.jobDescriptionNote}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {labels.jobDescriptionNote}
+            </p>
           ) : null}
         </div>
       ) : null}
       <div>
         <Label htmlFor="recruiting-title">{labels.title}</Label>
-        <Input id="recruiting-title" value={title} onChange={(event) => setTitle(event.target.value)} required />
+        <Input
+          id="recruiting-title"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          required
+        />
       </div>
       <div>
         <Label htmlFor="recruiting-employer">{labels.employer}</Label>
@@ -150,7 +164,11 @@ export function RecruitingCreateForm({ basePath, employers, employerRefusal, dep
         ) : employers.length === 1 ? (
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{employers[0]?.label}</p>
         ) : (
-          <Select id="recruiting-employer" value={employer} onChange={(event) => setEmployer(event.target.value)}>
+          <Select
+            id="recruiting-employer"
+            value={employer}
+            onChange={(event) => setEmployer(event.target.value)}
+          >
             {employers.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -161,7 +179,11 @@ export function RecruitingCreateForm({ basePath, employers, employerRefusal, dep
       </div>
       <div>
         <Label htmlFor="recruiting-department">{labels.department}</Label>
-        <Select id="recruiting-department" value={department} onChange={(event) => setDepartment(event.target.value)}>
+        <Select
+          id="recruiting-department"
+          value={department}
+          onChange={(event) => setDepartment(event.target.value)}
+        >
           <option value="">{labels.noDepartment}</option>
           {departments.map((option) => (
             <option key={option.value} value={option.value}>
@@ -182,7 +204,11 @@ export function RecruitingCreateForm({ basePath, employers, employerRefusal, dep
       </div>
       <div>
         <Label htmlFor="recruiting-target">{labels.targetStart}</Label>
-        <DateField id="recruiting-target" value={targetStart} onChange={(value) => setTargetStart(value)} />
+        <DateField
+          id="recruiting-target"
+          value={targetStart}
+          onChange={(value) => setTargetStart(value)}
+        />
       </div>
       <div>
         <Label htmlFor="recruiting-description">{labels.description}</Label>
@@ -202,5 +228,5 @@ export function RecruitingCreateForm({ basePath, employers, employerRefusal, dep
         {labels.submit}
       </Button>
     </form>
-  )
+  );
 }

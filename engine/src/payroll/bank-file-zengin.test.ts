@@ -97,22 +97,41 @@ const zenginInputs = (): PayRunBankFileInputs => ({
     entries: [],
     total: "380233.0000",
     excludedCheque: [
-      { employeePartyId: "p3", employeeName: "CY OVERRIDE", amount: "69767.0000", reason: "profile" },
+      {
+        employeePartyId: "p3",
+        employeeName: "CY OVERRIDE",
+        amount: "69767.0000",
+        reason: "profile",
+      },
     ],
     excludedTotal: "69767.0000",
   },
   credits: [
     {
-      stubId: "s1", employeePartyId: "p1", employeeName: "ADA WIDGET", amount: "250000.0000",
-      employeeNumber: "EMP-0001", routing: { bankCode: "0005", branchCode: "110", depositType: "1" },
+      stubId: "s1",
+      employeePartyId: "p1",
+      employeeName: "ADA WIDGET",
+      amount: "250000.0000",
+      employeeNumber: "EMP-0001",
+      routing: { bankCode: "0005", branchCode: "110", depositType: "1" },
       accountNumber: "8000001",
-      bankCode: "0005", branchCode: "110", depositType: "1", payeeKana: "ｴｲﾃﾞｨｰ",
+      bankCode: "0005",
+      branchCode: "110",
+      depositType: "1",
+      payeeKana: "ｴｲﾃﾞｨｰ",
     },
     {
-      stubId: "s2", employeePartyId: "p2", employeeName: "BO SAVER", amount: "130233.0000",
-      employeeNumber: "EMP-0002", routing: { bankCode: "9900", branchCode: "018", depositType: "1" },
+      stubId: "s2",
+      employeePartyId: "p2",
+      employeeName: "BO SAVER",
+      amount: "130233.0000",
+      employeeNumber: "EMP-0002",
+      routing: { bankCode: "9900", branchCode: "018", depositType: "1" },
       accountNumber: "0123456",
-      bankCode: "9900", branchCode: "018", depositType: "1", payeeKana: "BO SAVER",
+      bankCode: "9900",
+      branchCode: "018",
+      depositType: "1",
+      payeeKana: "BO SAVER",
     },
   ],
 });
@@ -228,15 +247,17 @@ test("the published byte positions match at every data offset", () => {
   const file = buildZenginFile({
     settings: ZENGIN_ORIGINATOR.zengin!,
     transferDate: "2026-12-10",
-    payments: [{
-      amountYen: 380233n,
-      bankCode: "0005",
-      branchCode: "110",
-      depositType: "2",
-      accountNumber: "123",
-      payeeName: "ﾔﾏﾀﾞﾀﾛｳ",
-      employeeNumber: "12345",
-    }],
+    payments: [
+      {
+        amountYen: 380233n,
+        bankCode: "0005",
+        branchCode: "110",
+        depositType: "2",
+        accountNumber: "123",
+        payeeName: "ﾔﾏﾀﾞﾀﾛｳ",
+        employeeNumber: "12345",
+      },
+    ],
   });
   const records = file.split("\r\n").filter((line) => line.length > 0);
   assert.equal(records.length, 4);
@@ -297,7 +318,10 @@ test("the renderer carries the Shift_JIS bytes the bank reads", () => {
 test("the kana channel encodes to its JIS X 0201 bytes", () => {
   // ASCII printable passes through; half-width katakana maps U+FF61–FF9F →
   // 0xA1–0xDF (ｱ U+FF71 → 0xB1); CRLF passes through as 0x0D 0x0A.
-  assert.deepEqual([...encodeZenginFile("A1 ｱ\r\n").values()], [0x41, 0x31, 0x20, 0xb1, 0x0d, 0x0a]);
+  assert.deepEqual(
+    [...encodeZenginFile("A1 ｱ\r\n").values()],
+    [0x41, 0x31, 0x20, 0xb1, 0x0d, 0x0a],
+  );
   // ｶ U+FF76 → 0xB6; ｰ U+FF70 → 0xB0 (the U+FF61–FF9F → 0xA1–0xDF
   // range is linear, including ﾞ/ﾟ at 0xDE/0xDF).
   assert.deepEqual([...encodeZenginFile("ｶｰ").values()], [0xb6, 0xb0]);
@@ -309,11 +333,13 @@ test("the encoder refuses anything without a single-byte form — never a replac
   // (two bytes that would shift every field after it).
   assert.throws(
     () => encodeZenginFile("ア"),
-    (error: Error) => error instanceof PaymentError && /no Shift_JIS single-byte form/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError && /no Shift_JIS single-byte form/.test(error.message),
   );
   assert.throws(
     () => encodeZenginFile("山"),
-    (error: Error) => error instanceof PaymentError && /no Shift_JIS single-byte form/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError && /no Shift_JIS single-byte form/.test(error.message),
   );
 });
 
@@ -364,7 +390,11 @@ test("payroll's Zengin output equals the shared AP builder's output for the same
 /* ------------------------------------------------------------------ */
 
 test("a missing bank code names the employee and the cheque fallback", () => {
-  const resolved = resolveZenginCreditor("ADA WIDGET", { branchCode: "110", depositType: "1" }, "8000001");
+  const resolved = resolveZenginCreditor(
+    "ADA WIDGET",
+    { branchCode: "110", depositType: "1" },
+    "8000001",
+  );
   if (resolved.ok) assert.fail("a missing bank code must not resolve");
   assert.match(resolved.reason, /ADA WIDGET/);
   assert.match(resolved.reason, /bank code/);
@@ -373,12 +403,20 @@ test("a missing bank code names the employee and the cheque fallback", () => {
 
 test("a malformed bank or branch code is refused rather than written into the address field", () => {
   for (const bad of ["123", "12345", "ABCD", ""]) {
-    const resolved = resolveZenginCreditor("ADA WIDGET", { bankCode: bad, branchCode: "110", depositType: "1" }, "8000001");
+    const resolved = resolveZenginCreditor(
+      "ADA WIDGET",
+      { bankCode: bad, branchCode: "110", depositType: "1" },
+      "8000001",
+    );
     if (resolved.ok) assert.fail(`bank code "${bad}" must not resolve`);
     assert.match(resolved.reason, /ADA WIDGET/);
   }
   for (const bad of ["12", "1234", "ABC", ""]) {
-    const resolved = resolveZenginCreditor("ADA WIDGET", { bankCode: "0005", branchCode: bad, depositType: "1" }, "8000001");
+    const resolved = resolveZenginCreditor(
+      "ADA WIDGET",
+      { bankCode: "0005", branchCode: bad, depositType: "1" },
+      "8000001",
+    );
     if (resolved.ok) assert.fail(`branch code "${bad}" must not resolve`);
     assert.match(resolved.reason, /ADA WIDGET/);
   }
@@ -386,7 +424,11 @@ test("a malformed bank or branch code is refused rather than written into the ad
 
 test("a deposit type outside {1, 2} is refused — the salary channel defines no other address byte", () => {
   for (const bad of ["4", "9", "0", ""]) {
-    const resolved = resolveZenginCreditor("ADA WIDGET", { bankCode: "0005", branchCode: "110", depositType: bad }, "8000001");
+    const resolved = resolveZenginCreditor(
+      "ADA WIDGET",
+      { bankCode: "0005", branchCode: "110", depositType: bad },
+      "8000001",
+    );
     if (resolved.ok) assert.fail(`deposit type "${bad}" must not resolve`);
     assert.match(resolved.reason, /ADA WIDGET/);
   }
@@ -394,7 +436,11 @@ test("a deposit type outside {1, 2} is refused — the salary channel defines no
 
 test("an account number that is not 1–7 digits is refused, never truncated", () => {
   for (const bad of ["12345678", "ABCDEFG", "", "0000000"]) {
-    const resolved = resolveZenginCreditor("ADA WIDGET", { bankCode: "0005", branchCode: "110", depositType: "1" }, bad);
+    const resolved = resolveZenginCreditor(
+      "ADA WIDGET",
+      { bankCode: "0005", branchCode: "110", depositType: "1" },
+      bad,
+    );
     if (resolved.ok) assert.fail(`account "${bad}" must not resolve`);
     assert.match(resolved.reason, /ADA WIDGET/);
   }
@@ -402,13 +448,28 @@ test("an account number that is not 1–7 digits is refused, never truncated", (
 
 test("a short account number zero-pads — the padding is formatting, not identity", () => {
   assert.deepEqual(
-    resolveZenginCreditor("BO SAVER", { bankCode: "9900", branchCode: "018", depositType: "1" }, "123456"),
-    { ok: true, bankCode: "9900", branchCode: "018", depositType: "1", accountNumber: "0123456", payeeKana: "BO SAVER" },
+    resolveZenginCreditor(
+      "BO SAVER",
+      { bankCode: "9900", branchCode: "018", depositType: "1" },
+      "123456",
+    ),
+    {
+      ok: true,
+      bankCode: "9900",
+      branchCode: "018",
+      depositType: "1",
+      accountNumber: "0123456",
+      payeeKana: "BO SAVER",
+    },
   );
 });
 
 test("a kanji payee name refuses with the furigana remedy — readings are never guessed", () => {
-  const resolved = resolveZenginCreditor("山田太郎", { bankCode: "0005", branchCode: "110", depositType: "1" }, "8000001");
+  const resolved = resolveZenginCreditor(
+    "山田太郎",
+    { bankCode: "0005", branchCode: "110", depositType: "1" },
+    "8000001",
+  );
   if (resolved.ok) assert.fail("a kanji name must not resolve");
   assert.match(resolved.reason, /山田太郎/);
   assert.match(resolved.reason, /payeeKana/);
@@ -423,8 +484,12 @@ test("an explicit kana name on the bank row wins over an unmappable employee nam
       "8000001",
     ),
     {
-      ok: true, bankCode: "0005", branchCode: "110", depositType: "1",
-      accountNumber: "8000001", payeeKana: "ﾔﾏﾀﾞﾀﾛｳ",
+      ok: true,
+      bankCode: "0005",
+      branchCode: "110",
+      depositType: "1",
+      accountNumber: "8000001",
+      payeeKana: "ﾔﾏﾀﾞﾀﾛｳ",
     },
   );
 });
@@ -445,7 +510,8 @@ test("a credit that reaches the renderer without resolved coordinates is refused
   assert.throws(
     () => renderZengin(inputs),
     (error: Error) =>
-      error instanceof PayrollError && /ADA WIDGET.*no validated Zengin coordinates/.test(error.message),
+      error instanceof PayrollError &&
+      /ADA WIDGET.*no validated Zengin coordinates/.test(error.message),
   );
 });
 
@@ -465,7 +531,8 @@ test("an unconfigured Zengin originator is refused by name rather than emitting 
           branchName: "",
         },
       }),
-    (error: Error) => error instanceof PaymentError && /Zengin originator settings are invalid/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError && /Zengin originator settings are invalid/.test(error.message),
   );
 });
 
@@ -489,7 +556,8 @@ test("a Zengin profile cannot render another format — the mismatch names zengi
           timeZone: "UTC",
         },
       ),
-    (error: Error) => error instanceof PayrollError && /originates zengin, not sepa/.test(error.message),
+    (error: Error) =>
+      error instanceof PayrollError && /originates zengin, not sepa/.test(error.message),
   );
 });
 
@@ -511,7 +579,8 @@ test("a file total past the 10-digit yen field is refused, not silently unbalanc
   inputs.population.total = "100000130232.0000";
   assert.throws(
     () => renderZengin(inputs),
-    (error: Error) => error instanceof PaymentError && /does not fit in 10 digits/.test(error.message),
+    (error: Error) =>
+      error instanceof PaymentError && /does not fit in 10 digits/.test(error.message),
   );
 });
 
@@ -634,7 +703,8 @@ test("optional kana bank names treat the unconfigured sentinel as omitted", () =
     bankName: "FILL-ME",
     branchName: "FILL-ME",
   });
-  if (!withSentinel.ok) assert.fail(`sentinel names must validate as omitted: ${withSentinel.missing.join(", ")}`);
+  if (!withSentinel.ok)
+    assert.fail(`sentinel names must validate as omitted: ${withSentinel.missing.join(", ")}`);
   assert.equal(withSentinel.settings.bankName, "");
   assert.equal(withSentinel.settings.branchName, "");
 });
@@ -653,8 +723,11 @@ async function zenginProfileOrg(secrets: Record<string, unknown>) {
   // The built-in ZENGIN-CREDIT format is JP-scoped and settles JPY — the same
   // definition AP would originate supplier payments on.
   await ensureBuiltInPaymentFormats(org.orgId, actorId);
-  const formats = await db.execute<{ id: string }>(sql`
-    select id from payment_formats where org_id = ${org.orgId} and rail = 'zengin_credit'`, "objects");
+  const formats = await db.execute<{ id: string }>(
+    sql`
+    select id from payment_formats where org_id = ${org.orgId} and rail = 'zengin_credit'`,
+    "objects",
+  );
   assert.equal(formats.length, 1);
   const bankAccountId = randomUUID();
   await db.execute(sql`
@@ -672,24 +745,29 @@ async function zenginProfileOrg(secrets: Record<string, unknown>) {
   return { orgId: org.orgId, profileId };
 }
 
-test("a zengin_credit bank profile is listed for payroll and resolves its originator", { skip: !DB }, async () => {
-  const fx = await zenginProfileOrg({
-    clientCode: "2012345678",
-    clientName: "カ）ヤマダショウジ",
-    bankCode: "0005",
-    branchCode: "110",
-    depositType: "1",
-    accountNumber: "1234567",
-  });
-  const profiles = await payrollBankProfiles(fx.orgId);
-  const found = profiles.find((p) => p.id === fx.profileId);
-  assert.ok(found);
-  assert.equal(found.format, "zengin");
-  assert.equal(found.currency, "JPY");
-  assert.equal(found.configured, true);
-  const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
-  if (!resolved.ok) assert.fail(`expected a resolved Zengin originator: ${resolved.missing.join(", ")}`);
-  assert.equal(resolved.format, "zengin");
-  assert.equal(resolved.config.currency, "JPY");
-  assert.equal(resolved.config.zengin?.clientCode, "2012345678");
-});
+test(
+  "a zengin_credit bank profile is listed for payroll and resolves its originator",
+  { skip: !DB },
+  async () => {
+    const fx = await zenginProfileOrg({
+      clientCode: "2012345678",
+      clientName: "カ）ヤマダショウジ",
+      bankCode: "0005",
+      branchCode: "110",
+      depositType: "1",
+      accountNumber: "1234567",
+    });
+    const profiles = await payrollBankProfiles(fx.orgId);
+    const found = profiles.find((p) => p.id === fx.profileId);
+    assert.ok(found);
+    assert.equal(found.format, "zengin");
+    assert.equal(found.currency, "JPY");
+    assert.equal(found.configured, true);
+    const resolved = await payrollOriginatorConfig(fx.orgId, fx.profileId);
+    if (!resolved.ok)
+      assert.fail(`expected a resolved Zengin originator: ${resolved.missing.join(", ")}`);
+    assert.equal(resolved.format, "zengin");
+    assert.equal(resolved.config.currency, "JPY");
+    assert.equal(resolved.config.zengin?.clientCode, "2012345678");
+  },
+);

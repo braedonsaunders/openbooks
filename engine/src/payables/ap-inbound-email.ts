@@ -43,7 +43,10 @@ export type InboundEmailErrorCode =
 
 /** A delivery the adapters cannot accept, with an operator-facing remedy. */
 export class InboundEmailError extends Error {
-  constructor(readonly code: InboundEmailErrorCode, message: string) {
+  constructor(
+    readonly code: InboundEmailErrorCode,
+    message: string,
+  ) {
     super(message);
     this.name = "InboundEmailError";
   }
@@ -74,7 +77,10 @@ const EXTENSION_TYPES: Record<string, string> = {
  * when the provider sends a generic octet stream. Anything else is not a
  * bill document (signatures, calendar invites, inline logos) and is skipped.
  */
-export function captureContentType(filename: string, declared: string | null | undefined): string | null {
+export function captureContentType(
+  filename: string,
+  declared: string | null | undefined,
+): string | null {
   const type = (declared ?? "").split(";")[0]!.trim().toLowerCase();
   if (INBOUND_CAPTURE_TYPES.has(type)) return type === "text/xml" ? "text/xml" : type;
   if (type && type !== "application/octet-stream" && type !== "binary/octet-stream") return null;
@@ -204,37 +210,68 @@ export function verifyInboundSignature(input: {
   if (!input.secret) return { verified: false, nonce: null };
   if (input.provider === "mailgun") {
     const signed = input.email.mailgunSignature;
-    if (!signed) throw new InboundEmailError("signature_required", "The delivery carries no Mailgun signature.");
+    if (!signed)
+      throw new InboundEmailError(
+        "signature_required",
+        "The delivery carries no Mailgun signature.",
+      );
     const timestamp = Number(signed.timestamp);
     const nowSeconds = Math.floor((input.now ?? new Date()).getTime() / 1000);
-    if (!Number.isSafeInteger(timestamp) || Math.abs(nowSeconds - timestamp) > MAILGUN_SIGNATURE_MAX_AGE_SECONDS) {
-      throw new InboundEmailError("signature_invalid", "The Mailgun signature timestamp is outside the accepted window.");
+    if (
+      !Number.isSafeInteger(timestamp) ||
+      Math.abs(nowSeconds - timestamp) > MAILGUN_SIGNATURE_MAX_AGE_SECONDS
+    ) {
+      throw new InboundEmailError(
+        "signature_invalid",
+        "The Mailgun signature timestamp is outside the accepted window.",
+      );
     }
-    const expected = createHmac("sha256", input.secret).update(`${signed.timestamp}${signed.token}`).digest("hex");
+    const expected = createHmac("sha256", input.secret)
+      .update(`${signed.timestamp}${signed.token}`)
+      .digest("hex");
     if (!safeEqual(expected, signed.signature.toLowerCase())) {
-      throw new InboundEmailError("signature_invalid", "The Mailgun signature does not match this address's signing key.");
+      throw new InboundEmailError(
+        "signature_invalid",
+        "The Mailgun signature does not match this address's signing key.",
+      );
     }
     if (!signed.token || signed.token.length > 512) {
-      throw new InboundEmailError("signature_invalid", "The Mailgun signature token is missing or too long.");
+      throw new InboundEmailError(
+        "signature_invalid",
+        "The Mailgun signature token is missing or too long.",
+      );
     }
     return { verified: true, nonce: signed.token };
   }
   if (input.provider === "generic") {
     const header = input.headers["x-openbooks-signature"] ?? "";
     const supplied = header.match(/^sha256=([0-9a-f]{64})$/i)?.[1]?.toLowerCase();
-    if (!supplied) throw new InboundEmailError("signature_required", "The delivery carries no X-OpenBooks-Signature header.");
+    if (!supplied)
+      throw new InboundEmailError(
+        "signature_required",
+        "The delivery carries no X-OpenBooks-Signature header.",
+      );
     const expected = createHmac("sha256", input.secret).update(input.rawBody).digest("hex");
     if (!safeEqual(expected, supplied)) {
-      throw new InboundEmailError("signature_invalid", "The X-OpenBooks-Signature does not match this address's secret.");
+      throw new InboundEmailError(
+        "signature_invalid",
+        "The X-OpenBooks-Signature does not match this address's secret.",
+      );
     }
     return { verified: true, nonce: null };
   }
   const password = basicAuthPassword(input.headers["authorization"]);
   if (password === null) {
-    throw new InboundEmailError("signature_required", "The delivery carries no HTTP Basic credentials.");
+    throw new InboundEmailError(
+      "signature_required",
+      "The delivery carries no HTTP Basic credentials.",
+    );
   }
   if (!safeEqual(password, input.secret)) {
-    throw new InboundEmailError("signature_invalid", "The HTTP Basic credentials do not match this address's secret.");
+    throw new InboundEmailError(
+      "signature_invalid",
+      "The HTTP Basic credentials do not match this address's secret.",
+    );
   }
   return { verified: true, nonce: null };
 }
@@ -246,8 +283,13 @@ function text(value: unknown, max: number): string | null {
 }
 
 function safeFilename(value: unknown, fallback: string): string {
-  const name = typeof value === "string" ? value.split(/[\\/]/).pop() ?? "" : "";
-  return name.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 240) || fallback;
+  const name = typeof value === "string" ? (value.split(/[\\/]/).pop() ?? "") : "";
+  return (
+    name
+      .replace(/[\u0000-\u001f\u007f]/g, "")
+      .trim()
+      .slice(0, 240) || fallback
+  );
 }
 
 function decodeBase64(value: unknown, label: string): Buffer {
@@ -265,7 +307,11 @@ function headerMessageId(value: unknown): string | null {
   }
   if (Array.isArray(value)) {
     for (const header of value) {
-      if (header && typeof header === "object" && String((header as { Name?: unknown }).Name).toLowerCase() === "message-id") {
+      if (
+        header &&
+        typeof header === "object" &&
+        String((header as { Name?: unknown }).Name).toLowerCase() === "message-id"
+      ) {
         return text((header as { Value?: unknown }).Value, 998);
       }
     }
@@ -278,7 +324,9 @@ function headerMessageId(value: unknown): string | null {
  * attachment bytes always derive the same id, so a provider retry is still
  * recognized as the message already logged.
  */
-export function derivedMessageId(email: Pick<InboundEmail, "from" | "subject" | "attachments">): string {
+export function derivedMessageId(
+  email: Pick<InboundEmail, "from" | "subject" | "attachments">,
+): string {
   const hash = createHash("sha256");
   hash.update(`${email.from ?? ""}\n${email.subject ?? ""}\n`);
   for (const attachment of email.attachments) {
@@ -291,7 +339,12 @@ export function derivedMessageId(email: Pick<InboundEmail, "from" | "subject" | 
 
 function finish(
   provider: InboundEmailProvider,
-  fields: { from: string | null; subject: string | null; messageId: string | null; attachments: InboundAttachment[] },
+  fields: {
+    from: string | null;
+    subject: string | null;
+    messageId: string | null;
+    attachments: InboundAttachment[];
+  },
   extra: Partial<InboundEmail> = {},
 ): InboundEmail {
   const from = bareAddress(fields.from);
@@ -301,7 +354,10 @@ function finish(
 
 function parsePostmark(body: Record<string, unknown>): InboundEmail {
   const attachments = Array.isArray(body.Attachments) ? body.Attachments : [];
-  const fromFull = body.FromFull && typeof body.FromFull === "object" ? (body.FromFull as { Email?: unknown }).Email : null;
+  const fromFull =
+    body.FromFull && typeof body.FromFull === "object"
+      ? (body.FromFull as { Email?: unknown }).Email
+      : null;
   return finish("postmark", {
     from: text(fromFull, 320) ?? text(body.From, 320),
     subject: text(body.Subject, 998),
@@ -336,7 +392,9 @@ function parseGenericJson(body: Record<string, unknown>): InboundEmail {
   });
 }
 
-async function fileBytes(value: FormDataEntryValue | null): Promise<{ name: string; type: string; bytes: Buffer } | null> {
+async function fileBytes(
+  value: FormDataEntryValue | null,
+): Promise<{ name: string; type: string; bytes: Buffer } | null> {
   if (!value || typeof value === "string") return null;
   return { name: value.name, type: value.type, bytes: Buffer.from(await value.arrayBuffer()) };
 }
@@ -353,26 +411,35 @@ async function parseMailgun(form: FormData): Promise<InboundEmail> {
   const attachments: InboundAttachment[] = [];
   for (let index = 1; index <= count; index += 1) {
     const file = await fileBytes(form.get(`attachment-${index}`));
-    if (file) attachments.push({ filename: safeFilename(file.name, `attachment-${index}`), contentType: file.type, bytes: file.bytes });
+    if (file)
+      attachments.push({
+        filename: safeFilename(file.name, `attachment-${index}`),
+        contentType: file.type,
+        bytes: file.bytes,
+      });
   }
   const timestamp = form.get("timestamp");
   const token = form.get("token");
   const signature = form.get("signature");
-  return finish("mailgun", {
-    from: text(form.get("sender"), 320) ?? text(form.get("from"), 320),
-    subject: text(form.get("subject"), 998),
-    messageId: text(form.get("Message-Id"), 998) ?? text(form.get("message-id"), 998),
-    attachments,
-  }, typeof timestamp === "string" && typeof token === "string" && typeof signature === "string"
-    ? { mailgunSignature: { timestamp, token, signature } }
-    : {});
+  return finish(
+    "mailgun",
+    {
+      from: text(form.get("sender"), 320) ?? text(form.get("from"), 320),
+      subject: text(form.get("subject"), 998),
+      messageId: text(form.get("Message-Id"), 998) ?? text(form.get("message-id"), 998),
+      attachments,
+    },
+    typeof timestamp === "string" && typeof token === "string" && typeof signature === "string"
+      ? { mailgunSignature: { timestamp, token, signature } }
+      : {},
+  );
 }
 
 async function parseSendgrid(form: FormData): Promise<InboundEmail> {
   if (typeof form.get("email") === "string") {
     throw new InboundEmailError(
       "unsupported_delivery",
-      "SendGrid posted the raw MIME message. Turn off \"POST the raw, full MIME message\" in the Inbound Parse settings.",
+      'SendGrid posted the raw MIME message. Turn off "POST the raw, full MIME message" in the Inbound Parse settings.',
     );
   }
   let info: Record<string, { filename?: unknown; name?: unknown; type?: unknown }> = {};
@@ -408,14 +475,16 @@ async function parseSendgrid(form: FormData): Promise<InboundEmail> {
 
 /** Which provider envelope a delivery is, from its content type and fields. */
 export function detectJsonProvider(body: Record<string, unknown>): InboundEmailProvider | null {
-  if ("FromFull" in body || "MessageID" in body || ("Attachments" in body && "From" in body)) return "postmark";
+  if ("FromFull" in body || "MessageID" in body || ("Attachments" in body && "From" in body))
+    return "postmark";
   if ("attachments" in body && ("from" in body || "messageId" in body)) return "generic";
   return null;
 }
 
 export function detectFormProvider(form: FormData): InboundEmailProvider | null {
   if (form.has("signature") && form.has("token") && form.has("timestamp")) return "mailgun";
-  if (form.has("attachment-count") || form.has("Message-Id") || form.has("body-plain")) return "mailgun";
+  if (form.has("attachment-count") || form.has("Message-Id") || form.has("body-plain"))
+    return "mailgun";
   if (form.has("attachment-info") || form.has("envelope") || form.has("headers")) return "sendgrid";
   return null;
 }
@@ -444,10 +513,17 @@ export async function parseInboundEmail(input: {
     }
     const body = parsed as Record<string, unknown>;
     const provider = detectJsonProvider(body);
-    if (!provider) throw new InboundEmailError("unsupported_format", "The JSON delivery is neither a Postmark inbound message nor the generic format.");
+    if (!provider)
+      throw new InboundEmailError(
+        "unsupported_format",
+        "The JSON delivery is neither a Postmark inbound message nor the generic format.",
+      );
     assertProvider(provider, input.expectedProvider);
     email = provider === "postmark" ? parsePostmark(body) : parseGenericJson(body);
-  } else if (mediaType === "multipart/form-data" || mediaType === "application/x-www-form-urlencoded") {
+  } else if (
+    mediaType === "multipart/form-data" ||
+    mediaType === "application/x-www-form-urlencoded"
+  ) {
     let form: FormData;
     try {
       form = await new Request("https://inbound.invalid/", {
@@ -459,11 +535,18 @@ export async function parseInboundEmail(input: {
       throw new InboundEmailError("malformed", "The form delivery could not be read.");
     }
     const provider = detectFormProvider(form);
-    if (!provider) throw new InboundEmailError("unsupported_format", "The form delivery is neither a Mailgun nor a SendGrid inbound message.");
+    if (!provider)
+      throw new InboundEmailError(
+        "unsupported_format",
+        "The form delivery is neither a Mailgun nor a SendGrid inbound message.",
+      );
     assertProvider(provider, input.expectedProvider);
     email = provider === "mailgun" ? await parseMailgun(form) : await parseSendgrid(form);
   } else {
-    throw new InboundEmailError("unsupported_format", "Inbound messages must be JSON or a multipart form.");
+    throw new InboundEmailError(
+      "unsupported_format",
+      "Inbound messages must be JSON or a multipart form.",
+    );
   }
   return email;
 }

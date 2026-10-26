@@ -1,106 +1,145 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { resolvePdfPageSetup } from '@openbooks/pdf'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
-import { guardUnrestrictedScope } from '../../../../../../lib/authz'
-import { readableContinuousCloseAgents } from '../../../../../../lib/continuous-close'
-import { pdfResponse, safeName } from '../../../../../../lib/export'
-import { exportDataToPdf, orgBranding, type ExportData } from '../../../../../../lib/report-pdf'
-import { isUuid } from '../../../../../../lib/list-params'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { getLocale, getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { resolvePdfPageSetup } from "@openbooks/pdf";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
+import { guardUnrestrictedScope } from "../../../../../../lib/authz";
+import { readableContinuousCloseAgents } from "../../../../../../lib/continuous-close";
+import { pdfResponse, safeName } from "../../../../../../lib/export";
+import { exportDataToPdf, orgBranding, type ExportData } from "../../../../../../lib/report-pdf";
+import { isUuid } from "../../../../../../lib/list-params";
 
 export const GET = defineRoute({
-  permission: 'assistant.use',
-  feature: 'continuousClose',
+  permission: "assistant.use",
+  feature: "continuousClose",
   params: z.object({ runId: z.string() }),
   handler: async ({ authz: gate, params: { runId } }) => {
-  if (!isUuid(runId)) return NextResponse.json({ error: 'invalid_report' }, { status: 422 })
-  const readable = readableContinuousCloseAgents(gate)
-  if (!readable.length) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-  // The narrative is pre-generated free text that can name any entity's
-  // accounts and findings, so per-item filtering is impossible after the
-  // run: exporting needs unrestricted subsidiary access (named 403).
-  const scopeDenied = guardUnrestrictedScope(gate)
-  if (scopeDenied) return scopeDenied
-  const result = (await db.execute<{ agent_key: 'accounting' | 'finance'; finished_at: Date; narrative: Record<string, unknown> }>(sql`
+    if (!isUuid(runId)) return NextResponse.json({ error: "invalid_report" }, { status: 422 });
+    const readable = readableContinuousCloseAgents(gate);
+    if (!readable.length) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    // The narrative is pre-generated free text that can name any entity's
+    // accounts and findings, so per-item filtering is impossible after the
+    // run: exporting needs unrestricted subsidiary access (named 403).
+    const scopeDenied = guardUnrestrictedScope(gate);
+    if (scopeDenied) return scopeDenied;
+    const result = await db.execute<{
+      agent_key: "accounting" | "finance";
+      finished_at: Date;
+      narrative: Record<string, unknown>;
+    }>(
+      sql`
     select r.agent_key, r.finished_at, r.stats->'enrichment'->'narrative' as narrative
       from ai_agent_runs r
      where r.id = ${runId} and r.org_id = ${gate.user.orgId}
-       and r.agent_key in (${sql.join(readable.map((agent) => sql`${agent}`), sql`, `)})
+       and r.agent_key in (${sql.join(
+         readable.map((agent) => sql`${agent}`),
+         sql`, `,
+       )})
        and r.status = 'completed'
        and jsonb_typeof(r.stats->'enrichment'->'narrative') = 'object'
-  `, 'objects'))
-  const run = result[0]
-  if (!run) return NextResponse.json({ error: 'report_not_found' }, { status: 404 })
+  `,
+      "objects",
+    );
+    const run = result[0];
+    if (!run) return NextResponse.json({ error: "report_not_found" }, { status: 404 });
 
-  const t = await getTranslations('continuousClose')
-  const locale = await getLocale()
-  const narrative = run.narrative
-  const title = typeof narrative.title === 'string' ? narrative.title : t('narrative.title')
-  const generated = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(run.finished_at))
-  const groups: ExportData['groups'] = []
-  const executiveSummary = typeof narrative.executiveSummary === 'string' ? narrative.executiveSummary : ''
-  if (executiveSummary) groups.push(textGroup(t('narrative.executiveSummary'), [executiveSummary]))
-  for (const [label, value] of [
-    [t('narrative.highlights'), narrative.highlights],
-    [t('narrative.risks'), narrative.risks],
-    [t('narrative.recommendations'), narrative.recommendations],
-  ] as const) {
-    const items = strings(value)
-    if (items.length) groups.push(textGroup(label, items))
-  }
-  for (const section of objects(narrative.sections)) {
-    const sectionTitle = typeof section.title === 'string' ? section.title : ''
-    const body = typeof section.body === 'string' ? section.body : ''
-    if (sectionTitle && body) groups.push(textGroup(sectionTitle, [body]))
-  }
-  const citations = objects(narrative.citations).flatMap((citation) => {
-    const label = typeof citation.label === 'string' ? citation.label : ''
-    const href = typeof citation.href === 'string' && citation.href.startsWith('/') && !citation.href.startsWith('//') ? citation.href : ''
-    return label && href ? [[label, href]] : []
-  })
-  if (citations.length) {
-    groups.push({
-      kind: 'section',
-      title: t('narrative.sources'),
-      columns: [t('narrative.sourceLabel'), t('narrative.sourcePath')],
-      rows: citations,
-      align: ['left', 'left'],
-    })
-  }
-  const data: ExportData = {
-    title,
-    dateRangeLabel: typeof narrative.periodLabel === 'string' ? narrative.periodLabel : t('narrative.generated', { date: generated }),
-    summary: [
-      { label: t('table.agent'), value: t(`agents.${run.agent_key}`) },
-      { label: t('narrative.generatedLabel'), value: generated },
-    ],
-    groups,
-  }
-  const branding = await orgBranding(gate.user.orgId)
-  const layout = resolvePdfPageSetup({ paperSize: 'letter', orientation: 'portrait', marginMm: 16, density: 'standard' })
-  const stamp = await businessToday(gate.user.orgId)
-  const pdf = await exportDataToPdf(data, branding, layout, {
-    showSummary: true,
-    generatedAt: new Date(`${stamp}T00:00:00Z`),
-  })
-  return pdfResponse(pdf, safeName(`${title}-${runId.slice(0, 8)}-${stamp}`))
+    const t = await getTranslations("continuousClose");
+    const locale = await getLocale();
+    const narrative = run.narrative;
+    const title = typeof narrative.title === "string" ? narrative.title : t("narrative.title");
+    const generated = new Intl.DateTimeFormat(locale, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(run.finished_at));
+    const groups: ExportData["groups"] = [];
+    const executiveSummary =
+      typeof narrative.executiveSummary === "string" ? narrative.executiveSummary : "";
+    if (executiveSummary)
+      groups.push(textGroup(t("narrative.executiveSummary"), [executiveSummary]));
+    for (const [label, value] of [
+      [t("narrative.highlights"), narrative.highlights],
+      [t("narrative.risks"), narrative.risks],
+      [t("narrative.recommendations"), narrative.recommendations],
+    ] as const) {
+      const items = strings(value);
+      if (items.length) groups.push(textGroup(label, items));
+    }
+    for (const section of objects(narrative.sections)) {
+      const sectionTitle = typeof section.title === "string" ? section.title : "";
+      const body = typeof section.body === "string" ? section.body : "";
+      if (sectionTitle && body) groups.push(textGroup(sectionTitle, [body]));
+    }
+    const citations = objects(narrative.citations).flatMap((citation) => {
+      const label = typeof citation.label === "string" ? citation.label : "";
+      const href =
+        typeof citation.href === "string" &&
+        citation.href.startsWith("/") &&
+        !citation.href.startsWith("//")
+          ? citation.href
+          : "";
+      return label && href ? [[label, href]] : [];
+    });
+    if (citations.length) {
+      groups.push({
+        kind: "section",
+        title: t("narrative.sources"),
+        columns: [t("narrative.sourceLabel"), t("narrative.sourcePath")],
+        rows: citations,
+        align: ["left", "left"],
+      });
+    }
+    const data: ExportData = {
+      title,
+      dateRangeLabel:
+        typeof narrative.periodLabel === "string"
+          ? narrative.periodLabel
+          : t("narrative.generated", { date: generated }),
+      summary: [
+        { label: t("table.agent"), value: t(`agents.${run.agent_key}`) },
+        { label: t("narrative.generatedLabel"), value: generated },
+      ],
+      groups,
+    };
+    const branding = await orgBranding(gate.user.orgId);
+    const layout = resolvePdfPageSetup({
+      paperSize: "letter",
+      orientation: "portrait",
+      marginMm: 16,
+      density: "standard",
+    });
+    const stamp = await businessToday(gate.user.orgId);
+    const pdf = await exportDataToPdf(data, branding, layout, {
+      showSummary: true,
+      generatedAt: new Date(`${stamp}T00:00:00Z`),
+    });
+    return pdfResponse(pdf, safeName(`${title}-${runId.slice(0, 8)}-${stamp}`));
   },
-})
+});
 
-function textGroup(title: string, values: string[]): ExportData['groups'][number] {
-  return { kind: 'section', title, columns: [''], rows: values.map((value) => [value]), align: ['left'] }
+function textGroup(title: string, values: string[]): ExportData["groups"][number] {
+  return {
+    kind: "section",
+    title,
+    columns: [""],
+    rows: values.map((value) => [value]),
+    align: ["left"],
+  };
 }
 
 function strings(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0) : []
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : [];
 }
 
 function objects(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
-    : []
+    ? value.filter(
+        (item): item is Record<string, unknown> =>
+          !!item && typeof item === "object" && !Array.isArray(item),
+      )
+    : [];
 }

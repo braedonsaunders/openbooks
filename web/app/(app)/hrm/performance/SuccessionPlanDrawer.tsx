@@ -1,52 +1,46 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Button, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
-import { PagedTable } from '../../../../components/paged-table'
-import { readApiErrorMessage } from '../../../../lib/api-error'
-import type { ContinuousData } from './continuous-view'
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button, Label, Select, Textarea, UrlDrawer } from "@openbooks/ui";
+import { PagedTable } from "../../../../components/paged-table";
+import { readApiErrorMessage } from "../../../../lib/api-error";
+import type { ContinuousData } from "./continuous-view";
 
-type Detail = NonNullable<NonNullable<ContinuousData['talent']>['planDetail']>
+type Detail = NonNullable<NonNullable<ContinuousData["talent"]>["planDetail"]>;
 
 /** One plan, its governed lifecycle, and its ranked successor candidates. */
 export function SuccessionPlanDrawer({ detail }: { detail: Detail }) {
-  const router = useRouter()
-  const [status, setStatus] = useState(detail.status)
-  const [notes, setNotes] = useState(detail.notes)
-  const [employmentId, setEmploymentId] = useState('')
-  const [readiness, setReadiness] = useState(
-    detail.readinessOptions[0]?.value ?? '',
-  )
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  async function write(
-    url: string,
-    method: string,
-    body: Record<string, unknown>,
-  ) {
-    setBusy(true)
-    setError(null)
+  const router = useRouter();
+  const [status, setStatus] = useState(detail.status);
+  const [notes, setNotes] = useState(detail.notes);
+  const [employmentId, setEmploymentId] = useState("");
+  const [readiness, setReadiness] = useState(detail.readinessOptions[0]?.value ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function write(url: string, method: string, body: Record<string, unknown>) {
+    setBusy(true);
+    setError(null);
     try {
       const response = await fetch(url, {
         method,
-        headers: { 'content-type': 'application/json' },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
-      })
+      });
       if (!response.ok) {
-        setError(await readApiErrorMessage(response, detail.failed))
-        return
+        setError(await readApiErrorMessage(response, detail.failed));
+        return;
       }
-      setEmploymentId('')
-      router.refresh()
+      setEmploymentId("");
+      router.refresh();
     } catch {
-      setError(detail.failed)
+      setError(detail.failed);
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
-  const planUrl = `/api/hrm/succession-plans?id=${encodeURIComponent(detail.id)}`
-  const candidateUrl = `/api/hrm/succession-plans/${encodeURIComponent(detail.id)}/candidates`
+  const planUrl = `/api/hrm/succession-plans?id=${encodeURIComponent(detail.id)}`;
+  const candidateUrl = `/api/hrm/succession-plans/${encodeURIComponent(detail.id)}/candidates`;
   return (
     <UrlDrawer open title={detail.title} closeHref={detail.closeHref}>
       <div className="space-y-6">
@@ -72,7 +66,7 @@ export function SuccessionPlanDrawer({ detail }: { detail: Detail }) {
             <Button
               variant="outline"
               disabled={busy || status === detail.status}
-              onClick={() => write(planUrl, 'PATCH', { status })}
+              onClick={() => write(planUrl, "PATCH", { status })}
             >
               {detail.saveLabel}
             </Button>
@@ -88,9 +82,7 @@ export function SuccessionPlanDrawer({ detail }: { detail: Detail }) {
           <Button
             variant="outline"
             disabled={busy || notes === detail.notes}
-            onClick={() =>
-              write(planUrl, 'PATCH', { notes: notes.trim() || null })
-            }
+            onClick={() => write(planUrl, "PATCH", { notes: notes.trim() || null })}
           >
             {detail.saveLabel}
           </Button>
@@ -102,25 +94,23 @@ export function SuccessionPlanDrawer({ detail }: { detail: Detail }) {
           empty={detail.empty}
           columns={[
             {
-              key: 'employee',
+              key: "employee",
               header: detail.employeeLabel,
               cell: (row) => row.name,
             },
             {
-              key: 'readiness',
+              key: "readiness",
               header: detail.readinessLabel,
               cell: (row) => row.readiness,
             },
             {
-              key: 'remove',
-              header: '',
+              key: "remove",
+              header: "",
               cell: (row) => (
                 <Button
                   variant="ghost"
                   disabled={busy}
-                  onClick={() =>
-                    write(candidateUrl, 'PATCH', { candidateId: row.id })
-                  }
+                  onClick={() => write(candidateUrl, "PATCH", { candidateId: row.id })}
                 >
                   {detail.removeLabel}
                 </Button>
@@ -131,8 +121,8 @@ export function SuccessionPlanDrawer({ detail }: { detail: Detail }) {
         <form
           className="space-y-3"
           onSubmit={(event) => {
-            event.preventDefault()
-            void write(candidateUrl, 'POST', { employmentId, readiness })
+            event.preventDefault();
+            void write(candidateUrl, "POST", { employmentId, readiness });
           }}
         >
           <Label htmlFor="successor-employment">{detail.employeeLabel}</Label>
@@ -160,11 +150,9 @@ export function SuccessionPlanDrawer({ detail }: { detail: Detail }) {
               </option>
             ))}
           </Select>
-          <Button disabled={busy || !employmentId || !readiness}>
-            {detail.addLabel}
-          </Button>
+          <Button disabled={busy || !employmentId || !readiness}>{detail.addLabel}</Button>
         </form>
       </div>
     </UrlDrawer>
-  )
+  );
 }

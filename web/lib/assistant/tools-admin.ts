@@ -33,17 +33,23 @@ const listUsers: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["admin.users.manage"] },
   inputSchema: z.object({
     q: z.string().max(100).optional().describe("Filter by name or email"),
-    status: z.enum(["active", "inactive", "all"]).optional().describe("Active state filter, default active"),
+    status: z
+      .enum(["active", "inactive", "all"])
+      .optional()
+      .describe("Active state filter, default active"),
     limit: z.number().int().min(1).max(100).optional().describe("Max rows, default 50"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { q?: string; status?: string; limit?: number };
     const limit = Math.min(a.limit ?? 50, 100);
     let where = sql`u.org_id = ${authz.user.orgId}`;
-    if (a.q) where = sql`${where} and (u.name ilike ${"%" + a.q + "%"} or u.email ilike ${"%" + a.q + "%"})`;
-    if ((a.status ?? "active") !== "all") where = sql`${where} and u.is_active = ${a.status !== "inactive"}`;
+    if (a.q)
+      where = sql`${where} and (u.name ilike ${"%" + a.q + "%"} or u.email ilike ${"%" + a.q + "%"})`;
+    if ((a.status ?? "active") !== "all")
+      where = sql`${where} and u.is_active = ${a.status !== "inactive"}`;
     const [rows, count] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select u.id, u.name, u.email, u.is_active, u.last_login_at,
                coalesce(array_agg(r.name) filter (where r.id is not null), '{}') as roles
           from users u
@@ -53,7 +59,9 @@ const listUsers: AssistantToolDef = {
          group by u.id
          order by lower(u.name) asc, lower(u.email) asc
          limit ${limit}
-      `, "objects"),
+      `,
+        "objects",
+      ),
       db.execute<{ n: string }>(sql`select count(*) as n from users u where ${where}`, "objects"),
     ]);
     const total = Number(count[0]?.n ?? 0);
@@ -70,7 +78,13 @@ const listUsers: AssistantToolDef = {
     );
     return {
       ok: true,
-      data: { total, returned: items.length, truncated: truncated || total > items.length, users: items, href: "/admin/users" },
+      data: {
+        total,
+        returned: items.length,
+        truncated: truncated || total > items.length,
+        users: items,
+        href: "/admin/users",
+      },
     };
   },
 };
@@ -83,7 +97,10 @@ const listRoles: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["admin.roles.manage"] },
   inputSchema: z.object({
     q: z.string().max(100).optional().describe("Filter by name, description, or key"),
-    type: z.enum(["built_in", "custom", "all"]).optional().describe("Role type filter, default all"),
+    type: z
+      .enum(["built_in", "custom", "all"])
+      .optional()
+      .describe("Role type filter, default all"),
     limit: z.number().int().min(1).max(100).optional().describe("Max rows, default 50"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
@@ -93,9 +110,11 @@ const listRoles: AssistantToolDef = {
     if (a.q) {
       where = sql`${where} and (r.name ilike ${"%" + a.q + "%"} or r.description ilike ${"%" + a.q + "%"} or r.key ilike ${"%" + a.q + "%"})`;
     }
-    if (a.type && a.type !== "all") where = sql`${where} and r.is_built_in = ${a.type === "built_in"}`;
+    if (a.type && a.type !== "all")
+      where = sql`${where} and r.is_built_in = ${a.type === "built_in"}`;
     const [rows, count] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select r.id, r.key, r.name, r.description, r.is_built_in, r.permissions,
                r.subsidiary_restriction,
                coalesce(jsonb_array_length(r.permissions), 0)::int as permission_count,
@@ -105,8 +124,13 @@ const listRoles: AssistantToolDef = {
          where ${where}
          order by r.is_built_in desc, lower(r.name) asc
          limit ${limit}
-      `, "objects"),
-      db.execute<{ n: string }>(sql`select count(*) as n from app_roles r where ${where}`, "objects"),
+      `,
+        "objects",
+      ),
+      db.execute<{ n: string }>(
+        sql`select count(*) as n from app_roles r where ${where}`,
+        "objects",
+      ),
     ]);
     const total = Number(count[0]?.n ?? 0);
     const { items, truncated } = capList(
@@ -125,7 +149,13 @@ const listRoles: AssistantToolDef = {
     );
     return {
       ok: true,
-      data: { total, returned: items.length, truncated: truncated || total > items.length, roles: items, href: "/admin/roles" },
+      data: {
+        total,
+        returned: items.length,
+        truncated: truncated || total > items.length,
+        roles: items,
+        href: "/admin/roles",
+      },
     };
   },
 };
@@ -153,7 +183,8 @@ const listApiKeys: AssistantToolDef = {
       where = sql`${where} and (k.name ilike ${"%" + a.q + "%"} or u.name ilike ${"%" + a.q + "%"} or u.email ilike ${"%" + a.q + "%"})`;
     }
     const [rows, count] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select k.id, k.name, k.description, k.key_prefix, k.key_preview, k.scopes,
                k.rate_limit_per_min, k.is_active, k.expires_at, k.last_used_at, k.created_at,
                u.name as owner_name, u.email as owner_email
@@ -162,12 +193,17 @@ const listApiKeys: AssistantToolDef = {
          where ${where}
          order by k.created_at desc
          limit ${limit}
-      `, "objects"),
-      db.execute<{ n: string }>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<{ n: string }>(
+        sql`
         select count(*) as n from api_keys k
           join users u on u.id = k.user_id
          where ${where}
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const total = Number(count[0]?.n ?? 0);
     const { items, truncated } = capList(
@@ -190,7 +226,13 @@ const listApiKeys: AssistantToolDef = {
     );
     return {
       ok: true,
-      data: { total, returned: items.length, truncated: truncated || total > items.length, keys: items, href: "/admin/api-keys" },
+      data: {
+        total,
+        returned: items.length,
+        truncated: truncated || total > items.length,
+        keys: items,
+        href: "/admin/api-keys",
+      },
     };
   },
 };
@@ -204,8 +246,15 @@ const searchAuditLog: AssistantToolDef = {
   inputSchema: z.object({
     q: z.string().max(100).optional().describe("Free text over record type, actor name, or row id"),
     action: z.string().max(30).optional().describe("Action code, e.g. post, void, approve"),
-    rtype: z.string().max(80).optional().describe("Record type, e.g. customer_invoice, journal_entry"),
-    actorId: z.union([uuidInput, z.literal("system")]).optional().describe("Only events by this user; the literal system selects system events"),
+    rtype: z
+      .string()
+      .max(80)
+      .optional()
+      .describe("Record type, e.g. customer_invoice, journal_entry"),
+    actorId: z
+      .union([uuidInput, z.literal("system")])
+      .optional()
+      .describe("Only events by this user; the literal system selects system events"),
     from: dateInput.optional().describe("Events on or after this date"),
     to: dateInput.optional().describe("Events before this date"),
     limit: z.number().int().min(1).max(50).optional().describe("Max rows, default 25"),
@@ -213,7 +262,15 @@ const searchAuditLog: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const denied = adminScopeDenied(authz);
     if (denied) return denied;
-    const a = raw as { q?: string; action?: string; rtype?: string; actorId?: string; from?: string; to?: string; limit?: number };
+    const a = raw as {
+      q?: string;
+      action?: string;
+      rtype?: string;
+      actorId?: string;
+      from?: string;
+      to?: string;
+      limit?: number;
+    };
     const limit = Math.min(a.limit ?? 25, 50);
     // The page's record-type expression: the raw table for most rows, the
     // document kind for the shared documents table, recovered from the
@@ -229,9 +286,10 @@ const searchAuditLog: AssistantToolDef = {
     if (a.action) where = sql`${where} and a.action = ${a.action}`;
     if (a.rtype) where = sql`${where} and (${rtypeExpr}) = ${a.rtype}`;
     if (a.actorId) {
-      where = a.actorId === "system"
-        ? sql`${where} and a.actor_id is null`
-        : sql`${where} and a.actor_id = ${a.actorId}`;
+      where =
+        a.actorId === "system"
+          ? sql`${where} and a.actor_id is null`
+          : sql`${where} and a.actor_id = ${a.actorId}`;
     }
     if (a.from) where = sql`${where} and a.at >= ${a.from}::date`;
     if (a.to) where = sql`${where} and a.at < (${a.to}::date + interval '1 day')`;
@@ -239,7 +297,8 @@ const searchAuditLog: AssistantToolDef = {
       where = sql`${where} and ((${rtypeExpr}) ilike ${"%" + a.q + "%"} or u.name ilike ${"%" + a.q + "%"} or a.row_id::text = ${a.q})`;
     }
     const [rows, count] = await Promise.all([
-      db.execute<Record<string, unknown>>(sql`
+      db.execute<Record<string, unknown>>(
+        sql`
         select a.id, a.row_id, a.action, a.at, u.name as actor_name, (${rtypeExpr}) as rtype, a.changes,
                case
                  when a.changes ? 'before' or a.changes ? 'after' then 'snapshot'
@@ -250,7 +309,9 @@ const searchAuditLog: AssistantToolDef = {
          where ${where}
          order by a.at desc
          limit ${limit}
-      `, "objects"),
+      `,
+        "objects",
+      ),
       db.execute<{ n: string }>(sql`select count(*) as n ${auditFrom} where ${where}`, "objects"),
     ]);
     const total = Number(count[0]?.n ?? 0);
@@ -269,7 +330,13 @@ const searchAuditLog: AssistantToolDef = {
     );
     return {
       ok: true,
-      data: { total, returned: items.length, truncated: truncated || total > items.length, events: items, href: "/admin/audit" },
+      data: {
+        total,
+        returned: items.length,
+        truncated: truncated || total > items.length,
+        events: items,
+        href: "/admin/audit",
+      },
     };
   },
 };
@@ -285,19 +352,26 @@ const getOutboxStatus: AssistantToolDef = {
     const denied = adminScopeDenied(authz);
     if (denied) return denied;
     const [scheduled, deliveries, failures] = await Promise.all([
-      db.execute<{ status: string; n: string; oldest_pending_at: string | null }>(sql`
+      db.execute<{ status: string; n: string; oldest_pending_at: string | null }>(
+        sql`
         select status, count(*)::text as n, min(case when status = 'pending' then created_at end) as oldest_pending_at
           from scheduler_outbox
          where org_id = ${authz.user.orgId}
          group by status
-      `, "objects"),
-      db.execute<{ status: string; n: string; oldest_pending_at: string | null }>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<{ status: string; n: string; oldest_pending_at: string | null }>(
+        sql`
         select status, count(*)::text as n, min(case when status = 'pending' then created_at end) as oldest_pending_at
           from report_delivery_outbox
          where org_id = ${authz.user.orgId}
          group by status
-      `, "objects"),
-      db.execute<Record<string, unknown>>(sql`
+      `,
+        "objects",
+      ),
+      db.execute<Record<string, unknown>>(
+        sql`
         (select id as job_id, 'scheduler'::text as job_type, status, attempt_count, created_at, updated_at
            from scheduler_outbox
           where org_id = ${authz.user.orgId} and status = 'failed'
@@ -308,7 +382,9 @@ const getOutboxStatus: AssistantToolDef = {
           where org_id = ${authz.user.orgId} and status = 'failed'
           order by updated_at desc limit 5)
         order by updated_at desc limit 10
-      `, "objects"),
+      `,
+        "objects",
+      ),
     ]);
     const summarize = (rows: { status: string; n: string; oldest_pending_at: string | null }[]) => {
       const byStatus: Record<string, number> = {};

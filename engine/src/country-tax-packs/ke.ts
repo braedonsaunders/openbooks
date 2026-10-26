@@ -4,7 +4,13 @@ const KE_VAT3_2026: TaxReturnPack = {
   code: "KE_VAT3",
   name: "VAT3 — Value Added Tax Return",
   country: "KE",
-  jurisdiction: { code: "KE", name: "Kenya — national VAT territory", country: "KE", level: "country", taxType: "vat" },
+  jurisdiction: {
+    code: "KE",
+    name: "Kenya — national VAT territory",
+    country: "KE",
+    level: "country",
+    taxType: "vat",
+  },
   // KRA's filing guidance describes the VAT3 as a return FORM filled online
   // via iTax ("VAT returns are filed online via iTax ... by filling a VAT3
   // Return form"), due on or before the 20th of the following month — hence
@@ -13,7 +19,8 @@ const KE_VAT3_2026: TaxReturnPack = {
   submissionChannel: "portal_manual",
   governmentFormat: "portal_entry",
   submissionUrl: "https://itax.kra.go.ke",
-  watermark: "Working copy — confirm the VAT3 lines against the iTax return before filing; turnover tax and Digital Service Tax are separate obligations",
+  watermark:
+    "Working copy — confirm the VAT3 lines against the iTax return before filing; turnover tax and Digital Service Tax are separate obligations",
   // No numeric line numbers are published on any fetchable KRA page (the
   // form itself lives inside iTax), so the return's section NAMES are used
   // as codes. Inventing numeric codes would be worse than naming them. The
@@ -21,14 +28,58 @@ const KE_VAT3_2026: TaxReturnPack = {
   // tax, withholding VAT credits, excess input tax brought forward, and tax
   // payable or credit carried forward.
   boxes: [
-    { lineCode: "OUTPUT_TAX", label: "Output tax on taxable supplies at the general rate", sign: -1, sequence: 10 },
-    { lineCode: "ZERO_RATED_SUPPLIES", label: "Zero-rated supplies (Second Schedule) at 0%", sign: 1, sequence: 20 },
-    { lineCode: "INPUT_TAX", label: "Input tax on taxable purchases and imports", sign: 1, sequence: 30 },
-    { lineCode: "WITHHOLDING_VAT", label: "Withholding VAT credits applied against tax payable", sign: 1, sequence: 40 },
-    { lineCode: "EXCESS_INPUT_BF", label: "Excess input tax brought forward from the prior period", sign: 1, sequence: 50 },
-    { lineCode: "TAX_PAYABLE_CREDIT_CF", label: "Tax payable, or credit carried forward where input exceeds output", sign: 1, sequence: 60 },
-    { lineCode: "OB_OUTPUT", label: "OpenBooks workpaper — output VAT from the ledger, all configured rates", sign: -1, sequence: 70, basis: "tax_collected", glMap: "sales" },
-    { lineCode: "OB_INPUT", label: "OpenBooks workpaper — input VAT from the ledger, all configured rates", sign: 1, sequence: 80, basis: "tax_paid", glMap: "purchases" },
+    {
+      lineCode: "OUTPUT_TAX",
+      label: "Output tax on taxable supplies at the general rate",
+      sign: -1,
+      sequence: 10,
+    },
+    {
+      lineCode: "ZERO_RATED_SUPPLIES",
+      label: "Zero-rated supplies (Second Schedule) at 0%",
+      sign: 1,
+      sequence: 20,
+    },
+    {
+      lineCode: "INPUT_TAX",
+      label: "Input tax on taxable purchases and imports",
+      sign: 1,
+      sequence: 30,
+    },
+    {
+      lineCode: "WITHHOLDING_VAT",
+      label: "Withholding VAT credits applied against tax payable",
+      sign: 1,
+      sequence: 40,
+    },
+    {
+      lineCode: "EXCESS_INPUT_BF",
+      label: "Excess input tax brought forward from the prior period",
+      sign: 1,
+      sequence: 50,
+    },
+    {
+      lineCode: "TAX_PAYABLE_CREDIT_CF",
+      label: "Tax payable, or credit carried forward where input exceeds output",
+      sign: 1,
+      sequence: 60,
+    },
+    {
+      lineCode: "OB_OUTPUT",
+      label: "OpenBooks workpaper — output VAT from the ledger, all configured rates",
+      sign: -1,
+      sequence: 70,
+      basis: "tax_collected",
+      glMap: "sales",
+    },
+    {
+      lineCode: "OB_INPUT",
+      label: "OpenBooks workpaper — input VAT from the ledger, all configured rates",
+      sign: 1,
+      sequence: 80,
+      basis: "tax_paid",
+      glMap: "purchases",
+    },
   ],
 };
 
@@ -81,25 +132,29 @@ export const KENYA_TAX_PACK: CountryTaxPackDefinition = {
   sources: [
     {
       id: "kra_vat_overview",
-      title: "KRA — VAT overview: 16% general rate, 0% Second Schedule zero rate (page states no origin date — cited as applicability), First Schedule exempt supplies, 8% petroleum rate deleted by the Finance Act 2023",
+      title:
+        "KRA — VAT overview: 16% general rate, 0% Second Schedule zero rate (page states no origin date — cited as applicability), First Schedule exempt supplies, 8% petroleum rate deleted by the Finance Act 2023",
       url: "https://www.kra.go.ke/individual/filing-paying/types-of-taxes/value-added-tax",
       asOf: "2026-09-18",
     },
     {
       id: "kra_vat3_filing",
-      title: "KRA — VAT returns are filed by filling the VAT3 Return form online via iTax, due on or before the 20th of the following month",
+      title:
+        "KRA — VAT returns are filed by filling the VAT3 Return form online via iTax, due on or before the 20th of the following month",
       url: "https://www.kra.go.ke/business/companies-partnerships/companies-partnerships-pin-taxes/companies-partnerships-file-pay",
       asOf: "2026-09-18",
     },
     {
       id: "kra_notice_ln35_2020",
-      title: "KRA public notice 02/04/2020 — Legal Notice No. 35 of 2020 cut VAT from 16% to 14% with effect from 1st April 2020; the 2020-12-31 close is set by the January 2021 restoration notice",
+      title:
+        "KRA public notice 02/04/2020 — Legal Notice No. 35 of 2020 cut VAT from 16% to 14% with effect from 1st April 2020; the 2020-12-31 close is set by the January 2021 restoration notice",
       url: "https://www.kra.go.ke/news-center/public-notices/807-tax-legislative-changes-contained-in-legal-notice-no-35-of-2020-and-business-laws-amendment-act,-2020",
       asOf: "2026-09-18",
     },
     {
       id: "kra_notice_rate_change_2021",
-      title: "KRA public notice 04/01/2021 — VAT back to 16% with effect from 1st January 2021, replacing the April 2020 rates; first return under the new rate due 20th February 2021",
+      title:
+        "KRA public notice 04/01/2021 — VAT back to 16% with effect from 1st January 2021, replacing the April 2020 rates; first return under the new rate due 20th February 2021",
       url: "https://www.kra.go.ke/news-center/public-notices/1042-change-of-tax-rates",
       asOf: "2026-09-18",
     },
@@ -114,8 +169,17 @@ export const KENYA_TAX_PACK: CountryTaxPackDefinition = {
         ratePercent: "16",
         role: "standard",
         rates: [
-          { ratePercent: "14", effectiveFrom: "2020-04-01", effectiveTo: "2020-12-31", sourceId: "kra_notice_ln35_2020" },
-          { ratePercent: "16", effectiveFrom: "2021-01-01", sourceId: "kra_notice_rate_change_2021" },
+          {
+            ratePercent: "14",
+            effectiveFrom: "2020-04-01",
+            effectiveTo: "2020-12-31",
+            sourceId: "kra_notice_ln35_2020",
+          },
+          {
+            ratePercent: "16",
+            effectiveFrom: "2021-01-01",
+            sourceId: "kra_notice_rate_change_2021",
+          },
         ],
         // The VAT3 names the "general rate" in words, not numbers.
         returnBoxes: ["OUTPUT_TAX"],

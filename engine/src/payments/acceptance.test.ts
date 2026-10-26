@@ -20,19 +20,39 @@ import {
 
 test("computeSurcharge: percent, fixed, combined, and cap are exact", () => {
   assert.equal(
-    computeSurcharge("100.0000", { calculation: "percent", percent: "2.9", fixed_amount: null, cap_amount: null }),
+    computeSurcharge("100.0000", {
+      calculation: "percent",
+      percent: "2.9",
+      fixed_amount: null,
+      cap_amount: null,
+    }),
     "2.9000",
   );
   assert.equal(
-    computeSurcharge("100.0000", { calculation: "fixed", percent: null, fixed_amount: "0.3000", cap_amount: null }),
+    computeSurcharge("100.0000", {
+      calculation: "fixed",
+      percent: null,
+      fixed_amount: "0.3000",
+      cap_amount: null,
+    }),
     "0.3000",
   );
   assert.equal(
-    computeSurcharge("100.0000", { calculation: "percent_plus_fixed", percent: "2.9", fixed_amount: "0.3000", cap_amount: null }),
+    computeSurcharge("100.0000", {
+      calculation: "percent_plus_fixed",
+      percent: "2.9",
+      fixed_amount: "0.3000",
+      cap_amount: null,
+    }),
     "3.2000",
   );
   assert.equal(
-    computeSurcharge("10000.0000", { calculation: "percent", percent: "10", fixed_amount: null, cap_amount: "50.0000" }),
+    computeSurcharge("10000.0000", {
+      calculation: "percent",
+      percent: "10",
+      fixed_amount: null,
+      cap_amount: "50.0000",
+    }),
     "50.0000",
   );
 });
@@ -92,10 +112,17 @@ function stripeSignature(secret: string, body: string, timestamp?: number): stri
   return `t=${t},v1=${v1}`;
 }
 
-function stripeEvent(secret: string, type: string, obj: Record<string, unknown>, ageSeconds = 0): WebhookEvent | null {
+function stripeEvent(
+  secret: string,
+  type: string,
+  obj: Record<string, unknown>,
+  ageSeconds = 0,
+): WebhookEvent | null {
   const body = JSON.stringify({ id: "evt_1", type, data: { object: obj } });
   return ACCEPTANCE_ADAPTERS.stripe.verifyWebhook(
-    { "stripe-signature": stripeSignature(secret, body, Math.floor(Date.now() / 1000) - ageSeconds) },
+    {
+      "stripe-signature": stripeSignature(secret, body, Math.floor(Date.now() / 1000) - ageSeconds),
+    },
     body,
     { webhookSecret: secret },
   );
@@ -104,7 +131,9 @@ function stripeEvent(secret: string, type: string, obj: Record<string, unknown>,
 test("stripe webhook: signature verified, tamper rejected", () => {
   const secret = "whsec_test_123";
   const ok = stripeEvent(secret, "checkout.session.completed", {
-    id: "cs_test_1", client_reference_id: "tok_abc", amount_total: 10300,
+    id: "cs_test_1",
+    client_reference_id: "tok_abc",
+    amount_total: 10300,
   });
   assert.ok(ok);
   assert.equal(ok.status, "succeeded");
@@ -113,43 +142,73 @@ test("stripe webhook: signature verified, tamper rejected", () => {
   assert.equal(ok.paidAmount, "103.0000");
 
   const zeroDecimal = stripeEvent(secret, "checkout.session.completed", {
-    id: "cs_jpy_1", client_reference_id: "tok_jpy", amount_total: 1000, currency: "jpy",
+    id: "cs_jpy_1",
+    client_reference_id: "tok_jpy",
+    amount_total: 1000,
+    currency: "jpy",
   });
   assert.ok(zeroDecimal);
   assert.equal(zeroDecimal.paidCurrency, "JPY");
-  assert.equal(zeroDecimal.paidAmount, "1000.0000", "Stripe zero-decimal amounts are already major units");
+  assert.equal(
+    zeroDecimal.paidAmount,
+    "1000.0000",
+    "Stripe zero-decimal amounts are already major units",
+  );
 
   const threeDecimal = stripeEvent(secret, "checkout.session.completed", {
-    id: "cs_bhd_1", client_reference_id: "tok_bhd", amount_total: 1000, currency: "bhd",
+    id: "cs_bhd_1",
+    client_reference_id: "tok_bhd",
+    amount_total: 1000,
+    currency: "bhd",
   });
   assert.ok(threeDecimal);
   assert.equal(threeDecimal.paidCurrency, "BHD");
-  assert.equal(threeDecimal.paidAmount, "1.0000", "Stripe three-decimal amounts are fils, not cents");
-
-  const tamperedBody = JSON.stringify({
-    id: "evt_1",
-    type: "checkout.session.completed",
-    data: { object: { id: "cs_test_1", client_reference_id: "tok_abc", amount_total: 10300 } },
-  }) + "x";
   assert.equal(
-    ACCEPTANCE_ADAPTERS.stripe.verifyWebhook({ "stripe-signature": stripeSignature(secret, tamperedBody) }, tamperedBody, {
-      webhookSecret: secret,
-    }),
+    threeDecimal.paidAmount,
+    "1.0000",
+    "Stripe three-decimal amounts are fils, not cents",
+  );
+
+  const tamperedBody =
+    JSON.stringify({
+      id: "evt_1",
+      type: "checkout.session.completed",
+      data: { object: { id: "cs_test_1", client_reference_id: "tok_abc", amount_total: 10300 } },
+    }) + "x";
+  assert.equal(
+    ACCEPTANCE_ADAPTERS.stripe.verifyWebhook(
+      { "stripe-signature": stripeSignature(secret, tamperedBody) },
+      tamperedBody,
+      {
+        webhookSecret: secret,
+      },
+    ),
     null,
     "tampered body rejected",
   );
   assert.equal(
-    ACCEPTANCE_ADAPTERS.stripe.verifyWebhook({ "stripe-signature": stripeSignature("whsec_other", JSON.stringify({
-      id: "evt_1",
-      type: "checkout.session.completed",
-      data: { object: { id: "cs_test_1", client_reference_id: "tok_abc", amount_total: 10300 } },
-    })) }, JSON.stringify({
-      id: "evt_1",
-      type: "checkout.session.completed",
-      data: { object: { id: "cs_test_1", client_reference_id: "tok_abc", amount_total: 10300 } },
-    }), {
-      webhookSecret: secret,
-    }),
+    ACCEPTANCE_ADAPTERS.stripe.verifyWebhook(
+      {
+        "stripe-signature": stripeSignature(
+          "whsec_other",
+          JSON.stringify({
+            id: "evt_1",
+            type: "checkout.session.completed",
+            data: {
+              object: { id: "cs_test_1", client_reference_id: "tok_abc", amount_total: 10300 },
+            },
+          }),
+        ),
+      },
+      JSON.stringify({
+        id: "evt_1",
+        type: "checkout.session.completed",
+        data: { object: { id: "cs_test_1", client_reference_id: "tok_abc", amount_total: 10300 } },
+      }),
+      {
+        webhookSecret: secret,
+      },
+    ),
     null,
     "wrong secret rejected",
   );
@@ -194,7 +253,12 @@ test("stripe webhook: any of several v1 signatures verifies during a secret roll
 
 test("stripe webhook: replay window accepts provider retries within 24h, rejects older and future", () => {
   const secret = "whsec_replay";
-  const obj = { id: "cs_replay_1", client_reference_id: "tok_r", amount_total: 10300, payment_status: "paid" };
+  const obj = {
+    id: "cs_replay_1",
+    client_reference_id: "tok_r",
+    amount_total: 10300,
+    payment_status: "paid",
+  };
   // An outage backlog redelivery from an hour ago must still settle.
   assert.ok(stripeEvent(secret, "checkout.session.completed", obj, 3_600));
   // Just inside the window.
@@ -202,10 +266,20 @@ test("stripe webhook: replay window accepts provider retries within 24h, rejects
   // Outside the window.
   assert.equal(stripeEvent(secret, "checkout.session.completed", obj, 25 * 3_600), null);
   // Future-dated beyond the clock-skew allowance is always rejected.
-  const futureBody = JSON.stringify({ id: "evt_1", type: "checkout.session.completed", data: { object: obj } });
+  const futureBody = JSON.stringify({
+    id: "evt_1",
+    type: "checkout.session.completed",
+    data: { object: obj },
+  });
   assert.equal(
     ACCEPTANCE_ADAPTERS.stripe.verifyWebhook(
-      { "stripe-signature": stripeSignature(secret, futureBody, Math.floor(Date.now() / 1000) + 600) },
+      {
+        "stripe-signature": stripeSignature(
+          secret,
+          futureBody,
+          Math.floor(Date.now() / 1000) + 600,
+        ),
+      },
       futureBody,
       { webhookSecret: secret },
     ),
@@ -219,7 +293,14 @@ test("stripe webhook: signature-valid un-normalizable amounts are quarantined li
   const body = JSON.stringify({
     id: "evt_malformed",
     type: "checkout.session.completed",
-    data: { object: { id: "cs_bad", client_reference_id: "tok_bad", amount_total: "103.5", currency: "cad" } },
+    data: {
+      object: {
+        id: "cs_bad",
+        client_reference_id: "tok_bad",
+        amount_total: "103.5",
+        currency: "cad",
+      },
+    },
   });
   const captured = captureConsoleError();
   let delivery;
@@ -232,8 +313,16 @@ test("stripe webhook: signature-valid un-normalizable amounts are quarantined li
   } finally {
     captured.restore();
   }
-  assert.equal(delivery.signatureValid, true, "malformed content must not downgrade authentication");
-  assert.deepEqual(delivery.events, [], "an un-normalizable authenticated event must not settle or crash");
+  assert.equal(
+    delivery.signatureValid,
+    true,
+    "malformed content must not downgrade authentication",
+  );
+  assert.deepEqual(
+    delivery.events,
+    [],
+    "an un-normalizable authenticated event must not settle or crash",
+  );
 
   const emitted = captured.logs
     .map((line) => {
@@ -244,7 +333,11 @@ test("stripe webhook: signature-valid un-normalizable amounts are quarantined li
       }
     })
     .filter((entry) => entry?.event === PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT);
-  assert.equal(emitted.length, 1, `expected one quarantine emission, got ${JSON.stringify(captured.logs)}`);
+  assert.equal(
+    emitted.length,
+    1,
+    `expected one quarantine emission, got ${JSON.stringify(captured.logs)}`,
+  );
   assert.deepEqual(
     {
       provider: emitted[0]!.provider,
@@ -258,15 +351,26 @@ test("stripe webhook: signature-valid un-normalizable amounts are quarantined li
 
 test("stripe webhook: unpaid async completion stays in flight until the async terminal events", () => {
   const secret = "whsec_async";
-  const session = { id: "cs_async_1", client_reference_id: "tok_async", amount_total: 10300, payment_intent: "pi_async_1" };
+  const session = {
+    id: "cs_async_1",
+    client_reference_id: "tok_async",
+    amount_total: 10300,
+    payment_intent: "pi_async_1",
+  };
 
-  const unpaid = stripeEvent(secret, "checkout.session.completed", { ...session, payment_status: "unpaid" });
+  const unpaid = stripeEvent(secret, "checkout.session.completed", {
+    ...session,
+    payment_status: "unpaid",
+  });
   assert.ok(unpaid);
   assert.equal(unpaid.status, "processing");
   assert.equal(unpaid.paidAmount, null);
   assert.equal(unpaid.intentRef, "pi_async_1");
 
-  const noPaymentRequired = stripeEvent(secret, "checkout.session.completed", { ...session, payment_status: "no_payment_required" });
+  const noPaymentRequired = stripeEvent(secret, "checkout.session.completed", {
+    ...session,
+    payment_status: "no_payment_required",
+  });
   assert.ok(noPaymentRequired);
   assert.equal(noPaymentRequired.status, "succeeded");
 
@@ -284,13 +388,23 @@ test("stripe webhook: unpaid async completion stays in flight until the async te
 
 test("stripe webhook: refunds and disputes key off the persisted payment intent", () => {
   const secret = "whsec_refund";
-  const refund = stripeEvent(secret, "charge.refunded", { id: "ch_1", payment_intent: "pi_async_1" });
+  const refund = stripeEvent(secret, "charge.refunded", {
+    id: "ch_1",
+    payment_intent: "pi_async_1",
+  });
   assert.ok(refund);
   assert.equal(refund.status, "refunded");
   assert.equal(refund.externalRef, "pi_async_1");
-  assert.equal(refund.intentRef, "pi_async_1", "refunds must set intentRef so resolution matches the session-keyed attempt");
+  assert.equal(
+    refund.intentRef,
+    "pi_async_1",
+    "refunds must set intentRef so resolution matches the session-keyed attempt",
+  );
 
-  const dispute = stripeEvent(secret, "charge.dispute.created", { id: "dp_1", payment_intent: "pi_async_1" });
+  const dispute = stripeEvent(secret, "charge.dispute.created", {
+    id: "dp_1",
+    payment_intent: "pi_async_1",
+  });
   assert.ok(dispute);
   assert.equal(dispute.status, "disputed");
   assert.equal(dispute.externalRef, "pi_async_1");
@@ -314,8 +428,14 @@ test("webhook claims: only pre-terminal states are claimable so redeliveries ded
   // Only returns may re-claim a settled or refunded attempt back into motion.
   for (const status of Object.keys(CLAIMABLE_FROM) as (keyof typeof CLAIMABLE_FROM)[]) {
     if (status !== "refunded" && status !== "disputed") {
-      assert.ok(!CLAIMABLE_FROM[status].includes("refunded"), `${status} must not claim a refunded attempt`);
-      assert.ok(!CLAIMABLE_FROM[status].includes("succeeded"), `${status} must not claim a settled attempt`);
+      assert.ok(
+        !CLAIMABLE_FROM[status].includes("refunded"),
+        `${status} must not claim a refunded attempt`,
+      );
+      assert.ok(
+        !CLAIMABLE_FROM[status].includes("succeeded"),
+        `${status} must not claim a settled attempt`,
+      );
     }
   }
 });
@@ -335,7 +455,9 @@ test("adyen webhook: signature-valid eventCode/success arrays normalize", () => 
       success: ["false", "true"],
     },
   ]);
-  const verified = ACCEPTANCE_ADAPTERS.adyen.verifyWebhookDelivery({}, body, { webhookSecret: hmacKey });
+  const verified = ACCEPTANCE_ADAPTERS.adyen.verifyWebhookDelivery({}, body, {
+    webhookSecret: hmacKey,
+  });
   assert.equal(verified.signatureValid, true);
   assert.deepEqual(
     verified.events.map((event) => ({ externalRef: event.externalRef, status: event.status })),
@@ -347,15 +469,17 @@ test("adyen webhook: signature-valid eventCode/success arrays normalize", () => 
 test("adyen webhook: per-item HMAC verified", () => {
   const keyBytes = Buffer.alloc(32, 7);
   const hmacKey = keyBytes.toString("base64");
-  const { body } = signedAdyenDelivery(keyBytes, [{
-    pspReference: "PSP-1",
-    originalReference: "",
-    merchantAccountCode: "TestMerchant",
-    merchantReference: "tok_xyz",
-    amount: { value: 10300, currency: "CAD" },
-    eventCode: "AUTHORISATION",
-    success: "true",
-  }]);
+  const { body } = signedAdyenDelivery(keyBytes, [
+    {
+      pspReference: "PSP-1",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "tok_xyz",
+      amount: { value: 10300, currency: "CAD" },
+      eventCode: "AUTHORISATION",
+      success: "true",
+    },
+  ]);
 
   const ok = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, body, { webhookSecret: hmacKey });
   assert.ok(ok);
@@ -365,7 +489,12 @@ test("adyen webhook: per-item HMAC verified", () => {
 
   const tampered = JSON.parse(body);
   tampered.notificationItems[0].NotificationRequestItem.amount.value = 99900;
-  assert.equal(ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, JSON.stringify(tampered), { webhookSecret: hmacKey }), null);
+  assert.equal(
+    ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, JSON.stringify(tampered), {
+      webhookSecret: hmacKey,
+    }),
+    null,
+  );
 });
 
 /** Build an Adyen delivery whose every item carries its own valid HMAC. */
@@ -395,10 +524,16 @@ function signedAdyenDelivery(
     ].join(":");
     item.additionalData = {
       ...item.additionalData,
-      "metadata.hmacSignature": createHmac("sha256", keyBytes).update(message, "utf8").digest("base64"),
+      "metadata.hmacSignature": createHmac("sha256", keyBytes)
+        .update(message, "utf8")
+        .digest("base64"),
     };
   }
-  return { body: JSON.stringify({ notificationItems: items.map((item) => ({ NotificationRequestItem: item })) }) };
+  return {
+    body: JSON.stringify({
+      notificationItems: items.map((item) => ({ NotificationRequestItem: item })),
+    }),
+  };
 }
 
 function captureConsoleError(): { logs: string[]; restore: () => void } {
@@ -407,7 +542,12 @@ function captureConsoleError(): { logs: string[]; restore: () => void } {
   console.error = (...args: unknown[]) => {
     logs.push(args.map(String).join(" "));
   };
-  return { logs, restore: () => { console.error = originalConsoleError; } };
+  return {
+    logs,
+    restore: () => {
+      console.error = originalConsoleError;
+    },
+  };
 }
 
 test("adyen webhook: a signature-valid malformed item is isolated without starving its signed siblings", () => {
@@ -437,12 +577,18 @@ test("adyen webhook: a signature-valid malformed item is isolated without starvi
   const captured = captureConsoleError();
   let delivery;
   try {
-    delivery = ACCEPTANCE_ADAPTERS.adyen.verifyWebhookDelivery({}, body, { webhookSecret: hmacKey });
+    delivery = ACCEPTANCE_ADAPTERS.adyen.verifyWebhookDelivery({}, body, {
+      webhookSecret: hmacKey,
+    });
   } finally {
     captured.restore();
   }
 
-  assert.equal(delivery.signatureValid, true, "malformed content must not downgrade authentication");
+  assert.equal(
+    delivery.signatureValid,
+    true,
+    "malformed content must not downgrade authentication",
+  );
   assert.deepEqual(
     delivery.events.map((event) => [event.externalRef, event.status, event.paidAmount]),
     [["PSP-GOOD", "succeeded", "103.0000"]],
@@ -458,7 +604,11 @@ test("adyen webhook: a signature-valid malformed item is isolated without starvi
       }
     })
     .filter((entry) => entry?.event === PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT);
-  assert.equal(emitted.length, 1, `expected one quarantine emission, got ${JSON.stringify(captured.logs)}`);
+  assert.equal(
+    emitted.length,
+    1,
+    `expected one quarantine emission, got ${JSON.stringify(captured.logs)}`,
+  );
   assert.deepEqual(
     {
       provider: emitted[0]!.provider,
@@ -475,25 +625,33 @@ test("adyen webhook: a delivery whose only actionable item is malformed stays au
   const hmacKey = Buffer.alloc(32, 13).toString("base64");
   // Fractional JSON *number* hits BigInt's RangeError branch (the sibling
   // test above covers the string/SyntaxError branch).
-  const { body } = signedAdyenDelivery(Buffer.alloc(32, 13), [{
-    pspReference: "PSP-NUMBER",
-    originalReference: "",
-    merchantAccountCode: "TestMerchant",
-    merchantReference: "tok_number",
-    amount: { value: 99.95, currency: "USD" },
-    eventCode: "AUTHORISATION",
-    success: "true",
-  }]);
+  const { body } = signedAdyenDelivery(Buffer.alloc(32, 13), [
+    {
+      pspReference: "PSP-NUMBER",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "tok_number",
+      amount: { value: 99.95, currency: "USD" },
+      eventCode: "AUTHORISATION",
+      success: "true",
+    },
+  ]);
 
   const captured = captureConsoleError();
   let delivery;
   try {
-    delivery = ACCEPTANCE_ADAPTERS.adyen.verifyWebhookDelivery({}, body, { webhookSecret: hmacKey });
+    delivery = ACCEPTANCE_ADAPTERS.adyen.verifyWebhookDelivery({}, body, {
+      webhookSecret: hmacKey,
+    });
   } finally {
     captured.restore();
   }
   assert.equal(delivery.signatureValid, true);
-  assert.deepEqual(delivery.events, [], "an un-normalizable authenticated item must not settle or crash");
+  assert.deepEqual(
+    delivery.events,
+    [],
+    "an un-normalizable authenticated item must not settle or crash",
+  );
 
   const capturedSecond = captureConsoleError();
   let firstEvent;
@@ -509,30 +667,38 @@ test("adyen webhook: success flags normalize boolean and case variants", () => {
   const keyBytes = Buffer.alloc(32, 17);
   const secret = keyBytes.toString("base64");
 
-  const { body: boolBody } = signedAdyenDelivery(Buffer.from(keyBytes), [{
-    pspReference: "PSP-BOOL",
-    originalReference: "",
-    merchantAccountCode: "TestMerchant",
-    merchantReference: "tok_bool",
-    amount: { value: 10300, currency: "CAD" },
-    eventCode: "AUTHORISATION",
-    success: true,
-  }]);
-  const boolEvent = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, boolBody, { webhookSecret: secret });
+  const { body: boolBody } = signedAdyenDelivery(Buffer.from(keyBytes), [
+    {
+      pspReference: "PSP-BOOL",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "tok_bool",
+      amount: { value: 10300, currency: "CAD" },
+      eventCode: "AUTHORISATION",
+      success: true,
+    },
+  ]);
+  const boolEvent = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, boolBody, {
+    webhookSecret: secret,
+  });
   assert.ok(boolEvent);
   assert.equal(boolEvent.status, "succeeded");
   assert.equal(boolEvent.externalRef, "PSP-BOOL");
 
-  const { body: capsBody } = signedAdyenDelivery(Buffer.from(keyBytes), [{
-    pspReference: "PSP-CAPS",
-    originalReference: "",
-    merchantAccountCode: "TestMerchant",
-    merchantReference: "tok_caps",
-    amount: { value: 10300, currency: "CAD" },
-    eventCode: "AUTHORISATION",
-    success: " TRUE ",
-  }]);
-  const capsEvent = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, capsBody, { webhookSecret: secret });
+  const { body: capsBody } = signedAdyenDelivery(Buffer.from(keyBytes), [
+    {
+      pspReference: "PSP-CAPS",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "tok_caps",
+      amount: { value: 10300, currency: "CAD" },
+      eventCode: "AUTHORISATION",
+      success: " TRUE ",
+    },
+  ]);
+  const capsEvent = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, capsBody, {
+    webhookSecret: secret,
+  });
   assert.ok(capsEvent);
   assert.equal(capsEvent.status, "succeeded");
   assert.equal(capsEvent.externalRef, "PSP-CAPS");
@@ -541,20 +707,22 @@ test("adyen webhook: success flags normalize boolean and case variants", () => {
 test("adyen webhook: a recurring contract with card detail keys the stable detail reference and refreshes", () => {
   const keyBytes = Buffer.alloc(32, 19);
   const secret = keyBytes.toString("base64");
-  const { body } = signedAdyenDelivery(Buffer.from(keyBytes), [{
-    pspReference: "PSP-CONTRACT-1",
-    originalReference: "",
-    merchantAccountCode: "TestMerchant",
-    merchantReference: "shopper-42",
-    eventCode: "RECURRING_CONTRACT",
-    additionalData: {
-      shopperReference: "shopper-42",
-      "recurring.recurringDetailReference": "DETAIL-9X2",
-      cardSummary: "0010",
-      expiryDate: "03/2030",
-      paymentMethodVariant: "visa",
+  const { body } = signedAdyenDelivery(Buffer.from(keyBytes), [
+    {
+      pspReference: "PSP-CONTRACT-1",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "shopper-42",
+      eventCode: "RECURRING_CONTRACT",
+      additionalData: {
+        shopperReference: "shopper-42",
+        "recurring.recurringDetailReference": "DETAIL-9X2",
+        cardSummary: "0010",
+        expiryDate: "03/2030",
+        paymentMethodVariant: "visa",
+      },
     },
-  }]);
+  ]);
   const event = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, body, { webhookSecret: secret });
   assert.ok(event);
   assert.equal(event.setupCompleted, true);
@@ -574,14 +742,16 @@ test("adyen webhook: a recurring contract with card detail keys the stable detai
 test("adyen webhook: a recurring contract without card detail keeps the notification reference", () => {
   const keyBytes = Buffer.alloc(32, 23);
   const secret = keyBytes.toString("base64");
-  const { body } = signedAdyenDelivery(Buffer.from(keyBytes), [{
-    pspReference: "PSP-CONTRACT-2",
-    originalReference: "",
-    merchantAccountCode: "TestMerchant",
-    merchantReference: "shopper-43",
-    eventCode: "RECURRING_CONTRACT",
-    additionalData: { shopperReference: "shopper-43" },
-  }]);
+  const { body } = signedAdyenDelivery(Buffer.from(keyBytes), [
+    {
+      pspReference: "PSP-CONTRACT-2",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "shopper-43",
+      eventCode: "RECURRING_CONTRACT",
+      additionalData: { shopperReference: "shopper-43" },
+    },
+  ]);
   const event = ACCEPTANCE_ADAPTERS.adyen.verifyWebhook({}, body, { webhookSecret: secret });
   assert.ok(event);
   assert.equal(event.setupCompleted, true);
@@ -592,19 +762,21 @@ test("adyen webhook: a recurring contract without card detail keeps the notifica
 test("adyen webhook: a recurring contract with an unreadable expiry is quarantined", () => {
   const keyBytes = Buffer.alloc(32, 29);
   const secret = keyBytes.toString("base64");
-  const { body } = signedAdyenDelivery(Buffer.from(keyBytes), [{
-    pspReference: "PSP-CONTRACT-3",
-    originalReference: "",
-    merchantAccountCode: "TestMerchant",
-    merchantReference: "shopper-44",
-    eventCode: "RECURRING_CONTRACT",
-    additionalData: {
-      shopperReference: "shopper-44",
-      "recurring.recurringDetailReference": "DETAIL-BAD",
-      cardSummary: "0010",
-      expiryDate: "13/2030",
+  const { body } = signedAdyenDelivery(Buffer.from(keyBytes), [
+    {
+      pspReference: "PSP-CONTRACT-3",
+      originalReference: "",
+      merchantAccountCode: "TestMerchant",
+      merchantReference: "shopper-44",
+      eventCode: "RECURRING_CONTRACT",
+      additionalData: {
+        shopperReference: "shopper-44",
+        "recurring.recurringDetailReference": "DETAIL-BAD",
+        cardSummary: "0010",
+        expiryDate: "13/2030",
+      },
     },
-  }]);
+  ]);
   const captured = captureConsoleError();
   let delivery;
   try {
@@ -613,16 +785,28 @@ test("adyen webhook: a recurring contract with an unreadable expiry is quarantin
     captured.restore();
   }
   assert.equal(delivery.signatureValid, true);
-  assert.deepEqual(delivery.events, [], "an unreadable updater expiry must not refresh or claim a method");
+  assert.deepEqual(
+    delivery.events,
+    [],
+    "an unreadable updater expiry must not refresh or claim a method",
+  );
 });
 
 test("gocardless webhook: raw-body HMAC verified", () => {
   const secret = "gc-whsec";
   const body = JSON.stringify({
-    events: [{ resource_type: "payments", action: "confirmed", links: { payment: "PM-1", billing_request: "BRQ-1" } }],
+    events: [
+      {
+        resource_type: "payments",
+        action: "confirmed",
+        links: { payment: "PM-1", billing_request: "BRQ-1" },
+      },
+    ],
   });
   const sig = createHmac("sha256", secret).update(body, "utf8").digest("hex");
-  const ok = ACCEPTANCE_ADAPTERS.gocardless.verifyWebhook({ "webhook-signature": sig }, body, { webhookSecret: secret });
+  const ok = ACCEPTANCE_ADAPTERS.gocardless.verifyWebhook({ "webhook-signature": sig }, body, {
+    webhookSecret: secret,
+  });
   assert.ok(ok);
   assert.equal(ok.status, "succeeded");
   assert.equal(ok.externalRef, "PM-1");
@@ -630,14 +814,22 @@ test("gocardless webhook: raw-body HMAC verified", () => {
   // expose it so resolution can match either side.
   assert.equal(ok.alternateExternalRef, "BRQ-1");
   assert.equal(ok.linkToken, null);
-  assert.equal(ACCEPTANCE_ADAPTERS.gocardless.verifyWebhook({ "webhook-signature": "deadbeef" }, body, { webhookSecret: secret }), null);
+  assert.equal(
+    ACCEPTANCE_ADAPTERS.gocardless.verifyWebhook({ "webhook-signature": "deadbeef" }, body, {
+      webhookSecret: secret,
+    }),
+    null,
+  );
 });
 
 test("gocardless webhook: payment lifecycle events resolve against the billing request", () => {
   const secret = "gc-lifecycle";
-  const event = (action: string) => JSON.stringify({
-    events: [{ resource_type: "payments", action, links: { payment: "PM-9", billing_request: "BRQ-9" } }],
-  });
+  const event = (action: string) =>
+    JSON.stringify({
+      events: [
+        { resource_type: "payments", action, links: { payment: "PM-9", billing_request: "BRQ-9" } },
+      ],
+    });
   const verify = (action: string) => {
     const payload = event(action);
     return ACCEPTANCE_ADAPTERS.gocardless.verifyWebhook(
@@ -705,7 +897,12 @@ test("payment provider API bases accept only published HTTPS endpoints", () => {
 
 test("the provider network boundary refuses redirect following even from an untyped caller", async (t) => {
   const refusal = new TypeError("Redirect refused");
-  const request = { method: "POST", headers: { Authorization: "Bearer test-provider-token" }, body: "request", redirect: "follow" };
+  const request = {
+    method: "POST",
+    headers: { Authorization: "Bearer test-provider-token" },
+    body: "request",
+    redirect: "follow",
+  };
   const network = t.mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {
     assert.equal(init?.redirect, "error");
     assert.equal(init?.method, request.method);
@@ -714,8 +911,11 @@ test("the provider network boundary refuses redirect following even from an unty
     throw refusal;
   });
   await assert.rejects(
-    defaultFetch("https://api.stripe.com/v1/checkout/sessions", request as unknown as Parameters<typeof defaultFetch>[1]),
-    error => error === refusal,
+    defaultFetch(
+      "https://api.stripe.com/v1/checkout/sessions",
+      request as unknown as Parameters<typeof defaultFetch>[1],
+    ),
+    (error) => error === refusal,
   );
   assert.equal(network.mock.callCount(), 1);
 });
@@ -736,7 +936,10 @@ test("payment provider requests refuse redirects and reject unsafe bases before 
     checkout,
     async (_url, init) => {
       redirectModes.push(init.redirect);
-      return { status: 200, json: async () => ({ id: "cs_1", url: "https://checkout.stripe.com/cs_1" }) };
+      return {
+        status: 200,
+        json: async () => ({ id: "cs_1", url: "https://checkout.stripe.com/cs_1" }),
+      };
     },
   );
   await ACCEPTANCE_ADAPTERS.adyen.createCheckout(
@@ -744,7 +947,13 @@ test("payment provider requests refuse redirects and reject unsafe bases before 
     checkout,
     async (_url, init) => {
       redirectModes.push(init.redirect);
-      return { status: 200, json: async () => ({ id: "adyen-1", url: "https://checkoutshopper-test.adyen.com/adyen-1" }) };
+      return {
+        status: 200,
+        json: async () => ({
+          id: "adyen-1",
+          url: "https://checkoutshopper-test.adyen.com/adyen-1",
+        }),
+      };
     },
   );
   await ACCEPTANCE_ADAPTERS.gocardless.createCheckout(
@@ -754,7 +963,12 @@ test("payment provider requests refuse redirects and reject unsafe bases before 
       redirectModes.push(init.redirect);
       return url.endsWith("/billing_requests")
         ? { status: 200, json: async () => ({ billing_requests: { id: "BRQ-1" } }) }
-        : { status: 200, json: async () => ({ billing_request_flows: { authorisation_url: "https://pay.gocardless.com/flow-1" } }) };
+        : {
+            status: 200,
+            json: async () => ({
+              billing_request_flows: { authorisation_url: "https://pay.gocardless.com/flow-1" },
+            }),
+          };
     },
   );
   assert.deepEqual(redirectModes, ["error", "error", "error", "error"]);

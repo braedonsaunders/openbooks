@@ -40,7 +40,11 @@ function person(overrides: Partial<PersonMigrationResult> = {}): PersonMigration
 
 function finalize(
   persons: readonly PersonMigrationResult[],
-  overrides: { dryRun?: boolean; allowPartial?: boolean; status?: "evaluated" | "empty_not_evaluated" } = {},
+  overrides: {
+    dryRun?: boolean;
+    allowPartial?: boolean;
+    status?: "evaluated" | "empty_not_evaluated";
+  } = {},
 ): EmploymentMigrationReport {
   const counts = {
     migrated: persons.filter((p) => p.outcome === "migrated").length,
@@ -136,7 +140,12 @@ test("exit code: clean and already-migrated pass; refused blocks without partial
     migrationExitCode(finalize([person({ outcome: "already_migrated", employmentId: "e-1" })])),
     0,
   );
-  assert.equal(migrationExitCode(finalize([person({ outcome: "would_migrate", employmentId: null })], { dryRun: true })), 0);
+  assert.equal(
+    migrationExitCode(
+      finalize([person({ outcome: "would_migrate", employmentId: null })], { dryRun: true }),
+    ),
+    0,
+  );
   const refused = finalize([
     person({ sourceId: "p-ok" }),
     person({ sourceId: "p-bad", outcome: "refused", employmentId: null }),
@@ -150,18 +159,34 @@ test("exit code: allow-partial with an empty accepted subset is a failure, not a
     person({ sourceId: "p-1", outcome: "refused", employmentId: null }),
     person({ sourceId: "p-2", outcome: "refused", employmentId: null }),
   ];
-  assert.equal(migrationExitCode(finalize(allRefused, { allowPartial: true })), 1, "nothing advanced");
-  assert.equal(migrationExitCode(finalize(allRefused, { allowPartial: true, dryRun: true })), 1, "a dry run that would migrate nobody is not clean either");
+  assert.equal(
+    migrationExitCode(finalize(allRefused, { allowPartial: true })),
+    1,
+    "nothing advanced",
+  );
+  assert.equal(
+    migrationExitCode(finalize(allRefused, { allowPartial: true, dryRun: true })),
+    1,
+    "a dry run that would migrate nobody is not clean either",
+  );
   const settledPlusRefused = [
     person({ sourceId: "p-old", outcome: "already_migrated", employmentId: "e-1" }),
     person({ sourceId: "p-bad", outcome: "refused", employmentId: null }),
   ];
-  assert.equal(migrationExitCode(finalize(settledPlusRefused, { allowPartial: true })), 0, "already_migrated is settled and counts as advanced");
+  assert.equal(
+    migrationExitCode(finalize(settledPlusRefused, { allowPartial: true })),
+    0,
+    "already_migrated is settled and counts as advanced",
+  );
   const previewPlusRefused = [
     person({ sourceId: "p-new", outcome: "would_migrate", employmentId: null }),
     person({ sourceId: "p-bad", outcome: "refused", employmentId: null }),
   ];
-  assert.equal(migrationExitCode(finalize(previewPlusRefused, { allowPartial: true, dryRun: true })), 0, "a dry run that would migrate someone is a clean preview");
+  assert.equal(
+    migrationExitCode(finalize(previewPlusRefused, { allowPartial: true, dryRun: true })),
+    0,
+    "a dry run that would migrate someone is a clean preview",
+  );
 });
 
 test("evidence token round-trips namespaces needing encoding", () => {
@@ -197,8 +222,5 @@ test("corrupt evidence token fails closed, never guesses", () => {
       error instanceof EmploymentMigrationError &&
       /corrupt employment migration evidence/.test(error.message),
   );
-  assert.throws(
-    () => parseMigrationRef("some-other-process ref"),
-    EmploymentMigrationError,
-  );
+  assert.throws(() => parseMigrationRef("some-other-process ref"), EmploymentMigrationError);
 });

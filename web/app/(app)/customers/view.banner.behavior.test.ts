@@ -1,19 +1,23 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { resolveValue } from '@braedonsaunders/appkit-viewspec'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { resolveValue } from "@braedonsaunders/appkit-viewspec";
 
-const state = { genericFailure: false, customerHomeCalls: 0 }
-Object.assign(globalThis, { __customerRatesBannerTest: state })
-const { stubModules } = await import('../../../testing/stub-modules')
-stubModules({ navigation: 'export function redirect(path){throw new Error(`redirect:${path}`)}', extra: { 'server-only': 'export {}' } })
+const state = { genericFailure: false, customerHomeCalls: 0 };
+Object.assign(globalThis, { __customerRatesBannerTest: state });
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({
+  navigation: "export function redirect(path){throw new Error(`redirect:${path}`)}",
+  extra: { "server-only": "export {}" },
+});
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'next-intl/server') {
+    if (specifier === "next-intl/server") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,' + encodeURIComponent(`
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(`
           export async function getLocale(){return 'en'}
           export async function getTranslations(namespace){
             const t=(key)=>namespace==='reports'&&key==='statement.ratesBlockedTitle'?'Exchange rates are missing'
@@ -21,89 +25,136 @@ registerHooks({
             t.has=()=>false; return t;
           }
         `),
-      }
+      };
     }
-    if (specifier === '../../../lib/authz' && context.parentURL?.endsWith('/web/app/(app)/customers/view.ts')) {
-      return { shortCircuit: true, url: 'data:text/javascript,export async function getAuthz(){return {user:{orgId:"org-1",roles:[]}}}export function can(){return true}export function assertCan(){throw new Error("unexpected refusal")}' }
-    }
-    if (specifier === '../../../lib/consolidation' && context.parentURL?.endsWith('/web/app/(app)/customers/view.ts')) {
+    if (
+      specifier === "../../../lib/authz" &&
+      context.parentURL?.endsWith("/web/app/(app)/customers/view.ts")
+    ) {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,' + encodeURIComponent(`
+        url: 'data:text/javascript,export async function getAuthz(){return {user:{orgId:"org-1",roles:[]}}}export function can(){return true}export function assertCan(){throw new Error("unexpected refusal")}',
+      };
+    }
+    if (
+      specifier === "../../../lib/consolidation" &&
+      context.parentURL?.endsWith("/web/app/(app)/customers/view.ts")
+    ) {
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(`
           export class MissingRatesError extends Error {}
           export async function reportSubsidiaryView(){
             if(globalThis.__customerRatesBannerTest.genericFailure) throw new Error('database unavailable')
             throw new MissingRatesError('USD/CAD rates are not derived through 2026-09-24')
           }
         `),
-      }
+      };
     }
-    if (specifier === '../../../lib/cash/core' && context.parentURL?.endsWith('/web/app/(app)/customers/view.ts')) {
-      return { shortCircuit: true, url: 'data:text/javascript,export async function resolveAsOf(){return "2026-09-24"}' }
+    if (
+      specifier === "../../../lib/cash/core" &&
+      context.parentURL?.endsWith("/web/app/(app)/customers/view.ts")
+    ) {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export async function resolveAsOf(){return "2026-09-24"}',
+      };
     }
-    if (specifier === '../../../lib/module-home/customers' && context.parentURL?.endsWith('/web/app/(app)/customers/view.ts')) {
-      return { shortCircuit: true, url: 'data:text/javascript,export async function customersHome(){globalThis.__customerRatesBannerTest.customerHomeCalls++;throw new Error("blocked figures must not load")}' }
+    if (
+      specifier === "../../../lib/module-home/customers" &&
+      context.parentURL?.endsWith("/web/app/(app)/customers/view.ts")
+    ) {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export async function customersHome(){globalThis.__customerRatesBannerTest.customerHomeCalls++;throw new Error("blocked figures must not load")}',
+      };
     }
-    if (specifier === '../../../lib/nav/resolve' && context.parentURL?.endsWith('/web/app/(app)/customers/view.ts')) {
-      return { shortCircuit: true, url: 'data:text/javascript,export async function resolveNav(){return []}' }
+    if (
+      specifier === "../../../lib/nav/resolve" &&
+      context.parentURL?.endsWith("/web/app/(app)/customers/view.ts")
+    ) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function resolveNav(){return []}",
+      };
     }
-    if (specifier === '../../../components/module-home/group-tabs' && context.parentURL?.endsWith('/web/app/(app)/customers/view.ts')) {
-      return { shortCircuit: true, url: 'data:text/javascript,export async function customerGroupTabs(){return []}' }
+    if (
+      specifier === "../../../components/module-home/group-tabs" &&
+      context.parentURL?.endsWith("/web/app/(app)/customers/view.ts")
+    ) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function customerGroupTabs(){return []}",
+      };
     }
-    if (specifier === '@/lib/money-server') {
-      return { shortCircuit: true, url: 'data:text/javascript,export async function getMoneyFormatter(){return {moneyCompact:(value)=>String(value)}}' }
+    if (specifier === "@/lib/money-server") {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function getMoneyFormatter(){return {moneyCompact:(value)=>String(value)}}",
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const { loadCustomers, customersSpec } = await import('./view')
+const { loadCustomers, customersSpec } = await import("./view");
 
-test('customer vitals retain five readable metrics with optional features disabled', async () => {
-  const base = await loadCustomers({})
+test("customer vitals retain five readable metrics with optional features disabled", async () => {
+  const base = await loadCustomers({});
   for (const crmEnabled of [false, true]) {
     for (const ordersEnabled of [false, true]) {
-      const data = { ...base, crmEnabled, ordersEnabled, arAllowed: true, partiesAllowed: true }
-      const grid = customersSpec(data).body.find((block) => block.kind === 'grid')
-      assert.ok(grid?.kind === 'grid')
-      const vitals = grid.blocks[0]
-      assert.ok(vitals?.kind === 'grid')
-      const visible = vitals.blocks.filter((block) => !block.when || resolveValue(block.when, data))
-      assert.equal(visible.length, 5, `CRM=${crmEnabled}, Orders=${ordersEnabled}`)
-      const unreadable = { ...data, arAllowed: false, crmEnabled: false, ordersEnabled: false }
-      const protectedGrid = customersSpec(unreadable).body.find((block) => block.kind === 'grid')
-      assert.ok(protectedGrid?.kind === 'grid')
-      const protectedVitals = protectedGrid.blocks[0]
-      assert.ok(protectedVitals?.kind === 'grid')
-      assert.equal(protectedVitals.blocks.filter((block) => !block.when || resolveValue(block.when, unreadable)).length, 1,
-        'without AR access only the customer count is readable')
+      const data = { ...base, crmEnabled, ordersEnabled, arAllowed: true, partiesAllowed: true };
+      const grid = customersSpec(data).body.find((block) => block.kind === "grid");
+      assert.ok(grid?.kind === "grid");
+      const vitals = grid.blocks[0];
+      assert.ok(vitals?.kind === "grid");
+      const visible = vitals.blocks.filter(
+        (block) => !block.when || resolveValue(block.when, data),
+      );
+      assert.equal(visible.length, 5, `CRM=${crmEnabled}, Orders=${ordersEnabled}`);
+      const unreadable = { ...data, arAllowed: false, crmEnabled: false, ordersEnabled: false };
+      const protectedGrid = customersSpec(unreadable).body.find((block) => block.kind === "grid");
+      assert.ok(protectedGrid?.kind === "grid");
+      const protectedVitals = protectedGrid.blocks[0];
+      assert.ok(protectedVitals?.kind === "grid");
+      assert.equal(
+        protectedVitals.blocks.filter(
+          (block) => !block.when || resolveValue(block.when, unreadable),
+        ).length,
+        1,
+        "without AR access only the customer count is readable",
+      );
     }
   }
-})
+});
 
-test('missing consolidated rates become a banner while figures fail closed', async () => {
-  state.genericFailure = false
-  state.customerHomeCalls = 0
-  const data = await loadCustomers({})
+test("missing consolidated rates become a banner while figures fail closed", async () => {
+  state.genericFailure = false;
+  state.customerHomeCalls = 0;
+  const data = await loadCustomers({});
   assert.deepEqual(data.ratesBlocked, {
-    code: 'rates-not-derived',
-    title: 'Exchange rates are missing',
-    description: 'USD/CAD rates are not derived through 2026-09-24',
-    deriveLabel: 'Derive rates',
-    deriveHref: '/close',
-  })
-  assert.equal(data.activeCustomersValue, '0')
-  assert.equal(data.arOutstanding, '0.0000')
-  assert.equal(state.customerHomeCalls, 0, 'blocked consolidation must not load unscoped figures')
+    code: "rates-not-derived",
+    title: "Exchange rates are missing",
+    description: "USD/CAD rates are not derived through 2026-09-24",
+    deriveLabel: "Derive rates",
+    deriveHref: "/close",
+  });
+  assert.equal(data.activeCustomersValue, "0");
+  assert.equal(data.arOutstanding, "0.0000");
+  assert.equal(state.customerHomeCalls, 0, "blocked consolidation must not load unscoped figures");
 
-  const notice = customersSpec(data).body.find((block) => block.kind === 'widget' && block.widget === 'empty-state')
-  assert.ok(notice && notice.kind === 'widget')
-  assert.equal(notice.props?.title, 'Exchange rates are missing')
-  assert.equal(notice.props?.description, data.ratesBlocked.description)
-  assert.deepEqual(notice.props?.actionProps, { href: '/close', label: 'Derive rates' })
-})
+  const notice = customersSpec(data).body.find(
+    (block) => block.kind === "widget" && block.widget === "empty-state",
+  );
+  assert.ok(notice && notice.kind === "widget");
+  assert.equal(notice.props?.title, "Exchange rates are missing");
+  assert.equal(notice.props?.description, data.ratesBlocked.description);
+  assert.deepEqual(notice.props?.actionProps, { href: "/close", label: "Derive rates" });
+});
 
-test('unexpected customer loader errors still reach the caller', async () => {
-  state.genericFailure = true
-  await assert.rejects(loadCustomers({}), /database unavailable/)
-})
+test("unexpected customer loader errors still reach the caller", async () => {
+  state.genericFailure = true;
+  await assert.rejects(loadCustomers({}), /database unavailable/);
+});

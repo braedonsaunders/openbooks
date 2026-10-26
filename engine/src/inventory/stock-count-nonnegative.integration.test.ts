@@ -17,68 +17,104 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
  */
 
 for (const counted of ["-1", "-0.0001"]) {
-  test(`recording ${counted} refuses before any line, audit, or stock write`, { skip: !DB }, async () => {
+  test(
+    `recording ${counted} refuses before any line, audit, or stock write`,
+    { skip: !DB },
+    async () => {
+      const org = await createScratchOrg();
+      try {
+        const { countId, lineId } = await openCountingLine(org);
+        const movementsBefore = (
+          await db.execute<{ n: string }>(
+            sql`
+        select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`,
+            "objects",
+          )
+        )[0]!.n;
+        const auditsBefore = (
+          await db.execute<{ n: string }>(
+            sql`
+        select count(*)::text as n from audit_log where org_id = ${org.orgId}`,
+            "objects",
+          )
+        )[0]!.n;
+        await assert.rejects(
+          recordCountedQuantity(org.orgId, null, { countId, lineId, countedQuantity: counted }),
+          (e: unknown) => {
+            assert.ok(
+              e instanceof InventoryError,
+              "a negative count must refuse as InventoryError (HTTP 422)",
+            );
+            assert.match((e as Error).message, /counted quantity cannot be negative/i);
+            assert.match((e as Error).message, /zero or more/i);
+            return true;
+          },
+        );
+        assert.equal(
+          (
+            await db.execute<{ q: string | null }>(
+              sql`
+          select counted_quantity::text as q from stock_count_lines
+           where org_id = ${org.orgId} and id = ${lineId}`,
+              "objects",
+            )
+          )[0]!.q,
+          null,
+          "the line keeps no observation",
+        );
+        assert.equal(
+          (
+            await db.execute<{ n: string }>(
+              sql`
+          select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`,
+              "objects",
+            )
+          )[0]!.n,
+          movementsBefore,
+          "no stock movement may be written",
+        );
+        assert.equal(
+          (
+            await db.execute<{ n: string }>(
+              sql`
+          select count(*)::text as n from audit_log where org_id = ${org.orgId}`,
+              "objects",
+            )
+          )[0]!.n,
+          auditsBefore,
+          "no audit row may be written",
+        );
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
+}
+
+test(
+  "storage refuses a negative counted_quantity even past the engine (0299)",
+  { skip: !DB },
+  async () => {
     const org = await createScratchOrg();
     try {
-      const { countId, lineId } = await openCountingLine(org);
-      const movementsBefore = (await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`, "objects"))[0]!.n;
-      const auditsBefore = (await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from audit_log where org_id = ${org.orgId}`, "objects"))[0]!.n;
+      const { lineId } = await openCountingLine(org);
+      // The constraint name surfaces on the driver's cause, not on the
+      // Drizzle wrapper message, so walk the chain like the BOM tests do.
       await assert.rejects(
-        recordCountedQuantity(org.orgId, null, { countId, lineId, countedQuantity: counted }),
+        db.execute(sql`
+        update stock_count_lines set counted_quantity = '-1'
+         where org_id = ${org.orgId} and id = ${lineId}`),
         (e: unknown) => {
-          assert.ok(e instanceof InventoryError, "a negative count must refuse as InventoryError (HTTP 422)");
-          assert.match((e as Error).message, /counted quantity cannot be negative/i);
-          assert.match((e as Error).message, /zero or more/i);
-          return true;
+          let current: unknown = e;
+          while (current instanceof Error) {
+            if (/stock_count_lines_counted_nonnegative/.test(current.message)) return true;
+            current = (current as Error & { cause?: unknown }).cause;
+          }
+          assert.fail("the CHECK must refuse a direct negative write by constraint name");
         },
-      );
-      assert.equal(
-        (await db.execute<{ q: string | null }>(sql`
-          select counted_quantity::text as q from stock_count_lines
-           where org_id = ${org.orgId} and id = ${lineId}`, "objects"))[0]!.q,
-        null,
-        "the line keeps no observation",
-      );
-      assert.equal(
-        (await db.execute<{ n: string }>(sql`
-          select count(*)::text as n from inventory_movements where org_id = ${org.orgId}`, "objects"))[0]!.n,
-        movementsBefore,
-        "no stock movement may be written",
-      );
-      assert.equal(
-        (await db.execute<{ n: string }>(sql`
-          select count(*)::text as n from audit_log where org_id = ${org.orgId}`, "objects"))[0]!.n,
-        auditsBefore,
-        "no audit row may be written",
       );
     } finally {
       await dropScratchOrg(org.orgId);
     }
-  });
-}
-
-test("storage refuses a negative counted_quantity even past the engine (0299)", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const { lineId } = await openCountingLine(org);
-    // The constraint name surfaces on the driver's cause, not on the
-    // Drizzle wrapper message, so walk the chain like the BOM tests do.
-    await assert.rejects(
-      db.execute(sql`
-        update stock_count_lines set counted_quantity = '-1'
-         where org_id = ${org.orgId} and id = ${lineId}`),
-      (e: unknown) => {
-        let current: unknown = e;
-        while (current instanceof Error) {
-          if (/stock_count_lines_counted_nonnegative/.test(current.message)) return true;
-          current = (current as Error & { cause?: unknown }).cause;
-        }
-        assert.fail("the CHECK must refuse a direct negative write by constraint name");
-      },
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);

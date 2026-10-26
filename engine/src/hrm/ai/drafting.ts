@@ -95,7 +95,11 @@ async function assertDraftFeature(exec: SqlExecutor, orgId: string): Promise<voi
 }
 
 async function requirePerm(
-  exec: SqlExecutor, orgId: string, actorId: string, perm: string, remedy: string,
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  perm: string,
+  remedy: string,
 ): Promise<void> {
   if (await actorHasPermission(exec, orgId, actorId, perm)) return;
   throw aiSubjectRefused(`drafting needs ${perm}`, remedy);
@@ -112,9 +116,10 @@ async function requireRecruitingSubject(
 ): Promise<string> {
   await requirePerm(exec, orgId, actorId, permission, remedy);
   try {
-    const subject = permission === "hrm.recruiting.manage"
-      ? await requireHrmRecruitingManage(exec, orgId, actorId, requisitionId)
-      : await requireHrmRecruitingRead(exec, orgId, actorId, requisitionId);
+    const subject =
+      permission === "hrm.recruiting.manage"
+        ? await requireHrmRecruitingManage(exec, orgId, actorId, requisitionId)
+        : await requireHrmRecruitingRead(exec, orgId, actorId, requisitionId);
     return subject.employerSubsidiaryId;
   } catch (error) {
     if (error instanceof HrmAuthorizationError) {
@@ -125,14 +130,26 @@ async function requireRecruitingSubject(
 }
 
 async function requireProcessSubject(
-  exec: SqlExecutor, orgId: string, actorId: string, employmentId: string,
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
 ): Promise<void> {
-  await requirePerm(exec, orgId, actorId, "hrm.process.read", "ask an HR administrator to draft this onboarding plan");
+  await requirePerm(
+    exec,
+    orgId,
+    actorId,
+    "hrm.process.read",
+    "ask an HR administrator to draft this onboarding plan",
+  );
   try {
     await requireHrmProcessRead(exec, orgId, actorId, employmentId);
   } catch (error) {
     if (error instanceof HrmAuthorizationError) {
-      throw new AiRailsError("ai_subject_missing", "onboarding subject is missing, inactive or outside your organization and subsidiary scope — reload and retry");
+      throw new AiRailsError(
+        "ai_subject_missing",
+        "onboarding subject is missing, inactive or outside your organization and subsidiary scope — reload and retry",
+      );
     }
     throw error;
   }
@@ -150,11 +167,21 @@ function excerptOf(row: Record<string, unknown>, fields: readonly string[], max 
 }
 
 async function collectJobDescription(
-  exec: SqlExecutor, orgId: string, actorId: string, requisitionId: string,
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  requisitionId: string,
 ): Promise<DraftSource[]> {
-  const employerSubsidiaryId = await requireRecruitingSubject(exec, orgId, actorId, requisitionId, "hrm.recruiting.read",
-    "ask a recruiter or hiring manager to draft this description");
-  const rows = await exec.execute<Record<string, unknown>>(sql`
+  const employerSubsidiaryId = await requireRecruitingSubject(
+    exec,
+    orgId,
+    actorId,
+    requisitionId,
+    "hrm.recruiting.read",
+    "ask a recruiter or hiring manager to draft this description",
+  );
+  const rows = await exec.execute<Record<string, unknown>>(
+    sql`
     select r.id::text as id, r.title, r.employment_kind as "employmentKind",
            r.compensation_min::text as "compensationMin",
            r.compensation_max::text as "compensationMax",
@@ -163,7 +190,9 @@ async function collectJobDescription(
            r.description, r.position_id::text as "positionId"
       from hrm_requisitions r
      where r.org_id = ${orgId}::uuid and r.id = ${requisitionId}::uuid
-       and r.employer_subsidiary_id = ${employerSubsidiaryId}::uuid`, "objects");
+       and r.employer_subsidiary_id = ${employerSubsidiaryId}::uuid`,
+    "objects",
+  );
   const req = rows[0];
   if (!req) {
     throw new AiRailsError(
@@ -171,20 +200,35 @@ async function collectJobDescription(
       "recruiting subject is missing or outside your organization and subsidiary scope — reload and retry",
     );
   }
-  const sources: DraftSource[] = [{
-    kind: "hrm_requisition",
-    id: String(req.id),
-    excerpt: excerptOf(req, ["title", "employmentKind", "compensationMin", "compensationMax", "compensationCurrency", "compensationBasis", "description"]),
-  }];
+  const sources: DraftSource[] = [
+    {
+      kind: "hrm_requisition",
+      id: String(req.id),
+      excerpt: excerptOf(req, [
+        "title",
+        "employmentKind",
+        "compensationMin",
+        "compensationMax",
+        "compensationCurrency",
+        "compensationBasis",
+        "description",
+      ]),
+    },
+  ];
   if (req.positionId) {
-    const pos = (await exec.execute<Record<string, unknown>>(sql`
+    const pos = (
+      await exec.execute<Record<string, unknown>>(
+        sql`
       select v.title, v.job_grade as "jobGrade"
         from position_versions v
        where v.org_id = ${orgId}::uuid and v.position_id = ${String(req.positionId)}::uuid
          and v.recorded_until is null
          and v.employer_subsidiary_id = ${employerSubsidiaryId}::uuid
        order by v.version_no desc
-       limit 1`, "objects"))[0];
+       limit 1`,
+        "objects",
+      )
+    )[0];
     if (!pos) {
       throw new AiRailsError(
         "ai_subject_missing",
@@ -208,16 +252,19 @@ type ReviewRow = {
   reviewerPartyId: string;
   kind: string;
   status: string;
-}
+};
 
 async function loadReview(exec: SqlExecutor, orgId: string, reviewId: string): Promise<ReviewRow> {
-  const rows = await exec.execute<ReviewRow>(sql`
+  const rows = await exec.execute<ReviewRow>(
+    sql`
     select id::text as id, cycle_id::text as "cycleId",
            employment_id::text as "employmentId",
            subject_party_id::text as "subjectPartyId",
            reviewer_party_id::text as "reviewerPartyId", kind, status
       from hrm_reviews
-     where org_id = ${orgId}::uuid and id = ${reviewId}::uuid`, "objects");
+     where org_id = ${orgId}::uuid and id = ${reviewId}::uuid`,
+    "objects",
+  );
   const review = rows[0];
   if (!review) {
     throw new AiRailsError(
@@ -229,7 +276,11 @@ async function loadReview(exec: SqlExecutor, orgId: string, reviewId: string): P
 }
 
 async function collectReview(
-  exec: SqlExecutor, orgId: string, actorId: string, reviewId: string, self: boolean,
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  reviewId: string,
+  self: boolean,
 ): Promise<DraftSource[]> {
   const partyId = await actorPartyOf(exec, orgId, actorId);
   const review = await loadReview(exec, orgId, reviewId);
@@ -249,16 +300,23 @@ async function collectReview(
       );
     }
   } else {
-    await requirePerm(exec, orgId, actorId, "hrm.performance.manage",
-      "only the manager (or HR) drafts this review — ask them");
+    await requirePerm(
+      exec,
+      orgId,
+      actorId,
+      "hrm.performance.manage",
+      "only the manager (or HR) drafts this review — ask them",
+    );
     if (review.kind !== "manager") {
       throw new AiRailsError(
         "ai_wrong_kind",
         `review ${reviewId} is a ${review.kind} review, not a manager review — draft it from its own form`,
       );
     }
-    if (review.reviewerPartyId !== partyId
-      && !(await actorHasPermission(exec, orgId, actorId, "hrm.retention.read"))) {
+    if (
+      review.reviewerPartyId !== partyId &&
+      !(await actorHasPermission(exec, orgId, actorId, "hrm.retention.read"))
+    ) {
       throw aiSubjectRefused(
         "you are not this review's manager",
         "ask the assigned manager or HR to draft this review",
@@ -270,11 +328,16 @@ async function collectReview(
     // applies. An out-of-scope draft refuses whole with the remedy, never
     // a redacted half-draft; a null employer fails closed.
     const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
-    const employer = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+    const employer = (
+      await exec.execute<{ employerSubsidiaryId: string | null }>(
+        sql`
       select employer_subsidiary_id as "employerSubsidiaryId"
         from worker_employments
        where org_id = ${orgId} and id = ${review.employmentId}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!subsidiaryScopeAllows(allowed, employer?.employerSubsidiaryId)) {
       throw aiSubjectRefused(
         "this review sits outside your allowed subsidiaries",
@@ -282,30 +345,49 @@ async function collectReview(
       );
     }
   }
-  const sources: DraftSource[] = [{
-    kind: "hrm_review",
-    id: review.id,
-    excerpt: `cycle review (${review.kind}, status ${review.status})`,
-  }];
-  const cycle = (await exec.execute<Record<string, unknown>>(sql`
+  const sources: DraftSource[] = [
+    {
+      kind: "hrm_review",
+      id: review.id,
+      excerpt: `cycle review (${review.kind}, status ${review.status})`,
+    },
+  ];
+  const cycle = (
+    await exec.execute<Record<string, unknown>>(
+      sql`
     select id::text as id, name, period_start_on::text as "periodStart",
            period_end_on::text as "periodEnd"
       from hrm_review_cycles
-     where org_id = ${orgId}::uuid and id = ${review.cycleId}::uuid`, "objects"))[0];
+     where org_id = ${orgId}::uuid and id = ${review.cycleId}::uuid`,
+      "objects",
+    )
+  )[0];
   if (cycle) {
-    sources.push({ kind: "hrm_review_cycle", id: String(cycle.id), excerpt: excerptOf(cycle, ["name", "periodStart", "periodEnd"]) });
+    sources.push({
+      kind: "hrm_review_cycle",
+      id: String(cycle.id),
+      excerpt: excerptOf(cycle, ["name", "periodStart", "periodEnd"]),
+    });
   }
-  const goals = await exec.execute<Record<string, unknown>>(sql`
+  const goals = await exec.execute<Record<string, unknown>>(
+    sql`
     select id::text as id, title, status, progress_percent as "progressPercent"
       from hrm_goals
      where org_id = ${orgId}::uuid and employment_id = ${review.employmentId}::uuid
        and (cycle_id = ${review.cycleId}::uuid or cycle_id is null)
      order by id
-     limit 20`, "objects");
+     limit 20`,
+    "objects",
+  );
   for (const g of goals) {
-    sources.push({ kind: "hrm_goal", id: String(g.id), excerpt: excerptOf(g, ["title", "status", "progressPercent"]) });
+    sources.push({
+      kind: "hrm_goal",
+      id: String(g.id),
+      excerpt: excerptOf(g, ["title", "status", "progressPercent"]),
+    });
   }
-  const priors = await exec.execute<Record<string, unknown>>(sql`
+  const priors = await exec.execute<Record<string, unknown>>(
+    sql`
     select r.id::text as id, r.calibrated_rating::text as "calibratedRating",
            r.overall_rating::text as "overallRating", c.name as cycle
       from hrm_reviews r
@@ -314,57 +396,92 @@ async function collectReview(
        and r.id <> ${review.id}::uuid and r.shared_at is not null
        and r.calibrated_rating is not null
      order by c.period_end_on desc
-     limit 3`, "objects");
+     limit 3`,
+    "objects",
+  );
   for (const p of priors) {
-    sources.push({ kind: "hrm_review", id: String(p.id), excerpt: excerptOf(p, ["cycle", "overallRating", "calibratedRating"]) });
+    sources.push({
+      kind: "hrm_review",
+      id: String(p.id),
+      excerpt: excerptOf(p, ["cycle", "overallRating", "calibratedRating"]),
+    });
   }
   return sources;
 }
 
 async function collectOnboardingPlan(
-  exec: SqlExecutor, orgId: string, actorId: string, subjectId: string,
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  subjectId: string,
 ): Promise<DraftSource[]> {
   // Resolve only the process's template and employment identity first; do
   // not collect template steps or precedent evidence until its scope passes.
   let templateId = subjectId;
-  const process = (await exec.execute<{ templateId: string; employmentId: string }>(sql`
+  const process = (
+    await exec.execute<{ templateId: string; employmentId: string }>(
+      sql`
     select template_id::text as "templateId", employment_id::text as "employmentId"
-      from hrm_processes where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`, "objects"))[0];
+      from hrm_processes where org_id = ${orgId}::uuid and id = ${subjectId}::uuid`,
+      "objects",
+    )
+  )[0];
   if (process) {
     await requireProcessSubject(exec, orgId, actorId, process.employmentId);
     templateId = process.templateId;
   } else {
-    await requirePerm(exec, orgId, actorId, "hrm.process.read",
-      "ask an HR administrator to draft this onboarding plan");
+    await requirePerm(
+      exec,
+      orgId,
+      actorId,
+      "hrm.process.read",
+      "ask an HR administrator to draft this onboarding plan",
+    );
   }
-  const template = (await exec.execute<Record<string, unknown>>(sql`
+  const template =
+    (
+      await exec.execute<Record<string, unknown>>(
+        sql`
     select id::text as id, kind, name
       from hrm_process_templates
-     where org_id = ${orgId}::uuid and id = ${templateId}::uuid and is_active`, "objects"))[0] ?? null;
+     where org_id = ${orgId}::uuid and id = ${templateId}::uuid and is_active`,
+        "objects",
+      )
+    )[0] ?? null;
   if (!template) {
     throw new AiRailsError(
       "ai_subject_missing",
       "onboarding subject is missing, inactive or outside your organization and subsidiary scope — reload and retry",
     );
   }
-  const sources: DraftSource[] = [{
-    kind: "hrm_process_template",
-    id: String(template.id),
-    excerpt: excerptOf(template, ["kind", "name"]),
-  }];
-  const steps = await exec.execute<Record<string, unknown>>(sql`
+  const sources: DraftSource[] = [
+    {
+      kind: "hrm_process_template",
+      id: String(template.id),
+      excerpt: excerptOf(template, ["kind", "name"]),
+    },
+  ];
+  const steps = await exec.execute<Record<string, unknown>>(
+    sql`
     select id::text as id, title, position
       from hrm_process_template_steps
      where org_id = ${orgId}::uuid and template_id = ${templateId}::uuid
      order by position
-     limit 30`, "objects");
+     limit 30`,
+    "objects",
+  );
   for (const s of steps) {
-    sources.push({ kind: "hrm_process_template_step", id: String(s.id), excerpt: excerptOf(s, ["title", "position"]) });
+    sources.push({
+      kind: "hrm_process_template_step",
+      id: String(s.id),
+      excerpt: excerptOf(s, ["title", "position"]),
+    });
   }
   // Precedent: the last three completed processes from the same template,
   // so the plan learns from what actually happened.
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
-  const priors = await exec.execute<Record<string, unknown>>(sql`
+  const priors = await exec.execute<Record<string, unknown>>(
+    sql`
     select p.id::text as id, p.employment_id::text as "employmentId",
            p.effective_date::text as "effectiveDate", p.completed_at::text as "completedAt"
       from hrm_processes p
@@ -373,28 +490,53 @@ async function collectOnboardingPlan(
        and p.status = 'completed'
        ${allowed === null ? sql`` : sql`and ${employerSubsidiaryScope(allowed, "e.employer_subsidiary_id")}`}
      order by p.completed_at desc
-     limit 3`, "objects");
+     limit 3`,
+    "objects",
+  );
   for (const p of priors) {
-    sources.push({ kind: "hrm_process", id: String(p.id), excerpt: excerptOf(p, ["employmentId", "effectiveDate", "completedAt"]) });
+    sources.push({
+      kind: "hrm_process",
+      id: String(p.id),
+      excerpt: excerptOf(p, ["employmentId", "effectiveDate", "completedAt"]),
+    });
   }
   return sources;
 }
 
 async function collectOfferClauses(
-  exec: SqlExecutor, orgId: string, actorId: string, offerId: string,
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  offerId: string,
 ): Promise<DraftSource[]> {
-  const reference = (await exec.execute<{ requisitionId: string }>(sql`
+  const reference = (
+    await exec.execute<{ requisitionId: string }>(
+      sql`
     select a.requisition_id::text as "requisitionId"
       from hrm_offers o
       join hrm_applications a on a.org_id = o.org_id and a.id = o.application_id
-     where o.org_id = ${orgId}::uuid and o.id = ${offerId}::uuid`, "objects"))[0];
+     where o.org_id = ${orgId}::uuid and o.id = ${offerId}::uuid`,
+      "objects",
+    )
+  )[0];
   if (!reference) {
-    throw new AiRailsError("ai_subject_missing", "offer is missing or outside your organization and subsidiary scope — reload and retry");
+    throw new AiRailsError(
+      "ai_subject_missing",
+      "offer is missing or outside your organization and subsidiary scope — reload and retry",
+    );
   }
-  const employerSubsidiaryId = await requireRecruitingSubject(exec, orgId, actorId, reference.requisitionId, "hrm.recruiting.manage",
+  const employerSubsidiaryId = await requireRecruitingSubject(
+    exec,
+    orgId,
+    actorId,
+    reference.requisitionId,
+    "hrm.recruiting.manage",
     "only the hiring team drafts offer clauses — ask a recruiter or hiring manager",
-    "offer is missing or outside your organization and subsidiary scope — reload and retry");
-  const offer = (await exec.execute<Record<string, unknown>>(sql`
+    "offer is missing or outside your organization and subsidiary scope — reload and retry",
+  );
+  const offer = (
+    await exec.execute<Record<string, unknown>>(
+      sql`
     select id::text as id, job_title as "jobTitle",
            employment_kind as "employmentKind",
            proposed_start_on::text as "proposedStart",
@@ -403,19 +545,33 @@ async function collectOfferClauses(
            compensation_basis as "compensationBasis"
       from hrm_offers
      where org_id = ${orgId}::uuid and id = ${offerId}::uuid
-       and employer_subsidiary_id = ${employerSubsidiaryId}::uuid`, "objects"))[0];
+       and employer_subsidiary_id = ${employerSubsidiaryId}::uuid`,
+      "objects",
+    )
+  )[0];
   if (!offer) {
     throw new AiRailsError(
       "ai_subject_missing",
       "offer is missing or outside your organization and subsidiary scope — reload and retry",
     );
   }
-  const sources: DraftSource[] = [{
-    kind: "hrm_offer",
-    id: String(offer.id),
-    excerpt: excerptOf(offer, ["jobTitle", "employmentKind", "proposedStart", "compensationAmount", "compensationCurrency", "compensationBasis"]),
-  }];
-  const band = (await exec.execute<Record<string, unknown>>(sql`
+  const sources: DraftSource[] = [
+    {
+      kind: "hrm_offer",
+      id: String(offer.id),
+      excerpt: excerptOf(offer, [
+        "jobTitle",
+        "employmentKind",
+        "proposedStart",
+        "compensationAmount",
+        "compensationCurrency",
+        "compensationBasis",
+      ]),
+    },
+  ];
+  const band = (
+    await exec.execute<Record<string, unknown>>(
+      sql`
     select id::text as id, min::text as min, target::text as target,
            max::text as max, currency, basis
       from pay_bands
@@ -425,9 +581,16 @@ async function collectOfferClauses(
        and min <= ${String(offer.compensationAmount)}::numeric
        and max >= ${String(offer.compensationAmount)}::numeric
      order by id
-     limit 1`, "objects"))[0];
+     limit 1`,
+      "objects",
+    )
+  )[0];
   if (band) {
-    sources.push({ kind: "pay_band", id: String(band.id), excerpt: excerptOf(band, ["min", "target", "max", "currency", "basis"]) });
+    sources.push({
+      kind: "pay_band",
+      id: String(band.id),
+      excerpt: excerptOf(band, ["min", "target", "max", "currency", "basis"]),
+    });
   }
   return sources;
 }
@@ -469,15 +632,16 @@ export async function draftFromEvidence(
     );
   }
   await assertDraftFeature(exec, orgId);
-  const sources = kind === "job_description"
-    ? await collectJobDescription(exec, orgId, actorId, subjectId)
-    : kind === "review_manager"
-      ? await collectReview(exec, orgId, actorId, subjectId, false)
-      : kind === "review_self"
-        ? await collectReview(exec, orgId, actorId, subjectId, true)
-        : kind === "onboarding_plan"
-          ? await collectOnboardingPlan(exec, orgId, actorId, subjectId)
-          : await collectOfferClauses(exec, orgId, actorId, subjectId);
+  const sources =
+    kind === "job_description"
+      ? await collectJobDescription(exec, orgId, actorId, subjectId)
+      : kind === "review_manager"
+        ? await collectReview(exec, orgId, actorId, subjectId, false)
+        : kind === "review_self"
+          ? await collectReview(exec, orgId, actorId, subjectId, true)
+          : kind === "onboarding_plan"
+            ? await collectOnboardingPlan(exec, orgId, actorId, subjectId)
+            : await collectOfferClauses(exec, orgId, actorId, subjectId);
   const text = renderOutline(kind, sources);
   const settings = await loadAiRailsSettings(exec, orgId);
   const biasFlags = flagBiasTerms(text, settings.biasTerms);

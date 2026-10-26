@@ -7,7 +7,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
 
@@ -26,11 +26,15 @@ export const billingRequests = pgTable(
     orgId: orgRef(),
     projectId: uuid("project_id").notNull(),
     requestNumber: text("request_number").notNull(),
-    invoiceType: text("invoice_type", { enum: ["progress", "final"] }).notNull().default("progress"),
+    invoiceType: text("invoice_type", { enum: ["progress", "final"] })
+      .notNull()
+      .default("progress"),
     /** How the invoice lines are derived. */
     basis: text("basis", {
       enum: ["date_range", "draw_amount", "time_selection", "milestone", "field_ticket"],
-    }).notNull().default("date_range"),
+    })
+      .notNull()
+      .default("date_range"),
     drawAmount: money("draw_amount"),
     startDate: date("start_date"),
     cutoffDate: date("cutoff_date"),
@@ -50,8 +54,12 @@ export const billingRequests = pgTable(
         "purchases",
         "purchases_shop_time",
       ],
-    }).notNull().default("none"),
-    status: text("status", { enum: ["open", "invoiced", "closed", "cancelled"] }).notNull().default("open"),
+    })
+      .notNull()
+      .default("none"),
+    status: text("status", { enum: ["open", "invoiced", "closed", "cancelled"] })
+      .notNull()
+      .default("open"),
     /** The generated customer_invoice document (null until created). */
     invoiceDocumentId: uuid("invoice_document_id"),
     /** Selected time-entry ids for basis='time_selection' (else null). */

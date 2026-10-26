@@ -18,251 +18,506 @@ import { loadFundCoverageTieout, loadNonprofitStatements } from "./statements.ts
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-test("nonprofit statements observe posted balances, gross releases, and tied functional expense", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const actorId = await withBypass(() => createScratchUser(org.orgId, "Statement Controller", "admin"));
-    installEngineSeams();
-    const departmentIds = [randomUUID(), randomUUID()];
-    await withOrgContext(org.orgId, async () => {
-      for (const [index, id] of departmentIds.entries()) {
-        const made = await db.execute<{ id: string }>(sql`
+test(
+  "nonprofit statements observe posted balances, gross releases, and tied functional expense",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Statement Controller", "admin"),
+      );
+      installEngineSeams();
+      const departmentIds = [randomUUID(), randomUUID()];
+      await withOrgContext(org.orgId, async () => {
+        for (const [index, id] of departmentIds.entries()) {
+          const made = await db.execute<{ id: string }>(
+            sql`
           insert into departments (id, org_id, name, is_active, custom)
           values (${id}, ${org.orgId}, ${index === 0 ? "Program" : "Fundraising"}, true, '{}'::jsonb)
           returning id
-        `, "objects");
-        assert.equal(made.length, 1);
-      }
-    });
-    await assert.rejects(setFunctionalMapping({
-      orgId: org.orgId, departmentId: departmentIds[0], functionKey: "program",
-      effectiveFrom: org.date, actorId, reason: "Initial classification",
-    }), (error: unknown) => error instanceof NonprofitError && error.code === "feature_off" &&
-      error.message.includes("functionalExpenses") && error.remedy.includes("Company Settings → Features"));
+        `,
+            "objects",
+          );
+          assert.equal(made.length, 1);
+        }
+      });
+      await assert.rejects(
+        setFunctionalMapping({
+          orgId: org.orgId,
+          departmentId: departmentIds[0],
+          functionKey: "program",
+          effectiveFrom: org.date,
+          actorId,
+          reason: "Initial classification",
+        }),
+        (error: unknown) =>
+          error instanceof NonprofitError &&
+          error.code === "feature_off" &&
+          error.message.includes("functionalExpenses") &&
+          error.remedy.includes("Company Settings → Features"),
+      );
 
-    await withOrgContext(org.orgId, async () => {
-      const enabled = await db.execute<{ id: string }>(sql`
+      await withOrgContext(org.orgId, async () => {
+        const enabled = await db.execute<{ id: string }>(
+          sql`
         update orgs set settings = jsonb_set(
           coalesce(settings, '{}'::jsonb), '{features}',
           coalesce(settings->'features', '{}'::jsonb) ||
             '{"nonprofit":true,"fundAccounting":true,"functionalExpenses":true,"grantManagement":true}'::jsonb,
           true
         ) where id = ${org.orgId} returning id
-      `, "objects");
-      assert.equal(enabled.length, 1);
-    });
-    const operating = await provisionFundAccounting({
-      orgId: org.orgId,
-      defaultFund: { code: "UNRESTRICTED", name: "Unrestricted Fund" },
-      classifications: { UNRESTRICTED: { kind: "operating", restrictionClass: "without_donor_restrictions" } },
-      actorId,
-    });
-    const restricted = await createFund({
-      orgId: org.orgId, code: "COMMUNITY", name: "Community Fund", kind: "restricted",
-      restrictionClass: "with_donor_restrictions", actorId,
-    });
-    await setFramework({ orgId: org.orgId, framework: "us_asc958", actorId, reason: "Adopt nonprofit reporting" });
-    const interfundAccount = (name: string, type: "asset_current_other" | "liability_current_other") =>
-      withOrgContext(org.orgId, async () => {
-        const account = await db.execute<{ id: string }>(sql`
+      `,
+          "objects",
+        );
+        assert.equal(enabled.length, 1);
+      });
+      const operating = await provisionFundAccounting({
+        orgId: org.orgId,
+        defaultFund: { code: "UNRESTRICTED", name: "Unrestricted Fund" },
+        classifications: {
+          UNRESTRICTED: { kind: "operating", restrictionClass: "without_donor_restrictions" },
+        },
+        actorId,
+      });
+      const restricted = await createFund({
+        orgId: org.orgId,
+        code: "COMMUNITY",
+        name: "Community Fund",
+        kind: "restricted",
+        restrictionClass: "with_donor_restrictions",
+        actorId,
+      });
+      await setFramework({
+        orgId: org.orgId,
+        framework: "us_asc958",
+        actorId,
+        reason: "Adopt nonprofit reporting",
+      });
+      const interfundAccount = (
+        name: string,
+        type: "asset_current_other" | "liability_current_other",
+      ) =>
+        withOrgContext(org.orgId, async () => {
+          const account = await db.execute<{ id: string }>(
+            sql`
           insert into accounts (org_id, number, name, type, is_summary, is_active, required_dimensions, custom, created_by, updated_by)
           values (${org.orgId}, ${`IF-${randomUUID().slice(0, 8)}`}, ${name}, ${type}, false, true, '[]'::jsonb, '{}'::jsonb, ${actorId}, ${actorId})
           returning id
-        `, "objects");
-        assert.equal(account.length, 1);
-        return account[0]!.id;
+        `,
+            "objects",
+          );
+          assert.equal(account.length, 1);
+          return account[0]!.id;
+        });
+      const dueFromFundsAccountId = await interfundAccount(
+        "Due from other funds",
+        "asset_current_other",
+      );
+      const dueToFundsAccountId = await interfundAccount(
+        "Due to other funds",
+        "liability_current_other",
+      );
+      await setFundPair({
+        orgId: org.orgId,
+        fromFundId: operating.defaultFundId,
+        toFundId: restricted.id,
+        dueFromAccountId: dueFromFundsAccountId,
+        dueToAccountId: org.accounts.ap,
+        actorId,
+        reason: "Settle interfund balances for statement fixtures",
       });
-    const dueFromFundsAccountId = await interfundAccount("Due from other funds", "asset_current_other");
-    const dueToFundsAccountId = await interfundAccount("Due to other funds", "liability_current_other");
-    await setFundPair({
-      orgId: org.orgId, fromFundId: operating.defaultFundId, toFundId: restricted.id,
-      dueFromAccountId: dueFromFundsAccountId, dueToAccountId: org.accounts.ap, actorId,
-      reason: "Settle interfund balances for statement fixtures",
-    });
-    await assert.rejects(
-      setFundPair({ orgId: org.orgId, fromFundId: operating.defaultFundId, toFundId: restricted.id, dueFromAccountId: dueFromFundsAccountId, dueToAccountId: org.accounts.ap, actorId, reason: "   " }),
-      (error: unknown) => (error as { code?: string }).code === "fund_pair_reason_required",
-    );
-    await setFundPair({ orgId: org.orgId, fromFundId: operating.defaultFundId, toFundId: restricted.id, dueFromAccountId: dueFromFundsAccountId, dueToAccountId: dueToFundsAccountId, actorId, reason: "Rotate the settlement account" });
-    const pairAudit = await withOrgContext(org.orgId, () => db.execute<{ action: string; changes: string }>(sql`
-      select action, changes::text as changes from audit_log where org_id = ${org.orgId} and table_name = 'fund_pairs' order by id desc limit 1`, "objects"));
-    const pairChanges = JSON.parse(pairAudit[0]!.changes) as { before: { due_to_account_id: string } | null; after: { due_to_account_id: string }; reason: string };
-    assert.equal(pairAudit[0]?.action, "update");
-    assert.equal(pairChanges.reason, "Rotate the settlement account");
-    assert.ok(pairChanges.before && pairChanges.before.due_to_account_id !== pairChanges.after.due_to_account_id);
-    for (const [departmentId, functionKey] of [
-      [departmentIds[0]!, "program"], [departmentIds[1]!, "fundraising"],
-    ] as const) {
-      await setFunctionalMapping({
-        orgId: org.orgId, departmentId, functionKey, effectiveFrom: org.date,
-        programKey: functionKey === "program" ? "food_access" : null,
-        actorId, reason: "Classify shared occupancy expense",
+      await assert.rejects(
+        setFundPair({
+          orgId: org.orgId,
+          fromFundId: operating.defaultFundId,
+          toFundId: restricted.id,
+          dueFromAccountId: dueFromFundsAccountId,
+          dueToAccountId: org.accounts.ap,
+          actorId,
+          reason: "   ",
+        }),
+        (error: unknown) => (error as { code?: string }).code === "fund_pair_reason_required",
+      );
+      await setFundPair({
+        orgId: org.orgId,
+        fromFundId: operating.defaultFundId,
+        toFundId: restricted.id,
+        dueFromAccountId: dueFromFundsAccountId,
+        dueToAccountId: dueToFundsAccountId,
+        actorId,
+        reason: "Rotate the settlement account",
       });
-    }
+      const pairAudit = await withOrgContext(org.orgId, () =>
+        db.execute<{ action: string; changes: string }>(
+          sql`
+      select action, changes::text as changes from audit_log where org_id = ${org.orgId} and table_name = 'fund_pairs' order by id desc limit 1`,
+          "objects",
+        ),
+      );
+      const pairChanges = JSON.parse(pairAudit[0]!.changes) as {
+        before: { due_to_account_id: string } | null;
+        after: { due_to_account_id: string };
+        reason: string;
+      };
+      assert.equal(pairAudit[0]?.action, "update");
+      assert.equal(pairChanges.reason, "Rotate the settlement account");
+      assert.ok(
+        pairChanges.before &&
+          pairChanges.before.due_to_account_id !== pairChanges.after.due_to_account_id,
+      );
+      for (const [departmentId, functionKey] of [
+        [departmentIds[0]!, "program"],
+        [departmentIds[1]!, "fundraising"],
+      ] as const) {
+        await setFunctionalMapping({
+          orgId: org.orgId,
+          departmentId,
+          functionKey,
+          effectiveFrom: org.date,
+          programKey: functionKey === "program" ? "food_access" : null,
+          actorId,
+          reason: "Classify shared occupancy expense",
+        });
+      }
 
-    await withOrgTransaction(org.orgId, () => postEntry(db, {
-      orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
-      entryNumber: `GIFT-${randomUUID()}`, postingDate: org.date, periodId: org.periodId,
-      currency: "CAD", actorId, origin: "gift", memo: "Restricted community gift",
-      lines: [
-        { accountId: org.accounts.bank, amount: "100.0000", extraDims: { fund: restricted.id } },
-        { accountId: org.accounts.revenue, amount: "-100.0000", extraDims: { fund: restricted.id } },
-      ],
-    }));
-    const groupId = await withOrgContext(org.orgId, async () => {
-      const group = await db.execute<{ id: string }>(sql`
+      await withOrgTransaction(org.orgId, () =>
+        postEntry(db, {
+          orgId: org.orgId,
+          bookId: org.bookId,
+          subsidiaryId: org.subsidiaryId,
+          entryNumber: `GIFT-${randomUUID()}`,
+          postingDate: org.date,
+          periodId: org.periodId,
+          currency: "CAD",
+          actorId,
+          origin: "gift",
+          memo: "Restricted community gift",
+          lines: [
+            {
+              accountId: org.accounts.bank,
+              amount: "100.0000",
+              extraDims: { fund: restricted.id },
+            },
+            {
+              accountId: org.accounts.revenue,
+              amount: "-100.0000",
+              extraDims: { fund: restricted.id },
+            },
+          ],
+        }),
+      );
+      const groupId = await withOrgContext(org.orgId, async () => {
+        const group = await db.execute<{ id: string }>(
+          sql`
         insert into account_groups (org_id, dimension, key, name, match, is_catch_all, is_active, created_by, updated_by)
         values (${org.orgId}, 'grant_allowable_costs', 'grant_costs', 'Grant Allowable Costs', '{}'::jsonb, false, true, ${actorId}, ${actorId})
         returning id
-      `, "objects");
-      assert.equal(group.length, 1);
-      const member = await db.execute<{ id: string }>(sql`
+      `,
+          "objects",
+        );
+        assert.equal(group.length, 1);
+        const member = await db.execute<{ id: string }>(
+          sql`
         insert into account_group_members (org_id, group_id, account_id, dimension, created_by, updated_by)
         values (${org.orgId}, ${group[0]!.id}, ${org.accounts.cogs}, 'grant_allowable_costs', ${actorId}, ${actorId})
         returning id
-      `, "objects");
-      assert.equal(member.length, 1);
-      return group[0]!.id;
-    });
-    const grant = await createGrant({
-      orgId: org.orgId, code: "COMMUNITY-AWARD", name: "Community Award",
-      sponsorPartyId: org.customerId, sponsorKind: "foundation", determination: "contribution_unconditional",
-      awardAmount: "40.00", periodFrom: "2026-01-01", periodTo: "2026-12-31",
-      fundId: restricted.id, allowableAccountGroupId: groupId, actorId,
-    });
-    const grantAccounts: GrantPostingAccounts = {
-      bankAccountId: org.accounts.bank, grantsReceivableAccountId: org.accounts.ar,
-      refundableAdvanceAccountId: org.accounts.ap, grantRevenueAccountId: org.accounts.revenue,
-      exchangeReceivableAccountId: org.accounts.ar, exchangeRevenueAccountId: org.accounts.revenue,
-    };
-    await awardGrant({ orgId: org.orgId, grantId: grant.id, accounts: grantAccounts, postingDate: org.date, actorId });
+      `,
+          "objects",
+        );
+        assert.equal(member.length, 1);
+        return group[0]!.id;
+      });
+      const grant = await createGrant({
+        orgId: org.orgId,
+        code: "COMMUNITY-AWARD",
+        name: "Community Award",
+        sponsorPartyId: org.customerId,
+        sponsorKind: "foundation",
+        determination: "contribution_unconditional",
+        awardAmount: "40.00",
+        periodFrom: "2026-01-01",
+        periodTo: "2026-12-31",
+        fundId: restricted.id,
+        allowableAccountGroupId: groupId,
+        actorId,
+      });
+      const grantAccounts: GrantPostingAccounts = {
+        bankAccountId: org.accounts.bank,
+        grantsReceivableAccountId: org.accounts.ar,
+        refundableAdvanceAccountId: org.accounts.ap,
+        grantRevenueAccountId: org.accounts.revenue,
+        exchangeReceivableAccountId: org.accounts.ar,
+        exchangeRevenueAccountId: org.accounts.revenue,
+      };
+      await awardGrant({
+        orgId: org.orgId,
+        grantId: grant.id,
+        accounts: grantAccounts,
+        postingDate: org.date,
+        actorId,
+      });
 
-    const rentAccountId = await withOrgContext(org.orgId, async () => {
-      const account = await db.execute<{ id: string }>(sql`
+      const rentAccountId = await withOrgContext(org.orgId, async () => {
+        const account = await db.execute<{ id: string }>(
+          sql`
         insert into accounts (org_id, number, name, type, is_summary, is_active, required_dimensions, custom, created_by, updated_by)
         values (${org.orgId}, ${`RENT-${randomUUID().slice(0, 8)}`}, 'Shared rent', 'expense', false, true, '[]'::jsonb, '{}'::jsonb, ${actorId}, ${actorId})
         returning id
-      `, "objects");
-      assert.equal(account.length, 1);
-      return account[0]!.id;
-    });
-    const split = splitSharedCost({
-      total: "30.00",
-      targets: [
-        { key: departmentIds[0]!, functionKey: "program", programKey: "food_access", weight: "2" },
-        { key: departmentIds[1]!, functionKey: "fundraising", weight: "1" },
-      ],
-      allocationRuleKey: "shared_occupancy", allocationRuleName: "Shared occupancy by area",
-      driverKey: "occupied_area", driverName: "Occupied area", driverUnit: "square feet", asOf: org.date,
-    });
-    await withOrgTransaction(org.orgId, () => postEntry(db, {
-      orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
-      entryNumber: `RENT-${randomUUID()}`, postingDate: org.date, periodId: org.periodId,
-      currency: "CAD", actorId, origin: "journal", memo: "Shared rent allocation",
-      lines: [
-        ...split.targets.map((target) => ({
-          accountId: rentAccountId, amount: target.amount,
-          departmentId: target.key,
-          extraDims: { fund: operating.defaultFundId },
-        })),
-        { accountId: org.accounts.bank, amount: "-30.0000", extraDims: { fund: operating.defaultFundId } },
-      ],
-    }));
+      `,
+          "objects",
+        );
+        assert.equal(account.length, 1);
+        return account[0]!.id;
+      });
+      const split = splitSharedCost({
+        total: "30.00",
+        targets: [
+          {
+            key: departmentIds[0]!,
+            functionKey: "program",
+            programKey: "food_access",
+            weight: "2",
+          },
+          { key: departmentIds[1]!, functionKey: "fundraising", weight: "1" },
+        ],
+        allocationRuleKey: "shared_occupancy",
+        allocationRuleName: "Shared occupancy by area",
+        driverKey: "occupied_area",
+        driverName: "Occupied area",
+        driverUnit: "square feet",
+        asOf: org.date,
+      });
+      await withOrgTransaction(org.orgId, () =>
+        postEntry(db, {
+          orgId: org.orgId,
+          bookId: org.bookId,
+          subsidiaryId: org.subsidiaryId,
+          entryNumber: `RENT-${randomUUID()}`,
+          postingDate: org.date,
+          periodId: org.periodId,
+          currency: "CAD",
+          actorId,
+          origin: "journal",
+          memo: "Shared rent allocation",
+          lines: [
+            ...split.targets.map((target) => ({
+              accountId: rentAccountId,
+              amount: target.amount,
+              departmentId: target.key,
+              extraDims: { fund: operating.defaultFundId },
+            })),
+            {
+              accountId: org.accounts.bank,
+              amount: "-30.0000",
+              extraDims: { fund: operating.defaultFundId },
+            },
+          ],
+        }),
+      );
 
-    const secondaryBook = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+      const secondaryBook = await withOrgContext(org.orgId, () =>
+        db.execute<{ id: string }>(
+          sql`
       insert into accounting_books (org_id, code, name, is_primary, created_by)
       values (${org.orgId}, ${`TAX-${randomUUID().slice(0, 8)}`}, 'Secondary tax book', false, ${actorId})
       returning id
-    `, "objects"));
-    await withOrgTransaction(org.orgId, () => postEntry(db, {
-      orgId: org.orgId, bookId: secondaryBook[0]!.id, subsidiaryId: org.subsidiaryId,
-      entryNumber: `TAX-${randomUUID()}`, postingDate: org.date, periodId: org.periodId,
-      currency: "CAD", actorId, origin: "journal", memo: "Secondary book activity",
-      lines: [
-        { accountId: org.accounts.bank, amount: "7.0000", extraDims: { fund: operating.defaultFundId } },
-        { accountId: org.accounts.revenue, amount: "-7.0000", extraDims: { fund: operating.defaultFundId } },
-      ],
-    }));
+    `,
+          "objects",
+        ),
+      );
+      await withOrgTransaction(org.orgId, () =>
+        postEntry(db, {
+          orgId: org.orgId,
+          bookId: secondaryBook[0]!.id,
+          subsidiaryId: org.subsidiaryId,
+          entryNumber: `TAX-${randomUUID()}`,
+          postingDate: org.date,
+          periodId: org.periodId,
+          currency: "CAD",
+          actorId,
+          origin: "journal",
+          memo: "Secondary book activity",
+          lines: [
+            {
+              accountId: org.accounts.bank,
+              amount: "7.0000",
+              extraDims: { fund: operating.defaultFundId },
+            },
+            {
+              accountId: org.accounts.revenue,
+              amount: "-7.0000",
+              extraDims: { fund: operating.defaultFundId },
+            },
+          ],
+        }),
+      );
 
-    const beforeRelease = await loadNonprofitStatements({
-      orgId: org.orgId, asOf: org.date, periodFrom: "2026-01-01", periodTo: org.date,
-    });
-    const release = await createFundRelease({
-      orgId: org.orgId, fromFundId: restricted.id, toFundId: operating.defaultFundId,
-      releaseAccountId: org.accounts.revenue, releaseDate: org.date, amount: "20.0000",
-      purpose: "Community program costs met", satisfactionRef: "Approved program expenditure", actorId,
-    });
-    assert.equal((await submitFundRelease({ orgId: org.orgId, releaseId: release.id, actorId })).status, "posted");
-
-    const statements = await loadNonprofitStatements({
-      orgId: org.orgId, asOf: org.date, periodFrom: "2026-01-01", periodTo: org.date,
-    });
-    const accounts = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${org.orgId}
-    `, "objects"));
-    assert.equal(new Set(statements.financialPosition.accounts.map((row) => row.accountId)).size, accounts.length);
-    assert.equal(statements.functionalExpenses.totalExpenseByCurrency[0]?.amount, "30.0000");
-    assert.equal(statements.functionalExpenses.totals.reduce((sum, row) => sum + toUnits(row.amount), 0n), toUnits("30.0000"));
-    assert.ok(statements.activities.rows.some((row) => row.grossReleasedFromClass === "20.0000"));
-    assert.ok(statements.activities.rows.some((row) =>
-      row.restrictionClass === "with_donor_restrictions" && row.revenue === "140.0000"));
-    assert.ok(statements.financialPosition.netAssetsByClass.some((row) =>
-      row.restrictionClass === "with_donor_restrictions" && row.restrictionClassLabel === "With donor restrictions"));
-    assert.ok(statements.cashFlows.reconciliation.some((row) =>
-      row.cashChange === "70.0000" && row.netActivity === "110.0000" &&
-      row.closingNetAssets === "110.0000" && row.reconciliationDifference === "0.0000"));
-    const voidedRelease = await voidFundRelease({
-      orgId: org.orgId, releaseId: release.id, actorId, voidDate: org.date,
-      reason: "The release was entered in error",
-    });
-    assert.equal(voidedRelease.status, "void");
-    const afterVoid = await loadNonprofitStatements({
-      orgId: org.orgId, asOf: org.date, periodFrom: "2026-01-01", periodTo: org.date,
-    });
-    assert.deepEqual(
-      afterVoid.financialPosition.netAssetsByClass.map(({ restrictionClass, amount }) => ({ restrictionClass, amount })),
-      beforeRelease.financialPosition.netAssetsByClass.map(({ restrictionClass, amount }) => ({ restrictionClass, amount })),
-    );
-    assert.ok(afterVoid.cashFlows.reconciliation.every((row) => row.reconciliationDifference === "0.0000"));
-    const gift = await withOrgContext(org.orgId, () => db.execute<{ id: string; entry_number: string }>(sql`
-      select id, entry_number from journal_entries where org_id = ${org.orgId} and entry_number like 'GIFT-%'`, "objects"));
-    // A correction appends the mirror reversal, then marks the gift reversed.
-    await withOrgTransaction(org.orgId, async () => {
-      await postEntry(db, {
-        orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
-        entryNumber: `${gift[0]!.entry_number}-REV`, postingDate: org.date, periodId: org.periodId,
-        currency: "CAD", actorId, origin: "gift", memo: "Reverse restricted community gift",
-        reversesEntryId: gift[0]!.id,
-        lines: [
-          { accountId: org.accounts.bank, amount: "-100.0000", extraDims: { fund: restricted.id } },
-          { accountId: org.accounts.revenue, amount: "100.0000", extraDims: { fund: restricted.id } },
-        ],
+      const beforeRelease = await loadNonprofitStatements({
+        orgId: org.orgId,
+        asOf: org.date,
+        periodFrom: "2026-01-01",
+        periodTo: org.date,
       });
-      await markEntryReversed(db, { orgId: org.orgId, entryId: gift[0]!.id, actorId });
-    });
-    await withOrgContext(org.orgId, () => db.execute(sql`
+      const release = await createFundRelease({
+        orgId: org.orgId,
+        fromFundId: restricted.id,
+        toFundId: operating.defaultFundId,
+        releaseAccountId: org.accounts.revenue,
+        releaseDate: org.date,
+        amount: "20.0000",
+        purpose: "Community program costs met",
+        satisfactionRef: "Approved program expenditure",
+        actorId,
+      });
+      assert.equal(
+        (await submitFundRelease({ orgId: org.orgId, releaseId: release.id, actorId })).status,
+        "posted",
+      );
+
+      const statements = await loadNonprofitStatements({
+        orgId: org.orgId,
+        asOf: org.date,
+        periodFrom: "2026-01-01",
+        periodTo: org.date,
+      });
+      const accounts = await withOrgContext(org.orgId, () =>
+        db.execute<{ id: string }>(
+          sql`
+      select id from accounts where org_id = ${org.orgId}
+    `,
+          "objects",
+        ),
+      );
+      assert.equal(
+        new Set(statements.financialPosition.accounts.map((row) => row.accountId)).size,
+        accounts.length,
+      );
+      assert.equal(statements.functionalExpenses.totalExpenseByCurrency[0]?.amount, "30.0000");
+      assert.equal(
+        statements.functionalExpenses.totals.reduce((sum, row) => sum + toUnits(row.amount), 0n),
+        toUnits("30.0000"),
+      );
+      assert.ok(statements.activities.rows.some((row) => row.grossReleasedFromClass === "20.0000"));
+      assert.ok(
+        statements.activities.rows.some(
+          (row) => row.restrictionClass === "with_donor_restrictions" && row.revenue === "140.0000",
+        ),
+      );
+      assert.ok(
+        statements.financialPosition.netAssetsByClass.some(
+          (row) =>
+            row.restrictionClass === "with_donor_restrictions" &&
+            row.restrictionClassLabel === "With donor restrictions",
+        ),
+      );
+      assert.ok(
+        statements.cashFlows.reconciliation.some(
+          (row) =>
+            row.cashChange === "70.0000" &&
+            row.netActivity === "110.0000" &&
+            row.closingNetAssets === "110.0000" &&
+            row.reconciliationDifference === "0.0000",
+        ),
+      );
+      const voidedRelease = await voidFundRelease({
+        orgId: org.orgId,
+        releaseId: release.id,
+        actorId,
+        voidDate: org.date,
+        reason: "The release was entered in error",
+      });
+      assert.equal(voidedRelease.status, "void");
+      const afterVoid = await loadNonprofitStatements({
+        orgId: org.orgId,
+        asOf: org.date,
+        periodFrom: "2026-01-01",
+        periodTo: org.date,
+      });
+      assert.deepEqual(
+        afterVoid.financialPosition.netAssetsByClass.map(({ restrictionClass, amount }) => ({
+          restrictionClass,
+          amount,
+        })),
+        beforeRelease.financialPosition.netAssetsByClass.map(({ restrictionClass, amount }) => ({
+          restrictionClass,
+          amount,
+        })),
+      );
+      assert.ok(
+        afterVoid.cashFlows.reconciliation.every(
+          (row) => row.reconciliationDifference === "0.0000",
+        ),
+      );
+      const gift = await withOrgContext(org.orgId, () =>
+        db.execute<{ id: string; entry_number: string }>(
+          sql`
+      select id, entry_number from journal_entries where org_id = ${org.orgId} and entry_number like 'GIFT-%'`,
+          "objects",
+        ),
+      );
+      // A correction appends the mirror reversal, then marks the gift reversed.
+      await withOrgTransaction(org.orgId, async () => {
+        await postEntry(db, {
+          orgId: org.orgId,
+          bookId: org.bookId,
+          subsidiaryId: org.subsidiaryId,
+          entryNumber: `${gift[0]!.entry_number}-REV`,
+          postingDate: org.date,
+          periodId: org.periodId,
+          currency: "CAD",
+          actorId,
+          origin: "gift",
+          memo: "Reverse restricted community gift",
+          reversesEntryId: gift[0]!.id,
+          lines: [
+            {
+              accountId: org.accounts.bank,
+              amount: "-100.0000",
+              extraDims: { fund: restricted.id },
+            },
+            {
+              accountId: org.accounts.revenue,
+              amount: "100.0000",
+              extraDims: { fund: restricted.id },
+            },
+          ],
+        });
+        await markEntryReversed(db, { orgId: org.orgId, entryId: gift[0]!.id, actorId });
+      });
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"functionalExpenses":false}'::jsonb, true)
-       where id = ${org.orgId}`));
-    const tieout = await loadFundCoverageTieout({ orgId: org.orgId, asOf: org.date });
-    const community = tieout.rows.find((row) => row.fundCode === "COMMUNITY");
-    assert.equal(community?.cash, "0.0000");
-    assert.equal(community?.undercovered, true);
-    assert.ok(tieout.netAssetsTie.every((tie) => tie.tied));
-    assert.ok(tieout.interfund.every((line) => line.zero));
-    assert.equal(tieout.bookId, org.bookId);
-    const cutoff = await loadFundCoverageTieout({ orgId: org.orgId, asOf: "2026-01-01" });
-    assert.equal(cutoff.rows.length, 0);
-    await withOrgContext(org.orgId, () => db.execute(sql`
+       where id = ${org.orgId}`),
+      );
+      const tieout = await loadFundCoverageTieout({ orgId: org.orgId, asOf: org.date });
+      const community = tieout.rows.find((row) => row.fundCode === "COMMUNITY");
+      assert.equal(community?.cash, "0.0000");
+      assert.equal(community?.undercovered, true);
+      assert.ok(tieout.netAssetsTie.every((tie) => tie.tied));
+      assert.ok(tieout.interfund.every((line) => line.zero));
+      assert.equal(tieout.bookId, org.bookId);
+      const cutoff = await loadFundCoverageTieout({ orgId: org.orgId, asOf: "2026-01-01" });
+      assert.equal(cutoff.rows.length, 0);
+      await withOrgContext(org.orgId, () =>
+        db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"functionalExpenses":true}'::jsonb, true)
-       where id = ${org.orgId}`));
-    const movement = await withOrgContext(org.orgId, () => db.execute<{ amount: string }>(sql`
+       where id = ${org.orgId}`),
+      );
+      const movement = await withOrgContext(org.orgId, () =>
+        db.execute<{ amount: string }>(
+          sql`
       select coalesce(sum(jl.amount), 0)::text as amount
         from journal_lines jl join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
        where jl.org_id = ${org.orgId} and je.status in ('posted', 'reversed')
          and je.posting_date between '2026-01-01'::date and ${org.date}::date
-    `, "objects"));
-    assert.equal(toUnits(movement[0]?.amount ?? "0"), 0n);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+    `,
+          "objects",
+        ),
+      );
+      assert.equal(toUnits(movement[0]?.amount ?? "0"), 0n);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

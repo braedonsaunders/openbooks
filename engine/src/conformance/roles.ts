@@ -16,7 +16,13 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, type ScratchOrg } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrg,
+  grantScratchPermissions,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
 import type { LedgerContext, Role } from "./types.ts";
 
 import { ROLES } from "./role-bindings.ts";
@@ -107,8 +113,11 @@ export async function createConformanceOrg(): Promise<ConformanceOrg> {
   // The shared fixture opens a single month. Recognition schedules, period-end
   // revaluation, and fiscal-year provision arithmetic all need a full year, so
   // open the remaining eleven months of 2026 on the same calendar.
-  const calendar = (await db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${scratch.orgId} limit 1`, "objects"));
+  const calendar = await db.execute<{ id: string }>(
+    sql`
+    select id from fiscal_calendars where org_id = ${scratch.orgId} limit 1`,
+    "objects",
+  );
   const fiscalCalendarId = calendar[0]!.id;
   for (let month = 1; month <= 12; month++) {
     if (month === 7) continue; // already created by the shared fixture
@@ -153,7 +162,11 @@ export async function createConformanceOrg(): Promise<ConformanceOrg> {
 
   const actorId = await createScratchUser(scratch.orgId, "Conformance Runner", "accountant");
 
-  await grantScratchPermissions(scratch.orgId, actorId, ["assets.manage", "funds.manage", "close.run"]);
+  await grantScratchPermissions(scratch.orgId, actorId, [
+    "assets.manage",
+    "funds.manage",
+    "close.run",
+  ]);
   const roleOf = new Map<string, Role>();
   for (const role of ROLES) {
     const account = roles[role];

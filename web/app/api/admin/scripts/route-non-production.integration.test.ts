@@ -26,11 +26,9 @@ registerHooks({
 
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { PATCH, POST } = await import("./route.ts");
-
 
 function caller(orgId: string, userId: string): SessionUser {
   return {
@@ -90,9 +88,14 @@ const SOURCE = "function main(ctx) { return 1; }";
 
 async function scriptCount(orgId: string): Promise<number> {
   return Number(
-    (await db.execute<{ n: string }>(sql`
+    (
+      await db.execute<{ n: string }>(
+        sql`
       select count(*)::text as n from user_scripts where org_id = ${orgId}
-    `, "objects"))[0]!.n,
+    `,
+        "objects",
+      )
+    )[0]!.n,
   );
 }
 
@@ -101,16 +104,19 @@ test("creating an active schedule in a sandbox org refuses by name with nothing 
   try {
     await adminIn(org.orgId);
     await flagSandbox(org.orgId);
-    const res = await POST(postReq({
-      name: "Nightly",
-      triggerPoint: "scheduled",
-      source: SOURCE,
-      cron: "0 12 * * *",
-      isActive: true,
-    }));
+    const res = await POST(
+      postReq({
+        name: "Nightly",
+        triggerPoint: "scheduled",
+        source: SOURCE,
+        cron: "0 12 * * *",
+        isActive: true,
+      }),
+    );
     assert.equal(res.status, 409);
     assert.deepEqual(await res.json(), {
-      error: "scheduled scripts run only in production organizations — this organization is 'sandbox', " +
+      error:
+        "scheduled scripts run only in production organizations — this organization is 'sandbox', " +
         "so an active schedule would never fire. Use Run now to exercise the script here, " +
         "or activate the schedule in a production organization.",
       code: "SCHEDULED_SCRIPT_NON_PRODUCTION",
@@ -128,22 +134,26 @@ test("a sandbox org can still stage an inactive schedule or another trigger", as
   try {
     await adminIn(org.orgId);
     await flagSandbox(org.orgId);
-    const inactive = await POST(postReq({
-      name: "Staged",
-      triggerPoint: "scheduled",
-      source: SOURCE,
-      cron: "0 12 * * *",
-      isActive: false,
-    }));
+    const inactive = await POST(
+      postReq({
+        name: "Staged",
+        triggerPoint: "scheduled",
+        source: SOURCE,
+        cron: "0 12 * * *",
+        isActive: false,
+      }),
+    );
     assert.equal(inactive.status, 200);
-    assert.ok((await inactive.json() as { id: string }).id);
-    const endpoint = await POST(postReq({
-      name: "Hook",
-      triggerPoint: "endpoint",
-      endpointSlug: `hook-${randomUUID().slice(0, 8)}`,
-      source: SOURCE,
-      isActive: true,
-    }));
+    assert.ok(((await inactive.json()) as { id: string }).id);
+    const endpoint = await POST(
+      postReq({
+        name: "Hook",
+        triggerPoint: "endpoint",
+        endpointSlug: `hook-${randomUUID().slice(0, 8)}`,
+        source: SOURCE,
+        isActive: true,
+      }),
+    );
     assert.equal(endpoint.status, 200);
     assert.equal(await scriptCount(org.orgId), 2);
   } finally {
@@ -157,36 +167,52 @@ test("activating an inactive schedule in a sandbox org refuses; deactivation pas
   try {
     await adminIn(org.orgId);
     await flagSandbox(org.orgId);
-    const created = (await (await POST(postReq({
-      name: "Staged",
-      triggerPoint: "scheduled",
-      source: SOURCE,
-      cron: "0 12 * * *",
-      isActive: false,
-    }))).json()) as { id: string };
-    const activate = await PATCH(patchReq({
-      id: created.id,
-      name: "Staged",
-      triggerPoint: "scheduled",
-      source: SOURCE,
-      cron: "0 12 * * *",
-      isActive: true,
-    }));
+    const created = (await (
+      await POST(
+        postReq({
+          name: "Staged",
+          triggerPoint: "scheduled",
+          source: SOURCE,
+          cron: "0 12 * * *",
+          isActive: false,
+        }),
+      )
+    ).json()) as { id: string };
+    const activate = await PATCH(
+      patchReq({
+        id: created.id,
+        name: "Staged",
+        triggerPoint: "scheduled",
+        source: SOURCE,
+        cron: "0 12 * * *",
+        isActive: true,
+      }),
+    );
     assert.equal(activate.status, 409);
-    assert.equal((await activate.json() as { code: string }).code, "SCHEDULED_SCRIPT_NON_PRODUCTION");
-    const row = (await db.execute<{ is_active: boolean }>(sql`
+    assert.equal(
+      ((await activate.json()) as { code: string }).code,
+      "SCHEDULED_SCRIPT_NON_PRODUCTION",
+    );
+    const row = (
+      await db.execute<{ is_active: boolean }>(
+        sql`
       select is_active from user_scripts where id = ${created.id}
-    `, "objects"))[0]!;
+    `,
+        "objects",
+      )
+    )[0]!;
     assert.equal(row.is_active, false);
     // A name-only edit to the inactive row is not an activation: it passes.
-    const rename = await PATCH(patchReq({
-      id: created.id,
-      name: "Staged renamed",
-      triggerPoint: "scheduled",
-      source: SOURCE,
-      cron: "0 12 * * *",
-      isActive: false,
-    }));
+    const rename = await PATCH(
+      patchReq({
+        id: created.id,
+        name: "Staged renamed",
+        triggerPoint: "scheduled",
+        source: SOURCE,
+        cron: "0 12 * * *",
+        isActive: false,
+      }),
+    );
     assert.equal(rename.status, 200);
   } finally {
     session.user = null;
@@ -198,15 +224,17 @@ test("a production org activates schedules unchanged (control)", async () => {
   const org = await createScratchOrg();
   try {
     await adminIn(org.orgId);
-    const res = await POST(postReq({
-      name: "Nightly",
-      triggerPoint: "scheduled",
-      source: SOURCE,
-      cron: "0 12 * * *",
-      isActive: true,
-    }));
+    const res = await POST(
+      postReq({
+        name: "Nightly",
+        triggerPoint: "scheduled",
+        source: SOURCE,
+        cron: "0 12 * * *",
+        isActive: true,
+      }),
+    );
     assert.equal(res.status, 200);
-    assert.ok((await res.json() as { id: string }).id);
+    assert.ok(((await res.json()) as { id: string }).id);
     assert.equal(await scriptCount(org.orgId), 1);
   } finally {
     session.user = null;

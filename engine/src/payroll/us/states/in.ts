@@ -42,7 +42,9 @@
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateAmount, certificateCount, type PayrollCertificate,
+  certificateAmount,
+  certificateCount,
+  type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -53,7 +55,11 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/in.ts";
 
 export interface InYearRates {
@@ -208,17 +214,19 @@ const IN_COUNTIES_BY_YEAR: Record<number, readonly InCounty[]> = {
   2026: IN_COUNTIES_2026,
 };
 
-export const IN_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Departmental Notice #1 (R46 / 01-26)",
-  effectiveFrom: "2026-01-01",
-  citation:
-    "Indiana Department of Revenue, Departmental Notice #1, Effective Jan. 1, 2026 "
-    + "(R46 / 01-26) — state rate 2.95%, Tables A/B/C and the weekly worked example "
-    + "(pp. 2–3); Indiana County Tax Rates effective Jan. 1, 2026 (p. 5)",
-  status: "published",
-  region: "IN",
-}];
+export const IN_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Departmental Notice #1 (R46 / 01-26)",
+    effectiveFrom: "2026-01-01",
+    citation:
+      "Indiana Department of Revenue, Departmental Notice #1, Effective Jan. 1, 2026 " +
+      "(R46 / 01-26) — state rate 2.95%, Tables A/B/C and the weekly worked example " +
+      "(pp. 2–3); Indiana County Tax Rates effective Jan. 1, 2026 (p. 5)",
+    status: "published",
+    region: "IN",
+  },
+];
 
 /**
  * The county Departmental Notice #1 names for an employee.
@@ -249,14 +257,16 @@ export function inCounty(year: number, code: string): InCounty {
   const resolvedYear = IN_STATE_ENGINE.ratesForPayDate(`${year}-01-01`).year;
   const list = IN_COUNTIES_BY_YEAR[resolvedYear];
   if (!list) {
-    throw new PayrollError(`Indiana county rates are not transcribed for ${resolvedYear} — ${RATES_MODULE}`);
+    throw new PayrollError(
+      `Indiana county rates are not transcribed for ${resolvedYear} — ${RATES_MODULE}`,
+    );
   }
   const county = IN_COUNTY_BY_CODE.get(code) ?? IN_COUNTY_BY_CODE.get(code.padStart(2, "0"));
   if (!county) {
     throw new PayrollError(
-      `"${code}" is not an Indiana county code published in Departmental Notice #1 for ${year} `
-      + `(${RATES_MODULE}). The notice lists all 92 counties by two-digit code (01–92); an `
-      + "unknown code is not a zero rate.",
+      `"${code}" is not an Indiana county code published in Departmental Notice #1 for ${year} ` +
+        `(${RATES_MODULE}). The notice lists all 92 counties by two-digit code (01–92); an ` +
+        "unknown code is not a zero rate.",
     );
   }
   return county;
@@ -296,10 +306,12 @@ export function inPeriodTaxable(input: {
   const P = IN_STATE_ENGINE.requirePeriodsPerYear(input.periodsPerYear);
   const factors: Record<string, string> = {};
   const annualExemption =
-    U(rates.personalExemption) * BigInt(Math.max(input.exemptions.personal, 0))
-    + U(rates.additionalDependentExemption) * BigInt(Math.max(input.exemptions.additionalDependent, 0))
-    + U(rates.additionalDependentExemption) * BigInt(Math.max(input.exemptions.firstTimeDependent, 0))
-    + U(rates.adoptedDependentExemption) * BigInt(Math.max(input.exemptions.adoptedDependent, 0));
+    U(rates.personalExemption) * BigInt(Math.max(input.exemptions.personal, 0)) +
+    U(rates.additionalDependentExemption) *
+      BigInt(Math.max(input.exemptions.additionalDependent, 0)) +
+    U(rates.additionalDependentExemption) *
+      BigInt(Math.max(input.exemptions.firstTimeDependent, 0)) +
+    U(rates.adoptedDependentExemption) * BigInt(Math.max(input.exemptions.adoptedDependent, 0));
   const periodExemption = divIntCents(annualExemption, P);
   factors.IN_ANNUAL_EXEMPTION = D(annualExemption);
   factors.IN_PERIOD_EXEMPTION = D(periodExemption);
@@ -308,7 +320,9 @@ export function inPeriodTaxable(input: {
   return { taxable, periodExemption, factors };
 }
 
-function exemptionsFromCertificate(certificate: UsStateWithholdingInput["certificate"]): InExemptionCounts {
+function exemptionsFromCertificate(
+  certificate: UsStateWithholdingInput["certificate"],
+): InExemptionCounts {
   return {
     personal: certificateCount(certificate, "personal_exemptions") ?? 0,
     additionalDependent: certificateCount(certificate, "additional_dependent_exemptions") ?? 0,
@@ -453,13 +467,13 @@ export const IN_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "IN" },
   purpose: "withholding",
   citation:
-    "Indiana Form WH-4, State Form 48845 (R10 / 8-23); Departmental Notice #1 "
-    + "(R46 / 01-26), Effective Jan. 1, 2026",
+    "Indiana Form WH-4, State Form 48845 (R10 / 8-23); Departmental Notice #1 " +
+    "(R46 / 01-26), Effective Jan. 1, 2026",
   summary:
-    "Sets Indiana state and county withholding exemptions and the January-1 county of "
-    + "residence and of principal employment. With no WH-4 on file there are no claimed "
-    + "exemptions — Departmental Notice #1 does not follow the federal IRC § 3402(n) "
-    + "allowance for no withholding.",
+    "Sets Indiana state and county withholding exemptions and the January-1 county of " +
+    "residence and of principal employment. With no WH-4 on file there are no claimed " +
+    "exemptions — Departmental Notice #1 does not follow the federal IRC § 3402(n) " +
+    "allowance for no withholding.",
   storage: "certificate_rows",
   fields: [
     {
@@ -468,9 +482,9 @@ export const IN_CERTIFICATE: PayrollCertificate = {
       kind: "code",
       subRegion: { side: "residence" },
       help:
-        "The two-digit county code from Departmental Notice #1 (01–92), or blank / "
-        + "\"not applicable\" if the employee did not live in Indiana on January 1. "
-        + "A move after January 1 does not change the county until the next calendar year.",
+        "The two-digit county code from Departmental Notice #1 (01–92), or blank / " +
+        '"not applicable" if the employee did not live in Indiana on January 1. ' +
+        "A move after January 1 does not change the county until the next calendar year.",
     },
     {
       key: "work_county",
@@ -478,53 +492,65 @@ export const IN_CERTIFICATE: PayrollCertificate = {
       kind: "code",
       subRegion: { side: "work" },
       help:
-        "The two-digit county code of the Indiana county where the employee principally "
-        + "worked on January 1. Used only when the employee resided out of state on "
-        + "January 1 — Departmental Notice #1 then withholds that county's rate.",
+        "The two-digit county code of the Indiana county where the employee principally " +
+        "worked on January 1. Used only when the employee resided out of state on " +
+        "January 1 — Departmental Notice #1 then withholds that county's rate.",
     },
     {
       key: "personal_exemptions",
       label: "Line 5 — Total personal exemptions",
       kind: "count",
-      min: "0", max: "99", default: "0",
+      min: "0",
+      max: "99",
+      default: "0",
       help:
-        "The sum of WH-4 lines 1–4 (self, spouse, dependents, age 65 / blind). Worth "
-        + "$1,000 a year each (Table A). Default zero: no certificate means no claimed "
-        + "exemptions.",
+        "The sum of WH-4 lines 1–4 (self, spouse, dependents, age 65 / blind). Worth " +
+        "$1,000 a year each (Table A). Default zero: no certificate means no claimed " +
+        "exemptions.",
     },
     {
       key: "additional_dependent_exemptions",
       label: "Line 6 — Additional dependent exemptions",
       kind: "count",
-      min: "0", max: "99", default: "0",
+      min: "0",
+      max: "99",
+      default: "0",
       help: "Worth $1,500 a year each (Table B). A qualifying dependent child already counted on line 3.",
     },
     {
       key: "first_time_dependent_exemptions",
       label: "Line 7 — First-time additional dependent exemptions",
       kind: "count",
-      min: "0", max: "99", default: "0",
+      min: "0",
+      max: "99",
+      default: "0",
       help:
-        "Worth $1,500 a year each (Table B). Good only for the calendar year the WH-4 "
-        + "claiming it is submitted. A new WH-4 is required each year this is claimed.",
+        "Worth $1,500 a year each (Table B). Good only for the calendar year the WH-4 " +
+        "claiming it is submitted. A new WH-4 is required each year this is claimed.",
     },
     {
       key: "adopted_dependent_exemptions",
       label: "Line 8 — Adopted qualifying dependent exemptions",
       kind: "count",
-      min: "0", max: "99", default: "0",
+      min: "0",
+      max: "99",
+      default: "0",
       help: "Worth $3,000 a year each (Table C). The child must also be counted on lines 3 and 6.",
     },
     {
       key: "additional_state_per_period",
       label: "Line 9 — Additional state withholding per pay period",
-      kind: "amount", decimals: 4, min: "0",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Added AFTER the 2.95% rate — a flat dollar amount, not a taxable adjustment.",
     },
     {
       key: "additional_county_per_period",
       label: "Line 10 — Additional county withholding per pay period",
-      kind: "amount", decimals: 4, min: "0",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
       help: "Added AFTER the county rate. It does not change state withholding.",
     },
     {
@@ -532,18 +558,18 @@ export const IN_CERTIFICATE: PayrollCertificate = {
       label: "Exempt from Indiana state and county withholding (WH-4MIL)",
       kind: "flag",
       help:
-        "Valid WH-4MIL military-spouse earned-income exemption. State Form 55496 exempts "
-        + "qualifying wages from both state and county income tax. Departmental Notice #1 "
-        + "does not otherwise permit a federal-style exempt claim.",
+        "Valid WH-4MIL military-spouse earned-income exemption. State Form 55496 exempts " +
+        "qualifying wages from both state and county income tax. Departmental Notice #1 " +
+        "does not otherwise permit a federal-style exempt claim.",
     },
     {
       key: "county_exempt",
       label: "Exempt from Indiana county tax (WH-4AFF)",
       kind: "flag",
       help:
-        "A current WH-4AFF county-tax waiver for a reciprocal-state nonresident; it does "
-        + "not exempt Indiana state withholding. File a new certificate when its 30-day "
-        + "authorization ends.",
+        "A current WH-4AFF county-tax waiver for a reciprocal-state nonresident; it does " +
+        "not exempt Indiana state withholding. File a new certificate when its 30-day " +
+        "authorization ends.",
     },
   ],
 };
@@ -559,9 +585,9 @@ const IN_COUNTY_LEVIES = IN_COUNTIES_2026.map((county) => ({
   rateSource: { kind: "pack" } as const,
   certificateKey: "us_in_wh4",
   citation:
-    `Indiana Department of Revenue, Departmental Notice #1 (R46 / 01-26) p. 5 — ${county.name} `
-    + `County (code ${county.code}), rate ${county.rate}`
-    + (county.changedSinceOct2025 ? ", changed since the Oct. 1, 2025 issue" : ""),
+    `Indiana Department of Revenue, Departmental Notice #1 (R46 / 01-26) p. 5 — ${county.name} ` +
+    `County (code ${county.code}), rate ${county.rate}` +
+    (county.changedSinceOct2025 ? ", changed since the Oct. 1, 2025 issue" : ""),
   implemented: true,
 }));
 
@@ -587,6 +613,6 @@ export const IN_REGION: PayrollRegionWithholding = {
   // owes only the residence county.
   subRegionConflictRule: "residence_only",
   citation:
-    "Indiana Department of Revenue, Departmental Notice #1 (R46 / 01-26), Effective "
-    + "Jan. 1, 2026; Form WH-4, State Form 48845 (R10 / 8-23)",
+    "Indiana Department of Revenue, Departmental Notice #1 (R46 / 01-26), Effective " +
+    "Jan. 1, 2026; Form WH-4, State Form 48845 (R10 / 8-23)",
 };

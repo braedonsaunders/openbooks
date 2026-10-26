@@ -89,9 +89,9 @@ export function assertFrFilingYearSupported(taxYear: number): void {
   );
   if (!covered) {
     throw new PayrollError(
-      `no published FR statutory tables for tax year ${taxYear} — the FR payroll pack's only `
-      + "transcribed year is calendar 2026 (PAS grille I and URSSAF parameters). "
-      + "This year is not yet supported by the FR pack; contact support.",
+      `no published FR statutory tables for tax year ${taxYear} — the FR payroll pack's only ` +
+        "transcribed year is calendar 2026 (PAS grille I and URSSAF parameters). " +
+        "This year is not yet supported by the FR pack; contact support.",
     );
   }
 }
@@ -152,7 +152,8 @@ export async function frRecapRows(orgId: string, taxYear: number): Promise<FrRec
       join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
      where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = ${kind}
        and pc.system_key = ${key})`;
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select s.employee_party_id, p.display_name,
            to_char(s.pay_date, 'YYYY-MM') as versement_month,
            s.filing_account_id as filing_account_id,
@@ -181,7 +182,9 @@ export async function frRecapRows(orgId: string, taxYear: number): Promise<FrRec
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'FR'
      group by s.employee_party_id, p.display_name, to_char(s.pay_date, 'YYYY-MM'), s.filing_account_id
      order by p.display_name, to_char(s.pay_date, 'YYYY-MM')
-   `, "objects"));
+   `,
+    "objects",
+  );
   return rows.map((row) => {
     const vieil = num(row.vieil_sal);
     const csg = num(row.csg);
@@ -213,7 +216,9 @@ export async function frRecapRows(orgId: string, taxYear: number): Promise<FrRec
   });
 }
 
-function frRecapRowId(row: Pick<FrRecapRow, "employeePartyId" | "versementMonth" | "filingAccountId">): string {
+function frRecapRowId(
+  row: Pick<FrRecapRow, "employeePartyId" | "versementMonth" | "filingAccountId">,
+): string {
   return `${row.employeePartyId}:${row.versementMonth}:${row.filingAccountId ?? ""}`;
 }
 
@@ -223,11 +228,12 @@ async function frRecapPopulation(orgId: string, taxYear: number): Promise<Payrol
   // wrong one — it would be read as "nothing was paid". Refuse by name.
   if (slices.length === 0) {
     throw new PayrollError(
-      `no committed French pay runs for tax year ${taxYear} — the récapitulatif reports posted `
-      + "versements only, so a year with nothing committed has nothing to reconcile. Commit a pay run first.",
+      `no committed French pay runs for tax year ${taxYear} — the récapitulatif reports posted ` +
+        "versements only, so a year with nothing committed has nothing to reconcile. Commit a pay run first.",
     );
   }
-  const total = (pick: (row: FrRecapRow) => string) => slices.reduce((acc, row) => add(acc, pick(row)), "0");
+  const total = (pick: (row: FrRecapRow) => string) =>
+    slices.reduce((acc, row) => add(acc, pick(row)), "0");
   return {
     rowKey: "rowId",
     columns: [
@@ -280,7 +286,11 @@ function frGrilleCitation(firstPayDate: string): string {
  * own line identifiers and every label is bulletin vocabulary — with the
  * article behind each line in the notes, not guessed.
  */
-async function frRecapSlip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+async function frRecapSlip(
+  orgId: string,
+  taxYear: number,
+  rowId: string,
+): Promise<PayrollFilingSlipData> {
   // Grammar first: a value that is not one of this filing's rows is refused
   // as such even when the year has no rows at all (which refuses its own
   // way below) — the operator asked for a row that cannot exist.
@@ -299,7 +309,8 @@ async function frRecapSlip(orgId: string, taxYear: number, rowId: string): Promi
   const account = filingAccountRef(slice.filingAccountId, await filingAccountsById(orgId));
   return {
     formCode: "FR_RECAP",
-    formName: "Récapitulatif annuel des versements déclarés en DSN — relevé par salarié et par mois",
+    formName:
+      "Récapitulatif annuel des versements déclarés en DSN — relevé par salarié et par mois",
     headerFields: [
       { label: "Salarié", value: slice.employeeName },
       { label: "Mois de versement", value: slice.versementMonth },
@@ -309,32 +320,64 @@ async function frRecapSlip(orgId: string, taxYear: number, rowId: string): Promi
     ],
     boxes: [
       { code: "BRUT", label: "Salaire brut", value: slice.brut },
-      { code: "NET_IMPOSABLE", label: "Montant net imposable (assiette PAS)", value: slice.netImposable },
+      {
+        code: "NET_IMPOSABLE",
+        label: "Montant net imposable (assiette PAS)",
+        value: slice.netImposable,
+      },
       { code: "PAS", label: "Prélèvement à la source", value: slice.pas, emphasis: true },
-      { code: "TAUX", label: "Taux PAS appliqué (%)", value: slice.tauxPas === "" ? "—" : slice.tauxPas },
+      {
+        code: "TAUX",
+        label: "Taux PAS appliqué (%)",
+        value: slice.tauxPas === "" ? "—" : slice.tauxPas,
+      },
       { code: "VIEIL_SAL", label: "Assurance vieillesse (salariale)", value: slice.vieillesseSal },
-      { code: "CSG", label: "Contribution sociale généralisée — CSG (salariale)", value: slice.csg },
-      { code: "CRDS", label: "Contribution au remboursement de la dette sociale — CRDS (salariale)", value: slice.crds },
-      { code: "ARRCO_SAL", label: "Retraite complémentaire AGIRC-ARRCO (salariale)", value: slice.arrcoSal },
-      { code: "CEG_SAL", label: "Contribution d'équilibre général (salariale)", value: slice.cegSal },
-      { code: "CET_SAL", label: "Contribution d'équilibre technique (salariale)", value: slice.cetSal },
-      { code: "COT_PAT", label: "Cotisations employeur (total)", value: slice.cotisationsPatronales },
+      {
+        code: "CSG",
+        label: "Contribution sociale généralisée — CSG (salariale)",
+        value: slice.csg,
+      },
+      {
+        code: "CRDS",
+        label: "Contribution au remboursement de la dette sociale — CRDS (salariale)",
+        value: slice.crds,
+      },
+      {
+        code: "ARRCO_SAL",
+        label: "Retraite complémentaire AGIRC-ARRCO (salariale)",
+        value: slice.arrcoSal,
+      },
+      {
+        code: "CEG_SAL",
+        label: "Contribution d'équilibre général (salariale)",
+        value: slice.cegSal,
+      },
+      {
+        code: "CET_SAL",
+        label: "Contribution d'équilibre technique (salariale)",
+        value: slice.cetSal,
+      },
+      {
+        code: "COT_PAT",
+        label: "Cotisations employeur (total)",
+        value: slice.cotisationsPatronales,
+      },
       { code: "NET_PAYE", label: "Net payé", value: slice.netPaye, emphasis: true },
     ],
     notes: [
-      "France issues no employer annual tax certificate: the monthly DSN (net-entreprises.fr) replaced the DADS "
-      + "and carries the prélèvement à la source to the DGFiP since 1 January 2019 (CGI art. 204 A et s.), so the "
-      + "employee's return is pre-filled and the employer owes monthly bulletins de paie (C. trav. art. L3243-2, "
-      + "R3243-1). This page reconciles one month of DSN-declared versements; it is not a certificate.",
+      "France issues no employer annual tax certificate: the monthly DSN (net-entreprises.fr) replaced the DADS " +
+        "and carries the prélèvement à la source to the DGFiP since 1 January 2019 (CGI art. 204 A et s.), so the " +
+        "employee's return is pre-filled and the employer owes monthly bulletins de paie (C. trav. art. L3243-2, " +
+        "R3243-1). This page reconciles one month of DSN-declared versements; it is not a certificate.",
       "Salaire brut, Net payé — lignes du bulletin de paie, C. trav. art. R3243-1 (mentions obligatoires).",
-      "Montant net imposable, Prélèvement à la source — CGI art. 204 A et s.; assiette mensuelle et grille en "
-      + "vigueur à la date du versement, BOI-IR-PAS-20-20-30-10 (§90 base mensuelle, §120 grille applicable).",
-      "Vieillesse, CSG, CRDS — cotisations URSSAF 2026 (urssaf.fr, taux et barèmes secteur privé): CSG/CRDS sur "
-      + "98,25 % du brut dans la limite de 4 × PASS. AGIRC-ARRCO, CEG, CET — agirc-arrco.fr (tranches 1 et 2).",
-      "The employee's NIR (numéro de sécurité sociale) is intentionally not printed here: it travels on the "
-      + "monthly DSN, and no annual statement carries a statutory box for it (named gap, not a blank).",
-      "Versements beyond this month's committed runs — drafts, uncommitted calculations, future months — are "
-      + "excluded by construction: only run_status = 'committed' stubs reconcile.",
+      "Montant net imposable, Prélèvement à la source — CGI art. 204 A et s.; assiette mensuelle et grille en " +
+        "vigueur à la date du versement, BOI-IR-PAS-20-20-30-10 (§90 base mensuelle, §120 grille applicable).",
+      "Vieillesse, CSG, CRDS — cotisations URSSAF 2026 (urssaf.fr, taux et barèmes secteur privé): CSG/CRDS sur " +
+        "98,25 % du brut dans la limite de 4 × PASS. AGIRC-ARRCO, CEG, CET — agirc-arrco.fr (tranches 1 et 2).",
+      "The employee's NIR (numéro de sécurité sociale) is intentionally not printed here: it travels on the " +
+        "monthly DSN, and no annual statement carries a statutory box for it (named gap, not a blank).",
+      "Versements beyond this month's committed runs — drafts, uncommitted calculations, future months — are " +
+        "excluded by construction: only run_status = 'committed' stubs reconcile.",
     ],
   };
 }
@@ -345,25 +388,25 @@ function frRecapFiling(): PayrollYearEndFiling {
     label: "Récapitulatif annuel DSN (par salarié, par mois)",
     cadence: "annual",
     description:
-      "France has no employer-issued annual tax certificate — the monthly DSN carries pay and PAS to the "
-      + "authorities — so this filing is the per-employee, per-month reconciliation of the year's committed "
-      + "versements (brut, net imposable, PAS, cotisations), tying each month to its DSN to the centime.",
+      "France has no employer-issued annual tax certificate — the monthly DSN carries pay and PAS to the " +
+      "authorities — so this filing is the per-employee, per-month reconciliation of the year's committed " +
+      "versements (brut, net imposable, PAS, cotisations), tying each month to its DSN to the centime.",
     emptyText: "No committed French pay stubs for this year.",
     population: (orgId, taxYear) => frRecapPopulation(orgId, taxYear),
     parseRowId: parseFrRecapRowId,
     slip: { build: (orgId, taxYear, rowId) => frRecapSlip(orgId, taxYear, rowId) },
     downloadRefusal:
-      "the FR pack produces no DSN file (Déclaration Sociale Nominative — the monthly employer declaration "
-      + "via net-entreprises.fr): this reconciliation is the source data; transmit the DSN through "
-      + "net-entreprises.fr. The DSN submission standard itself is out of scope as a separate campaign.",
+      "the FR pack produces no DSN file (Déclaration Sociale Nominative — the monthly employer declaration " +
+      "via net-entreprises.fr): this reconciliation is the source data; transmit the DSN through " +
+      "net-entreprises.fr. The DSN submission standard itself is out of scope as a separate campaign.",
     // A wrong month is corrected where it lives: the DSN is rectified out
     // of product (annule-et-remplace) and the bulletin reissued. There is
     // no annual certificate to re-file, so no in-product mechanics exist.
     amendment: {
       supported: false,
       refusal:
-        "a wrong versement is corrected out of product with a DSN rectificative (annule-et-remplace) via "
-        + "net-entreprises.fr and a reissued bulletin de paie — no in-product correction file is built",
+        "a wrong versement is corrected out of product with a DSN rectificative (annule-et-remplace) via " +
+        "net-entreprises.fr and a reissued bulletin de paie — no in-product correction file is built",
     },
   };
 }
@@ -375,9 +418,7 @@ let cached: PayrollPackFilings | null = null;
 export function frPackFilings(): PayrollPackFilings {
   cached ??= {
     country: "FR",
-    programTypes: [
-      { key: "fr_siret", label: "SIRET — établissement employeur (DSN)" },
-    ],
+    programTypes: [{ key: "fr_siret", label: "SIRET — établissement employeur (DSN)" }],
     yearEnd: [frRecapFiling()],
   };
   return cached;

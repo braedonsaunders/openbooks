@@ -1,13 +1,12 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
-import { NextResponse } from 'next/server'
-import { publishVersion } from '@openbooks/engine/allocations/runtime'
-import { allocationWriteErrorResponse, requireRuleId } from '../../../../../_lib.ts'
+import { NextResponse } from "next/server";
+import { publishVersion } from "@openbooks/engine/allocations/runtime";
+import { allocationWriteErrorResponse, requireRuleId } from "../../../../../_lib.ts";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Publish a draft version: A1 runs full validation (problems come back
@@ -16,33 +15,38 @@ export const runtime = 'nodejs'
  */
 async function legacyPOST(
   _req: Request,
-  { params }: { params: Promise<{ id: string; versionId: string }> }, injectedGate?: Authz | null,
+  { params }: { params: Promise<{ id: string; versionId: string }> },
+  injectedGate?: Authz | null,
 ) {
   const gate = injectedGate as Authz;
-  const { id, versionId } = await params
-  const ruleId = requireRuleId(id)
-  if (ruleId instanceof NextResponse) return ruleId
-  const versionParam = requireRuleId(versionId)
-  if (versionParam instanceof NextResponse) return versionParam
+  const { id, versionId } = await params;
+  const ruleId = requireRuleId(id);
+  if (ruleId instanceof NextResponse) return ruleId;
+  const versionParam = requireRuleId(versionId);
+  if (versionParam instanceof NextResponse) return versionParam;
   try {
-    const published = await publishVersion(
-      versionParam,
-      { orgId: gate.user.orgId, expectedRuleId: ruleId, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
-    )
+    const published = await publishVersion(versionParam, {
+      orgId: gate.user.orgId,
+      expectedRuleId: ruleId,
+      actorId: gate.user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    });
     if (published.version.ruleId !== ruleId) {
-      return notFound("record")
+      return notFound("record");
     }
     return NextResponse.json({
       version: { ...published.version, revision: published.revision },
       targets: published.targets,
-    })
+    });
   } catch (error) {
-    return allocationWriteErrorResponse(error)
+    return allocationWriteErrorResponse(error);
   }
 }
 
 export const POST = defineRoute({
-  permission: 'allocations.manage', feature: "allocations",
-  params: z.object({ "id": z.string(), "versionId": z.string() }),
-  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+  permission: "allocations.manage",
+  feature: "allocations",
+  params: z.object({ id: z.string(), versionId: z.string() }),
+  handler: ({ request, params, authz }) =>
+    legacyPOST(request, { params: Promise.resolve(params) }, authz),
 });

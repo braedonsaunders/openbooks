@@ -48,7 +48,10 @@ test("advance timing discounts one fewer period", () => {
 test("contractual advance and arrears timings are accepted without rewriting the agreement", () => {
   assert.doesNotThrow(() => assertLeaseTimingSupported("advance"));
   assert.doesNotThrow(() => assertLeaseTimingSupported("arrears"));
-  assert.throws(() => assertLeaseTimingSupported("other" as never), /matching the signed agreement/);
+  assert.throws(
+    () => assertLeaseTimingSupported("other" as never),
+    /matching the signed agreement/,
+  );
 });
 
 test("a zero rate degenerates to the undiscounted sum", () => {
@@ -81,7 +84,10 @@ test("finance schedule: interest method, straight-line amortization, retires to 
   const amortSum = m.schedule.reduce((a, l) => a + toUnits(l.amortization!), 0n);
   assert.equal(amortSum, toUnits(m.rouAsset));
   const interestSum = m.schedule.reduce((a, l) => a + toUnits(l.interest), 0n);
-  const principalSum = m.schedule.reduce((a, l) => a + toUnits(l.payment) - toUnits(l.interest), 0n);
+  const principalSum = m.schedule.reduce(
+    (a, l) => a + toUnits(l.payment) - toUnits(l.interest),
+    0n,
+  );
   assert.equal(interestSum + principalSum, toUnits("100000"));
   assert.equal(principalSum, toUnits(m.liability));
 });
@@ -114,7 +120,10 @@ test("IFRS applies the single lessee model regardless of the criteria (IFRS 16.2
 
 test("US GAAP classification criteria (842-10-25-2)", () => {
   assert.equal(classifyLease({ transfersOwnership: true }, "us_gaap").model, "finance");
-  assert.equal(classifyLease({ purchaseOptionReasonablyCertain: true }, "us_gaap").model, "finance");
+  assert.equal(
+    classifyLease({ purchaseOptionReasonablyCertain: true }, "us_gaap").model,
+    "finance",
+  );
   assert.equal(
     classifyLease({ leaseTermMonths: 60, economicLifeMonths: 72 }, "us_gaap").model,
     "finance", // 83% ≥ 75%
@@ -155,9 +164,15 @@ test("classification refuses junk numerics with a named LeaseError", () => {
     ["junk term months", { leaseTermMonths: "abc", economicLifeMonths: 120 }],
     ["fractional term months", { leaseTermMonths: 2.5, economicLifeMonths: 120 }],
     ["negative life months", { leaseTermMonths: 60, economicLifeMonths: -72 }],
-    ["junk term threshold", { leaseTermMonths: 60, economicLifeMonths: 72, termThresholdPercent: "high" }],
+    [
+      "junk term threshold",
+      { leaseTermMonths: 60, economicLifeMonths: 72, termThresholdPercent: "high" },
+    ],
     ["junk pv", { pvOfPayments: "1e5", fairValue: "100000" }],
-    ["junk threshold", { pvOfPayments: "91000", fairValue: "100000", pvThresholdPercent: "ninety" }],
+    [
+      "junk threshold",
+      { pvOfPayments: "91000", fairValue: "100000", pvThresholdPercent: "ninety" },
+    ],
   ];
   for (const [label, inputs] of junk) {
     assert.throws(
@@ -167,7 +182,12 @@ test("classification refuses junk numerics with a named LeaseError", () => {
     );
   }
   assert.throws(
-    () => classifyLessorLease({ pvOfPayments: "91000", fairValue: "100000", thirdPartyResidualGuaranteePv: "junk" }),
+    () =>
+      classifyLessorLease({
+        pvOfPayments: "91000",
+        fairValue: "100000",
+        thirdPartyResidualGuaranteePv: "junk",
+      }),
     (e) => e instanceof LeaseError,
   );
 });
@@ -235,7 +255,8 @@ test("monthly compounding uses the exact annual/12 rational, not a truncated dec
 
 test("present value rejects fractional and unbounded horizons instead of mis-splitting the denominator", () => {
   const rate = periodRateFromAnnualPercent("6", 12);
-  const pvError = (e: unknown) => e instanceof PresentValueError && /whole number of periods/.test(e.message);
+  const pvError = (e: unknown) =>
+    e instanceof PresentValueError && /whole number of periods/.test(e.message);
   // Fractional horizons previously computed without throwing: the visit loop
   // ran whole t while pow() iterated `exp` times, silently mis-splitting the
   // common denominator (periods=2.5 returned 1985.0994 — neither the 2- nor
@@ -249,7 +270,13 @@ test("present value rejects fractional and unbounded horizons instead of mis-spl
     pvError,
   );
   assert.throws(
-    () => presentValueOfLevelStream({ payment: "1000", periods: Number.MAX_SAFE_INTEGER, rate, timing: "arrears" }),
+    () =>
+      presentValueOfLevelStream({
+        payment: "1000",
+        periods: Number.MAX_SAFE_INTEGER,
+        rate,
+        timing: "arrears",
+      }),
     pvError,
   );
   assert.throws(
@@ -259,13 +286,19 @@ test("present value rejects fractional and unbounded horizons instead of mis-spl
   // The supported boundary stays usable without running a giant loop: the
   // zero-rate path is O(1), proving 1200 is accepted exactly at the cap.
   assert.equal(
-    presentValueOfLevelStream({ payment: "1000", periods: 1200, rate: { num: 0n, den: 1n }, timing: "arrears" }),
+    presentValueOfLevelStream({
+      payment: "1000",
+      periods: 1200,
+      rate: { num: 0n, den: 1n },
+      timing: "arrears",
+    }),
     "1200000.0000",
   );
 });
 
 test("period rates require a positive whole periods-per-year (no raw BigInt RangeError)", () => {
-  const rateError = (e: unknown) => e instanceof PresentValueError && /positive whole number/.test(e.message);
+  const rateError = (e: unknown) =>
+    e instanceof PresentValueError && /positive whole number/.test(e.message);
   // Non-integer counts previously escaped as `RangeError: ... cannot be
   // converted to a BigInt`, which callers catching PresentValueError miss.
   assert.throws(() => periodRateFromAnnualPercent("5", 2.5), rateError);

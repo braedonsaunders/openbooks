@@ -116,45 +116,67 @@ function occurredAtOf(now: Date): string {
   return new Date(Math.floor(now.getTime() / 60_000) * 60_000).toISOString();
 }
 
-async function occurrences(flowId: string): Promise<Array<{
-  id: string;
-  status: string;
-  attempt_count: number;
-  result: Record<string, unknown> | null;
-}>> {
-  return (await db.execute<{ id: string; status: string; attempt_count: number; result: Record<string, unknown> | null }>(sql`
+async function occurrences(flowId: string): Promise<
+  Array<{
+    id: string;
+    status: string;
+    attempt_count: number;
+    result: Record<string, unknown> | null;
+  }>
+> {
+  return (
+    await db.execute<{
+      id: string;
+      status: string;
+      attempt_count: number;
+      result: Record<string, unknown> | null;
+    }>(
+      sql`
       select o.id, o.status, o.attempt_count, o.result
         from flow_scheduled_occurrences o
        where o.flow_id = ${flowId}
        order by o.occurred_at, o.node_id
-    `, "objects")).map((row) => ({ ...row, result: row.result ?? null }));
+    `,
+      "objects",
+    )
+  ).map((row) => ({ ...row, result: row.result ?? null }));
 }
 
 const runCount = async (orgId: string): Promise<number> =>
   Number(
-    (await db.execute<{ n: number }>(
-        sql`select count(*) as n from flow_runs where org_id = ${orgId}`, "objects",
-      ))[0]!.n,
+    (
+      await db.execute<{ n: number }>(
+        sql`select count(*) as n from flow_runs where org_id = ${orgId}`,
+        "objects",
+      )
+    )[0]!.n,
   );
 
 const outboxCount = async (orgId: string): Promise<number> =>
   Number(
-    (await db.execute<{ n: number }>(
-        sql`select count(*) as n from scheduler_outbox where org_id = ${orgId}`, "objects",
-      ))[0]!.n,
+    (
+      await db.execute<{ n: number }>(
+        sql`select count(*) as n from scheduler_outbox where org_id = ${orgId}`,
+        "objects",
+      )
+    )[0]!.n,
   );
 
 const notificationCount = async (orgId: string): Promise<number> =>
   Number(
-    (await db.execute<{ n: number }>(
-        sql`select count(*) as n from notifications where org_id = ${orgId}`, "objects",
-      ))[0]!.n,
+    (
+      await db.execute<{ n: number }>(
+        sql`select count(*) as n from notifications where org_id = ${orgId}`,
+        "objects",
+      )
+    )[0]!.n,
   );
 
 /** The committed cron cursor of the flow (null while never fired). */
 const cursorOf = async (flowId: string): Promise<Date | null> => {
   const r = await db.execute<{ c: Date | string | null }>(
-    sql`select last_scheduled_run_at as c from flows where id = ${flowId}`, "objects",
+    sql`select last_scheduled_run_at as c from flows where id = ${flowId}`,
+    "objects",
   );
   const raw = r[0]?.c;
   return raw == null ? null : raw instanceof Date ? raw : new Date(raw);
@@ -170,20 +192,24 @@ async function failFlowRunInserts(orgId: string): Promise<() => Promise<void>> {
   const suffix = orgId.replaceAll("-", "").slice(0, 12);
   const fn = `openbooks_test_fail_flowrun_${suffix}`;
   const trigger = `openbooks_test_fail_flowrun_${suffix}`;
-  await db.execute(sql.raw(`
+  await db.execute(
+    sql.raw(`
     create function public.${fn}() returns trigger
     language plpgsql as $$
     begin
       raise exception 'forced flow-run failure';
     end
     $$
-  `));
-  await db.execute(sql.raw(`
+  `),
+  );
+  await db.execute(
+    sql.raw(`
     create trigger ${trigger}
     before insert on public.flow_runs
     for each row when (new.org_id = '${orgId}'::uuid)
     execute function public.${fn}()
-  `));
+  `),
+  );
   return async () => {
     await db.execute(sql.raw(`drop trigger if exists ${trigger} on public.flow_runs`));
     await db.execute(sql.raw(`drop function if exists public.${fn}()`));
@@ -199,7 +225,8 @@ async function pauseRecoveryTake(orgId: string): Promise<() => Promise<void>> {
   const suffix = orgId.replaceAll("-", "").slice(0, 12);
   const fn = `openbooks_test_pause_scheduled_take_${suffix}`;
   const trigger = `openbooks_test_pause_scheduled_take_${suffix}`;
-  await db.execute(sql.raw(`
+  await db.execute(
+    sql.raw(`
     create function public.${fn}() returns trigger
     language plpgsql as $$
     begin
@@ -207,8 +234,10 @@ async function pauseRecoveryTake(orgId: string): Promise<() => Promise<void>> {
       return new;
     end
     $$
-  `));
-  await db.execute(sql.raw(`
+  `),
+  );
+  await db.execute(
+    sql.raw(`
     create trigger ${trigger}
     before update on public.flow_scheduled_occurrences
     for each row when (
@@ -217,9 +246,12 @@ async function pauseRecoveryTake(orgId: string): Promise<() => Promise<void>> {
       and new.attempt_count = 2
     )
     execute function public.${fn}()
-  `));
+  `),
+  );
   return async () => {
-    await db.execute(sql.raw(`drop trigger if exists ${trigger} on public.flow_scheduled_occurrences`));
+    await db.execute(
+      sql.raw(`drop trigger if exists ${trigger} on public.flow_scheduled_occurrences`),
+    );
     await db.execute(sql.raw(`drop function if exists public.${fn}()`));
   };
 }
@@ -250,8 +282,11 @@ test(
       assert.equal(occ.length, 1);
       assert.equal(occ[0]!.status, "firing");
       assert.equal(occ[0]!.attempt_count, 1);
-      assert.deepEqual((await cursorOf(probe.fixture.flowId))?.toISOString(), probe.occurredAt,
-        "the cursor advanced atomically with the claim");
+      assert.deepEqual(
+        (await cursorOf(probe.fixture.flowId))?.toISOString(),
+        probe.occurredAt,
+        "the cursor advanced atomically with the claim",
+      );
       assert.equal(await runCount(org.orgId), 0, "no run evidence committed yet");
       assert.equal(await outboxCount(org.orgId), 0);
       assert.equal(await notificationCount(org.orgId), 0);
@@ -271,19 +306,36 @@ test(
       assert.equal(occ.length, 1, "still exactly one occurrence");
       assert.equal(occ[0]!.status, "fired");
       assert.equal(await runCount(org.orgId), 1, "one run row adopted by the resume");
-      const runs = await db.execute<{ id: string; occurrenceKey: string | null; status: string; trigger: string }>(sql`
+      const runs = await db.execute<{
+        id: string;
+        occurrenceKey: string | null;
+        status: string;
+        trigger: string;
+      }>(
+        sql`
           select id, occurrence_key as "occurrenceKey", status, trigger
             from flow_runs where org_id = ${org.orgId}
-        `, "objects");
+        `,
+        "objects",
+      );
       assert.equal(runs.length, 1);
       assert.equal(runs[0]!.status, "completed");
       assert.equal(runs[0]!.trigger, "scheduled");
-      assert.match(runs[0]!.occurrenceKey ?? "", /^sched\|/, "deterministic occurrence key present");
+      assert.match(
+        runs[0]!.occurrenceKey ?? "",
+        /^sched\|/,
+        "deterministic occurrence key present",
+      );
       assert.equal(await outboxCount(org.orgId), 1, "exactly one deferred email");
       assert.match(
-        (await db.execute<{ k: string }>(sql`
+        (
+          await db.execute<{ k: string }>(
+            sql`
             select occurrence_key as k from scheduler_outbox where org_id = ${org.orgId}
-          `, "objects"))[0]!.k,
+          `,
+            "objects",
+          )
+        )[0]!.k,
         new RegExp(`^${runs[0]!.id}:email:`),
         "the email key is bound to the adopted run identity",
       );
@@ -324,7 +376,12 @@ test(
       await recoverLostScheduledFlows(staleRecoveryNow());
 
       assert.equal(await runCount(org.orgId), 1, "no duplicate run row");
-      const ids = (await db.execute<{ id: string }>(sql`select id from flow_runs where org_id = ${org.orgId}`, "objects")).map((r) => r.id);
+      const ids = (
+        await db.execute<{ id: string }>(
+          sql`select id from flow_runs where org_id = ${org.orgId}`,
+          "objects",
+        )
+      ).map((r) => r.id);
       assert.equal(ids.length, 1);
       assert.equal(await outboxCount(org.orgId), 1, "the retry did not double-send");
       assert.equal(await notificationCount(org.orgId), 1, "the retry did not double-notify");
@@ -380,76 +437,69 @@ test(
   },
 );
 
-test(
-  "concurrent scanners claim-and-fire each occurrence exactly once",
-  { skip: !DB },
-  async () => {
-    const probe = await seedScheduledProbe(new Date());
-    const { org, fixture } = probe;
-    try {
-      // Both scanners target the same pinned instant — same quantized
-      // occurrence, so the unique claim index decides the single winner.
-      const results = await Promise.allSettled([
-        runDueScheduledFlows(probe.now),
-        runDueScheduledFlows(probe.now),
-      ]);
-      for (const r of results) assert.equal(r.status, "fulfilled");
-      const totalFired = results.reduce(
-        (n, r) =>
-          n + ((r as PromiseFulfilledResult<Awaited<ReturnType<typeof runDueScheduledFlows>>>).value.fired),
-        0,
-      );
-      assert.equal(totalFired, 1, "exactly one scanner won the claimed occurrence");
-      const occ = await occurrences(fixture.flowId);
-      assert.equal(occ.length, 1);
-      assert.equal(occ[0]!.status, "fired");
-      assert.equal(await runCount(org.orgId), 1);
-      assert.equal(await outboxCount(org.orgId), 1);
-      assert.equal(await notificationCount(org.orgId), 1);
-    } finally {
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
+test("concurrent scanners claim-and-fire each occurrence exactly once", { skip: !DB }, async () => {
+  const probe = await seedScheduledProbe(new Date());
+  const { org, fixture } = probe;
+  try {
+    // Both scanners target the same pinned instant — same quantized
+    // occurrence, so the unique claim index decides the single winner.
+    const results = await Promise.allSettled([
+      runDueScheduledFlows(probe.now),
+      runDueScheduledFlows(probe.now),
+    ]);
+    for (const r of results) assert.equal(r.status, "fulfilled");
+    const totalFired = results.reduce(
+      (n, r) =>
+        n +
+        (r as PromiseFulfilledResult<Awaited<ReturnType<typeof runDueScheduledFlows>>>).value.fired,
+      0,
+    );
+    assert.equal(totalFired, 1, "exactly one scanner won the claimed occurrence");
+    const occ = await occurrences(fixture.flowId);
+    assert.equal(occ.length, 1);
+    assert.equal(occ[0]!.status, "fired");
+    assert.equal(await runCount(org.orgId), 1);
+    assert.equal(await outboxCount(org.orgId), 1);
+    assert.equal(await notificationCount(org.orgId), 1);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
-test(
-  "concurrent recovery workers take a stale occurrence only once",
-  { skip: !DB },
-  async () => {
-    const probe = await seedScheduledProbe(new Date());
-    const { org, fixture } = probe;
-    let dropFailureTrigger: () => Promise<void> = () => Promise.resolve();
-    let dropPauseTrigger: () => Promise<void> = () => Promise.resolve();
-    try {
-      // Leave one stale claim behind after its initial firing fails. Both
-      // recovery workers will select this same row before either can finish
-      // its deliberately paused take UPDATE.
-      dropFailureTrigger = await failFlowRunInserts(org.orgId);
-      assert.equal((await runDueScheduledFlows(probe.now)).errors, 1);
-      await dropFailureTrigger();
-      dropFailureTrigger = () => Promise.resolve();
+test("concurrent recovery workers take a stale occurrence only once", { skip: !DB }, async () => {
+  const probe = await seedScheduledProbe(new Date());
+  const { org, fixture } = probe;
+  let dropFailureTrigger: () => Promise<void> = () => Promise.resolve();
+  let dropPauseTrigger: () => Promise<void> = () => Promise.resolve();
+  try {
+    // Leave one stale claim behind after its initial firing fails. Both
+    // recovery workers will select this same row before either can finish
+    // its deliberately paused take UPDATE.
+    dropFailureTrigger = await failFlowRunInserts(org.orgId);
+    assert.equal((await runDueScheduledFlows(probe.now)).errors, 1);
+    await dropFailureTrigger();
+    dropFailureTrigger = () => Promise.resolve();
 
-      dropPauseTrigger = await pauseRecoveryTake(org.orgId);
-      const recoveries = await Promise.allSettled([
-        recoverLostScheduledFlows(staleRecoveryNow()),
-        recoverLostScheduledFlows(staleRecoveryNow()),
-      ]);
-      for (const recovery of recoveries) assert.equal(recovery.status, "fulfilled");
+    dropPauseTrigger = await pauseRecoveryTake(org.orgId);
+    const recoveries = await Promise.allSettled([
+      recoverLostScheduledFlows(staleRecoveryNow()),
+      recoverLostScheduledFlows(staleRecoveryNow()),
+    ]);
+    for (const recovery of recoveries) assert.equal(recovery.status, "fulfilled");
 
-      const occ = await occurrences(fixture.flowId);
-      assert.equal(occ.length, 1);
-      assert.equal(occ[0]!.status, "fired");
-      assert.equal(occ[0]!.attempt_count, 2, "one initial take plus one recovery take");
-      assert.equal(await runCount(org.orgId), 1, "one recovery firing");
-      assert.equal(await outboxCount(org.orgId), 1, "one deferred email");
-      assert.equal(await notificationCount(org.orgId), 1, "one notification");
-    } finally {
-      await dropPauseTrigger();
-      await dropFailureTrigger();
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
+    const occ = await occurrences(fixture.flowId);
+    assert.equal(occ.length, 1);
+    assert.equal(occ[0]!.status, "fired");
+    assert.equal(occ[0]!.attempt_count, 2, "one initial take plus one recovery take");
+    assert.equal(await runCount(org.orgId), 1, "one recovery firing");
+    assert.equal(await outboxCount(org.orgId), 1, "one deferred email");
+    assert.equal(await notificationCount(org.orgId), 1, "one notification");
+  } finally {
+    await dropPauseTrigger();
+    await dropFailureTrigger();
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test(
   "an occurrence whose flow was disabled since claiming is closed without ghost-firing",

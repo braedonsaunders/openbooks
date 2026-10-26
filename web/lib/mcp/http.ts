@@ -7,11 +7,7 @@ import {
   mcpPreflightResponse,
   resolveMcpRequestId,
 } from "@braedonsaunders/appkit-mcp";
-import {
-  enforceRateLimit,
-  guardApiKeyFeature,
-  resolveApiKeyAuth,
-} from "../api-auth";
+import { enforceRateLimit, guardApiKeyFeature, resolveApiKeyAuth } from "../api-auth";
 import { insertApiKeyEvent, transportEvent } from "../application/api-key-audit";
 import { createOpenBooksMcpServer } from "./server";
 
@@ -42,8 +38,14 @@ function publicApplicationUrl(): URL | null {
 export function boundaryOptions() {
   const publicUrl = publicApplicationUrl();
   return {
-    allowedHosts: [...configured("OPENBOOKS_MCP_ALLOWED_HOSTS"), ...(publicUrl ? [publicUrl.host] : [])],
-    allowedOrigins: [...configured("OPENBOOKS_MCP_ALLOWED_ORIGINS"), ...(publicUrl ? [publicUrl.origin] : [])],
+    allowedHosts: [
+      ...configured("OPENBOOKS_MCP_ALLOWED_HOSTS"),
+      ...(publicUrl ? [publicUrl.host] : []),
+    ],
+    allowedOrigins: [
+      ...configured("OPENBOOKS_MCP_ALLOWED_ORIGINS"),
+      ...(publicUrl ? [publicUrl.origin] : []),
+    ],
   };
 }
 
@@ -84,11 +86,16 @@ export async function handleMcpPost(request: Request): Promise<Response> {
   // hook before exposing its result; fresh mutations write inside the claim
   // transaction and reads, replays, and failures write through that hook.
   try {
-    await insertApiKeyEvent(transportEvent(
-      auth.audit,
-      { orgId: auth.user.orgId, keyId: auth.keyId },
-      { statusCode: response.status, ...(transportError !== undefined ? { error: "transport failure" } : {}) },
-    ));
+    await insertApiKeyEvent(
+      transportEvent(
+        auth.audit,
+        { orgId: auth.user.orgId, keyId: auth.keyId },
+        {
+          statusCode: response.status,
+          ...(transportError !== undefined ? { error: "transport failure" } : {}),
+        },
+      ),
+    );
   } catch (cause) {
     console.error("[mcp] execution evidence unavailable", cause);
     return jsonRpcErrorResponse(500, -32003, "Execution evidence unavailable");

@@ -69,7 +69,10 @@ test("2024 reports through DIRF; 2025+ through eSocial + EFD-Reinf", () => {
 
 test("the BR pack declares the informe as its annual filing", () => {
   const filings = brPackFilings();
-  assert.deepEqual(filings.yearEnd.map((filing) => filing.key), ["informe"]);
+  assert.deepEqual(
+    filings.yearEnd.map((filing) => filing.key),
+    ["informe"],
+  );
   const informe = filings.yearEnd[0]!;
   assert.equal(informe.cadence, "annual");
   assert.equal(

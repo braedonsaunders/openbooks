@@ -9,14 +9,21 @@ import test from "node:test";
 // (the chart itself is stubbed: ECharts needs no canvas for this).
 
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/analytics/financial-health", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/analytics/financial-health",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__fcRouter}export function usePathname(){return '/analytics/financial-health'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__fcRouter}export function usePathname(){return '/analytics/financial-health'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier.endsWith("/_ui/charts")) {
       return {
         shortCircuit: true,
@@ -47,23 +54,31 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 function forecastParams(): Record<string, unknown> {
   return {
     periodsPerYear: 12,
-    defaultMethod: 'ets',
-    methods: ['ets', 'ets_damped', 'linear', 'seasonal', 'moving_avg', 'arima'],
+    defaultMethod: "ets",
+    methods: ["ets", "ets_damped", "linear", "seasonal", "moving_avg", "arima"],
     defaultHorizon: 6,
     defaultConfidence: 90,
-    defaultSeasonality: 'auto',
-    seasonalities: ['auto', 'none', 'monthly', 'quarterly'],
+    defaultSeasonality: "auto",
+    seasonalities: ["auto", "none", "monthly", "quarterly"],
     horizons: [3, 6, 12, 24],
     confidences: [80, 90, 95, 99],
     adjustments: [
-      { code: 'neg10', value: -0.1 },
-      { code: 'neg05', value: -0.05 },
-      { code: 'zero', value: 0 },
-      { code: 'pos05', value: 0.05 },
-      { code: 'pos10', value: 0.1 },
+      { code: "neg10", value: -0.1 },
+      { code: "neg05", value: -0.05 },
+      { code: "zero", value: 0 },
+      { code: "pos05", value: 0.05 },
+      { code: "pos10", value: 0.1 },
     ],
-    defaultAdjustment: 'zero',
-    model: { alpha: 0.3, beta: 0.1, gamma: 0.2, dampedPhi: 0.9, ma1: 0.3, minCorrelation: 0.3, minPeriods: 24 },
+    defaultAdjustment: "zero",
+    model: {
+      alpha: 0.3,
+      beta: 0.1,
+      gamma: 0.2,
+      dampedPhi: 0.9,
+      ma1: 0.3,
+      minCorrelation: 0.3,
+      minPeriods: 24,
+    },
   };
 }
 
@@ -75,10 +90,10 @@ function decliningData(): Record<string, unknown> {
       month: `2026-0${i + 1}`,
       label: `M${i + 1}`,
       revenue: String(revenue),
-      cogs: '0',
+      cogs: "0",
       grossProfit: String(revenue),
       grossMarginPct: 100,
-      opex: '0',
+      opex: "0",
       operatingIncome: String(revenue),
       operatingMarginPct: 100,
       netIncome: String(revenue),
@@ -193,8 +208,12 @@ test("short future periods keep Settings with only fitting horizons", async () =
   // Four declared names against the default 6-period horizon: the chart
   // refuses by name, but Settings stay so the operator can pick 3 instead
   // of only declaring more periods.
-  (data.forecast as { futurePeriodNames: string[] }).futurePeriodNames =
-    ["Q3 FY26", "Q4 FY26", "Q1 FY27", "Q2 FY27"];
+  (data.forecast as { futurePeriodNames: string[] }).futurePeriodNames = [
+    "Q3 FY26",
+    "Q4 FY26",
+    "Q1 FY27",
+    "Q2 FY27",
+  ];
   const { host, unmount } = await mount(data);
   try {
     const text = host.textContent ?? "";
@@ -205,7 +224,10 @@ test("short future periods keep Settings with only fitting horizons", async () =
     assert.doesNotMatch(text, /Projected Growth/);
     // The second native select is the horizon: only covered horizons stay.
     const horizon = host.querySelectorAll("select")[1];
-    assert.deepEqual([...(horizon?.querySelectorAll("option") ?? [])].map((o) => o.value), ["3"]);
+    assert.deepEqual(
+      [...(horizon?.querySelectorAll("option") ?? [])].map((o) => o.value),
+      ["3"],
+    );
   } finally {
     await unmount();
   }
@@ -214,8 +236,14 @@ test("short future periods keep Settings with only fitting horizons", async () =
 test("declared future period names label the buckets", async () => {
   globalThis.__fcRouter = { push() {}, refresh() {} };
   const data = decliningData();
-  (data.forecast as { futurePeriodNames: string[] }).futurePeriodNames =
-    ["Q3 FY26", "Q4 FY26", "Q1 FY27", "Q2 FY27", "Q3 FY27", "Q4 FY27"];
+  (data.forecast as { futurePeriodNames: string[] }).futurePeriodNames = [
+    "Q3 FY26",
+    "Q4 FY26",
+    "Q1 FY27",
+    "Q2 FY27",
+    "Q3 FY27",
+    "Q4 FY27",
+  ];
   const { host, unmount } = await mount(data);
   try {
     const text = host.textContent ?? "";
@@ -231,8 +259,15 @@ test("quiet trailing periods keep the end-anchored bucket names", async () => {
   // Activity stops after March but the window ends in June: bucket 1 is
   // July, not the April the last active month would step to.
   const data = decliningData();
-  (data.monthly as { revenue: string; grossProfit: string; operatingIncome: string; netIncome: string }[]).forEach((m, i) => {
-    const revenue = i < 3 ? '1000000' : '0';
+  (
+    data.monthly as {
+      revenue: string;
+      grossProfit: string;
+      operatingIncome: string;
+      netIncome: string;
+    }[]
+  ).forEach((m, i) => {
+    const revenue = i < 3 ? "1000000" : "0";
     m.revenue = revenue;
     m.grossProfit = revenue;
     m.operatingIncome = revenue;
@@ -251,8 +286,15 @@ test("a window with fewer than 3 active periods refuses instead of modelling", a
   globalThis.__fcRouter = { push() {}, refresh() {} };
   // Two active months of six: smoothing zeros is not a forecast.
   const data = decliningData();
-  (data.monthly as { revenue: string; grossProfit: string; operatingIncome: string; netIncome: string }[]).forEach((m, i) => {
-    const revenue = i < 2 ? '1000000' : '0';
+  (
+    data.monthly as {
+      revenue: string;
+      grossProfit: string;
+      operatingIncome: string;
+      netIncome: string;
+    }[]
+  ).forEach((m, i) => {
+    const revenue = i < 2 ? "1000000" : "0";
     m.revenue = revenue;
     m.grossProfit = revenue;
     m.operatingIncome = revenue;
@@ -272,7 +314,7 @@ test("an in-domain projection shows no caveat", async () => {
   globalThis.__fcRouter = { push() {}, refresh() {} };
   const data = decliningData();
   (data.monthly as { revenue: string }[]).forEach((m) => {
-    m.revenue = '1000000';
+    m.revenue = "1000000";
   });
   const { host, unmount } = await mount(data);
   try {

@@ -163,23 +163,38 @@ test(
         ],
       };
       const imports = await Promise.all([
-        importStatement(statementInput, { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null }),
-        importStatement(statementInput, { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null }),
+        importStatement(statementInput, {
+          orgId: org.orgId,
+          userId: actor,
+          allowedSubsidiaryIds: null,
+        }),
+        importStatement(statementInput, {
+          orgId: org.orgId,
+          userId: actor,
+          allowedSubsidiaryIds: null,
+        }),
       ]);
       assert.equal(imports.filter((result) => result.statementId !== null).length, 1);
-      assert.equal(imports.reduce((count, result) => count + result.imported, 0), 3);
-      assert.equal(imports.reduce((count, result) => count + result.duplicates, 0), 3);
+      assert.equal(
+        imports.reduce((count, result) => count + result.imported, 0),
+        3,
+      );
+      assert.equal(
+        imports.reduce((count, result) => count + result.duplicates, 0),
+        3,
+      );
 
-      const statementRows = (await db.execute<{ id: string; bank_transaction_id: string }>(sql`
+      const statementRows = await db.execute<{ id: string; bank_transaction_id: string }>(
+        sql`
         select id, bank_transaction_id
           from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
          order by bank_transaction_id
-      `, "objects"));
-      assert.equal(statementRows.length, 3);
-      const statementByRef = new Map(
-        statementRows.map((row) => [row.bank_transaction_id, row.id]),
+      `,
+        "objects",
       );
+      assert.equal(statementRows.length, 3);
+      const statementByRef = new Map(statementRows.map((row) => [row.bank_transaction_id, row.id]));
 
       const starts = await Promise.allSettled([
         startReconciliation(
@@ -200,14 +215,10 @@ test(
         ),
       ]);
       const fulfilled = starts.filter(
-        (result): result is PromiseFulfilledResult<{ id: string }> =>
-          result.status === "fulfilled",
+        (result): result is PromiseFulfilledResult<{ id: string }> => result.status === "fulfilled",
       );
       assert.equal(fulfilled.length, 1);
-      assert.equal(
-        starts.filter((result) => result.status === "rejected").length,
-        1,
-      );
+      assert.equal(starts.filter((result) => result.status === "rejected").length, 1);
       const reconciliationId = fulfilled[0]!.value.id;
       const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
 
@@ -247,10 +258,7 @@ test(
         ctx,
       );
 
-      await assert.rejects(
-        markReconciled(reconciliationId, ctx),
-        /remain unmatched/,
-      );
+      await assert.rejects(markReconciled(reconciliationId, ctx), /remain unmatched/);
       const excludedId = statementByRef.get("bank-excluded-5")!;
       await assert.rejects(
         excludeStatementLine(excludedId, "bad", ctx),
@@ -311,8 +319,7 @@ test(
              set reconciled_at = null, reconciliation_id = null
            where id = ${hundred[0]} and org_id = ${org.orgId}
         `),
-        (error: unknown) =>
-          errorChainMatches(error, /reconciliation evidence is append-only/),
+        (error: unknown) => errorChainMatches(error, /reconciliation evidence is append-only/),
       );
       await assert.rejects(
         db.execute(sql`
@@ -330,16 +337,16 @@ test(
            where id = ${statementByRef.get("bank-deposit-100")!}
              and org_id = ${org.orgId}
         `),
-        (error: unknown) =>
-          errorChainMatches(error, /statement (content|evidence) is immutable/),
+        (error: unknown) => errorChainMatches(error, /statement (content|evidence) is immutable/),
       );
 
-      const evidence = (await db.execute<{
-          exclusions: number;
-          restores: number;
-          signoffs: number;
-          stamped: number;
-        }>(sql`
+      const evidence = await db.execute<{
+        exclusions: number;
+        restores: number;
+        signoffs: number;
+        stamped: number;
+      }>(
+        sql`
         select
           (select count(*)::int
              from audit_log
@@ -364,7 +371,9 @@ test(
             where org_id = ${org.orgId}
               and reconciliation_id = ${reconciliationId}
               and reconciled_at is not null) as stamped
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.deepEqual(evidence[0], {
         exclusions: 2,
         restores: 1,
@@ -393,8 +402,13 @@ test(
          where id = ${org.accounts.bank} and org_id = ${org.orgId}
       `);
       const [reversedLineId] = await postBankJournal(org, actor, ["100.0000"], "reversed");
-      const reversedEntryId = (await db.execute<{ id: string }>(sql`
-        select entry_id as id from journal_lines where id = ${reversedLineId} and org_id = ${org.orgId}`, "objects"))[0]!.id;
+      const reversedEntryId = (
+        await db.execute<{ id: string }>(
+          sql`
+        select entry_id as id from journal_lines where id = ${reversedLineId} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!.id;
       // Finding 5.2: posted→reversed needs a posted same-book mirror.
       const mirrorId = randomUUID();
       await db.execute(sql`
@@ -407,7 +421,9 @@ test(
           (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
         select ${org.orgId}, ${mirrorId}, line_number, account_id, subsidiary_id, -amount, currency, -txn_amount, fx_rate, memo
           from journal_lines where entry_id = ${reversedEntryId} and org_id = ${org.orgId} order by line_number`);
-      await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${mirrorId}`);
+      await db.execute(
+        sql`update journal_entries set status = 'posted', posted_at = now() where id = ${mirrorId}`,
+      );
       await db.execute(sql`
         update journal_entries
            set status = 'reversed'
@@ -441,11 +457,16 @@ test(
         },
         ctx,
       );
-      const statementLineId = (await db.execute<{ id: string }>(sql`
+      const statementLineId = (
+        await db.execute<{ id: string }>(
+          sql`
           select id
             from bank_statement_lines
            where org_id = ${org.orgId} and bank_transaction_id = 'reversed-deposit'
-        `, "objects"))[0]!.id;
+        `,
+          "objects",
+        )
+      )[0]!.id;
 
       const automatic = await autoMatch(reconciliation.id, ctx);
       assert.equal(automatic.matched, 0);
@@ -506,11 +527,16 @@ test(
         },
         ctx,
       );
-      const statementLineId = (await db.execute<{ id: string }>(sql`
+      const statementLineId = (
+        await db.execute<{ id: string }>(
+          sql`
           select id
             from bank_statement_lines
            where org_id = ${org.orgId} and bank_transaction_id = 'restore-lock'
-        `, "objects"))[0]!.id;
+        `,
+          "objects",
+        )
+      )[0]!.id;
       await excludeStatementLine(statementLineId, "Pending reconciliation lock", ctx);
 
       let lockReady!: () => void;
@@ -553,11 +579,16 @@ test(
       await restore;
       if (restoreError) throw restoreError;
       assert.equal(restored, true);
-      const status = (await db.execute<{ match_status: string }>(sql`
+      const status = (
+        await db.execute<{ match_status: string }>(
+          sql`
           select match_status
             from bank_statement_lines
            where id = ${statementLineId} and org_id = ${org.orgId}
-        `, "objects"))[0]!.match_status;
+        `,
+          "objects",
+        )
+      )[0]!.match_status;
       assert.equal(status, "unmatched");
     } finally {
       await dropScratchOrg(org.orgId);
@@ -565,324 +596,342 @@ test(
   },
 );
 
-test(
-  "importing statement lines inside signed-off coverage is refused",
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actor = (await seedFlowActors(org.orgId)).adminId;
-      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
-      await db.execute(sql`
+test("importing statement lines inside signed-off coverage is refused", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+    await db.execute(sql`
         update accounts
            set reconcilable = true, currency_restriction = 'CAD'
          where id = ${org.accounts.bank} and org_id = ${org.orgId}
       `);
-      await postBankJournal(org, actor, ["100"], "covered");
-      const statementInput = {
-        accountId: org.accounts.bank,
-        source: "manual" as const,
-        statementDate: org.date,
-        openingBalance: "0",
-        closingBalance: "100",
-        currency: "CAD",
-        lines: [
-          {
-            postedOn: org.date,
-            amount: "100",
-            description: "Covered deposit",
-            bankTransactionId: "covered-deposit",
-          },
-        ],
-      };
-      await importStatement(statementInput, ctx);
-      const reconciliation = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
-        ctx,
-      );
-      assert.equal((await autoMatch(reconciliation.id, ctx)).matched, 1);
-      assert.deepEqual(await markReconciled(reconciliation.id, ctx), { status: "signed_off", journalLinesReconciled: 1 });
+    await postBankJournal(org, actor, ["100"], "covered");
+    const statementInput = {
+      accountId: org.accounts.bank,
+      source: "manual" as const,
+      statementDate: org.date,
+      openingBalance: "0",
+      closingBalance: "100",
+      currency: "CAD",
+      lines: [
+        {
+          postedOn: org.date,
+          amount: "100",
+          description: "Covered deposit",
+          bankTransactionId: "covered-deposit",
+        },
+      ],
+    };
+    await importStatement(statementInput, ctx);
+    const reconciliation = await startReconciliation(
+      { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
+      ctx,
+    );
+    assert.equal((await autoMatch(reconciliation.id, ctx)).matched, 1);
+    assert.deepEqual(await markReconciled(reconciliation.id, ctx), {
+      status: "signed_off",
+      journalLinesReconciled: 1,
+    });
 
-      // A late-arriving but distinct transaction dated inside the signed
-      // coverage must refuse — signed-off history is immutable and the
-      // closed session could never clear the new unmatched line.
-      await assert.rejects(
-        importStatement(
-          {
-            accountId: org.accounts.bank,
-            source: "manual" as const,
-            statementDate: org.date,
-            currency: "CAD",
-            lines: [
-              {
-                postedOn: org.date,
-                amount: "7",
-                description: "Late fee inside signed coverage",
-                bankTransactionId: "late-fee-signed",
-              },
-            ],
-          },
-          ctx,
-        ),
-        /signed-off/,
-      );
-      // The preview refuses the same way — it must agree with the import.
-      await assert.rejects(
-        importStatement(
-          {
-            accountId: org.accounts.bank,
-            source: "manual" as const,
-            statementDate: org.date,
-            currency: "CAD",
-            dryRun: true,
-            lines: [
-              {
-                postedOn: org.date,
-                amount: "7",
-                description: "Late fee inside signed coverage",
-                bankTransactionId: "late-fee-signed",
-              },
-            ],
-          },
-          ctx,
-        ),
-        /signed-off/,
-      );
-      // Lines after the signed cutoff still import.
-      const dayAfter = new Date(Date.parse(`${org.date}T00:00:00Z`) + 86_400_000)
-        .toISOString()
-        .slice(0, 10);
-      const later = await importStatement(
+    // A late-arriving but distinct transaction dated inside the signed
+    // coverage must refuse — signed-off history is immutable and the
+    // closed session could never clear the new unmatched line.
+    await assert.rejects(
+      importStatement(
         {
           accountId: org.accounts.bank,
           source: "manual" as const,
-          statementDate: dayAfter,
+          statementDate: org.date,
           currency: "CAD",
           lines: [
             {
-              postedOn: dayAfter,
+              postedOn: org.date,
               amount: "7",
-              description: "Next-day fee",
-              bankTransactionId: "next-day-fee",
+              description: "Late fee inside signed coverage",
+              bankTransactionId: "late-fee-signed",
             },
           ],
         },
         ctx,
-      );
-      assert.equal(later.imported, 1);
-      // And retrying the already-imported file stays idempotent —
-      // grandfathered duplicates never trip the cutoff.
-      const retry = await importStatement(statementInput, ctx);
-      assert.equal(retry.statementId, null);
-      assert.equal(retry.duplicates, 1);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      ),
+      /signed-off/,
+    );
+    // The preview refuses the same way — it must agree with the import.
+    await assert.rejects(
+      importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual" as const,
+          statementDate: org.date,
+          currency: "CAD",
+          dryRun: true,
+          lines: [
+            {
+              postedOn: org.date,
+              amount: "7",
+              description: "Late fee inside signed coverage",
+              bankTransactionId: "late-fee-signed",
+            },
+          ],
+        },
+        ctx,
+      ),
+      /signed-off/,
+    );
+    // Lines after the signed cutoff still import.
+    const dayAfter = new Date(Date.parse(`${org.date}T00:00:00Z`) + 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const later = await importStatement(
+      {
+        accountId: org.accounts.bank,
+        source: "manual" as const,
+        statementDate: dayAfter,
+        currency: "CAD",
+        lines: [
+          {
+            postedOn: dayAfter,
+            amount: "7",
+            description: "Next-day fee",
+            bankTransactionId: "next-day-fee",
+          },
+        ],
+      },
+      ctx,
+    );
+    assert.equal(later.imported, 1);
+    // And retrying the already-imported file stays idempotent —
+    // grandfathered duplicates never trip the cutoff.
+    const retry = await importStatement(statementInput, ctx);
+    assert.equal(retry.statementId, null);
+    assert.equal(retry.duplicates, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "separate ID-less files with distinct balances hold overlapping lines out until opt-in; the identical file still dedupes",
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actor = (await seedFlowActors(org.orgId)).adminId;
-      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
-      await db.execute(sql`
+test("separate ID-less files with distinct balances hold overlapping lines out until opt-in; the identical file still dedupes", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+    await db.execute(sql`
         update accounts
            set reconcilable = true, currency_restriction = 'CAD'
          where id = ${org.accounts.bank} and org_id = ${org.orgId}
       `);
-      const fileA = {
+    const fileA = {
+      accountId: org.accounts.bank,
+      source: "manual" as const,
+      statementDate: org.date,
+      openingBalance: "1000",
+      closingBalance: "1090",
+      currency: "CAD",
+      // Two genuine $5 coffees on the same day: content-identical, both
+      // real, both import clean on first sight.
+      lines: [
+        { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
+        { postedOn: org.date, amount: "-5.0000", description: "coffee shop" },
+        { postedOn: org.date, amount: "100.0000", description: "PAYROLL" },
+      ],
+    };
+    const first = await importStatement(fileA, ctx);
+    assert.equal(first.imported, 3);
+    assert.equal(first.duplicates, 0);
+    assert.equal(first.possibleDuplicates, 0);
+    assert.deepEqual(
+      first.lines.map((line) => line.possibleDuplicateOf),
+      [null, null, null],
+    );
+
+    // An independent second file carries the same content with DISTINCT
+    // balances: no replay proof exists, so its overlapping lines are
+    // possible duplicates. The default preview and commit hold them out;
+    // only an explicit opt-in imports them, flagged against the earlier line.
+    const overlapping = {
+      ...fileA,
+      openingBalance: "2000",
+      closingBalance: "2090",
+      lines: [
+        { postedOn: org.date, amount: "100.0000", description: "payroll" },
+        { postedOn: org.date, amount: "-5.0000", description: "COFFEE  SHOP" },
+        { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
+      ],
+    };
+    const preview = await importStatement({ ...overlapping, dryRun: true }, ctx);
+    assert.equal(preview.statementId, null);
+    assert.equal(preview.imported, 0);
+    assert.equal(preview.duplicates, 0);
+    assert.equal(preview.possibleDuplicates, 3);
+    assert.deepEqual(preview.lines, [], "the default preview lists no line for import");
+    assert.equal(preview.possibleDuplicateLines.length, 3);
+    assert.ok(preview.possibleDuplicateLines.every((line) => line.possibleDuplicateOf !== null));
+
+    const defaultCommit = await importStatement(overlapping, ctx);
+    assert.equal(
+      defaultCommit.statementId,
+      null,
+      "nothing is written when every line is a possible duplicate",
+    );
+    assert.equal(defaultCommit.imported, 0);
+    assert.equal(defaultCommit.possibleDuplicates, 3);
+    const storedBeforeOptIn = (
+      await db.execute<{ n: number }>(
+        sql`
+        select count(*)::int as n from bank_statement_lines
+         where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
+      `,
+        "objects",
+      )
+    )[0]!.n;
+    assert.equal(storedBeforeOptIn, 3, "held-out lines are not stored");
+
+    const second = await importStatement({ ...overlapping, includePossibleDuplicates: true }, ctx);
+    assert.equal(second.imported, 3);
+    assert.equal(second.duplicates, 0);
+    assert.equal(second.possibleDuplicates, 3);
+
+    // Every flagged line points at an earlier line with the same content,
+    // and ID-less imports store no synthetic bank key.
+    const stored = await db.execute<{
+      id: string;
+      bank_transaction_id: string | null;
+      possible_duplicate_of: string | null;
+    }>(
+      sql`
+        select id, bank_transaction_id, possible_duplicate_of
+          from bank_statement_lines
+         where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
+      `,
+      "objects",
+    );
+    assert.equal(stored.length, 6);
+    for (const row of stored) assert.equal(row.bank_transaction_id, null);
+    const flagged = stored.filter((row) => row.possible_duplicate_of);
+    assert.equal(flagged.length, 3);
+    const earlierIds = new Set(
+      stored.filter((row) => !row.possible_duplicate_of).map((row) => row.id),
+    );
+    for (const row of flagged) assert.ok(earlierIds.has(row.possible_duplicate_of!));
+
+    // Replaying the identical first file still dedupes cleanly.
+    const retry = await importStatement(fileA, ctx);
+    assert.equal(retry.statementId, null);
+    assert.equal(retry.imported, 0);
+    assert.equal(retry.duplicates, 3);
+    assert.equal(retry.possibleDuplicates, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an equal closing balance on a distinct file holds a genuine twin for review, never drops it", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+    await db.execute(sql`
+        update accounts
+           set reconcilable = true, currency_restriction = 'CAD'
+         where id = ${org.accounts.bank} and org_id = ${org.orgId}
+      `);
+    const first = await importStatement(
+      {
         accountId: org.accounts.bank,
         source: "manual" as const,
         statementDate: org.date,
         openingBalance: "1000",
-        closingBalance: "1090",
+        closingBalance: "995",
         currency: "CAD",
-        // Two genuine $5 coffees on the same day: content-identical, both
-        // real, both import clean on first sight.
+        lines: [{ postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" }],
+      },
+      ctx,
+    );
+    assert.equal(first.imported, 1);
+    assert.equal(first.duplicates, 0);
+
+    // A distinct second file ends on the same closing balance — offsetting
+    // activity in between restores it. A balance match is not transaction
+    // identity, so the genuine second coffee is a possible duplicate: the
+    // default commit imports the distinct snack and holds the coffee out.
+    const second = await importStatement(
+      {
+        accountId: org.accounts.bank,
+        source: "manual" as const,
+        statementDate: org.date,
+        openingBalance: "1005",
+        closingBalance: "995",
+        currency: "CAD",
         lines: [
           { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
-          { postedOn: org.date, amount: "-5.0000", description: "coffee shop" },
-          { postedOn: org.date, amount: "100.0000", description: "PAYROLL" },
+          { postedOn: org.date, amount: "-5.0000", description: "SNACK BAR" },
         ],
-      };
-      const first = await importStatement(fileA, ctx);
-      assert.equal(first.imported, 3);
-      assert.equal(first.duplicates, 0);
-      assert.equal(first.possibleDuplicates, 0);
-      assert.deepEqual(first.lines.map((line) => line.possibleDuplicateOf), [null, null, null]);
+      },
+      ctx,
+    );
+    assert.equal(second.imported, 1);
+    assert.equal(second.duplicates, 0);
+    assert.equal(second.possibleDuplicates, 1);
+    assert.deepEqual(
+      second.lines.map((line) => line.description),
+      ["SNACK BAR"],
+    );
+    const [heldCoffee] = second.possibleDuplicateLines;
+    assert.ok(heldCoffee!.possibleDuplicateOf);
 
-      // An independent second file carries the same content with DISTINCT
-      // balances: no replay proof exists, so its overlapping lines are
-      // possible duplicates. The default preview and commit hold them out;
-      // only an explicit opt-in imports them, flagged against the earlier line.
-      const overlapping = {
-        ...fileA,
-        openingBalance: "2000",
-        closingBalance: "2090",
-        lines: [
-          { postedOn: org.date, amount: "100.0000", description: "payroll" },
-          { postedOn: org.date, amount: "-5.0000", description: "COFFEE  SHOP" },
-          { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
-        ],
-      };
-      const preview = await importStatement({ ...overlapping, dryRun: true }, ctx);
-      assert.equal(preview.statementId, null);
-      assert.equal(preview.imported, 0);
-      assert.equal(preview.duplicates, 0);
-      assert.equal(preview.possibleDuplicates, 3);
-      assert.deepEqual(preview.lines, [], "the default preview lists no line for import");
-      assert.equal(preview.possibleDuplicateLines.length, 3);
-      assert.ok(preview.possibleDuplicateLines.every((line) => line.possibleDuplicateOf !== null));
-
-      const defaultCommit = await importStatement(overlapping, ctx);
-      assert.equal(defaultCommit.statementId, null, "nothing is written when every line is a possible duplicate");
-      assert.equal(defaultCommit.imported, 0);
-      assert.equal(defaultCommit.possibleDuplicates, 3);
-      const storedBeforeOptIn = (await db.execute<{ n: number }>(sql`
-        select count(*)::int as n from bank_statement_lines
-         where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
-      `, "objects"))[0]!.n;
-      assert.equal(storedBeforeOptIn, 3, "held-out lines are not stored");
-
-      const second = await importStatement({ ...overlapping, includePossibleDuplicates: true }, ctx);
-      assert.equal(second.imported, 3);
-      assert.equal(second.duplicates, 0);
-      assert.equal(second.possibleDuplicates, 3);
-
-      // Every flagged line points at an earlier line with the same content,
-      // and ID-less imports store no synthetic bank key.
-      const stored = await db.execute<{
-        id: string;
-        bank_transaction_id: string | null;
-        possible_duplicate_of: string | null;
-      }>(sql`
-        select id, bank_transaction_id, possible_duplicate_of
-          from bank_statement_lines
-         where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
-      `, "objects");
-      assert.equal(stored.length, 6);
-      for (const row of stored) assert.equal(row.bank_transaction_id, null);
-      const flagged = stored.filter((row) => row.possible_duplicate_of);
-      assert.equal(flagged.length, 3);
-      const earlierIds = new Set(
-        stored.filter((row) => !row.possible_duplicate_of).map((row) => row.id),
-      );
-      for (const row of flagged) assert.ok(earlierIds.has(row.possible_duplicate_of!));
-
-      // Replaying the identical first file still dedupes cleanly.
-      const retry = await importStatement(fileA, ctx);
-      assert.equal(retry.statementId, null);
-      assert.equal(retry.imported, 0);
-      assert.equal(retry.duplicates, 3);
-      assert.equal(retry.possibleDuplicates, 0);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
-
-test(
-  "an equal closing balance on a distinct file holds a genuine twin for review, never drops it",
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actor = (await seedFlowActors(org.orgId)).adminId;
-      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
-      await db.execute(sql`
-        update accounts
-           set reconcilable = true, currency_restriction = 'CAD'
-         where id = ${org.accounts.bank} and org_id = ${org.orgId}
-      `);
-      const first = await importStatement(
-        {
-          accountId: org.accounts.bank,
-          source: "manual" as const,
-          statementDate: org.date,
-          openingBalance: "1000",
-          closingBalance: "995",
-          currency: "CAD",
-          lines: [
-            { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
-          ],
-        },
-        ctx,
-      );
-      assert.equal(first.imported, 1);
-      assert.equal(first.duplicates, 0);
-
-      // A distinct second file ends on the same closing balance — offsetting
-      // activity in between restores it. A balance match is not transaction
-      // identity, so the genuine second coffee is a possible duplicate: the
-      // default commit imports the distinct snack and holds the coffee out.
-      const second = await importStatement(
-        {
-          accountId: org.accounts.bank,
-          source: "manual" as const,
-          statementDate: org.date,
-          openingBalance: "1005",
-          closingBalance: "995",
-          currency: "CAD",
-          lines: [
-            { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
-            { postedOn: org.date, amount: "-5.0000", description: "SNACK BAR" },
-          ],
-        },
-        ctx,
-      );
-      assert.equal(second.imported, 1);
-      assert.equal(second.duplicates, 0);
-      assert.equal(second.possibleDuplicates, 1);
-      assert.deepEqual(second.lines.map((line) => line.description), ["SNACK BAR"]);
-      const [heldCoffee] = second.possibleDuplicateLines;
-      assert.ok(heldCoffee!.possibleDuplicateOf);
-
-      // The earlier file's line is the only unflagged COFFEE SHOP stored so far.
-      const earlierRow = (await db.execute<{ id: string }>(sql`
+    // The earlier file's line is the only unflagged COFFEE SHOP stored so far.
+    const earlierRow = (
+      await db.execute<{ id: string }>(
+        sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
            and description = 'COFFEE SHOP' and possible_duplicate_of is null
-      `, "objects"))[0]!;
-      assert.equal(heldCoffee!.possibleDuplicateOf, earlierRow.id);
+      `,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(heldCoffee!.possibleDuplicateOf, earlierRow.id);
 
-      // The reviewer confirms the coffee is genuine: a further file carrying
-      // it imports it flagged on explicit opt-in.
-      const optedIn = await importStatement(
-        {
-          accountId: org.accounts.bank,
-          source: "manual" as const,
-          statementDate: org.date,
-          openingBalance: "1010",
-          closingBalance: "995",
-          currency: "CAD",
-          lines: [{ postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" }],
-          includePossibleDuplicates: true,
-        },
-        ctx,
-      );
-      assert.equal(optedIn.imported, 1);
-      assert.equal(optedIn.possibleDuplicates, 1);
+    // The reviewer confirms the coffee is genuine: a further file carrying
+    // it imports it flagged on explicit opt-in.
+    const optedIn = await importStatement(
+      {
+        accountId: org.accounts.bank,
+        source: "manual" as const,
+        statementDate: org.date,
+        openingBalance: "1010",
+        closingBalance: "995",
+        currency: "CAD",
+        lines: [{ postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" }],
+        includePossibleDuplicates: true,
+      },
+      ctx,
+    );
+    assert.equal(optedIn.imported, 1);
+    assert.equal(optedIn.possibleDuplicates, 1);
 
-      // The flag points at the earlier file's line, and every imported line persists.
-      const stored = await db.execute<{
-        id: string;
-        description: string | null;
-        possible_duplicate_of: string | null;
-      }>(sql`
+    // The flag points at the earlier file's line, and every imported line persists.
+    const stored = await db.execute<{
+      id: string;
+      description: string | null;
+      possible_duplicate_of: string | null;
+    }>(
+      sql`
         select id, description, possible_duplicate_of
           from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
-      `, "objects");
-      assert.equal(stored.length, 3);
-      const flaggedCoffee = stored.find((row) => row.possible_duplicate_of !== null)!;
-      assert.equal(flaggedCoffee.description, "COFFEE SHOP");
-      assert.equal(flaggedCoffee.possible_duplicate_of, earlierRow.id);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      `,
+      "objects",
+    );
+    assert.equal(stored.length, 3);
+    const flaggedCoffee = stored.find((row) => row.possible_duplicate_of !== null)!;
+    assert.equal(flaggedCoffee.description, "COFFEE SHOP");
+    assert.equal(flaggedCoffee.possible_duplicate_of, earlierRow.id);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test("parser-skipped rows are reported in the preview and the import", async () => {
   const org = await createScratchOrg();
@@ -925,10 +974,13 @@ test("parser-skipped rows are reported in the preview and the import", async () 
     );
     assert.deepEqual(imported.skipped, skipped);
     // The skipped row is reported, never written.
-    const stored = (await db.execute<{ n: number }>(sql`
+    const stored = await db.execute<{ n: number }>(
+      sql`
       select count(*)::int as n from bank_statement_lines
        where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
-    `, "objects"));
+    `,
+      "objects",
+    );
     assert.equal(stored[0]!.n, 1);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -968,10 +1020,15 @@ test(
         },
         ctx,
       );
-      const lineId = (await db.execute<{ id: string }>(sql`
+      const lineId = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = 'discard-deposit-100'
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       const { id: reconciliationId } = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
         ctx,
@@ -985,22 +1042,31 @@ test(
 
       // The session is gone and its line is released — and the delete left
       // evidence instead of silence, atomically with the delete above.
-      const gone = (await db.execute<{ n: number }>(sql`
+      const gone = await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from reconciliations
          where id = ${reconciliationId} and org_id = ${org.orgId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(gone[0]!.n, 0);
-      const line = (await db.execute<{ match_status: string }>(sql`
+      const line = await db.execute<{ match_status: string }>(
+        sql`
         select match_status from bank_statement_lines where id = ${lineId}
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(line[0]!.match_status, "unmatched");
-      const audits = (await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(sql`
+      const audits = await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(
+        sql`
         select changes, actor_id from audit_log
          where org_id = ${org.orgId}
            and table_name = 'reconciliations'
            and row_id = ${reconciliationId}
            and action = 'discard'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(audits.length, 1);
       assert.deepEqual(audits[0]!.changes, {
         operation: "discard",
@@ -1056,10 +1122,15 @@ test(
         },
         ctx,
       );
-      const lineId = (await db.execute<{ id: string }>(sql`
+      const lineId = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and bank_transaction_id = 'match-deposit-100'
-      `, "objects"))[0]!.id;
+      `,
+          "objects",
+        )
+      )[0]!.id;
       const { id: reconciliationId } = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
         ctx,
@@ -1070,21 +1141,29 @@ test(
         ctx,
       );
       // Capture before unmatching removes the group's match rows.
-      const groupId = (await db.execute<{ group_id: string }>(sql`
+      const groupId = (
+        await db.execute<{ group_id: string }>(
+          sql`
         select group_id from reconciliation_matches
          where org_id = ${org.orgId} and reconciliation_id = ${reconciliationId}
          limit 1
-      `, "objects"))[0]!.group_id;
+      `,
+          "objects",
+        )
+      )[0]!.group_id;
       await unmatchStatementLine({ reconciliationId, statementLineId: lineId }, ctx);
 
-      const audits = (await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(sql`
+      const audits = await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(
+        sql`
         select changes, actor_id from audit_log
          where org_id = ${org.orgId}
            and table_name = 'bank_statement_lines'
            and row_id = ${lineId}
            and action = 'update'
          order by id
-      `, "objects"));
+      `,
+        "objects",
+      );
       // Even a single-line match clears as a one-member group, and the
       // line's audit names the group that cleared it.
       assert.deepEqual(
@@ -1157,11 +1236,16 @@ test(
         },
         ctx,
       );
-      const lineIds = (await db.execute<{ id: string }>(sql`
+      const lineIds = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
          order by bank_transaction_id
-      `, "objects")).map((row) => row.id);
+      `,
+          "objects",
+        )
+      ).map((row) => row.id);
       const { id: reconciliationId } = await startReconciliation(
         { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "150" },
         ctx,
@@ -1171,18 +1255,26 @@ test(
       assert.equal(result.matched, 2);
 
       // Batched, not per-pair: exactly one row even for two matches.
-      const audits = (await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(sql`
+      const audits = await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(
+        sql`
         select changes, actor_id from audit_log
          where org_id = ${org.orgId}
            and table_name = 'reconciliations'
            and row_id = ${reconciliationId}
            and changes->>'operation' = 'auto_match'
-      `, "objects"));
+      `,
+        "objects",
+      );
       assert.equal(audits.length, 1);
       const changes = audits[0]!.changes as {
         operation: string;
         matched: number;
-        pairs: { statementLineId: string; journalLineId: string; confidence: string; reasons: { code: string; days?: number }[] }[];
+        pairs: {
+          statementLineId: string;
+          journalLineId: string;
+          confidence: string;
+          reasons: { code: string; days?: number }[];
+        }[];
       };
       assert.equal(changes.operation, "auto_match");
       assert.equal(changes.matched, 2);
@@ -1193,18 +1285,40 @@ test(
       // Same-day exact amounts clear the review ceiling, and each pair names
       // why it was made.
       for (const pair of changes.pairs) {
-        assert.ok(toUnits(pair.confidence) > toUnits("0.70"), `confidence ${pair.confidence} is high`);
-        assert.deepEqual(pair.reasons.slice(0, 2), [{ code: "exact_amount" }, { code: "date_lag", days: 0 }]);
+        assert.ok(
+          toUnits(pair.confidence) > toUnits("0.70"),
+          `confidence ${pair.confidence} is high`,
+        );
+        assert.deepEqual(pair.reasons.slice(0, 2), [
+          { code: "exact_amount" },
+          { code: "date_lag", days: 0 },
+        ]);
       }
-      const stored = await db.execute<{ statement_line_id: string; confidence: string; match_reasons: unknown }>(sql`
+      const stored = await db.execute<{
+        statement_line_id: string;
+        confidence: string;
+        match_reasons: unknown;
+      }>(
+        sql`
         select statement_line_id, confidence::text as confidence, match_reasons from reconciliation_matches
          where org_id = ${org.orgId} and reconciliation_id = ${reconciliationId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(stored.length, 2);
       for (const row of stored) {
-        const pair = changes.pairs.find((candidate) => candidate.statementLineId === row.statement_line_id);
-        assert.ok(pair && toUnits(pair.confidence) === toUnits(row.confidence), "the stored confidence is the audited one");
-        assert.deepEqual(row.match_reasons, pair.reasons, "the stored reasons are the audited ones");
+        const pair = changes.pairs.find(
+          (candidate) => candidate.statementLineId === row.statement_line_id,
+        );
+        assert.ok(
+          pair && toUnits(pair.confidence) === toUnits(row.confidence),
+          "the stored confidence is the audited one",
+        );
+        assert.deepEqual(
+          row.match_reasons,
+          pair.reasons,
+          "the stored reasons are the audited ones",
+        );
       }
       assert.equal(audits[0]!.actor_id, actor);
     } finally {
@@ -1213,252 +1327,325 @@ test(
   },
 );
 
-test(
-  "a re-exported ID-less file with different bytes is never skipped: it imports flagged on opt-in",
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actor = (await seedFlowActors(org.orgId)).adminId;
-      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
-      await db.execute(sql`
+test("a re-exported ID-less file with different bytes is never skipped: it imports flagged on opt-in", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+    await db.execute(sql`
         update accounts
            set reconcilable = true, currency_restriction = 'CAD'
          where id = ${org.accounts.bank} and org_id = ${org.orgId}
       `);
-      const month = {
+    const month = {
+      accountId: org.accounts.bank,
+      source: "manual" as const,
+      statementDate: org.date,
+      openingBalance: "1000",
+      closingBalance: "1090",
+      currency: "CAD",
+      lines: [
+        { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
+        { postedOn: org.date, amount: "100.0000", description: "PAYROLL" },
+      ],
+    };
+    const first = await importStatement(month, ctx);
+    assert.equal(first.imported, 2);
+    // Same window, same balances, rows reordered with a reflowed
+    // description: different source bytes, so not an exact replay. A
+    // balance match is not transaction identity — both lines import,
+    // flagged against the earlier import for review.
+    const reexport = await importStatement(
+      {
+        ...month,
+        includePossibleDuplicates: true,
+        lines: [
+          { postedOn: org.date, amount: "100.0000", description: "payroll" },
+          { postedOn: org.date, amount: "-5.0000", description: "COFFEE  SHOP" },
+        ],
+      },
+      ctx,
+    );
+    assert.equal(reexport.imported, 2);
+    assert.equal(reexport.duplicates, 0);
+    assert.equal(reexport.possibleDuplicates, 2);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("sign-off refuses when the imported closing balance disagrees with the session balance", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+    await db.execute(sql`
+        update accounts
+           set reconcilable = true, currency_restriction = 'CAD'
+         where id = ${org.accounts.bank} and org_id = ${org.orgId}
+      `);
+    await postBankJournal(org, actor, ["100"], "closing-check");
+    // The bank's own figure for the cutoff is 90, but the session was
+    // typed as 100: the GL must not balance against a number the bank
+    // never reported.
+    await importStatement(
+      {
         accountId: org.accounts.bank,
         source: "manual" as const,
         statementDate: org.date,
-        openingBalance: "1000",
-        closingBalance: "1090",
+        openingBalance: "0",
+        closingBalance: "90",
         currency: "CAD",
         lines: [
-          { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
-          { postedOn: org.date, amount: "100.0000", description: "PAYROLL" },
+          {
+            postedOn: org.date,
+            amount: "100",
+            description: "Closing-check deposit",
+            bankTransactionId: "closing-check-deposit",
+          },
         ],
-      };
-      const first = await importStatement(month, ctx);
-      assert.equal(first.imported, 2);
-      // Same window, same balances, rows reordered with a reflowed
-      // description: different source bytes, so not an exact replay. A
-      // balance match is not transaction identity — both lines import,
-      // flagged against the earlier import for review.
-      const reexport = await importStatement(
-        {
-          ...month,
-          includePossibleDuplicates: true,
-          lines: [
-            { postedOn: org.date, amount: "100.0000", description: "payroll" },
-            { postedOn: org.date, amount: "-5.0000", description: "COFFEE  SHOP" },
-          ],
-        },
-        ctx,
-      );
-      assert.equal(reexport.imported, 2);
-      assert.equal(reexport.duplicates, 0);
-      assert.equal(reexport.possibleDuplicates, 2);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
-
-test(
-  "sign-off refuses when the imported closing balance disagrees with the session balance",
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actor = (await seedFlowActors(org.orgId)).adminId;
-      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
-      await db.execute(sql`
-        update accounts
-           set reconcilable = true, currency_restriction = 'CAD'
-         where id = ${org.accounts.bank} and org_id = ${org.orgId}
-      `);
-      await postBankJournal(org, actor, ["100"], "closing-check");
-      // The bank's own figure for the cutoff is 90, but the session was
-      // typed as 100: the GL must not balance against a number the bank
-      // never reported.
-      await importStatement(
-        {
-          accountId: org.accounts.bank,
-          source: "manual" as const,
-          statementDate: org.date,
-          openingBalance: "0",
-          closingBalance: "90",
-          currency: "CAD",
-          lines: [
-            {
-              postedOn: org.date,
-              amount: "100",
-              description: "Closing-check deposit",
-              bankTransactionId: "closing-check-deposit",
-            },
-          ],
-        },
-        ctx,
-      );
-      const reconciliation = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
-        ctx,
-      );
-      assert.equal((await autoMatch(reconciliation.id, ctx)).matched, 1);
-      await assert.rejects(
-        markReconciled(reconciliation.id, ctx),
-        /closing balance 90.*session statement balance 100|session statement balance 100.*closing balance 90/,
-      );
-      // The named remedy — adjusting the session to the imported closing —
-      // clears this gate (the genuine 10 imbalance then surfaces as a
-      // difference, not a silent sign-off).
-      await adjustReconciliation(reconciliation.id, { statementBalance: "90" }, ctx);
-      await assert.rejects(markReconciled(reconciliation.id, ctx), /difference is -10\.0000/);
-      const status = (await db.execute<{ status: string }>(sql`
+      },
+      ctx,
+    );
+    const reconciliation = await startReconciliation(
+      { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
+      ctx,
+    );
+    assert.equal((await autoMatch(reconciliation.id, ctx)).matched, 1);
+    await assert.rejects(
+      markReconciled(reconciliation.id, ctx),
+      /closing balance 90.*session statement balance 100|session statement balance 100.*closing balance 90/,
+    );
+    // The named remedy — adjusting the session to the imported closing —
+    // clears this gate (the genuine 10 imbalance then surfaces as a
+    // difference, not a silent sign-off).
+    await adjustReconciliation(reconciliation.id, { statementBalance: "90" }, ctx);
+    await assert.rejects(markReconciled(reconciliation.id, ctx), /difference is -10\.0000/);
+    const status = (
+      await db.execute<{ status: string }>(
+        sql`
         select status from reconciliations where id = ${reconciliation.id} and org_id = ${org.orgId}
-      `, "objects"))[0]!.status;
-      assert.notEqual(status, "signed_off");
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      `,
+        "objects",
+      )
+    )[0]!.status;
+    assert.notEqual(status, "signed_off");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "flagged lines hold matching until reviewed, then clear or bulk-exclude audited",
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actor = (await seedFlowActors(org.orgId)).adminId;
-      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
-      await db.execute(sql`
+test("flagged lines hold matching until reviewed, then clear or bulk-exclude audited", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+    await db.execute(sql`
         update accounts
            set reconcilable = true, currency_restriction = 'CAD'
          where id = ${org.accounts.bank} and org_id = ${org.orgId}
       `);
-      const base = {
-        accountId: org.accounts.bank,
-        source: "manual" as const,
-        statementDate: org.date,
-        currency: "CAD",
-        lines: [{ postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" }],
-      };
-      await importStatement({ ...base, openingBalance: "1000", closingBalance: "995" }, ctx);
-      const second = await importStatement(
-        { ...base, openingBalance: "2000", closingBalance: "1995", includePossibleDuplicates: true },
-        ctx,
-      );
-      assert.equal(second.possibleDuplicates, 1);
-      const flaggedId = (await db.execute<{ id: string }>(sql`
+    const base = {
+      accountId: org.accounts.bank,
+      source: "manual" as const,
+      statementDate: org.date,
+      currency: "CAD",
+      lines: [{ postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" }],
+    };
+    await importStatement({ ...base, openingBalance: "1000", closingBalance: "995" }, ctx);
+    const second = await importStatement(
+      { ...base, openingBalance: "2000", closingBalance: "1995", includePossibleDuplicates: true },
+      ctx,
+    );
+    assert.equal(second.possibleDuplicates, 1);
+    const flaggedId = (
+      await db.execute<{ id: string }>(
+        sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
            and possible_duplicate_of is not null
-      `, "objects"))[0]!.id;
+      `,
+        "objects",
+      )
+    )[0]!.id;
 
-      const [journalLineId] = await postBankJournal(org, actor, ["-5.0000"], "flagged-coffee");
-      const recon = await startReconciliation(
-        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "1990" },
+    const [journalLineId] = await postBankJournal(org, actor, ["-5.0000"], "flagged-coffee");
+    const recon = await startReconciliation(
+      { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "1990" },
+      ctx,
+    );
+    // Manual matching refuses the flagged line by name.
+    await assert.rejects(
+      createMatch(
+        {
+          reconciliationId: recon.id,
+          statementLineIds: [flaggedId],
+          journalLineIds: [journalLineId!],
+        },
         ctx,
-      );
-      // Manual matching refuses the flagged line by name.
-      await assert.rejects(
-        createMatch(
-          { reconciliationId: recon.id, statementLineIds: [flaggedId], journalLineIds: [journalLineId!] },
-          ctx,
-        ),
-        /possible duplicate/,
-      );
-      // Auto-match sweeps around it: the unflagged twin matches, the flagged
-      // line stays unmatched — and sign-off still counts it.
-      assert.equal((await autoMatch(recon.id, ctx)).matched, 1);
-      assert.equal((await reconciliationTotals(recon.id, ctx)).unmatchedStatementLines, 1);
+      ),
+      /possible duplicate/,
+    );
+    // Auto-match sweeps around it: the unflagged twin matches, the flagged
+    // line stays unmatched — and sign-off still counts it.
+    assert.equal((await autoMatch(recon.id, ctx)).matched, 1);
+    assert.equal((await reconciliationTotals(recon.id, ctx)).unmatchedStatementLines, 1);
 
-      // Review clears the flag with an audit row naming the evidence...
-      await clearPossibleDuplicateFlag(flaggedId, ctx);
-      const clears = (await db.execute<{ n: number }>(sql`
+    // Review clears the flag with an audit row naming the evidence...
+    await clearPossibleDuplicateFlag(flaggedId, ctx);
+    const clears = (
+      await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from audit_log
          where org_id = ${org.orgId} and table_name = 'bank_statement_lines'
            and row_id = ${flaggedId} and action = 'update'
            and changes->>'operation' = 'clear_possible_duplicate'
            and changes->'before'->>'possibleDuplicateOf' is not null
            and actor_id = ${actor}
-      `, "objects"))[0]!.n;
-      assert.equal(clears, 1);
-      // ...and the cleared line matches normally afterwards.
-      const [journalLineId2] = await postBankJournal(org, actor, ["-5.0000"], "cleared-coffee");
-      await createMatch(
-        { reconciliationId: recon.id, statementLineIds: [flaggedId], journalLineIds: [journalLineId2!] },
-        ctx,
-      );
-      // Clearing an unflagged line refuses instead of no-op success.
-      const unflaggedId = (await db.execute<{ id: string }>(sql`
+      `,
+        "objects",
+      )
+    )[0]!.n;
+    assert.equal(clears, 1);
+    // ...and the cleared line matches normally afterwards.
+    const [journalLineId2] = await postBankJournal(org, actor, ["-5.0000"], "cleared-coffee");
+    await createMatch(
+      {
+        reconciliationId: recon.id,
+        statementLineIds: [flaggedId],
+        journalLineIds: [journalLineId2!],
+      },
+      ctx,
+    );
+    // Clearing an unflagged line refuses instead of no-op success.
+    const unflaggedId = (
+      await db.execute<{ id: string }>(
+        sql`
         select id from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
            and possible_duplicate_of is null and match_status = 'matched'
          limit 1
-      `, "objects"))[0]!.id;
-      await assert.rejects(clearPossibleDuplicateFlag(unflaggedId, ctx), /Only flagged/);
+      `,
+        "objects",
+      )
+    )[0]!.id;
+    await assert.rejects(clearPossibleDuplicateFlag(unflaggedId, ctx), /Only flagged/);
 
-      // A third overlapping file flags again, and the bulk review excludes
-      // every flagged line with one audited row per line.
-      const third = await importStatement(
-        { ...base, openingBalance: "3000", closingBalance: "2995", includePossibleDuplicates: true },
-        ctx,
-      );
-      assert.equal(third.possibleDuplicates, 1);
-      const bulk = await excludePossibleDuplicates(
-        org.accounts.bank,
-        "Duplicate of an earlier import (reviewed in bulk)",
-        ctx,
-      );
-      assert.equal(bulk.excluded, 1);
-      const excluded = (await db.execute<{
-        match_status: string;
-        exclusion_reason: string | null;
-        possible_duplicate_of: string | null;
-      }>(sql`
+    // A third overlapping file flags again, and the bulk review excludes
+    // every flagged line with one audited row per line.
+    const third = await importStatement(
+      { ...base, openingBalance: "3000", closingBalance: "2995", includePossibleDuplicates: true },
+      ctx,
+    );
+    assert.equal(third.possibleDuplicates, 1);
+    const bulk = await excludePossibleDuplicates(
+      org.accounts.bank,
+      "Duplicate of an earlier import (reviewed in bulk)",
+      ctx,
+    );
+    assert.equal(bulk.excluded, 1);
+    const excluded = await db.execute<{
+      match_status: string;
+      exclusion_reason: string | null;
+      possible_duplicate_of: string | null;
+    }>(
+      sql`
         select match_status, exclusion_reason, possible_duplicate_of
           from bank_statement_lines
          where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
            and match_status = 'excluded'
-      `, "objects"));
-      assert.equal(excluded.length, 1);
-      assert.equal(excluded[0]!.exclusion_reason, "Duplicate of an earlier import (reviewed in bulk)");
-      assert.ok(excluded[0]!.possible_duplicate_of, "the flag is kept as exclusion evidence");
-      const bulkAudits = (await db.execute<{ n: number }>(sql`
+      `,
+      "objects",
+    );
+    assert.equal(excluded.length, 1);
+    assert.equal(
+      excluded[0]!.exclusion_reason,
+      "Duplicate of an earlier import (reviewed in bulk)",
+    );
+    assert.ok(excluded[0]!.possible_duplicate_of, "the flag is kept as exclusion evidence");
+    const bulkAudits = (
+      await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from audit_log
          where org_id = ${org.orgId} and table_name = 'bank_statement_lines'
            and action = 'update' and changes->>'operation' = 'exclude'
            and (changes->>'bulk')::boolean is true and actor_id = ${actor}
-      `, "objects"))[0]!.n;
-      assert.equal(bulkAudits, 1);
-      // A second bulk run finds nothing left to exclude.
-      assert.equal(
-        (await excludePossibleDuplicates(org.accounts.bank, "Duplicate of an earlier import (reviewed in bulk)", ctx)).excluded,
-        0,
+      `,
+        "objects",
+      )
+    )[0]!.n;
+    assert.equal(bulkAudits, 1);
+    // A second bulk run finds nothing left to exclude.
+    assert.equal(
+      (
+        await excludePossibleDuplicates(
+          org.accounts.bank,
+          "Duplicate of an earlier import (reviewed in bulk)",
+          ctx,
+        )
+      ).excluded,
+      0,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test(
+  "a cleared line whose entry is later reversed stays in every later cleared balance",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+      await db.execute(
+        sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where id = ${org.accounts.bank} and org_id = ${org.orgId}`,
       );
+      await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual",
+          statementDate: org.date,
+          currency: "CAD",
+          openingBalance: "0",
+          closingBalance: "100",
+          lines: [{ postedOn: org.date, amount: "100.0000", description: "DEPOSIT" }],
+        },
+        ctx,
+      );
+      const [lineId] = await postBankJournal(org, actor, ["100.0000"], "cleared-deposit");
+      const first = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
+        ctx,
+      );
+      assert.equal((await autoMatch(first.id, ctx)).matched, 1);
+      await markReconciled(first.id, ctx);
+      const {
+        rows: [entry],
+      } = await db.execute<{ entry_id: string }>(
+        sql`select entry_id from journal_lines where id = ${lineId!} and org_id = ${org.orgId}`,
+      );
+      await reverseProjectGlEntry(
+        org.orgId,
+        actor,
+        entry!.entry_id,
+        "Deposit recorded twice",
+        "2026-07-20",
+      );
+      const second = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: "2026-07-31", statementBalance: "100" },
+        ctx,
+      );
+      const totals = await reconciliationTotals(second.id, ctx);
+      assert.deepEqual(
+        [totals.clearedBalance, totals.difference],
+        ["100.0000", "0.0000"],
+        "the bank cleared the original deposit; reversing it later must not un-clear it",
+      );
+      await markReconciled(second.id, ctx);
     } finally {
       await dropScratchOrg(org.orgId);
     }
   },
 );
-
-test("a cleared line whose entry is later reversed stays in every later cleared balance", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actor = (await seedFlowActors(org.orgId)).adminId;
-    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
-    await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where id = ${org.accounts.bank} and org_id = ${org.orgId}`);
-    await importStatement({ accountId: org.accounts.bank, source: "manual", statementDate: org.date, currency: "CAD", openingBalance: "0", closingBalance: "100", lines: [{ postedOn: org.date, amount: "100.0000", description: "DEPOSIT" }] }, ctx);
-    const [lineId] = await postBankJournal(org, actor, ["100.0000"], "cleared-deposit");
-    const first = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" }, ctx);
-    assert.equal((await autoMatch(first.id, ctx)).matched, 1);
-    await markReconciled(first.id, ctx);
-    const { rows: [entry] } = await db.execute<{ entry_id: string }>(sql`select entry_id from journal_lines where id = ${lineId!} and org_id = ${org.orgId}`);
-    await reverseProjectGlEntry(org.orgId, actor, entry!.entry_id, "Deposit recorded twice", "2026-07-20");
-    const second = await startReconciliation({ accountId: org.accounts.bank, throughDate: "2026-07-31", statementBalance: "100" }, ctx);
-    const totals = await reconciliationTotals(second.id, ctx);
-    assert.deepEqual([totals.clearedBalance, totals.difference], ["100.0000", "0.0000"], "the bank cleared the original deposit; reversing it later must not un-clear it");
-    await markReconciled(second.id, ctx);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});

@@ -5,20 +5,58 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
-const empty = () => ({ relations: [], columns: [], constraints: [], indexes: [], triggers: [], functions: [], policies: [] });
+const empty = () => ({
+  relations: [],
+  columns: [],
+  constraints: [],
+  indexes: [],
+  triggers: [],
+  functions: [],
+  policies: [],
+});
 
 function compare(actual, reference) {
   const dir = mkdtempSync(join(tmpdir(), "catalog-compare-"));
   writeFileSync(join(dir, "actual.json"), JSON.stringify(actual));
   writeFileSync(join(dir, "reference.json"), JSON.stringify(reference));
-  return JSON.parse(execFileSync("node", ["scripts/compare-schema-catalogs.mjs", join(dir, "actual.json"), join(dir, "reference.json")], { encoding: "utf8" }));
+  return JSON.parse(
+    execFileSync(
+      "node",
+      [
+        "scripts/compare-schema-catalogs.mjs",
+        join(dir, "actual.json"),
+        join(dir, "reference.json"),
+      ],
+      { encoding: "utf8" },
+    ),
+  );
 }
 
 function withTable(catalog, name) {
-  catalog.relations.push({ relation: name, kind: "r", row_level_security: false, force_row_level_security: false });
-  catalog.columns.push({ relation: name, position: 1, column: "filename", data_type: "text", not_null: true });
-  catalog.constraints.push({ relation: name, constraint: `${name}_pkey`, type: "p", definition: "PRIMARY KEY (filename)" });
-  catalog.indexes.push({ table_name: name, index: `${name}_pkey`, definition: `CREATE UNIQUE INDEX ${name}_pkey ON public.${name} USING btree (filename)` });
+  catalog.relations.push({
+    relation: name,
+    kind: "r",
+    row_level_security: false,
+    force_row_level_security: false,
+  });
+  catalog.columns.push({
+    relation: name,
+    position: 1,
+    column: "filename",
+    data_type: "text",
+    not_null: true,
+  });
+  catalog.constraints.push({
+    relation: name,
+    constraint: `${name}_pkey`,
+    type: "p",
+    definition: "PRIMARY KEY (filename)",
+  });
+  catalog.indexes.push({
+    table_name: name,
+    index: `${name}_pkey`,
+    definition: `CREATE UNIQUE INDEX ${name}_pkey ON public.${name} USING btree (filename)`,
+  });
   return catalog;
 }
 

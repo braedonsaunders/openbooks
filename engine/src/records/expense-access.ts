@@ -33,7 +33,10 @@ export const ALL_EXPENSE_REPORTS: ExpenseAccess = { scope: "all" };
  * (or a grant implying it over everyone's records) first, then an own-scope
  * grant. Null when the holder has neither.
  */
-export function expenseGrantScope(holds: (permission: string) => boolean, authority: ExpenseAuthority): "all" | "own" | null {
+export function expenseGrantScope(
+  holds: (permission: string) => boolean,
+  authority: ExpenseAuthority,
+): "all" | "own" | null {
   const permission = EXPENSE_AUTHORITY_PERMISSION[authority];
   if (grantsConferring(permission, "all").some(holds)) return "all";
   if (grantsConferring(permission, "own").some(holds)) return "own";
@@ -47,10 +50,19 @@ export function expenseAuthorityGrants(authority: ExpenseAuthority): string[] {
 }
 
 /** The person linked to a login, or null for a login with no person. */
-export async function actorLinkedPartyId(executor: SqlExecutor, orgId: string, actorId: string): Promise<string | null> {
-  const row = (await executor.execute<{ partyId: string | null }>(sql`
+export async function actorLinkedPartyId(
+  executor: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<string | null> {
+  const row = (
+    await executor.execute<{ partyId: string | null }>(
+      sql`
     select party_id as "partyId" from users where id = ${actorId} and org_id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return row?.partyId ?? null;
 }
 
@@ -61,7 +73,9 @@ export async function expenseAccessForScope(
   actorId: string,
   scope: "all" | "own",
 ): Promise<ExpenseAccess> {
-  return scope === "all" ? ALL_EXPENSE_REPORTS : { scope: "own", partyId: await actorLinkedPartyId(executor, orgId, actorId) };
+  return scope === "all"
+    ? ALL_EXPENSE_REPORTS
+    : { scope: "own", partyId: await actorLinkedPartyId(executor, orgId, actorId) };
 }
 
 /** Resolve an actor's expense access from the database, for services and background work. */
@@ -76,13 +90,17 @@ export async function resolveExpenseAccess(
     if (await actorHasPermission(executor, orgId, actorId, grant)) return ALL_EXPENSE_REPORTS;
   }
   for (const grant of grantsConferring(permission, "own")) {
-    if (await actorHasPermission(executor, orgId, actorId, grant)) return expenseAccessForScope(executor, orgId, actorId, "own");
+    if (await actorHasPermission(executor, orgId, actorId, grant))
+      return expenseAccessForScope(executor, orgId, actorId, "own");
   }
   return null;
 }
 
 /** True when the access reaches a report whose employee is `partyId`. */
-export function expenseAccessAllows(access: ExpenseAccess, partyId: string | null | undefined): boolean {
+export function expenseAccessAllows(
+  access: ExpenseAccess,
+  partyId: string | null | undefined,
+): boolean {
   if (access.scope === "all") return true;
   return access.partyId !== null && partyId != null && partyId === access.partyId;
 }
@@ -107,13 +125,16 @@ export class ExpenseSelfServiceRefusal extends Error {
   readonly code: string;
   readonly remedy: string;
   constructor(kind: "unlinked" | "other_employee") {
-    super(kind === "unlinked"
-      ? "Your login is not linked to an employee record, so there are no expense reports of yours to create or open."
-      : "You can only file expense reports for yourself.");
+    super(
+      kind === "unlinked"
+        ? "Your login is not linked to an employee record, so there are no expense reports of yours to create or open."
+        : "You can only file expense reports for yourself.",
+    );
     this.code = kind === "unlinked" ? "expense_self_unlinked" : "expense_self_only";
-    this.remedy = kind === "unlinked"
-      ? "Ask an administrator to link your user to your employee record under Administration → Users."
-      : "Leave the employee as yourself; to file for a coworker, ask an administrator for a role that enters everyone's expense reports.";
+    this.remedy =
+      kind === "unlinked"
+        ? "Ask an administrator to link your user to your employee record under Administration → Users."
+        : "Leave the employee as yourself; to file for a coworker, ask an administrator for a role that enters everyone's expense reports.";
   }
 }
 
@@ -123,9 +144,13 @@ export class ExpenseSelfServiceRefusal extends Error {
  * self-service access names only the linked person, which is also the
  * employee when the request names none.
  */
-export function expenseEmployeeForAccess(access: ExpenseAccess, requested: string | null | undefined): string | null | undefined {
+export function expenseEmployeeForAccess(
+  access: ExpenseAccess,
+  requested: string | null | undefined,
+): string | null | undefined {
   if (access.scope === "all") return requested;
   if (access.partyId === null) throw new ExpenseSelfServiceRefusal("unlinked");
-  if (requested != null && requested !== access.partyId) throw new ExpenseSelfServiceRefusal("other_employee");
+  if (requested != null && requested !== access.partyId)
+    throw new ExpenseSelfServiceRefusal("other_employee");
   return access.partyId;
 }

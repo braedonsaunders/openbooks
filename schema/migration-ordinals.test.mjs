@@ -45,8 +45,8 @@ test("a forward migration without a four-digit snake_case ordinal is refused", (
     assert.throws(
       () => generatedMigrationFiles(directory),
       (error) =>
-        error instanceof Error
-        && error.message.includes(`${malformed} does not have a four-digit ordinal`),
+        error instanceof Error &&
+        error.message.includes(`${malformed} does not have a four-digit ordinal`),
       `${malformed} must be refused`,
     );
   }

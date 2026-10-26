@@ -141,7 +141,8 @@ function normalizeConfidential(
   entries: { label: string; fingerprint: string }[],
 ): { label: string; fingerprint: string }[] {
   return entries.map((entry) => {
-    const parsed = typeof entry?.fingerprint === "string" ? parseKeyedFingerprint(entry.fingerprint) : null;
+    const parsed =
+      typeof entry?.fingerprint === "string" ? parseKeyedFingerprint(entry.fingerprint) : null;
     return {
       label: entry.label,
       fingerprint: parsed ? `${parsed.keyId}:${parsed.hmac}` : entry.fingerprint,
@@ -156,9 +157,13 @@ function toReported(raw: unknown): PayrollFilingReported {
     fields: Array.isArray(value.fields) ? value.fields : [],
     confidential: normalizeConfidential(confidential),
     ...(value.privateFacts && typeof value.privateFacts === "object"
-      ? { privateFacts: Object.fromEntries(Object.entries(value.privateFacts).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string",
-      )) }
+      ? {
+          privateFacts: Object.fromEntries(
+            Object.entries(value.privateFacts).filter(
+              (entry): entry is [string, string] => typeof entry[1] === "string",
+            ),
+          ),
+        }
       : {}),
   };
 }
@@ -173,7 +178,8 @@ export async function filingSubmissions(
   filingKey: string,
   taxYear: number,
 ): Promise<PayrollFilingSubmission[]> {
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select s.id, s.country, s.filing_key, s.tax_year, s.revision, s.revision_number,
            s.supersedes_id, s.issued_at, s.note, s.slip_count,
            s.artifact_filename, s.artifact_content_type,
@@ -190,7 +196,9 @@ export async function filingSubmissions(
      where s.org_id = ${orgId} and s.country = ${country}
        and s.filing_key = ${filingKey} and s.tax_year = ${taxYear}
      order by s.revision_number
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: String(row.id),
     country: String(row.country),
@@ -204,10 +212,10 @@ export async function filingSubmissions(
     slipCount: Number(row.slip_count ?? 0),
     artifact: row.artifact_filename
       ? {
-        filename: String(row.artifact_filename),
-        contentType: String(row.artifact_content_type ?? "application/octet-stream"),
-        bytes: Number(row.artifact_bytes ?? 0),
-      }
+          filename: String(row.artifact_filename),
+          contentType: String(row.artifact_content_type ?? "application/octet-stream"),
+          bytes: Number(row.artifact_bytes ?? 0),
+        }
       : null,
     slips: ((row.slips as unknown[]) ?? []).map((slip) => {
       const value = slip as Record<string, unknown>;
@@ -230,15 +238,18 @@ export async function filingArtifact(
   orgId: string,
   submissionId: string,
 ): Promise<PayrollFilingFile | null> {
-  const rows = (await db.execute<{
-      artifact_filename: string | null;
-      artifact_content_type: string | null;
-      artifact_body: string | null;
-    }>(sql`
+  const rows = await db.execute<{
+    artifact_filename: string | null;
+    artifact_content_type: string | null;
+    artifact_body: string | null;
+  }>(
+    sql`
     select artifact_filename, artifact_content_type, artifact_body
       from payroll_filing_submissions
      where org_id = ${orgId} and id = ${submissionId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = rows[0];
   if (!row || row.artifact_body == null || !row.artifact_filename) return null;
   return {
@@ -257,7 +268,10 @@ export async function filingArtifact(
 export function lastReportedByRow(
   submissions: readonly PayrollFilingSubmission[],
 ): Map<string, { slip: PayrollFilingIssuedSlip; submission: PayrollFilingSubmission }> {
-  const latest = new Map<string, { slip: PayrollFilingIssuedSlip; submission: PayrollFilingSubmission }>();
+  const latest = new Map<
+    string,
+    { slip: PayrollFilingIssuedSlip; submission: PayrollFilingSubmission }
+  >();
   // `filingSubmissions` returns oldest first, so a later artifact simply
   // overwrites an earlier statement about the same row.
   for (const submission of submissions) {
@@ -355,7 +369,7 @@ export function diffReported(
  *    named rather than quietly re-filed.
  */
 export type PayrollFilingRowStatus =
-  | "unfiled" | "unchanged" | "changed" | "absent" | "unavailable" | "withdrawn" | "resurrected";
+  "unfiled" | "unchanged" | "changed" | "absent" | "unavailable" | "withdrawn" | "resurrected";
 
 export interface PayrollFilingRowReview {
   rowId: string;
@@ -376,16 +390,16 @@ export interface PayrollFilingLifecycle {
   taxYear: number;
   /** The pack's declared correction mechanics, flattened for the surface. */
   amendment:
-  | { supported: false; refusal: string }
-  | {
-    supported: true;
-    revisions: readonly PayrollFilingCorrectionKind[];
-    vehicle: "same_form" | "correction_form";
-    formLabel: string | null;
-    download: { label: string; note: string | null } | null;
-    downloadRefusal: string | null;
-    hasSlip: boolean;
-  };
+    | { supported: false; refusal: string }
+    | {
+        supported: true;
+        revisions: readonly PayrollFilingCorrectionKind[];
+        vehicle: "same_form" | "correction_form";
+        formLabel: string | null;
+        download: { label: string; note: string | null } | null;
+        downloadRefusal: string | null;
+        hasSlip: boolean;
+      };
   submissions: PayrollFilingSubmission[];
   rows: PayrollFilingRowReview[];
   /**
@@ -436,7 +450,12 @@ export async function filingLifecycle(
     const previous = issued.get(rowId);
     if (!previous) {
       rows.push({
-        rowId, label, status: "unfiled", lastRevision: null, lastIssuedAt: null, changes: [],
+        rowId,
+        label,
+        status: "unfiled",
+        lastRevision: null,
+        lastIssuedAt: null,
+        changes: [],
       });
       continue;
     }
@@ -444,7 +463,14 @@ export async function filingLifecycle(
     // population never pays for a per-row query it has nothing to compare to.
     // The stored snapshot rides along so the confidential comparison
     // recomputes under the key that proved the last issue.
-    const current = await currentReported(filing, orgId, taxYear, data, row, previous.slip.reported);
+    const current = await currentReported(
+      filing,
+      orgId,
+      taxYear,
+      data,
+      row,
+      previous.slip.reported,
+    );
     const changes = diffReported(previous.slip.reported, current.reported);
     const cancelled = previous.slip.revision === "cancelled";
     rows.push({
@@ -468,7 +494,9 @@ export async function filingLifecycle(
       label: previous.slip.label,
       status: populationRefusal
         ? "unavailable"
-        : previous.slip.revision === "cancelled" ? "withdrawn" : "absent",
+        : previous.slip.revision === "cancelled"
+          ? "withdrawn"
+          : "absent",
       lastRevision: previous.slip.revision,
       lastIssuedAt: previous.submission.issuedAt,
       changes: [],
@@ -491,19 +519,19 @@ export async function filingLifecycle(
     taxYear,
     amendment: filing.amendment.supported
       ? {
-        supported: true,
-        revisions: filing.amendment.revisions,
-        vehicle: filing.amendment.vehicle,
-        formLabel: filing.amendment.formLabel ?? null,
-        download: filing.amendment.download
-          ? {
-            label: filing.amendment.download.label,
-            note: filing.amendment.download.note ?? null,
-          }
-          : null,
-        downloadRefusal: filing.amendment.downloadRefusal ?? null,
-        hasSlip: filing.amendment.slip != null,
-      }
+          supported: true,
+          revisions: filing.amendment.revisions,
+          vehicle: filing.amendment.vehicle,
+          formLabel: filing.amendment.formLabel ?? null,
+          download: filing.amendment.download
+            ? {
+                label: filing.amendment.download.label,
+                note: filing.amendment.download.note ?? null,
+              }
+            : null,
+          downloadRefusal: filing.amendment.downloadRefusal ?? null,
+          hasSlip: filing.amendment.slip != null,
+        }
       : { supported: false, refusal: filing.amendment.refusal },
     submissions,
     rows,
@@ -540,23 +568,35 @@ async function currentReported(
   let confidential: { label: string; fingerprint: string }[] = [];
   if (filing.amendment.supported && filing.amendment.confidential) {
     try {
-      confidential = await filing.amendment.confidential(orgId, taxYear, rowId, previous?.confidential);
+      confidential = await filing.amendment.confidential(
+        orgId,
+        taxYear,
+        rowId,
+        previous?.confidential,
+      );
     } catch (error) {
       if (error instanceof KeyedFingerprintError) throw new PayrollError(error.message);
       throw error;
     }
   }
-  const privateFacts = filing.amendment.supported && filing.amendment.privateFacts
-    ? await filing.amendment.privateFacts(orgId, taxYear, rowId)
-    : undefined;
+  const privateFacts =
+    filing.amendment.supported && filing.amendment.privateFacts
+      ? await filing.amendment.privateFacts(orgId, taxYear, rowId)
+      : undefined;
   if (filing.slip) {
     const slip = await filing.slip.build(orgId, taxYear, rowId);
     const fields: PayrollFilingReportedField[] = [
       ...slip.headerFields.map((field) => ({
-        code: null, label: field.label, value: field.value, ...(field.money ? { money: true } : {}),
+        code: null,
+        label: field.label,
+        value: field.value,
+        ...(field.money ? { money: true } : {}),
       })),
       ...slip.boxes.map((box) => ({
-        code: box.code, label: box.label, value: box.value, ...(box.money ? { money: true } : {}),
+        code: box.code,
+        label: box.label,
+        value: box.value,
+        ...(box.money ? { money: true } : {}),
       })),
     ];
     return { slip, reported: { fields, confidential, ...(privateFacts ? { privateFacts } : {}) } };
@@ -621,8 +661,12 @@ export async function planFingerprintReseal(
     confidential: normalizeConfidential(storedRaw.confidential ?? []),
   };
   let confidential:
-    | ((orgId: string, taxYear: number, rowId: string, previous?: readonly { label: string; fingerprint: string }[]) =>
-      Promise<{ label: string; fingerprint: string }[]>)
+    | ((
+        orgId: string,
+        taxYear: number,
+        rowId: string,
+        previous?: readonly { label: string; fingerprint: string }[],
+      ) => Promise<{ label: string; fingerprint: string }[]>)
     | undefined;
   try {
     const filing = yearEndFiling(country, filingKey);
@@ -649,9 +693,13 @@ export async function planFingerprintReseal(
   }
   const byLabel = (entries: { label: string; fingerprint: string }[], label: string) =>
     entries.find((entry) => entry.label === label)?.fingerprint;
-  const verified = stored.confidential.every((entry) => byLabel(comparable, entry.label) === entry.fingerprint);
+  const verified = stored.confidential.every(
+    (entry) => byLabel(comparable, entry.label) === entry.fingerprint,
+  );
   if (!verified) return { status: "drifted" };
-  const current = stored.confidential.every((entry) => byLabel(fresh, entry.label) === entry.fingerprint);
+  const current = stored.confidential.every(
+    (entry) => byLabel(fresh, entry.label) === entry.fingerprint,
+  );
   if (current) return { status: "current" };
   return {
     status: "rewritten",
@@ -734,8 +782,12 @@ export interface RecordFilingIssueResult {
  * an amendment must not combine values from before and after a concurrent
  * ledger/profile commit.
  */
-async function withRepeatableRead<T>(orgId: string, taxYear: number, fn: () => Promise<T>): Promise<T> {
-  return withOpeningReportingSnapshot(orgId,taxYear,fn,true);
+async function withRepeatableRead<T>(
+  orgId: string,
+  taxYear: number,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return withOpeningReportingSnapshot(orgId, taxYear, fn, true);
 }
 
 /**
@@ -760,9 +812,7 @@ export async function recordFilingIssue(
   // Normalize the evidence once at the service boundary. A trusted caller
   // may use `reason`, while older callers may already supply the filing note;
   // either way a cancellation is persisted with the confirmed explanation.
-  const normalizedInput = revision === "cancelled"
-    ? { ...input, note: cancellationReason }
-    : input;
+  const normalizedInput = revision === "cancelled" ? { ...input, note: cancellationReason } : input;
 
   if (revision === "original") {
     return await withRepeatableRead(orgId, taxYear, async () => {
@@ -782,15 +832,16 @@ async function issueOriginal(
   submissions: readonly PayrollFilingSubmission[],
 ): Promise<RecordFilingIssueResult> {
   const { orgId, country, filingKey, taxYear } = input;
-  const alreadyIssued = (revisionNumber: number, revision: string) => new PayrollError(
-    `${filing.label} for ${taxYear} has already been issued (revision `
-    + `${revisionNumber}, `
-    + `${revision}) — correct it with an amendment `
-    + "or a cancellation; a second original would give the agency two competing returns. "
-    + "Slips DISCOVERED since the return was filed are filed as additional originals, which "
-    + "is not produced here: file those slips through the agency's own service and record "
-    + "them there",
-  );
+  const alreadyIssued = (revisionNumber: number, revision: string) =>
+    new PayrollError(
+      `${filing.label} for ${taxYear} has already been issued (revision ` +
+        `${revisionNumber}, ` +
+        `${revision}) — correct it with an amendment ` +
+        "or a cancellation; a second original would give the agency two competing returns. " +
+        "Slips DISCOVERED since the return was filed are filed as additional originals, which " +
+        "is not produced here: file those slips through the agency's own service and record " +
+        "them there",
+    );
   if (submissions.length > 0 && !filing.additionalSelectedOriginals) {
     // A slip DISCOVERED after the return went out is neither an amendment nor
     // a cancellation: every agency here files it as an ADDITIONAL original
@@ -804,17 +855,34 @@ async function issueOriginal(
   }
   const data = await filing.population(orgId, taxYear, input.scope);
   const selection = await filing.originalIssueRowIds?.(input.params ?? {}, orgId);
-  if(filing.additionalSelectedOriginals && (!selection || !filing.lockIssueSources || !filing.recordIssueSources))
-    throw new PayrollError('Independent original filings require an exact selection and protected native source lifecycle');
+  if (
+    filing.additionalSelectedOriginals &&
+    (!selection || !filing.lockIssueSources || !filing.recordIssueSources)
+  )
+    throw new PayrollError(
+      "Independent original filings require an exact selection and protected native source lifecycle",
+    );
   const selected = selection ? new Set(selection) : null;
-  if(selected && filing.additionalSelectedOriginals && submissions.some(submission=>submission.slips.some(slip=>selected.has(slip.rowId))))
-    throw new PayrollError('This separation event already has an issued ROE — preserve the original artifact and use the Service Canada correction workflow');
+  if (
+    selected &&
+    filing.additionalSelectedOriginals &&
+    submissions.some((submission) => submission.slips.some((slip) => selected.has(slip.rowId)))
+  )
+    throw new PayrollError(
+      "This separation event already has an issued ROE — preserve the original artifact and use the Service Canada correction workflow",
+    );
   if (selection && (selection.length === 0 || selected!.size !== selection.length)) {
-    throw new PayrollError('Choose each filing row exactly once before recording the original artifact');
+    throw new PayrollError(
+      "Choose each filing row exactly once before recording the original artifact",
+    );
   }
-  const rows = selected ? data.rows.filter(row => selected.has(String(row[data.rowKey] ?? ""))) : data.rows;
+  const rows = selected
+    ? data.rows.filter((row) => selected.has(String(row[data.rowKey] ?? "")))
+    : data.rows;
   if (selected && rows.length !== selected.size) {
-    throw new PayrollError('The original filing selection contains unavailable rows — reload the filing population');
+    throw new PayrollError(
+      "The original filing selection contains unavailable rows — reload the filing population",
+    );
   }
   if (rows.length === 0) {
     throw new PayrollError(
@@ -827,15 +895,15 @@ async function issueOriginal(
   if (input.authorizeRowIds) {
     await input.authorizeRowIds(rows.map((row) => String(row[data.rowKey] ?? "")));
   }
-  const sourceRowIds = rows.map(row => String(row[data.rowKey] ?? ""));
+  const sourceRowIds = rows.map((row) => String(row[data.rowKey] ?? ""));
   await filing.lockIssueSources?.(orgId, input.actorId, sourceRowIds);
   let file: PayrollFilingFile | null = null;
   let fileRefusal: string | null = null;
   if (filing.download) {
     file = await filing.download.build(orgId, taxYear, input.params ?? {});
   } else {
-    fileRefusal = filing.downloadRefusal
-      ?? `the ${country} "${filingKey}" filing declares no electronic file`;
+    fileRefusal =
+      filing.downloadRefusal ?? `the ${country} "${filingKey}" filing declares no electronic file`;
   }
 
   const slips: PayrollFilingIssuedSlip[] = [];
@@ -844,17 +912,27 @@ async function issueOriginal(
     if (!rowId) continue;
     const current = await currentReported(filing, orgId, taxYear, data, row);
     slips.push({
-      rowId, label: rowLabel(data, row), revision: "original", reported: current.reported,
+      rowId,
+      label: rowLabel(data, row),
+      revision: "original",
+      reported: current.reported,
     });
   }
 
   const submission = await persist(input, {
-    revision: "original", revisionNumber: submissions.length ? submissions.at(-1)!.revisionNumber+1 : 1, supersedesId: null, file, slips,
+    revision: "original",
+    revisionNumber: submissions.length ? submissions.at(-1)!.revisionNumber + 1 : 1,
+    supersedesId: null,
+    file,
+    slips,
   }).catch((error: unknown) => {
     // A rival issue committed revision 1 first: the fence held, so the
     // standing refusal is the accurate one. (No re-read here: the
     // violation aborted this unit's transaction.)
-    if (error instanceof ConcurrentFilingIssue && filing.additionalSelectedOriginals) throw new PayrollError('The separation filing history changed — reload and review the exact unissued event');
+    if (error instanceof ConcurrentFilingIssue && filing.additionalSelectedOriginals)
+      throw new PayrollError(
+        "The separation filing history changed — reload and review the exact unissued event",
+      );
     if (error instanceof ConcurrentFilingIssue) throw alreadyIssued(1, "original");
     throw error;
   });
@@ -878,22 +956,22 @@ async function issueCorrection(
   if (!amendment.supported) throw new PayrollError(amendment.refusal);
   if (!amendment.revisions.includes(revision)) {
     throw new PayrollError(
-      `${filing.label} cannot be ${revision} — the ${country} pack declares `
-      + `${amendment.revisions.join(", ")} for this filing`,
+      `${filing.label} cannot be ${revision} — the ${country} pack declares ` +
+        `${amendment.revisions.join(", ")} for this filing`,
     );
   }
   if (submissions.length === 0) {
     throw new PayrollError(
-      `${filing.label} for ${taxYear} has never been issued — there is nothing to `
-      + `${revision === "cancelled" ? "cancel" : "amend"}. Record the original filing first`,
+      `${filing.label} for ${taxYear} has never been issued — there is nothing to ` +
+        `${revision === "cancelled" ? "cancel" : "amend"}. Record the original filing first`,
     );
   }
 
   const requested = [...new Set(input.rowIds ?? [])];
   if (requested.length === 0) {
     throw new PayrollError(
-      `name the ${filing.label} rows to ${revision === "cancelled" ? "cancel" : "amend"} — `
-      + "a correction restates named slips, never the whole return",
+      `name the ${filing.label} rows to ${revision === "cancelled" ? "cancel" : "amend"} — ` +
+        "a correction restates named slips, never the whole return",
     );
   }
 
@@ -905,8 +983,8 @@ async function issueCorrection(
   const lifecycle = await filingLifecycle(orgId, country, filingKey, taxYear, input.scope);
   if (lifecycle.populationRefusal) {
     throw new PayrollError(
-      `${filing.label} for ${taxYear} has an unavailable population, so no ${revision} can be issued: `
-      + lifecycle.populationRefusal,
+      `${filing.label} for ${taxYear} has an unavailable population, so no ${revision} can be issued: ` +
+        lifecycle.populationRefusal,
     );
   }
   const byRow = new Map(lifecycle.rows.map((row) => [row.rowId, row]));
@@ -915,9 +993,9 @@ async function issueCorrection(
   const unknown = requested.filter((rowId) => !issued.has(rowId));
   if (unknown.length > 0) {
     throw new PayrollError(
-      `these rows were never issued on a ${filing.label} for ${taxYear}, so they cannot be `
-      + `${revision === "cancelled" ? "cancelled" : "amended"}: `
-      + unknown.map((rowId) => byRow.get(rowId)?.label || rowId).join(", "),
+      `these rows were never issued on a ${filing.label} for ${taxYear}, so they cannot be ` +
+        `${revision === "cancelled" ? "cancelled" : "amended"}: ` +
+        unknown.map((rowId) => byRow.get(rowId)?.label || rowId).join(", "),
     );
   }
   if (revision === "cancelled" && !cancellationReason) {
@@ -929,9 +1007,9 @@ async function issueCorrection(
     const resurrected = requested.filter((rowId) => byRow.get(rowId)?.status === "resurrected");
     if (resurrected.length > 0) {
       throw new PayrollError(
-        "these slips were cancelled but the payroll ledger produces them again, so they must be "
-        + "filed as additional originals rather than amended: "
-        + resurrected.map((rowId) => byRow.get(rowId)?.label || rowId).join(", "),
+        "these slips were cancelled but the payroll ledger produces them again, so they must be " +
+          "filed as additional originals rather than amended: " +
+          resurrected.map((rowId) => byRow.get(rowId)?.label || rowId).join(", "),
       );
     }
     const unmoved = requested.filter((rowId) => {
@@ -940,19 +1018,19 @@ async function issueCorrection(
     });
     if (unmoved.length > 0) {
       throw new PayrollError(
-        "nothing changed on these slips, so amending them would restate the same figures to "
-        + "the agency: "
-        + unmoved.map((rowId) => byRow.get(rowId)?.label || rowId).join(", ")
-        + " — correct the underlying payroll data first (the slip is recomputed from the "
-        + "ledger, never typed over)",
+        "nothing changed on these slips, so amending them would restate the same figures to " +
+          "the agency: " +
+          unmoved.map((rowId) => byRow.get(rowId)?.label || rowId).join(", ") +
+          " — correct the underlying payroll data first (the slip is recomputed from the " +
+          "ledger, never typed over)",
       );
     }
     const gone = requested.filter((rowId) => byRow.get(rowId)?.status === "absent");
     if (gone.length > 0) {
       throw new PayrollError(
-        "the payroll ledger no longer produces these slips at all, so there is nothing to "
-        + "restate — cancel them instead: "
-        + gone.map((rowId) => byRow.get(rowId)?.label || rowId).join(", "),
+        "the payroll ledger no longer produces these slips at all, so there is nothing to " +
+          "restate — cancel them instead: " +
+          gone.map((rowId) => byRow.get(rowId)?.label || rowId).join(", "),
       );
     }
   }
@@ -968,11 +1046,9 @@ async function issueCorrection(
   // computed ONCE, so the file the agency receives and the delta the operator
   // approved are the same object.
   const data = lifecycle.populationRefusal
-    ? { rowKey: "rowId", columns: [], rows: [] } as PayrollFilingData
+    ? ({ rowKey: "rowId", columns: [], rows: [] } as PayrollFilingData)
     : await filing.population(orgId, taxYear, input.scope);
-  const dataByRow = new Map(
-    data.rows.map((row) => [String(row[data.rowKey] ?? ""), row] as const),
-  );
+  const dataByRow = new Map(data.rows.map((row) => [String(row[data.rowKey] ?? ""), row] as const));
 
   const corrections: PayrollFilingCorrectionRow[] = [];
   const slips: PayrollFilingIssuedSlip[] = [];
@@ -982,12 +1058,12 @@ async function issueCorrection(
     // A cancellation reports the slip AS FILED — the agency is being told
     // that this exact slip should not exist, so the values it carries are the
     // ones it carried, not a recomputation that may no longer produce them.
-    const current = revision === "cancelled" || !row
-      ? { slip: null, reported: previous.slip.reported }
-      : await currentReported(filing, orgId, taxYear, data, row, previous.slip.reported);
-    const changes = revision === "cancelled"
-      ? []
-      : diffReported(previous.slip.reported, current.reported);
+    const current =
+      revision === "cancelled" || !row
+        ? { slip: null, reported: previous.slip.reported }
+        : await currentReported(filing, orgId, taxYear, data, row, previous.slip.reported);
+    const changes =
+      revision === "cancelled" ? [] : diffReported(previous.slip.reported, current.reported);
     corrections.push({
       rowId,
       label: byRow.get(rowId)?.label || previous.slip.label,
@@ -1078,8 +1154,8 @@ function isFilingRevisionConflict(error: unknown): boolean {
   for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
     const candidate = current as { code?: string; constraint?: string; cause?: unknown };
     if (
-      candidate.code === "23505"
-      && candidate.constraint === "payroll_filing_submissions_org_revision"
+      candidate.code === "23505" &&
+      candidate.constraint === "payroll_filing_submissions_org_revision"
     ) {
       return true;
     }
@@ -1103,7 +1179,8 @@ async function persist(
   const submissionId = await db.transaction(async (tx) => {
     let id: string;
     try {
-      const inserted = (await tx.execute<{ id: string }>(sql`
+      const inserted = await tx.execute<{ id: string }>(
+        sql`
       insert into payroll_filing_submissions
         (org_id, country, filing_key, tax_year, revision, revision_number, supersedes_id,
          note, slip_count, artifact_filename, artifact_content_type, artifact_body,
@@ -1114,7 +1191,9 @@ async function persist(
               ${issue.file?.contentType ?? null}, ${issue.file?.body ?? null},
               ${actorId}, ${actorId})
       returning id
-    `, "objects"));
+    `,
+        "objects",
+      );
       id = inserted[0]!.id;
     } catch (error) {
       // A rival issue committed this revision number first: the storage
@@ -1160,14 +1239,14 @@ export async function filingCorrectionSlip(
   if (!filing.amendment.supported) throw new PayrollError(filing.amendment.refusal);
   if (!filing.amendment.slip) {
     throw new PayrollError(
-      `the ${country} "${filingKey}" filing declares no correction form to render — `
-      + `${filing.amendment.downloadRefusal ?? "the correction is transmitted, not printed"}`,
+      `the ${country} "${filingKey}" filing declares no correction form to render — ` +
+        `${filing.amendment.downloadRefusal ?? "the correction is transmitted, not printed"}`,
     );
   }
   if (!filing.amendment.revisions.includes(revision)) {
     throw new PayrollError(
-      `${filing.label} cannot be ${revision} — the ${country} pack declares `
-      + `${filing.amendment.revisions.join(", ")} for this filing`,
+      `${filing.label} cannot be ${revision} — the ${country} pack declares ` +
+        `${filing.amendment.revisions.join(", ")} for this filing`,
     );
   }
   const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
@@ -1180,18 +1259,19 @@ export async function filingCorrectionSlip(
   const lifecycle = await filingLifecycle(orgId, country, filingKey, taxYear, scope);
   if (lifecycle.populationRefusal) {
     throw new PayrollError(
-      `${filing.label} for ${taxYear} has an unavailable population, so no ${revision} preview can be built: `
-      + lifecycle.populationRefusal,
+      `${filing.label} for ${taxYear} has an unavailable population, so no ${revision} preview can be built: ` +
+        lifecycle.populationRefusal,
     );
   }
   const review = lifecycle.rows.find((row) => row.rowId === rowId);
   const data = lifecycle.populationRefusal
-    ? { rowKey: "rowId", columns: [], rows: [] } as PayrollFilingData
+    ? ({ rowKey: "rowId", columns: [], rows: [] } as PayrollFilingData)
     : await filing.population(orgId, taxYear, scope);
   const row = data.rows.find((candidate) => String(candidate[data.rowKey] ?? "") === rowId);
-  const current = revision === "cancelled" || !row
-    ? { slip: null, reported: previous.slip.reported }
-    : await currentReported(filing, orgId, taxYear, data, row, previous.slip.reported);
+  const current =
+    revision === "cancelled" || !row
+      ? { slip: null, reported: previous.slip.reported }
+      : await currentReported(filing, orgId, taxYear, data, row, previous.slip.reported);
   return await filing.amendment.slip.build(
     {
       rowId,
@@ -1199,9 +1279,8 @@ export async function filingCorrectionSlip(
       revision,
       previously: previous.slip.reported,
       current: current.slip ?? reportedAsSlip(filing, current.reported),
-      changes: revision === "cancelled"
-        ? []
-        : diffReported(previous.slip.reported, current.reported),
+      changes:
+        revision === "cancelled" ? [] : diffReported(previous.slip.reported, current.reported),
     },
     orgId,
     taxYear,

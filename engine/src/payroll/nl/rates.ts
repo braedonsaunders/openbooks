@@ -256,9 +256,9 @@ export const NL_TAX_YEARS: PayrollTaxYearSupport = {
       label: "Rekenvoorschriften januari 2026 v2 + Tarieven Uitgave 2",
       effectiveFrom: "2026-01-01",
       citation:
-        "Belastingdienst, Rekenvoorschriften voor de geautomatiseerde loonadministratie 2026 "
-        + "(uitgave januari 2026, versie 2); Tarieven, bedragen en percentages loonheffingen "
-        + "vanaf 1 januari 2026 (bijlage bij de Nieuwsbrief Loonheffingen 2026, uitgave 2)",
+        "Belastingdienst, Rekenvoorschriften voor de geautomatiseerde loonadministratie 2026 " +
+        "(uitgave januari 2026, versie 2); Tarieven, bedragen en percentages loonheffingen " +
+        "vanaf 1 januari 2026 (bijlage bij de Nieuwsbrief Loonheffingen 2026, uitgave 2)",
       status: "published",
     },
   ],

@@ -113,19 +113,40 @@ test("POST /api/v1/files refuses a missing Idempotency-Key", async () => {
     new Request("http://openbooks.test/api/v1/files", {
       method: "POST",
       headers: { authorization: "Bearer test-key", "content-type": "application/json" },
-      body: JSON.stringify({ folderId: "x", filename: "a.pdf", contentType: "application/pdf", contentBase64: "aGVsbG8=" }),
+      body: JSON.stringify({
+        folderId: "x",
+        filename: "a.pdf",
+        contentType: "application/pdf",
+        contentBase64: "aGVsbG8=",
+      }),
     }),
   );
   assert.equal(response.status, 400);
 });
 
- test("source upload fields are forwarded and bound to the idempotent request", async () => {
-  const source = { sourceSystem: "payroll", sourceId: "original-row", auditReason: "  Retain source for adoption  " };
-  const response = await POST(new Request("http://openbooks.test/api/v1/files", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "source-key" }, body: JSON.stringify({ folderId: "ffffffff-ffff-ffff-ffff-ffffffffffff", filename: "source.txt", contentType: "text/plain", contentBase64: "aGVsbG8=", ...source }) }));
+test("source upload fields are forwarded and bound to the idempotent request", async () => {
+  const source = {
+    sourceSystem: "payroll",
+    sourceId: "original-row",
+    auditReason: "  Retain source for adoption  ",
+  };
+  const response = await POST(
+    new Request("http://openbooks.test/api/v1/files", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": "source-key" },
+      body: JSON.stringify({
+        folderId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+        filename: "source.txt",
+        contentType: "text/plain",
+        contentBase64: "aGVsbG8=",
+        ...source,
+      }),
+    }),
+  );
   assert.equal(response.status, 201);
   const expected = { ...source, auditReason: source.auditReason.trim() };
   for (const [field, value] of Object.entries(expected)) {
     assert.equal(routeState.uploads.at(-1)?.input[field], value);
     assert.equal(routeState.claims.at(-1)?.request[field], value);
   }
- });
+});

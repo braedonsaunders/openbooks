@@ -63,7 +63,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmLeaveSubmitRouteNextResponse = NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmLeaveSubmitRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
@@ -73,22 +75,23 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const routeUrl = "./route.ts?hrm-leave-submit";
-  const submitRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const routeUrl = "./route.ts?hrm-leave-submit";
+const submitRoute: typeof import("./route.ts") | undefined = (await import(
+  routeUrl
+)) as typeof import("./route.ts");
+test.after(() => hooks.deregister());
 
 const REQUEST_ID = "00000000-0000-4000-8000-000000000031";
 const ctx = { params: Promise.resolve({ id: REQUEST_ID }) };
@@ -140,7 +143,10 @@ test("submit refuses a malformed id before the service", async () => {
 
 test("submit maps a service refusal to its status", async () => {
   reset();
-  routeState.serviceThrow = new LeaveError("BAD_STATE", "the request is not in a submittable state — reopen it first");
+  routeState.serviceThrow = new LeaveError(
+    "BAD_STATE",
+    "the request is not in a submittable state — reopen it first",
+  );
   const res = await submitRoute!.POST(jsonRequest({}), ctx);
   assert.equal(res.status, 409);
 });

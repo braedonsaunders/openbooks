@@ -16,7 +16,6 @@
 import type { CatalogMessageFn, CatalogMessageKey } from "./catalog-strings";
 import { catalogMonthLabel } from "./catalog-strings";
 
-
 /**
  * Rate-format keys the refusal messages name. The engine blends display
  * rates, so a mixed-unit refusal must show the translated labels
@@ -82,24 +81,37 @@ export interface TrueCostStrings {
 }
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
-export function trueCostStrings(t: CatalogMessageFn, locale: string, currency = "USD"): TrueCostStrings {
+export function trueCostStrings(
+  t: CatalogMessageFn,
+  locale: string,
+  currency = "USD",
+): TrueCostStrings {
   return {
     locale,
     currency,
     monthLabel: catalogMonthLabel(t),
-    displayEmployeeName: (name) => (name === "Unknown" ? t("trueCost.labels.unknownEmployee") : name),
+    displayEmployeeName: (name) =>
+      name === "Unknown" ? t("trueCost.labels.unknownEmployee") : name,
     displayProfileName: (name) => (name === "Default" ? t("trueCost.labels.defaultProfile") : name),
     timeCategoryName: t("trueCost.labels.timeCategory"),
-    rateFormatLabel: (format) => t(`trueCost.allocation.${RATE_FORMAT_CATALOG_KEY[format] ?? format}` as CatalogMessageKey, { currency }),
+    rateFormatLabel: (format) =>
+      t(`trueCost.allocation.${RATE_FORMAT_CATALOG_KEY[format] ?? format}` as CatalogMessageKey, {
+        currency,
+      }),
     allocationBaseLabel: (base) => t(`trueCost.bases.${base}` as CatalogMessageKey),
-    refusalMixedUnits: (formats, categories) => t("trueCost.refusals.mixedUnits", { formats, categories }),
+    refusalMixedUnits: (formats, categories) =>
+      t("trueCost.refusals.mixedUnits", { formats, categories }),
     refusalCascadingNoLabor: () => t("trueCost.refusals.cascadingNoLabor"),
     refusalCascadingNoLaborDept: (dept) => t("trueCost.refusals.cascadingNoLaborDept", { dept }),
     refusalPerFteNoHours: (category) => t("trueCost.refusals.perFteNoHours", { category }),
-    refusalPerFteNoHoursDept: (category, dept) => t("trueCost.refusals.perFteNoHoursDept", { category, dept }),
-    refusalMissingBase: (category, format, base) => t("trueCost.refusals.missingBase", { category, format, base }),
-    refusalFormulaReference: (category, reference) => t("trueCost.refusals.formulaReference", { category, reference }),
-    refusalFormulaNegative: (category, amount) => t("trueCost.refusals.formulaNegative", { category, amount }),
+    refusalPerFteNoHoursDept: (category, dept) =>
+      t("trueCost.refusals.perFteNoHoursDept", { category, dept }),
+    refusalMissingBase: (category, format, base) =>
+      t("trueCost.refusals.missingBase", { category, format, base }),
+    refusalFormulaReference: (category, reference) =>
+      t("trueCost.refusals.formulaReference", { category, reference }),
+    refusalFormulaNegative: (category, amount) =>
+      t("trueCost.refusals.formulaNegative", { category, amount }),
     refusalUnreadableAmount: (category) => t("trueCost.refusals.unreadableAmount", { category }),
     formulaError: t("trueCost.labels.formulaError"),
     absorptionNoAccount: t("trueCost.labels.absorptionNoAccount"),

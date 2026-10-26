@@ -118,7 +118,12 @@ test("accruing allowance prices the cumulative method: flat percent of the whole
     base: { source: "gross", scope: "org" },
     timing: "per_run",
     rate: { kind: "flat_percent", percent: "0.5" },
-    allowance: { kind: "accruing_allowance", factKey: "levy_allowance", yearStartMonth: 4, yearStartDay: 6 },
+    allowance: {
+      kind: "accruing_allowance",
+      factKey: "levy_allowance",
+      yearStartMonth: 4,
+      yearStartDay: 6,
+    },
     factorKey: "GB_LEVY",
   };
   assert.deepEqual(
@@ -165,11 +170,7 @@ test("marginal bands price each slice at its own rate", () => {
 
 test("marginal bands reconcile across stubs regardless of split", () => {
   const first = assessAggregateLevyStub(BAND_LEVY, "500", PRIORS);
-  const second = assessAggregateLevyStub(
-    BAND_LEVY,
-    "500",
-    { ...PRIORS, employerPriorBase: "500" },
-  );
+  const second = assessAggregateLevyStub(BAND_LEVY, "500", { ...PRIORS, employerPriorBase: "500" });
   const whole = assessAggregateLevyStub(BAND_LEVY, "1000", PRIORS);
   assert.equal(cmp(first.amount, "5"), 0);
   assert.equal(cmp(second.amount, "5"), 0);
@@ -228,10 +229,7 @@ test("tenant-slot rate refuses a missing configuration by levy name", () => {
     allowance: { kind: "none" },
     factorKey: "SLT",
   };
-  assert.throws(
-    () => assessAggregateLevyStub(levy, "1000", PRIORS),
-    /slotrate.*health/,
-  );
+  assert.throws(() => assessAggregateLevyStub(levy, "1000", PRIORS), /slotrate.*health/);
   const got = assessAggregateLevyStub(levy, "1000", {
     ...PRIORS,
     tenantValues: { health: { rate: "1.95" } },
@@ -264,10 +262,7 @@ test("class bands select the employer's class, default otherwise", () => {
     factorKey: "NSL",
     classSlotKey: undefined,
   };
-  assert.throws(
-    () => assertAggregateLeviesValid([noSlot]),
-    /no class slot/,
-  );
+  assert.throws(() => assertAggregateLeviesValid([noSlot]), /no class slot/);
   const twoClass: PayrollEmployerAggregateLevy = {
     ...levy,
     key: "twoclass",
@@ -282,10 +277,11 @@ test("class bands select the employer's class, default otherwise", () => {
     },
   };
   assert.throws(
-    () => assessAggregateLevyStub(twoClass, "1000", {
-      ...PRIORS,
-      tenantValues: { org: { heavy: "true", other: "true" } },
-    }),
+    () =>
+      assessAggregateLevyStub(twoClass, "1000", {
+        ...PRIORS,
+        tenantValues: { org: { heavy: "true", other: "true" } },
+      }),
     /matches 2 employer classes/,
   );
 });
@@ -298,28 +294,36 @@ test("declaration validation refuses what the generic layer cannot compute", () 
   bad({ ...CAP_LEVY, key: "k", factorKey: "lower" }, /factor keys are uppercase/);
   bad(
     {
-      ...CAP_LEVY, key: "k", factorKey: "K",
+      ...CAP_LEVY,
+      key: "k",
+      factorKey: "K",
       base: { source: "net", scope: "org" },
     } as unknown as PayrollEmployerAggregateLevy,
     /base source "net"/,
   );
   bad(
     {
-      ...CAP_LEVY, key: "k", factorKey: "K",
+      ...CAP_LEVY,
+      key: "k",
+      factorKey: "K",
       rate: { kind: "per_stub_guess" },
     } as unknown as PayrollEmployerAggregateLevy,
     /rate kind "per_stub_guess"/,
   );
   bad(
     {
-      ...CAP_LEVY, key: "k", factorKey: "K",
+      ...CAP_LEVY,
+      key: "k",
+      factorKey: "K",
       rate: { kind: "marginal_bands", bands: [{ upTo: "100", percent: "1" }] },
     },
     /no open top band/,
   );
   bad(
     {
-      ...CAP_LEVY, key: "k", factorKey: "K",
+      ...CAP_LEVY,
+      key: "k",
+      factorKey: "K",
       rate: {
         kind: "marginal_bands",
         bands: [
@@ -333,7 +337,9 @@ test("declaration validation refuses what the generic layer cannot compute", () 
   );
   bad(
     {
-      ...THRESHOLD_LEVY, key: "k", factorKey: "K",
+      ...THRESHOLD_LEVY,
+      key: "k",
+      factorKey: "K",
       offset: { kind: "tenant_spend", slotKey: "s", amountField: "a" },
     },
     /per-run assessment/,
@@ -342,7 +348,9 @@ test("declaration validation refuses what the generic layer cannot compute", () 
   // no meaning against a personal cap under either timing.
   bad(
     {
-      ...CAP_LEVY, key: "k", factorKey: "K",
+      ...CAP_LEVY,
+      key: "k",
+      factorKey: "K",
       timing: "annual",
       offset: { kind: "tenant_spend", slotKey: "s", amountField: "a" },
     },
@@ -350,23 +358,23 @@ test("declaration validation refuses what the generic layer cannot compute", () 
   );
   bad(
     {
-      ...CAP_LEVY, key: "k", factorKey: "K",
+      ...CAP_LEVY,
+      key: "k",
+      factorKey: "K",
       timing: "annual",
     },
     /settles annually against a per-employee cap/,
   );
   assert.throws(
-    () => assertAggregateLeviesValid([
-      { ...CAP_LEVY, key: "same" },
-      { ...THRESHOLD_LEVY, key: "same", factorKey: "OTHER" },
-    ]),
+    () =>
+      assertAggregateLeviesValid([
+        { ...CAP_LEVY, key: "same" },
+        { ...THRESHOLD_LEVY, key: "same", factorKey: "OTHER" },
+      ]),
     /duplicate.*key "same"/,
   );
   assert.throws(
-    () => assertAggregateLeviesValid([
-      CAP_LEVY,
-      { ...THRESHOLD_LEVY, factorKey: "CAP" },
-    ]),
+    () => assertAggregateLeviesValid([CAP_LEVY, { ...THRESHOLD_LEVY, factorKey: "CAP" }]),
     /reuses factor "CAP"/,
   );
 });

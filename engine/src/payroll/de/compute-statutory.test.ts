@@ -13,7 +13,10 @@ import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { buildResolution } from "../statutory-rates.ts";
 import {
-  computeDeStatutory, computeDeStatutoryWithRates, DePayrollRefusal, deSvTage,
+  computeDeStatutory,
+  computeDeStatutoryWithRates,
+  DePayrollRefusal,
+  deSvTage,
 } from "./compute-statutory.ts";
 import { computePapLaufend2026 } from "./pap.ts";
 import { DE_PACK_RATES } from "./rates.ts";
@@ -23,7 +26,8 @@ type Pushed = { systemKey: string; kind: string; amount: string; sequence: numbe
 
 function fakeCtx(overrides: {
   income?: string;
-  pensionable?: string; insurable?: string;
+  pensionable?: string;
+  insurable?: string;
   region?: string;
   nonPeriodic?: string;
   elstam?: Record<string, string | null> | null;
@@ -32,22 +36,28 @@ function fakeCtx(overrides: {
   emp?: Record<string, string | null>;
 }): { ctx: PayrollStatutoryComputeContext; pushed: Pushed[] } {
   const pushed: Pushed[] = [];
-  const elstam = overrides.elstam === undefined
-    ? {
-      steuerklasse: "I",
-      kinderfreibetrag_anzahl: "0",
-      konfession: null,
-      freibetrag: "0",
-      hinzurechnungsbetrag: "0",
-      faktor: "1.000",
-    }
-    : overrides.elstam;
-  const pv = overrides.pv === undefined
-    ? { kinderlosenzuschlag: "true", abschlag_kinder: "0" }
-    : overrides.pv;
+  const elstam =
+    overrides.elstam === undefined
+      ? {
+          steuerklasse: "I",
+          kinderfreibetrag_anzahl: "0",
+          konfession: null,
+          freibetrag: "0",
+          hinzurechnungsbetrag: "0",
+          faktor: "1.000",
+        }
+      : overrides.elstam;
+  const pv =
+    overrides.pv === undefined
+      ? { kinderlosenzuschlag: "true", abschlag_kinder: "0" }
+      : overrides.pv;
   const ctx = {
-    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} },
+    supplementalTaxMethod: "per_run",
+    programBases: {},
+    pensionableNonPeriodic: "0",
+    insurableNonPeriodic: "0",
+    programNonPeriodicBases: {},
     taxYear: 2026,
     income: overrides.income ?? "3000.00",
     nonPeriodic: overrides.nonPeriodic ?? "0",
@@ -60,11 +70,21 @@ function fakeCtx(overrides: {
     documentId: "doc",
     employeePartyId: "emp",
     employeeName: "Emp",
-    run: overrides.run ?? { period_start: "2026-03-01", period_end: "2026-03-31", pay_date: "2026-03-31" },
+    run: overrides.run ?? {
+      period_start: "2026-03-01",
+      period_end: "2026-03-31",
+      pay_date: "2026-03-31",
+    },
     emp: overrides.emp ?? { hired_on: "2020-01-01", terminated_on: null },
     filingAccountId: null,
     deduction: () => "0",
-    pushStatutory: (systemKey: string, kind: "deduction" | "employer_contribution" | "credit", _desc: string, amount: string, sequence: number) => {
+    pushStatutory: (
+      systemKey: string,
+      kind: "deduction" | "employer_contribution" | "credit",
+      _desc: string,
+      amount: string,
+      sequence: number,
+    ) => {
       // Like the real createPushStatutory: zero amounts never become lines.
       if (cmp(amount, "0") === 0) return;
       pushed.push({ systemKey, kind, amount, sequence });
@@ -83,12 +103,35 @@ function fakeCtx(overrides: {
     },
     bool: (value: string | null | undefined) => value === "true",
     assertRegionSupported: (region: string) => {
-      const known = ["BW", "BY", "BE", "BB", "HB", "HH", "HE", "MV", "NI", "NW", "RP", "SL", "SN", "ST", "SH", "TH"];
+      const known = [
+        "BW",
+        "BY",
+        "BE",
+        "BB",
+        "HB",
+        "HH",
+        "HE",
+        "MV",
+        "NI",
+        "NW",
+        "RP",
+        "SL",
+        "SN",
+        "ST",
+        "SH",
+        "TH",
+      ];
       if (!known.includes(region)) throw new PayrollPackError(`unknown region ${region}`);
     },
     employerLevies: {
-      wcbAmount: "0", wcbAssessable: "0", ehtAmount: "0", ehtEarnings: "0",
-      hsfAmount: "0", hsfEarnings: "0", cntAmount: "0", cntEarnings: "0",
+      wcbAmount: "0",
+      wcbAssessable: "0",
+      ehtAmount: "0",
+      ehtEarnings: "0",
+      hsfAmount: "0",
+      hsfEarnings: "0",
+      cntAmount: "0",
+      cntEarnings: "0",
     },
     tx: {},
   } as unknown as PayrollStatutoryComputeContext;
@@ -109,9 +152,24 @@ test("full monthly period computes: PAP wiring + hand-checked SV and adapter nam
   await assert.rejects(computeDeStatutory(ctx), /refuses.*U1.*U2.*U3.*Berufsgenossenschaft/);
   const result = computeDeStatutoryWithRates(ctx, { kvz: 2.9 });
   const pap = computePapLaufend2026({
-    lzz: 2, re4: 300000n, stkl: 1, zkf: 0, af: 0, f: 1,
-    alv: 0, krv: 0, pkv: 0, kvz: 2.9, pvs: 0, pvz: 1, pva: 0, r: 0,
-    lzzfreib: 0n, lzzhinzu: 0n, pkpv: 0n, pkpvagz: 0n,
+    lzz: 2,
+    re4: 300000n,
+    stkl: 1,
+    zkf: 0,
+    af: 0,
+    f: 1,
+    alv: 0,
+    krv: 0,
+    pkv: 0,
+    kvz: 2.9,
+    pvs: 0,
+    pvz: 1,
+    pva: 0,
+    r: 0,
+    lzzfreib: 0n,
+    lzzhinzu: 0n,
+    pkpv: 0n,
+    pkpvagz: 0n,
   });
   assert.equal(result.LST, fromUnits(pap.lstlzz * 100n));
   assert.equal(result.SOLI, fromUnits(pap.solzlzz * 100n));
@@ -136,8 +194,12 @@ test("ceilings cap the SV base; KiSt elected at 9% outside BY/BW", () => {
   const { ctx, pushed } = fakeCtx({
     income: "7000.00",
     elstam: {
-      steuerklasse: "I", kinderfreibetrag_anzahl: "0", konfession: "rk",
-      freibetrag: "0", hinzurechnungsbetrag: "0", faktor: "1.000",
+      steuerklasse: "I",
+      kinderfreibetrag_anzahl: "0",
+      konfession: "rk",
+      freibetrag: "0",
+      hinzurechnungsbetrag: "0",
+      faktor: "1.000",
     },
   });
   const result = computeDeStatutoryWithRates(ctx, { kvz: 2.9 });
@@ -145,9 +207,24 @@ test("ceilings cap the SV base; KiSt elected at 9% outside BY/BW", () => {
   assert.equal(result.RV_W, "651.0000");
   assert.equal(result.PV_W, "139.5000"); // 5812.50 × 2.4%, PV rides the KV ceiling
   const pap = computePapLaufend2026({
-    lzz: 2, re4: 700000n, stkl: 1, zkf: 0, af: 0, f: 1,
-    alv: 0, krv: 0, pkv: 0, kvz: 2.9, pvs: 0, pvz: 1, pva: 0, r: 1,
-    lzzfreib: 0n, lzzhinzu: 0n, pkpv: 0n, pkpvagz: 0n,
+    lzz: 2,
+    re4: 700000n,
+    stkl: 1,
+    zkf: 0,
+    af: 0,
+    f: 1,
+    alv: 0,
+    krv: 0,
+    pkv: 0,
+    kvz: 2.9,
+    pvs: 0,
+    pvz: 1,
+    pva: 0,
+    r: 1,
+    lzzfreib: 0n,
+    lzzhinzu: 0n,
+    pkpv: 0n,
+    pkpvagz: 0n,
   });
   const expectedKist = fromUnits(((pap.bk * 9n) / 100n) * 100n);
   assert.equal(result.KIST, expectedKist);
@@ -168,11 +245,25 @@ test("a part month prorates every ceiling by its SV-Tage", () => {
   );
   // A leaver on 10 March (10 SV-Tage) and a whole month (30 SV-Tage, the
   // published monthly ceiling 5,812.50) bound the same rule.
-  assert.equal(deSvTage({ periodStart: "2026-03-01", periodEnd: "2026-03-31", hiredOn: "2019-05-01", terminatedOn: "2026-03-10" }), 10);
-  assert.equal(computeDeStatutoryWithRates(fakeCtx({ income: "7000.00" }).ctx, { kvz: 2.9 }).KV_W, "508.5900");
+  assert.equal(
+    deSvTage({
+      periodStart: "2026-03-01",
+      periodEnd: "2026-03-31",
+      hiredOn: "2019-05-01",
+      terminatedOn: "2026-03-10",
+    }),
+    10,
+  );
+  assert.equal(
+    computeDeStatutoryWithRates(fakeCtx({ income: "7000.00" }).ctx, { kvz: 2.9 }).KV_W,
+    "508.5900",
+  );
   // An unknown hire date refuses by name instead of assuming a full month.
   assert.throws(
-    () => computeDeStatutoryWithRates(fakeCtx({ emp: { hired_on: null, terminated_on: null } }).ctx, { kvz: 2.9 }),
+    () =>
+      computeDeStatutoryWithRates(fakeCtx({ emp: { hired_on: null, terminated_on: null } }).ctx, {
+        kvz: 2.9,
+      }),
     /needs the employee's hire date.*Record the hire date on the employee record/s,
   );
 });
@@ -185,11 +276,17 @@ test("Sachsen PV split and BY KiSt at 8%", () => {
   const snResult = computeDeStatutoryWithRates(sn.ctx, { kvz: 2.9 });
   assert.equal(snResult.PV_W, "69.0000");
   assert.equal(snResult.PV_ER, "39.0000");
-  const snChildless = fakeCtx({ region: "SN", pv: { kinderlosenzuschlag: "true", abschlag_kinder: "0" } });
+  const snChildless = fakeCtx({
+    region: "SN",
+    pv: { kinderlosenzuschlag: "true", abschlag_kinder: "0" },
+  });
   const snChildlessResult = computeDeStatutoryWithRates(snChildless.ctx, { kvz: 2.9 });
   assert.equal(snChildlessResult.PV_W, "87.0000"); // +0.6 points, borne by employee
   assert.equal(snChildlessResult.PV_ER, "39.0000");
-  const snDiscountedChildren = fakeCtx({ region: "SN", pv: { kinderlosenzuschlag: "false", abschlag_kinder: "2" } });
+  const snDiscountedChildren = fakeCtx({
+    region: "SN",
+    pv: { kinderlosenzuschlag: "false", abschlag_kinder: "2" },
+  });
   const snDiscountedResult = computeDeStatutoryWithRates(snDiscountedChildren.ctx, { kvz: 2.9 });
   assert.equal(snDiscountedResult.PV_W, "54.0000"); // −0.25 points per eligible child
   assert.equal(snDiscountedResult.PV_ER, "39.0000");
@@ -197,15 +294,34 @@ test("Sachsen PV split and BY KiSt at 8%", () => {
   const by = fakeCtx({
     region: "BY",
     elstam: {
-      steuerklasse: "I", kinderfreibetrag_anzahl: "0", konfession: "ev",
-      freibetrag: "0", hinzurechnungsbetrag: "0", faktor: "1.000",
+      steuerklasse: "I",
+      kinderfreibetrag_anzahl: "0",
+      konfession: "ev",
+      freibetrag: "0",
+      hinzurechnungsbetrag: "0",
+      faktor: "1.000",
     },
   });
   const byResult = computeDeStatutoryWithRates(by.ctx, { kvz: 2.9 });
   const pap = computePapLaufend2026({
-    lzz: 2, re4: 300000n, stkl: 1, zkf: 0, af: 0, f: 1,
-    alv: 0, krv: 0, pkv: 0, kvz: 2.9, pvs: 0, pvz: 1, pva: 0, r: 1,
-    lzzfreib: 0n, lzzhinzu: 0n, pkpv: 0n, pkpvagz: 0n,
+    lzz: 2,
+    re4: 300000n,
+    stkl: 1,
+    zkf: 0,
+    af: 0,
+    f: 1,
+    alv: 0,
+    krv: 0,
+    pkv: 0,
+    kvz: 2.9,
+    pvs: 0,
+    pvz: 1,
+    pva: 0,
+    r: 1,
+    lzzfreib: 0n,
+    lzzhinzu: 0n,
+    pkpv: 0n,
+    pkpvagz: 0n,
   });
   assert.equal(byResult.KIST, fromUnits(((pap.bk * 8n) / 100n) * 100n));
 });
@@ -236,8 +352,12 @@ test("no ELStAM on file refuses; blank Steuerklasse refuses, not Klasse I", () =
   );
   const { ctx: noStkl } = fakeCtx({
     elstam: {
-      steuerklasse: null, kinderfreibetrag_anzahl: "0", konfession: null,
-      freibetrag: "0", hinzurechnungsbetrag: "0", faktor: "1.000",
+      steuerklasse: null,
+      kinderfreibetrag_anzahl: "0",
+      konfession: null,
+      freibetrag: "0",
+      hinzurechnungsbetrag: "0",
+      faktor: "1.000",
     },
   });
   assert.throws(
@@ -251,13 +371,15 @@ test("no ELStAM on file refuses; blank Steuerklasse refuses, not Klasse I", () =
 });
 
 test("blank PV child facts cannot inherit synthesized childless defaults", () => {
-  const certificate = DE_PAYROLL_PACK.certificates().certificates.find((entry) => entry.key === "de_pv_nachweis")!;
-  const resolved = resolveCertificate({ certificate, stored: [{ certificateKey: certificate.key, answers: {}, effectiveFrom: "2026-01-01" }] });
+  const certificate = DE_PAYROLL_PACK.certificates().certificates.find(
+    (entry) => entry.key === "de_pv_nachweis",
+  )!;
+  const resolved = resolveCertificate({
+    certificate,
+    stored: [{ certificateKey: certificate.key, answers: {}, effectiveFrom: "2026-01-01" }],
+  });
   const { ctx } = fakeCtx({ pv: resolved.answers });
-  assert.throws(
-    () => computeDeStatutoryWithRates(ctx, { kvz: 2.9 }),
-    /de_pv_nachweis/,
-  );
+  assert.throws(() => computeDeStatutoryWithRates(ctx, { kvz: 2.9 }), /de_pv_nachweis/);
 });
 
 test("de_kvz resolves through the generic resolution (pure half)", () => {
@@ -265,12 +387,23 @@ test("de_kvz resolves through the generic resolution (pure half)", () => {
   const empty = buildResolution({ country: "DE", taxYear: 2026, pack: decl, rows: [] });
   assert.equal(empty.values("de_kvz"), null, "unconfigured: no values, so the engine refuses");
   const filled = buildResolution({
-    country: "DE", taxYear: 2026, pack: decl,
-    rows: [{
-      id: "r1", country: "DE", rateKey: "de_kvz", region: null,
-      filingAccountId: null, taxYear: 2026, values: { rate: "2.90" },
-      sourceCitation: null, reason: null, supersededOn: null,
-    }],
+    country: "DE",
+    taxYear: 2026,
+    pack: decl,
+    rows: [
+      {
+        id: "r1",
+        country: "DE",
+        rateKey: "de_kvz",
+        region: null,
+        filingAccountId: null,
+        taxYear: 2026,
+        values: { rate: "2.90" },
+        sourceCitation: null,
+        reason: null,
+        supersededOn: null,
+      },
+    ],
   });
   assert.deepEqual(filled.values("de_kvz"), { rate: "2.90" });
 });

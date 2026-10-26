@@ -1,7 +1,4 @@
-import {
-  accrualEarned,
-  carryoverApplied,
-} from "@openbooks/engine/hrm/leave-math";
+import { accrualEarned, carryoverApplied } from "@openbooks/engine/hrm/leave-math";
 import {} from "./coerce.ts";
 import { foldWholeNumber } from "./whole-number";
 import { isUuid } from "@openbooks/engine/platform/identifiers";
@@ -38,7 +35,12 @@ import { isUuid } from "@openbooks/engine/platform/identifiers";
 // the probe is sensitive only to rule shape, never to the calendar.
 const PROBE_DATE = "2000-01-01";
 
-const APPLIES_SLOTS = ["appliesEmployerSubsidiaryId", "appliesDepartmentId", "appliesEmploymentIds", "appliesClassificationIds"] as const;
+const APPLIES_SLOTS = [
+  "appliesEmployerSubsidiaryId",
+  "appliesDepartmentId",
+  "appliesEmploymentIds",
+  "appliesClassificationIds",
+] as const;
 const ACCRUAL_SLOTS = ["accrualKind", "accrualHours", "accrualPeriodsPerYear"] as const;
 const ACCRUAL_TIERS_SLOT = "accrualTiers";
 const CARRYOVER_SLOTS = ["carryoverKind", "carryoverHours", "carryoverExpiresAfterDays"] as const;
@@ -47,7 +49,9 @@ const ACCRUAL_KINDS = ["none", "per_period", "per_year", "unlimited"] as const;
 const CARRYOVER_KINDS = ["none", "carry_all", "carry_up_to"] as const;
 
 function blank(value: unknown): boolean {
-  return value === undefined || value === null || (typeof value === "string" && value.trim() === "");
+  return (
+    value === undefined || value === null || (typeof value === "string" && value.trim() === "")
+  );
 }
 
 function idSlot(value: unknown): string | null {
@@ -146,7 +150,10 @@ export function leavePolicyRuleProblem(values: LeavePolicyRuleValues): string | 
         return "The applies-to subsidiary and department must be ids, or null for all";
       }
     }
-    for (const [prop, field] of [["employment_ids", "employments"], ["classification_ids", "classifications"]] as const) {
+    for (const [prop, field] of [
+      ["employment_ids", "employments"],
+      ["classification_ids", "classifications"],
+    ] as const) {
       const problem = targetListProblem(record[prop], field);
       if (problem) return problem;
     }
@@ -160,8 +167,12 @@ export function leavePolicyRuleProblem(values: LeavePolicyRuleValues): string | 
     if (!(ACCRUAL_KINDS as readonly unknown[]).includes(record.kind)) {
       return "accrual_rule kind is one of none, per_period, per_year, unlimited — record the rule";
     }
-    if (record.tiers !== undefined && record.tiers !== null
-      && record.kind !== "per_year" && record.kind !== "per_period") {
+    if (
+      record.tiers !== undefined &&
+      record.tiers !== null &&
+      record.kind !== "per_year" &&
+      record.kind !== "per_period"
+    ) {
       return `a ${String(record.kind)} accrual rule carries no hours, so tiers have nothing to lift — use kind per_year or per_period for service-based tiers`;
     }
     const tiersProblem = accrualTiersProblem(record.tiers);
@@ -186,7 +197,10 @@ export function leavePolicyRuleProblem(values: LeavePolicyRuleValues): string | 
       return "carryover_rule kind is one of none, carry_all, carry_up_to — record the rule";
     }
     if (record.expires_after_days !== undefined && record.expires_after_days !== null) {
-      if (!Number.isInteger(record.expires_after_days) || (record.expires_after_days as number) < 0) {
+      if (
+        !Number.isInteger(record.expires_after_days) ||
+        (record.expires_after_days as number) < 0
+      ) {
         return "carryover expires_after_days is a non-negative integer of days — record the expiry";
       }
     }
@@ -212,7 +226,9 @@ export function leavePolicyRuleProblem(values: LeavePolicyRuleValues): string | 
 function idListSlot(value: unknown): string[] | null {
   if (value === undefined || value === null) return null;
   if (!Array.isArray(value)) return value as unknown as string[];
-  const ids = [...new Set(value.map((entry) => String(entry).trim()).filter((entry) => entry.length > 0))];
+  const ids = [
+    ...new Set(value.map((entry) => String(entry).trim()).filter((entry) => entry.length > 0)),
+  ];
   return ids.length === 0 ? null : ids;
 }
 
@@ -245,7 +261,12 @@ export function normalizeHrmLeavePolicyInput(
 ): Record<string, unknown> {
   if (entityKey !== "leave-policies") return body;
   const hasSlot = (keys: readonly string[]): boolean => keys.some((key) => body[key] !== undefined);
-  if (!hasSlot(APPLIES_SLOTS) && !hasSlot(ACCRUAL_SLOTS) && body[ACCRUAL_TIERS_SLOT] === undefined && !hasSlot(CARRYOVER_SLOTS)) {
+  if (
+    !hasSlot(APPLIES_SLOTS) &&
+    !hasSlot(ACCRUAL_SLOTS) &&
+    body[ACCRUAL_TIERS_SLOT] === undefined &&
+    !hasSlot(CARRYOVER_SLOTS)
+  ) {
     return foldDirectRuleNumerics(body);
   }
   const out: Record<string, unknown> = { ...body };
@@ -283,7 +304,8 @@ export function normalizeHrmLeavePolicyInput(
   // hrm-rule-slots.ts strips their generated columns (and skips the folded
   // array slots through coveredSlotFields) from whatever buildRow emits for
   // the declared slot fields, so nothing generated is written.
-  for (const key of [...APPLIES_SLOTS, ...ACCRUAL_SLOTS, ACCRUAL_TIERS_SLOT, ...CARRYOVER_SLOTS]) delete out[key];
+  for (const key of [...APPLIES_SLOTS, ...ACCRUAL_SLOTS, ACCRUAL_TIERS_SLOT, ...CARRYOVER_SLOTS])
+    delete out[key];
   // The fold never throws: the shape refusal is raised by
   // validateEntityIntegrity in write.ts through leavePolicyRuleProblem, so
   // the caller receives a 400 with the engine's words, not an exception.
@@ -299,7 +321,10 @@ export function normalizeHrmLeavePolicyInput(
  */
 function foldDirectRuleNumerics(body: Record<string, unknown>): Record<string, unknown> {
   let out = body;
-  for (const [ruleKey, member] of [["accrualRule", "periods_per_year"], ["carryoverRule", "expires_after_days"]] as const) {
+  for (const [ruleKey, member] of [
+    ["accrualRule", "periods_per_year"],
+    ["carryoverRule", "expires_after_days"],
+  ] as const) {
     const rule = out[ruleKey];
     if (typeof rule !== "object" || rule === null || Array.isArray(rule)) continue;
     const record = rule as Record<string, unknown>;

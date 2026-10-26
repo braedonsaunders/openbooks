@@ -4,9 +4,8 @@ import { isSerializationConflict } from "./consolidation.ts";
 
 /** A driver-style error carrying a pg code, wrapped `wrappers` deep in causes. */
 function chained(code: string | null, wrappers: number): unknown {
-  let current: unknown = code === null
-    ? new Error("boom")
-    : Object.assign(new Error("boom"), { code });
+  let current: unknown =
+    code === null ? new Error("boom") : Object.assign(new Error("boom"), { code });
   for (let i = 0; i < wrappers; i++) {
     current = Object.assign(new Error("wrapped"), { cause: current });
   }

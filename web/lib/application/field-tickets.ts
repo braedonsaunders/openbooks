@@ -19,7 +19,8 @@ export async function createApplicationFieldTicket(
   input: { projectId: string; date?: string; period?: string; idempotencyKey: string },
 ): Promise<{ replayed: boolean; result: { id: string; documentNumber: string } }> {
   assertApplicationPermission(context, "time.manage");
-  if (!(await isFeatureEnabled(context.authz.user.orgId, "fieldTickets"))) throw notFound("field ticket");
+  if (!(await isFeatureEnabled(context.authz.user.orgId, "fieldTickets")))
+    throw notFound("field ticket");
   if (!isUuid(input.projectId)) throw invalidInput("projectId required");
   if (input.period !== undefined && !TICKET_PERIODS.includes(input.period as TicketPeriod)) {
     throw invalidInput("Invalid ticket period");
@@ -39,7 +40,8 @@ export async function createApplicationFieldTicket(
         });
       } catch (error) {
         if (error instanceof FieldTicketNotFoundError) throw notFound("project");
-        if (error instanceof FieldTicketError) throw new ApplicationError("invalid_input", error.message, 422);
+        if (error instanceof FieldTicketError)
+          throw new ApplicationError("invalid_input", error.message, 422);
         throw error;
       }
     },

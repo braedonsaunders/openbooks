@@ -88,7 +88,10 @@ export async function periodOperatingExpenses(
   for (const row of r.rows) {
     const date = String(row.late ?? to).slice(0, 10);
     opex = add(opex, mulDecimal(String(row.opex ?? 0), ctx.rateAt(row.func ?? null, date)));
-    revenue = add(revenue, mulDecimal(String(row.revenue ?? 0), ctx.rateAt(row.func ?? null, date)));
+    revenue = add(
+      revenue,
+      mulDecimal(String(row.revenue ?? 0), ctx.rateAt(row.func ?? null, date)),
+    );
   }
   return { opex, revenue };
 }

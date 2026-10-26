@@ -8,20 +8,21 @@ import { RECORD_TYPE_BY_KEY } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../lib/customization/gates";
 import { isUuid } from "../../../../lib/list-params";
 const putBodySchema0 = z.strictObject({
-  recordType: z.string().trim().min(1, "recordType is required").refine(
-    (value) => Object.hasOwn(RECORD_TYPE_BY_KEY, value),
-    "recordType must name a supported record type",
-  ),
+  recordType: z
+    .string()
+    .trim()
+    .min(1, "recordType is required")
+    .refine(
+      (value) => Object.hasOwn(RECORD_TYPE_BY_KEY, value),
+      "recordType must name a supported record type",
+    ),
   layoutId: uuidString("layoutId must be a valid id").nullable().optional(),
 });
 
 export const runtime = "nodejs";
 
 /** Same accessibility rule resolveFormLayout uses: empty/null ⇒ everyone. */
-function rowIsAccessible(
-  allowedRoles: string[] | null,
-  userRoles: string[],
-): boolean {
+function rowIsAccessible(allowedRoles: string[] | null, userRoles: string[]): boolean {
   if (!allowedRoles || allowedRoles.length === 0) return true;
   return allowedRoles.some((role) => userRoles.includes(role));
 }
@@ -36,8 +37,7 @@ export const PUT = defineRoute({
   public: "session",
   body: putBodySchema0,
   handler: async ({ request: _req, authz, body: routeBody }) => {
-    if (!authz)
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;
 
     const body = routeBody as {
@@ -45,20 +45,14 @@ export const PUT = defineRoute({
       layoutId?: string | null;
     };
     if (!body.recordType || !RECORD_TYPE_BY_KEY[body.recordType])
-      return NextResponse.json(
-        { error: "unknown record type" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "unknown record type" }, { status: 400 });
     const refused = await refuseDisabledRecordType(user.orgId, body.recordType);
     if (refused) return refused;
     const layoutId = body.layoutId ?? null;
     // A malformed id would surface as a Postgres uuid throw and a raw 500;
     // resolve it through the same 404 as an unknown layout.
     if (layoutId && !isUuid(layoutId)) {
-      return NextResponse.json(
-        { error: "form layout not found" },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: "form layout not found" }, { status: 404 });
     }
     if (layoutId) {
       // The preferred form must be one resolveFormLayout would actually apply:
@@ -68,17 +62,16 @@ export const PUT = defineRoute({
       const owned = await db.execute<{
         isActive: boolean;
         allowedRoles: string[] | null;
-      }>(sql`
+      }>(
+        sql`
       select is_active as "isActive", allowed_roles as "allowedRoles"
         from form_layouts
        where id = ${layoutId} and org_id = ${user.orgId} and record_type = ${body.recordType}
-    `, "objects");
+    `,
+        "objects",
+      );
       const row = owned[0];
-      if (!row)
-        return NextResponse.json(
-          { error: "form layout not found" },
-          { status: 404 },
-        );
+      if (!row) return NextResponse.json({ error: "form layout not found" }, { status: 404 });
       if (!row.isActive) {
         return NextResponse.json(
           {
@@ -89,10 +82,7 @@ export const PUT = defineRoute({
         );
       }
       const userRoles = (user.roles ?? []).map((role) => role.key);
-      if (!(
-        rowIsAccessible(row.allowedRoles, userRoles) ||
-        userRoles.includes("admin")
-      )) {
+      if (!(rowIsAccessible(row.allowedRoles, userRoles) || userRoles.includes("admin"))) {
         return NextResponse.json(
           {
             error:

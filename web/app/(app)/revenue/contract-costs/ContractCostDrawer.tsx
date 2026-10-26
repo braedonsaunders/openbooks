@@ -20,7 +20,10 @@ import type { ContractCostAssetPayload } from "./view";
 import { ImpairAssetButton } from "./ImpairAssetButton";
 import { LinkAssetButton } from "./LinkAssetButton";
 
-const STATUS_VARIANT: Record<string, "success" | "secondary" | "warning" | "outline" | "destructive"> = {
+const STATUS_VARIANT: Record<
+  string,
+  "success" | "secondary" | "warning" | "outline" | "destructive"
+> = {
   active: "success",
   fully_amortized: "secondary",
   impaired: "destructive",
@@ -65,9 +68,7 @@ export function ContractCostDrawer({
       title={
         <span className="flex items-center gap-2.5">
           <span className="font-mono">{a.contractNumber ?? t("drawer.unlinked")}</span>
-          <Badge variant={STATUS_VARIANT[a.status] ?? "secondary"}>
-            {t(`status.${a.status}`)}
-          </Badge>
+          <Badge variant={STATUS_VARIANT[a.status] ?? "secondary"}>{t(`status.${a.status}`)}</Badge>
         </span>
       }
       description={a.customer ?? t(`costType.${a.costType}`)}

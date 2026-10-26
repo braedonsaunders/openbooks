@@ -4,7 +4,11 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/testing/fixtures";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+} from "@openbooks/engine/testing/fixtures";
 
 const state: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } = {
   user: { orgId: "", id: "" },
@@ -13,11 +17,18 @@ const state: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<st
 Object.assign(globalThis, { __stockCountRetryAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if ((specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) ||
-        (specifier === "./authz" && context.parentURL?.includes("/lib/feature-gates"))) {
-      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
-        "export async function guardPermission(){return {user:globalThis.__stockCountRetryAudit.user,allowedSubsidiaryIds:globalThis.__stockCountRetryAudit.allowedSubsidiaryIds}}",
-      ) };
+    if (
+      (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) ||
+      (specifier === "./authz" && context.parentURL?.includes("/lib/feature-gates"))
+    ) {
+      return {
+        shortCircuit: true,
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            "export async function guardPermission(){return {user:globalThis.__stockCountRetryAudit.user,allowedSubsidiaryIds:globalThis.__stockCountRetryAudit.allowedSubsidiaryIds}}",
+          ),
+      };
     }
     return next(specifier, context);
   },
@@ -33,18 +44,32 @@ test("a committed count create retried with the same key returns the original co
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     state.user = { orgId: org.orgId, id: actor };
-    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`);
+    await db.execute(
+      sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`,
+    );
     const { GET, POST } = await import("./route");
-    const body = { action: "create", idempotencyKey: randomUUID(), locationId: org.locationId,
-      subsidiaryId: org.subsidiaryId, date: org.date,
-      lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }] };
-    const post = () => new Request("http://audit.local/api/inventory/counts", { method: "POST", body: JSON.stringify(body) });
+    const body = {
+      action: "create",
+      idempotencyKey: randomUUID(),
+      locationId: org.locationId,
+      subsidiaryId: org.subsidiaryId,
+      date: org.date,
+      lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
+    };
+    const post = () =>
+      new Request("http://audit.local/api/inventory/counts", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
     // The create commits; the response never reaches the operator.
     const first = await POST(post());
     const result = await first.json();
     assert.equal(first.status, 200, JSON.stringify(result));
     assert.equal(result.replayed, false);
-    assert.ok(typeof result.id === "string" && result.id.length > 0, "the create must return the count id");
+    assert.ok(
+      typeof result.id === "string" && result.id.length > 0,
+      "the create must return the count id",
+    );
     // The operator presses Open count again with unchanged fields.
     const retry = await POST(post());
     const replay = await retry.json();
@@ -52,25 +77,36 @@ test("a committed count create retried with the same key returns the original co
     assert.deepEqual(replay, { ...result, replayed: true });
     assert.equal(replay.id, result.id, "the retry must return the ORIGINAL count id");
     assert.equal(
-      (await db.execute<{ n: number }>(sql`select count(*)::int as n from stock_counts where org_id=${org.orgId}`, "objects"))[0]!.n,
-      1, "the retry must replay, not open a second count",
+      (
+        await db.execute<{ n: number }>(
+          sql`select count(*)::int as n from stock_counts where org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]!.n,
+      1,
+      "the retry must replay, not open a second count",
     );
     // A restricted actor gets the same response for the extant count outside
     // scope and an id that has never existed, on both detail and mutation.
     state.allowedSubsidiaryIds = new Set([randomUUID()]);
-    const hiddenDetail = await GET(new Request(`http://audit.local/api/inventory/counts?id=${result.id}`));
-    const absentDetail = await GET(new Request(`http://audit.local/api/inventory/counts?id=${randomUUID()}`));
+    const hiddenDetail = await GET(
+      new Request(`http://audit.local/api/inventory/counts?id=${result.id}`),
+    );
+    const absentDetail = await GET(
+      new Request(`http://audit.local/api/inventory/counts?id=${randomUUID()}`),
+    );
     assert.equal(hiddenDetail.status, 404);
     const hiddenDetailBody = await hiddenDetail.json();
     const absentDetailBody = await absentDetail.json();
     assert.deepEqual(hiddenDetailBody, absentDetailBody);
     assert.deepEqual(absentDetailBody, { error: "not_found" });
 
-    const mutate = (countId: string) => new Request("http://audit.local/api/inventory/counts", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "start", countId, idempotencyKey: randomUUID() }),
-    });
+    const mutate = (countId: string) =>
+      new Request("http://audit.local/api/inventory/counts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "start", countId, idempotencyKey: randomUUID() }),
+      });
     const hiddenMutation = await POST(mutate(result.id));
     const absentMutation = await POST(mutate(randomUUID()));
     assert.equal(hiddenMutation.status, 404);
@@ -78,5 +114,7 @@ test("a committed count create retried with the same key returns the original co
     const absentMutationBody = await absentMutation.json();
     assert.deepEqual(hiddenMutationBody, absentMutationBody);
     assert.deepEqual(absentMutationBody, { error: "not_found" });
-  } finally { await dropScratchOrg(org.orgId); }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
 });

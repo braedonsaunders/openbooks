@@ -19,18 +19,66 @@ export interface TenantRetirementRegistration {
   reviewedState: Record<string, { digest: string }>;
 }
 export interface TenantRetirementStatus {
-  run: { id: string; plan_digest: string; catalog_digest: string; database_identity: TenantRetirementRegistration["database"]; retain_ids: string[]; target_ids: string[]; reviewed_state: Record<string, { digest: string }> };
-  events: Array<{ id: number; run_id: string; tenant_id: string | null; kind: string; login_name: string; detail: Record<string, unknown>; created_at: string }>;
-  targets: Array<{ tenant_id: string; run_id: string | null; state: "active" | "quarantined" | "deleted"; receipt: unknown }>;
+  run: {
+    id: string;
+    plan_digest: string;
+    catalog_digest: string;
+    database_identity: TenantRetirementRegistration["database"];
+    retain_ids: string[];
+    target_ids: string[];
+    reviewed_state: Record<string, { digest: string }>;
+  };
+  events: Array<{
+    id: number;
+    run_id: string;
+    tenant_id: string | null;
+    kind: string;
+    login_name: string;
+    detail: Record<string, unknown>;
+    created_at: string;
+  }>;
+  targets: Array<{
+    tenant_id: string;
+    run_id: string | null;
+    state: "active" | "quarantined" | "deleted";
+    receipt: unknown;
+  }>;
 }
 const DIGEST = /^[0-9a-f]{64}$/;
 export function parseTenantRetirementRecovery(value: unknown): TenantRetirementRecovery {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Recovery evidence must be an explicit artifact attestation");
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Recovery evidence must be an explicit artifact attestation");
   const record = value as Record<string, unknown>;
-  const keys = ["backupSha256", "restoreReceiptSha256", "preservationReceiptSha256", "objectRetentionReceiptSha256", "verifiedAt", "verifier"];
-  if (Object.keys(record).length !== keys.length || keys.some(key => !(key in record))) throw new Error("Recovery evidence must contain exactly backupSha256, restoreReceiptSha256, preservationReceiptSha256, objectRetentionReceiptSha256, verifiedAt, verifier");
-  if (keys.slice(0, 4).some(key => typeof record[key] !== "string" || !DIGEST.test(record[key] as string))) throw new Error("Recovery artifact digests must be SHA256 values from verified backup/restore receipts");
-  if (typeof record.verifiedAt !== "string" || !Number.isFinite(Date.parse(record.verifiedAt)) || (typeof record.verifiedAt === "string" && Number.isFinite(Date.parse(record.verifiedAt)) && new Date(record.verifiedAt).toISOString() !== record.verifiedAt) || typeof record.verifier !== "string" || record.verifier.trim().length < 3) throw new Error("Recovery evidence needs a verifier and an ISO verification timestamp");
+  const keys = [
+    "backupSha256",
+    "restoreReceiptSha256",
+    "preservationReceiptSha256",
+    "objectRetentionReceiptSha256",
+    "verifiedAt",
+    "verifier",
+  ];
+  if (Object.keys(record).length !== keys.length || keys.some((key) => !(key in record)))
+    throw new Error(
+      "Recovery evidence must contain exactly backupSha256, restoreReceiptSha256, preservationReceiptSha256, objectRetentionReceiptSha256, verifiedAt, verifier",
+    );
+  if (
+    keys
+      .slice(0, 4)
+      .some((key) => typeof record[key] !== "string" || !DIGEST.test(record[key] as string))
+  )
+    throw new Error(
+      "Recovery artifact digests must be SHA256 values from verified backup/restore receipts",
+    );
+  if (
+    typeof record.verifiedAt !== "string" ||
+    !Number.isFinite(Date.parse(record.verifiedAt)) ||
+    (typeof record.verifiedAt === "string" &&
+      Number.isFinite(Date.parse(record.verifiedAt)) &&
+      new Date(record.verifiedAt).toISOString() !== record.verifiedAt) ||
+    typeof record.verifier !== "string" ||
+    record.verifier.trim().length < 3
+  )
+    throw new Error("Recovery evidence needs a verifier and an ISO verification timestamp");
   return {
     backupSha256: record.backupSha256 as string,
     restoreReceiptSha256: record.restoreReceiptSha256 as string,

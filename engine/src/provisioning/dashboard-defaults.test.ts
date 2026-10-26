@@ -12,8 +12,15 @@ test("every built-in role has a valid, distinct dashboard layout", () => {
   for (const role of DASHBOARD_ROLE_KEYS) {
     const widgets = DEFAULT_DASHBOARD_LAYOUTS[role].widgets;
     assert.ok(widgets.length > 0, `${role} dashboard must not be empty`);
-    assert.equal(new Set(widgets.map((widget) => widget.id)).size, widgets.length, `${role} widget ids must be unique`);
-    assert.ok(!widgets.some((widget) => widget.id === "kpi-journal-entries"), `${role} must not restore the retired journal-entry count`);
+    assert.equal(
+      new Set(widgets.map((widget) => widget.id)).size,
+      widgets.length,
+      `${role} widget ids must be unique`,
+    );
+    assert.ok(
+      !widgets.some((widget) => widget.id === "kpi-journal-entries"),
+      `${role} must not restore the retired journal-entry count`,
+    );
 
     for (const widget of widgets) {
       assert.ok(widget.x >= 0 && widget.y >= 0, `${role}/${widget.id} must start inside the grid`);

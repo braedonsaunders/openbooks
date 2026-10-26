@@ -1,14 +1,14 @@
-import { extensionContributionTargetErrors } from './contribution-targets'
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
-import { db, withBypassContext, type SqlExecutor } from '@openbooks/engine/platform/db'
+import { extensionContributionTargetErrors } from "./contribution-targets";
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
+import { db, withBypassContext, type SqlExecutor } from "@openbooks/engine/platform/db";
 import {
   runAppEndpoint,
   type AppHostAdapters,
   type AppRequest,
   type AppRecordsAdapter,
   type AppStorageAdapter,
-} from '@openbooks/engine/apps/runtime'
+} from "@openbooks/engine/apps/runtime";
 import {
   executeAppInvocation,
   lockInstalledAppForInvocation,
@@ -19,32 +19,51 @@ import {
   AppInvocationDisabledError,
   type AppInvocationAuditRow,
   type AppInvocationAttempt,
-} from '@openbooks/engine/apps/invocations'
-import { createScriptJournal, type ScriptJournalInput } from '@openbooks/engine/ledger/journal-writes'
-import { requestHash } from '@/lib/application/idempotency-core'
-import { parseManifest, validateBundle, validateAppToolsForInstall, contentTypeFor, type AppManifest } from './manifest'
-import { appliedDraftStillCurrent, PACKAGE_PATH_REFUSAL, validPackagePath } from './package-files'
-import { APP_CAPABILITIES } from './manifest'
-import { projectExtensionPage } from '@openbooks/engine/extensions/pages'
-import { getExtensionSettings, projectSupplementalContributions, withdrawSupplementalContributions } from '@openbooks/engine/extensions/projections'
-import { EXTENSION_CONTRIBUTION_PERMISSIONS } from './contributions'
-import { actorHasPermission } from '@openbooks/engine/organization/actor-permissions'
-import { parseNativeExtension } from './native-ui'
-import { parseObjectSpecs, type ParsedObjects } from './objects'
-import { createAppPlatformAdapter, AppPlatformError } from './platform'
-import { readOnlyAppHostAdapters } from './tool-capabilities'
-import type { SessionUser } from '@/lib/auth'
-import { permissionSetCovers } from '@/lib/permissions'
-import { lockCustomFieldKeys } from '../custom-field-write-lock'
-import { validateCustomFieldDefinition, type ExistingFieldDef } from '../custom-field-definition'
-import { normalizeCustomFieldConfig } from '../custom-field-config'
-import { isCustomFieldTargetEnabled } from '../customization/gates'
-import { acquireFeatureGateLock, featureGateLockKey, isFeatureEnabled } from '../features'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
-import { documentRevisionSql } from '@openbooks/engine/records/revision'
-import { inTypeAudience, hasSubsidiaryField, loadRecordTypeByKey, recordVisibleInSubsidiaryFenceSql, type RecordTypeRow } from '@/lib/records'
-import { lintRecordFields } from '../record-schema'
-import { isUuid } from '@/lib/list-params'
+} from "@openbooks/engine/apps/invocations";
+import {
+  createScriptJournal,
+  type ScriptJournalInput,
+} from "@openbooks/engine/ledger/journal-writes";
+import { requestHash } from "@/lib/application/idempotency-core";
+import {
+  parseManifest,
+  validateBundle,
+  validateAppToolsForInstall,
+  contentTypeFor,
+  type AppManifest,
+} from "./manifest";
+import { appliedDraftStillCurrent, PACKAGE_PATH_REFUSAL, validPackagePath } from "./package-files";
+import { APP_CAPABILITIES } from "./manifest";
+import { projectExtensionPage } from "@openbooks/engine/extensions/pages";
+import {
+  getExtensionSettings,
+  projectSupplementalContributions,
+  withdrawSupplementalContributions,
+} from "@openbooks/engine/extensions/projections";
+import { EXTENSION_CONTRIBUTION_PERMISSIONS } from "./contributions";
+import { actorHasPermission } from "@openbooks/engine/organization/actor-permissions";
+import { parseNativeExtension } from "./native-ui";
+import { parseObjectSpecs, type ParsedObjects } from "./objects";
+import { createAppPlatformAdapter, AppPlatformError } from "./platform";
+import { readOnlyAppHostAdapters } from "./tool-capabilities";
+import type { SessionUser } from "@/lib/auth";
+import { permissionSetCovers } from "@/lib/permissions";
+import { lockCustomFieldKeys } from "../custom-field-write-lock";
+import { validateCustomFieldDefinition, type ExistingFieldDef } from "../custom-field-definition";
+import { normalizeCustomFieldConfig } from "../custom-field-config";
+import { isCustomFieldTargetEnabled } from "../customization/gates";
+import { acquireFeatureGateLock, featureGateLockKey, isFeatureEnabled } from "../features";
+import { lockAndCheckOrgFeature } from "@openbooks/engine/organization/org-feature-lock";
+import { documentRevisionSql } from "@openbooks/engine/records/revision";
+import {
+  inTypeAudience,
+  hasSubsidiaryField,
+  loadRecordTypeByKey,
+  recordVisibleInSubsidiaryFenceSql,
+  type RecordTypeRow,
+} from "@/lib/records";
+import { lintRecordFields } from "../record-schema";
+import { isUuid } from "@/lib/list-params";
 
 /**
  * Apps server store — every function is org-scoped: the caller passes the
@@ -54,28 +73,30 @@ import { isUuid } from '@/lib/list-params'
  */
 
 export type AppRow = {
-  id: string
-  key: string
-  name: string
-  description: string | null
-  iconKey: string
-  status: 'installed' | 'disabled'
-  activeVersionId: string | null
-  grantedPermissions: string[]
-  version: string | null
-  manifest: AppManifest | null
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  iconKey: string;
+  status: "installed" | "disabled";
+  activeVersionId: string | null;
+  grantedPermissions: string[];
+  version: string | null;
+  manifest: AppManifest | null;
 };
 
 export interface UploadBundle {
-  manifest: unknown
-  files: { path: string; content: string; isBinary?: boolean }[]
+  manifest: unknown;
+  files: { path: string; content: string; isBinary?: boolean }[];
   /** Permissions the admin chose to grant (defaults to those requested). */
-  grantedPermissions?: string[]
+  grantedPermissions?: string[];
 }
 
-async function rows<T extends Record<string, unknown> = Record<string, unknown>>(q: ReturnType<typeof sql>) {
-  const r = (await db.execute<T>(q, 'objects'))
-  return r
+async function rows<T extends Record<string, unknown> = Record<string, unknown>>(
+  q: ReturnType<typeof sql>,
+) {
+  const r = await db.execute<T>(q, "objects");
+  return r;
 }
 
 /** List installed Apps for an org (admin view). */
@@ -87,7 +108,7 @@ export async function listApps(orgId: string): Promise<AppRow[]> {
       from apps a
       left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
      where a.org_id = ${orgId}
-     order by a.sort_order, a.name`)
+     order by a.sort_order, a.name`);
 }
 
 /** Load one App (with its active version's manifest) by slug. */
@@ -99,8 +120,8 @@ export async function getAppByKey(orgId: string, key: string): Promise<AppRow | 
       from apps a
       left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
      where a.org_id = ${orgId} and a.key = ${key}
-     limit 1`)
-  return r[0] ?? null
+     limit 1`);
+  return r[0] ?? null;
 }
 
 /**
@@ -120,159 +141,249 @@ export async function getAppByKey(orgId: string, key: string): Promise<AppRow | 
  *  the row-identity provenance (appId/appVersionId), which necessarily
  *  changes across reinstalls because the apps/version rows are new. */
 
-async function assertInstallerHoldsGrant(tx: SqlExecutor, orgId: string, userId: string, granted: readonly string[]): Promise<void> {
-  const missing: string[] = []
+async function assertInstallerHoldsGrant(
+  tx: SqlExecutor,
+  orgId: string,
+  userId: string,
+  granted: readonly string[],
+): Promise<void> {
+  const missing: string[] = [];
   for (const permission of granted) {
-    if (!(await actorHasPermission(tx, orgId, userId, permission))) missing.push(permission)
+    if (!(await actorHasPermission(tx, orgId, userId, permission))) missing.push(permission);
   }
   if (missing.length > 0) {
     throw new AppError(
-      `You cannot grant an App permissions you do not hold: ${missing.join(', ')}. Remove them from the grant, or ask an administrator who holds them to install or enable the App.`,
+      `You cannot grant an App permissions you do not hold: ${missing.join(", ")}. Remove them from the grant, or ask an administrator who holds them to install or enable the App.`,
       403,
-    )
+    );
   }
 }
 
-export async function installApp(orgId: string, userId: string, bundle: UploadBundle, draft?: { id: string; hash: string }): Promise<{ key: string }> {
-  const parsed = parseManifest(bundle.manifest)
-  if (!parsed.ok || !parsed.manifest) throw new AppError(`invalid manifest: ${parsed.errors.join('; ')}`)
-  const manifest = parsed.manifest
+export async function installApp(
+  orgId: string,
+  userId: string,
+  bundle: UploadBundle,
+  draft?: { id: string; hash: string },
+): Promise<{ key: string }> {
+  const parsed = parseManifest(bundle.manifest);
+  if (!parsed.ok || !parsed.manifest)
+    throw new AppError(`invalid manifest: ${parsed.errors.join("; ")}`);
+  const manifest = parsed.manifest;
 
-  const paths = bundle.files.map((f) => f.path)
-  if (new Set(paths).size !== paths.length) throw new AppError('bundle has duplicate file paths')
+  const paths = bundle.files.map((f) => f.path);
+  if (new Set(paths).size !== paths.length) throw new AppError("bundle has duplicate file paths");
   // Zip parse already gates entries; installApp is also reachable with a
   // hand-built bundle. Extra files must pass the same relative-path rule.
   // validPackagePath rejects manifest.json, so skip that reserved name here.
-  if (bundle.files.some((file) => !validPackagePath(file.path) && file.path !== 'manifest.json')) {
-    throw new AppError(PACKAGE_PATH_REFUSAL)
+  if (bundle.files.some((file) => !validPackagePath(file.path) && file.path !== "manifest.json")) {
+    throw new AppError(PACKAGE_PATH_REFUSAL);
   }
-  const vb = validateBundle(manifest, paths)
-  if (!vb.ok) throw new AppError(`invalid bundle: ${vb.errors.join('; ')}`)
+  const vb = validateBundle(manifest, paths);
+  if (!vb.ok) throw new AppError(`invalid bundle: ${vb.errors.join("; ")}`);
 
   // Grant only permissions the manifest actually requested (admin may narrow).
-  const requested = new Set(manifest.permissions)
-  const granted = (bundle.grantedPermissions ?? manifest.permissions).filter((p) => requested.has(p))
+  const requested = new Set(manifest.permissions);
+  const granted = (bundle.grantedPermissions ?? manifest.permissions).filter((p) =>
+    requested.has(p),
+  );
 
   // App-declared assistant tools ride in the stored manifest, so their
   // contract is enforced here, before anything is written: tool permissions
   // against the ADMIN-GRANTED set, and assistant names against the built-in
   // catalogs. The static names load lazily so the store never joins the
   // assistant-registry import cycle at module load.
-  const { ASSISTANT_TOOLS } = await import('../assistant/registry')
-  const { APPLICATION_TOOLS } = await import('../application/tool-catalog')
+  const { ASSISTANT_TOOLS } = await import("../assistant/registry");
+  const { APPLICATION_TOOLS } = await import("../application/tool-catalog");
   const staticNames = new Set([
     ...ASSISTANT_TOOLS.map((tool) => tool.name),
     ...APPLICATION_TOOLS.map((tool) => tool.name),
-  ])
-  const toolErrors = validateAppToolsForInstall(manifest, granted, staticNames)
-  if (toolErrors.length) throw new AppError(`invalid app tools: ${toolErrors.join('; ')}`)
+  ]);
+  const toolErrors = validateAppToolsForInstall(manifest, granted, staticNames);
+  if (toolErrors.length) throw new AppError(`invalid app tools: ${toolErrors.join("; ")}`);
 
   // objects/*.json — validate BEFORE the transaction so a bad spec is a clean 400.
-  const objects = parseObjectSpecs(bundle.files)
-  if (objects.errors.length) throw new AppError(`invalid objects: ${objects.errors.join('; ')}`)
+  const objects = parseObjectSpecs(bundle.files);
+  if (objects.errors.length) throw new AppError(`invalid objects: ${objects.errors.join("; ")}`);
   for (const field of objects.customFields) {
-    const error = validateCustomFieldDefinition({ ...field })
-    if (error) throw new AppError(`invalid custom field "${field.key}": ${error}`)
-    field.config = normalizeCustomFieldConfig(field.config)
+    const error = validateCustomFieldDefinition({ ...field });
+    if (error) throw new AppError(`invalid custom field "${field.key}": ${error}`);
+    field.config = normalizeCustomFieldConfig(field.config);
   }
 
-  if (manifest.frontend.renderer === 'native') {
-    const entry = bundle.files.find(file => file.path === manifest.frontend.entry)
-    if (!entry || entry.isBinary) throw new AppError('Native UI entry must be a JSON text file')
+  if (manifest.frontend.renderer === "native") {
+    const entry = bundle.files.find((file) => file.path === manifest.frontend.entry);
+    if (!entry || entry.isBinary) throw new AppError("Native UI entry must be a JSON text file");
     try {
-      const ui = parseNativeExtension(entry.content, manifest)
-      if (ui.screens.some(screen => screen.kind === 'records') && !manifest.permissions.includes('records.read')) {
-        throw new AppError('Native record screens require records.read')
+      const ui = parseNativeExtension(entry.content, manifest);
+      if (
+        ui.screens.some((screen) => screen.kind === "records") &&
+        !manifest.permissions.includes("records.read")
+      ) {
+        throw new AppError("Native record screens require records.read");
       }
     } catch (error) {
-      if (error instanceof AppError) throw error
-      throw new AppError(`invalid native UI: ${error instanceof Error ? error.message : 'invalid JSON'}`)
+      if (error instanceof AppError) throw error;
+      throw new AppError(
+        `invalid native UI: ${error instanceof Error ? error.message : "invalid JSON"}`,
+      );
     }
   }
 
-  const targetErrors = extensionContributionTargetErrors(manifest.contributions ?? [])
-  if (targetErrors.length) throw new AppError(targetErrors.join('; '))
-  const manifestJson = JSON.stringify(manifest)
+  const targetErrors = extensionContributionTargetErrors(manifest.contributions ?? []);
+  if (targetErrors.length) throw new AppError(targetErrors.join("; "));
+  const manifestJson = JSON.stringify(manifest);
 
   await db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`)
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'extension-package:' + orgId + ':' + manifest.key}, 0))`)
-    let draftReason: string | null = null
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`,
+    );
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${"extension-package:" + orgId + ":" + manifest.key}, 0))`,
+    );
+    let draftReason: string | null = null;
     if (draft) {
-      const proposal = (await tx.execute<{ bundle: unknown; content_hash: string; base_version_id: string | null; status: string; reason: string; applied_at: Date | null }>(sql`
+      const proposal = (
+        await tx.execute<{
+          bundle: unknown;
+          content_hash: string;
+          base_version_id: string | null;
+          status: string;
+          reason: string;
+          applied_at: Date | null;
+        }>(
+          sql`
         select bundle, content_hash, base_version_id, status, reason, applied_at from extension_drafts
         where org_id=${orgId} and id=${draft.id} and created_by=${userId} for update
-      `, 'objects'))[0]
-      if (!proposal || proposal.content_hash !== draft.hash || requestHash(bundle) !== proposal.content_hash) throw new AppError('The reviewed extension draft does not match', 409)
-      draftReason = proposal.reason
-      const current = (await tx.execute<{ active_version_id: string | null; status: string }>(sql`select active_version_id, status from apps where org_id=${orgId} and key=${manifest.key} for update`, 'objects'))[0]
-      if (proposal.status === 'applied') {
+      `,
+          "objects",
+        )
+      )[0];
+      if (
+        !proposal ||
+        proposal.content_hash !== draft.hash ||
+        requestHash(bundle) !== proposal.content_hash
+      )
+        throw new AppError("The reviewed extension draft does not match", 409);
+      draftReason = proposal.reason;
+      const current = (
+        await tx.execute<{ active_version_id: string | null; status: string }>(
+          sql`select active_version_id, status from apps where org_id=${orgId} and key=${manifest.key} for update`,
+          "objects",
+        )
+      )[0];
+      if (proposal.status === "applied") {
         // A concurrent activate may observe the winner's apply. Return only
         // when the live version row is the exact row this draft applied;
         // a later uninstall/reinstall of the same version label is a new row.
-        if (!current) throw new AppError('The installed extension is no longer present; create and review a new draft', 409)
-        if (current.status !== 'installed') throw new AppError('The installed extension is disabled; enable it from Apps or create and review a new draft', 409)
+        if (!current)
+          throw new AppError(
+            "The installed extension is no longer present; create and review a new draft",
+            409,
+          );
+        if (current.status !== "installed")
+          throw new AppError(
+            "The installed extension is disabled; enable it from Apps or create and review a new draft",
+            409,
+          );
         const active = current.active_version_id
-          ? (await tx.execute<{ id: string; version: string; created_at: Date }>(sql`select id, version, created_at from app_versions where org_id=${orgId} and id=${current.active_version_id}`, 'objects'))[0]
-          : undefined
-        const evidence = (await tx.execute<{ versionId: string | null }>(sql`
+          ? (
+              await tx.execute<{ id: string; version: string; created_at: Date }>(
+                sql`select id, version, created_at from app_versions where org_id=${orgId} and id=${current.active_version_id}`,
+                "objects",
+              )
+            )[0]
+          : undefined;
+        const evidence = (
+          await tx.execute<{ versionId: string | null }>(
+            sql`
           select changes->>'versionId' as "versionId"
             from audit_log
            where org_id=${orgId} and table_name='extension_drafts' and row_id=${draft.id}
              and changes->>'event'='extension_draft_applied'
            order by at desc, id desc
-           limit 1`, 'objects'))[0]
-        if (!appliedDraftStillCurrent({
-          activeVersionId: current.active_version_id,
-          appliedVersionId: evidence?.versionId ?? null,
-          activeVersionLabel: active?.version ?? null,
-          activeVersionCreatedAt: active?.created_at ?? null,
-          draftManifestVersion: manifest.version,
-          draftAppliedAt: proposal.applied_at,
-        })) {
-          throw new AppError('The installed extension changed after this draft was created; create and review a new draft', 409)
+           limit 1`,
+            "objects",
+          )
+        )[0];
+        if (
+          !appliedDraftStillCurrent({
+            activeVersionId: current.active_version_id,
+            appliedVersionId: evidence?.versionId ?? null,
+            activeVersionLabel: active?.version ?? null,
+            activeVersionCreatedAt: active?.created_at ?? null,
+            draftManifestVersion: manifest.version,
+            draftAppliedAt: proposal.applied_at,
+          })
+        ) {
+          throw new AppError(
+            "The installed extension changed after this draft was created; create and review a new draft",
+            409,
+          );
         }
-        return
+        return;
       }
-      if (proposal.status !== 'draft') throw new AppError('This extension draft is no longer available', 409)
-      if ((current?.active_version_id ?? null) !== proposal.base_version_id) throw new AppError('The installed extension changed after this draft was created; create and review a new draft', 409)
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
-      if (!(await isFeatureEnabled(orgId, 'apps', tx))) throw new AppError('Extensions are disabled', 404)
+      if (proposal.status !== "draft")
+        throw new AppError("This extension draft is no longer available", 409);
+      if ((current?.active_version_id ?? null) !== proposal.base_version_id)
+        throw new AppError(
+          "The installed extension changed after this draft was created; create and review a new draft",
+          409,
+        );
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`,
+      );
+      if (!(await isFeatureEnabled(orgId, "apps", tx)))
+        throw new AppError("Extensions are disabled", 404);
     }
 
     if (objects.customFields.length) {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`,
+      );
       for (const field of objects.customFields) {
         if (!(await isCustomFieldTargetEnabled(orgId, field.targetTable, field.targetKind, tx))) {
-          throw new AppError(`custom field "${field.key}" targets a disabled feature`, 404)
+          throw new AppError(`custom field "${field.key}" targets a disabled feature`, 404);
         }
       }
     }
     // An App acts for whoever opens it, so its grant can never exceed the
     // authority of the administrator installing it.
-    await assertInstallerHoldsGrant(tx, orgId, userId, granted)
+    await assertInstallerHoldsGrant(tx, orgId, userId, granted);
     for (const contribution of manifest.contributions ?? []) {
-      const permission = EXTENSION_CONTRIBUTION_PERMISSIONS[contribution.kind]
-      if (!granted.includes(permission) || !(await actorHasPermission(tx, orgId, userId, permission))) throw new AppError(`${permission} required for ${contribution.kind}`, 403)
+      const permission = EXTENSION_CONTRIBUTION_PERMISSIONS[contribution.kind];
+      if (
+        !granted.includes(permission) ||
+        !(await actorHasPermission(tx, orgId, userId, permission))
+      )
+        throw new AppError(`${permission} required for ${contribution.kind}`, 403);
     }
     // Prior grants (absent on first install) become the audit "before" state.
-    const prior = (await tx.execute<{ grantedPermissions: string[] | null; activeVersionId: string | null }>(sql`
+    const prior = await tx.execute<{
+      grantedPermissions: string[] | null;
+      activeVersionId: string | null;
+    }>(
+      sql`
       select active_version_id as "activeVersionId", granted_permissions as "grantedPermissions" from apps
-       where org_id = ${orgId} and key = ${manifest.key} limit 1`, 'objects'))
+       where org_id = ${orgId} and key = ${manifest.key} limit 1`,
+      "objects",
+    );
 
     // Upsert the app row (create, or update presentation on reinstall/upgrade).
-    const appRes = (await tx.execute<{ id: string }>(sql`
+    const appRes = await tx.execute<{ id: string }>(
+      sql`
       insert into apps (org_id, key, name, description, icon_key, status, granted_permissions, created_by, updated_by)
       values (${orgId}, ${manifest.key}, ${manifest.name}, ${manifest.description ?? null},
-              ${manifest.icon ?? 'box'}, 'installed', ${JSON.stringify(granted)}::jsonb,
+              ${manifest.icon ?? "box"}, 'installed', ${JSON.stringify(granted)}::jsonb,
               ${userId}, ${userId})
       on conflict (org_id, key) do update set
         name = excluded.name, description = excluded.description, icon_key = excluded.icon_key,
         granted_permissions = excluded.granted_permissions,
         status = 'installed', updated_at = now(), updated_by = ${userId}
       where apps.org_id = ${orgId}
-      returning id`, 'objects'))
-    const appId = appRes[0]!.id
+      returning id`,
+      "objects",
+    );
+    const appId = appRes[0]!.id;
 
     // Permission grants are audited with before/after evidence. Install keeps
     // the reviewed grants from the draft, bounded by its requested permissions.
@@ -284,74 +395,123 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
           permissionsBefore: prior[0]?.grantedPermissions ?? null,
           permissionsAfter: granted,
         })}::jsonb,
-        ${userId})`)
+        ${userId})`);
 
     // Reject a duplicate version rather than silently overwriting history.
-    const existing = (await tx.execute(
-      sql`select 1 from app_versions where org_id = ${orgId} and app_id = ${appId} and version = ${manifest.version} limit 1`, 'objects',
-    ))
-    if (existing.length) throw new AppError(`version ${manifest.version} already exists for this app`)
+    const existing = await tx.execute(
+      sql`select 1 from app_versions where org_id = ${orgId} and app_id = ${appId} and version = ${manifest.version} limit 1`,
+      "objects",
+    );
+    if (existing.length)
+      throw new AppError(`version ${manifest.version} already exists for this app`);
 
-    const verRes = (await tx.execute<{ id: string }>(sql`
+    const verRes = await tx.execute<{ id: string }>(
+      sql`
       insert into app_versions (org_id, app_id, version, manifest, status, created_by, updated_by)
       values (${orgId}, ${appId}, ${manifest.version}, ${manifestJson}::jsonb, 'active', ${userId}, ${userId})
-      returning id`, 'objects'))
-    const versionId = verRes[0]!.id
+      returning id`,
+      "objects",
+    );
+    const versionId = verRes[0]!.id;
 
     for (const f of bundle.files) {
-      const { contentType } = contentTypeFor(f.path)
+      const { contentType } = contentTypeFor(f.path);
       await tx.execute(sql`
         insert into app_files (org_id, app_id, version_id, path, kind, content_type, content, is_binary, size, created_by, updated_by)
         values (${orgId}, ${appId}, ${versionId}, ${f.path}, ${vb.kinds[f.path]}, ${contentType},
-                ${f.content}, ${!!f.isBinary}, ${f.content.length}, ${userId}, ${userId})`)
+                ${f.content}, ${!!f.isBinary}, ${f.content.length}, ${userId}, ${userId})`);
     }
 
     // Provision declared objects (record types + custom fields). May create
     // new objects or upgrade ones THIS app provisioned before; a key collision
     // with a user-authored object aborts the whole install transaction.
-    const prevRes = (await tx.execute<{ provisioned: { recordTypes?: string[]; customFields?: string[] } }>(sql`select provisioned from apps where id = ${appId} and org_id = ${orgId}`, 'objects'))
-    const prev = prevRes[0]?.provisioned ?? {}
+    const prevRes = await tx.execute<{
+      provisioned: { recordTypes?: string[]; customFields?: string[] };
+    }>(sql`select provisioned from apps where id = ${appId} and org_id = ${orgId}`, "objects");
+    const prev = prevRes[0]?.provisioned ?? {};
     const owned = {
       recordTypes: new Set(prev.recordTypes ?? []),
       customFields: new Set(prev.customFields ?? []),
-    }
+    };
     // A fresh row after an uninstall has lost its ownership map; recover it
     // from the uninstall audit evidence so the reinstall may upgrade the
     // objects it provisioned instead of colliding with them forever.
     if (!prior.length) {
-      await adoptUninstalledProvenance(tx, orgId, userId, appId, manifest.key, objects, owned)
+      await adoptUninstalledProvenance(tx, orgId, userId, appId, manifest.key, objects, owned);
     }
-    const provisioned = await provisionObjects(tx, orgId, userId, objects, owned, { appKey: manifest.key, appVersionId: versionId })
-    if (manifest.frontend.renderer === 'native') {
-      const ui = parseNativeExtension(bundle.files.find(file => file.path === manifest.frontend.entry)!.content)
-      for (const screen of ui.screens) if (screen.kind === 'records') {
-        const type = (await tx.execute(sql`select id from custom_record_types where org_id=${orgId} and key=${screen.typeKey} and status='published'`, 'objects'))[0]
-        if (!type) throw new AppError(`Native screen ${screen.key} requires a published record type: ${screen.typeKey}`, 409)
-      }
+    const provisioned = await provisionObjects(tx, orgId, userId, objects, owned, {
+      appKey: manifest.key,
+      appVersionId: versionId,
+    });
+    if (manifest.frontend.renderer === "native") {
+      const ui = parseNativeExtension(
+        bundle.files.find((file) => file.path === manifest.frontend.entry)!.content,
+      );
+      for (const screen of ui.screens)
+        if (screen.kind === "records") {
+          const type = (
+            await tx.execute(
+              sql`select id from custom_record_types where org_id=${orgId} and key=${screen.typeKey} and status='published'`,
+              "objects",
+            )
+          )[0];
+          if (!type)
+            throw new AppError(
+              `Native screen ${screen.key} requires a published record type: ${screen.typeKey}`,
+              409,
+            );
+        }
     }
-    await tx.execute(sql`update apps set provisioned = ${JSON.stringify(provisioned)}::jsonb where id = ${appId} and org_id = ${orgId}`)
+    await tx.execute(
+      sql`update apps set provisioned = ${JSON.stringify(provisioned)}::jsonb where id = ${appId} and org_id = ${orgId}`,
+    );
 
     // Supersede the previous active version, then activate the new one.
-    await tx.execute(sql`update app_versions set status = 'superseded' where app_id = ${appId} and org_id = ${orgId} and id <> ${versionId} and status = 'active'`)
-    await tx.execute(sql`update apps set active_version_id = ${versionId}, updated_at = now() where id = ${appId} and org_id = ${orgId}`)
+    await tx.execute(
+      sql`update app_versions set status = 'superseded' where app_id = ${appId} and org_id = ${orgId} and id <> ${versionId} and status = 'active'`,
+    );
+    await tx.execute(
+      sql`update apps set active_version_id = ${versionId}, updated_at = now() where id = ${appId} and org_id = ${orgId}`,
+    );
 
-    const projectionReason = draftReason ?? `Install extension ${manifest.key} ${manifest.version}`
-    await withdrawExtensionPages(tx, orgId, userId, appId, projectionReason)
-    for (const contribution of manifest.contributions ?? []) if (contribution.kind === 'page') {
-      await projectExtensionPage(tx, { orgId, actorId: userId, extensionId: appId, extensionKey: manifest.key, version: manifest.version, versionId, contribution, reason: projectionReason })
-    }
-    await projectSupplementalContributions(tx, { orgId, actorId: userId, extensionId: appId, extensionKey: manifest.key, versionId, previousVersionId: prior[0]?.activeVersionId,
-      contributions: (manifest.contributions ?? []).filter(contribution => contribution.kind !== 'page'), reason: projectionReason })
+    const projectionReason = draftReason ?? `Install extension ${manifest.key} ${manifest.version}`;
+    await withdrawExtensionPages(tx, orgId, userId, appId, projectionReason);
+    for (const contribution of manifest.contributions ?? [])
+      if (contribution.kind === "page") {
+        await projectExtensionPage(tx, {
+          orgId,
+          actorId: userId,
+          extensionId: appId,
+          extensionKey: manifest.key,
+          version: manifest.version,
+          versionId,
+          contribution,
+          reason: projectionReason,
+        });
+      }
+    await projectSupplementalContributions(tx, {
+      orgId,
+      actorId: userId,
+      extensionId: appId,
+      extensionKey: manifest.key,
+      versionId,
+      previousVersionId: prior[0]?.activeVersionId,
+      contributions: (manifest.contributions ?? []).filter(
+        (contribution) => contribution.kind !== "page",
+      ),
+      reason: projectionReason,
+    });
 
     if (draft) {
-      await tx.execute(sql`update extension_drafts set status='applied', applied_at=now() where org_id=${orgId} and id=${draft.id}`)
+      await tx.execute(
+        sql`update extension_drafts set status='applied', applied_at=now() where org_id=${orgId} and id=${draft.id}`,
+      );
       await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-        values(${orgId},'extension_drafts',${draft.id},'update',${JSON.stringify({ event: 'extension_draft_applied', reason: draftReason, contentHash: draft.hash, appKey: manifest.key, versionId, appId, before: { status: 'draft' }, after: { status: 'applied' } })}::jsonb,${userId})`)
+        values(${orgId},'extension_drafts',${draft.id},'update',${JSON.stringify({ event: "extension_draft_applied", reason: draftReason, contentHash: draft.hash, appKey: manifest.key, versionId, appId, before: { status: "draft" }, after: { status: "applied" } })}::jsonb,${userId})`);
     }
+  });
 
-  })
-
-  return { key: manifest.key }
+  return { key: manifest.key };
 }
 
 /**
@@ -377,59 +537,76 @@ async function adoptUninstalledProvenance(
   objects: ParsedObjects,
   owned: { recordTypes: Set<string>; customFields: Set<string> },
 ): Promise<void> {
-  if (!objects.recordTypes.length && !objects.customFields.length) return
-  const evidence = (await tx.execute<{
-    id: string
-    at: Date
-    provisioned: { recordTypes?: unknown; customFields?: unknown } | null
-  }>(sql`
+  if (!objects.recordTypes.length && !objects.customFields.length) return;
+  const evidence = (
+    await tx.execute<{
+      id: string;
+      at: Date;
+      provisioned: { recordTypes?: unknown; customFields?: unknown } | null;
+    }>(
+      sql`
     select id, at, changes->'before'->'provisioned' as provisioned
       from audit_log
      where org_id = ${orgId} and table_name = 'apps' and action = 'delete'
        and changes->>'event' = 'app_uninstall'
        and changes->'before'->>'key' = ${appKey}
      order by at desc, id desc
-     limit 1`, 'objects'))[0]
-  if (!evidence) return
+     limit 1`,
+      "objects",
+    )
+  )[0];
+  if (!evidence) return;
   const listed = (value: unknown): Set<string> =>
-    new Set(Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [])
-  const recordTypes = listed(evidence.provisioned?.recordTypes)
-  const customFields = listed(evidence.provisioned?.customFields)
+    new Set(Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
+  const recordTypes = listed(evidence.provisioned?.recordTypes);
+  const customFields = listed(evidence.provisioned?.customFields);
 
-  const adopted = { recordTypes: [] as string[], customFields: [] as string[] }
+  const adopted = { recordTypes: [] as string[], customFields: [] as string[] };
   for (const rt of objects.recordTypes) {
-    if (owned.recordTypes.has(rt.key) || !recordTypes.has(rt.key)) continue
-    const survived = (await tx.execute(sql`
+    if (owned.recordTypes.has(rt.key) || !recordTypes.has(rt.key)) continue;
+    const survived =
+      (
+        await tx.execute(
+          sql`
       select 1 from custom_record_types
        where org_id = ${orgId} and key = ${rt.key} and created_at <= ${evidence.at}
-       limit 1`, 'objects')).length > 0
-    if (survived) adopted.recordTypes.push(rt.key)
+       limit 1`,
+          "objects",
+        )
+      ).length > 0;
+    if (survived) adopted.recordTypes.push(rt.key);
   }
   for (const cf of objects.customFields) {
-    const scoped = `${cf.targetTable}:${cf.key}`
-    if (owned.customFields.has(scoped) || !customFields.has(scoped)) continue
-    const survived = (await tx.execute(sql`
+    const scoped = `${cf.targetTable}:${cf.key}`;
+    if (owned.customFields.has(scoped) || !customFields.has(scoped)) continue;
+    const survived =
+      (
+        await tx.execute(
+          sql`
       select 1 from custom_field_defs
        where org_id = ${orgId} and target_table = ${cf.targetTable} and key = ${cf.key}
          and created_at <= ${evidence.at}
-       limit 1`, 'objects')).length > 0
-    if (survived) adopted.customFields.push(scoped)
+       limit 1`,
+          "objects",
+        )
+      ).length > 0;
+    if (survived) adopted.customFields.push(scoped);
   }
-  if (!adopted.recordTypes.length && !adopted.customFields.length) return
+  if (!adopted.recordTypes.length && !adopted.customFields.length) return;
 
-  for (const key of adopted.recordTypes) owned.recordTypes.add(key)
-  for (const key of adopted.customFields) owned.customFields.add(key)
+  for (const key of adopted.recordTypes) owned.recordTypes.add(key);
+  for (const key of adopted.customFields) owned.customFields.add(key);
   await tx.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'apps', ${appId}, 'update',
       ${JSON.stringify({
-        event: 'app_provenance_adopted',
+        event: "app_provenance_adopted",
         appKey,
         evidenceAuditId: evidence.id,
         before: { provisioned: { recordTypes: [], customFields: [] } },
         after: { provisioned: adopted },
       })}::jsonb,
-      ${userId})`)
+      ${userId})`);
 }
 
 /** Upsert declared objects inside the install transaction. Returns provenance. */
@@ -441,177 +618,264 @@ async function provisionObjects(
   owned: { recordTypes: Set<string>; customFields: Set<string> },
   source: { appKey: string; appVersionId: string },
 ): Promise<{ recordTypes: string[]; customFields: string[] }> {
-  const recordTypes = new Set(owned.recordTypes)
-  const customFields = new Set(owned.customFields)
-  await lockCustomFieldKeys(tx, orgId, objects.customFields)
+  const recordTypes = new Set(owned.recordTypes);
+  const customFields = new Set(owned.customFields);
+  await lockCustomFieldKeys(tx, orgId, objects.customFields);
 
   for (const rt of objects.recordTypes) {
     const existing = await tx.execute<{ id: string }>(
-      sql`select id from custom_record_types where org_id = ${orgId} and key = ${rt.key} limit 1`, 'objects',
-    )
+      sql`select id from custom_record_types where org_id = ${orgId} and key = ${rt.key} limit 1`,
+      "objects",
+    );
     if (existing[0]) {
       if (!owned.recordTypes.has(rt.key)) {
-        throw new AppError(`record type "${rt.key}" already exists and was not provisioned by this app`, 409)
+        throw new AppError(
+          `record type "${rt.key}" already exists and was not provisioned by this app`,
+          409,
+        );
       }
       await tx.execute(sql`
         update custom_record_types
            set name = ${rt.name}, plural_name = ${rt.pluralName}, icon_key = ${rt.iconKey},
                fields = ${JSON.stringify(rt.fields)}::jsonb, show_in_nav = ${rt.showInNav},
                updated_at = now(), updated_by = ${userId}
-         where id = ${existing[0].id} and org_id = ${orgId}`)
+         where id = ${existing[0].id} and org_id = ${orgId}`);
     } else {
       await tx.execute(sql`
         insert into custom_record_types (org_id, key, name, plural_name, icon_key, fields, status, show_in_nav, created_by, updated_by)
         values (${orgId}, ${rt.key}, ${rt.name}, ${rt.pluralName}, ${rt.iconKey},
-                ${JSON.stringify(rt.fields)}::jsonb, 'published', ${rt.showInNav}, ${userId}, ${userId})`)
+                ${JSON.stringify(rt.fields)}::jsonb, 'published', ${rt.showInNav}, ${userId}, ${userId})`);
     }
-    recordTypes.add(rt.key)
+    recordTypes.add(rt.key);
   }
 
   for (const cf of objects.customFields) {
-    const scoped = `${cf.targetTable}:${cf.key}`
-    const before = (await tx.execute<ExistingFieldDef>(sql`
+    const scoped = `${cf.targetTable}:${cf.key}`;
+    const before = (
+      await tx.execute<ExistingFieldDef>(
+        sql`
       select custom_field_defs.*, ${documentRevisionSql(sql`created_at`)} as created_at,
              ${documentRevisionSql(sql`updated_at`)} as updated_at from custom_field_defs
-       where org_id = ${orgId} and target_table = ${cf.targetTable} and key = ${cf.key} limit 1 for update`, 'objects',
-    ))[0]
-    let after: ExistingFieldDef
+       where org_id = ${orgId} and target_table = ${cf.targetTable} and key = ${cf.key} limit 1 for update`,
+        "objects",
+      )
+    )[0];
+    let after: ExistingFieldDef;
     if (before) {
       if (!owned.customFields.has(scoped)) {
-        throw new AppError(`custom field "${scoped}" already exists and was not provisioned by this app`, 409)
+        throw new AppError(
+          `custom field "${scoped}" already exists and was not provisioned by this app`,
+          409,
+        );
       }
-      const error = validateCustomFieldDefinition({ ...cf }, before)
-      if (error) throw new AppError(`invalid custom field "${cf.key}": ${error}`)
-      after = (await tx.execute<ExistingFieldDef>(sql`
+      const error = validateCustomFieldDefinition({ ...cf }, before);
+      if (error) throw new AppError(`invalid custom field "${cf.key}": ${error}`);
+      after = (
+        await tx.execute<ExistingFieldDef>(
+          sql`
         update custom_field_defs
            set label = ${cf.label}, field_type = ${cf.fieldType}, target_kind = ${cf.targetKind},
                config = ${JSON.stringify(cf.config)}::jsonb, is_required = ${cf.isRequired},
                is_active = true, updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${userId}
          where id = ${before.id} and org_id = ${orgId}
          returning custom_field_defs.*, ${documentRevisionSql(sql`created_at`)} as created_at,
-                   ${documentRevisionSql(sql`updated_at`)} as updated_at`, 'objects'))[0]!
+                   ${documentRevisionSql(sql`updated_at`)} as updated_at`,
+          "objects",
+        )
+      )[0]!;
     } else {
-      const created = await tx.execute<ExistingFieldDef>(sql`
+      const created = await tx.execute<ExistingFieldDef>(
+        sql`
         insert into custom_field_defs (org_id, target_table, target_kind, key, label, field_type, config, is_required, created_by, updated_by)
         values (${orgId}, ${cf.targetTable}, ${cf.targetKind}, ${cf.key}, ${cf.label}, ${cf.fieldType},
                 ${JSON.stringify(cf.config)}::jsonb, ${cf.isRequired}, ${userId}, ${userId})
         -- A concurrent custom-field key claim raises the named conflict below instead of reporting installation.
         on conflict do nothing returning custom_field_defs.*, ${documentRevisionSql(sql`created_at`)} as created_at,
-                   ${documentRevisionSql(sql`updated_at`)} as updated_at`, 'objects')
-      if (!created.length) throw new AppError(`custom field "${scoped}" already exists`, 409)
-      after = created[0]!
+                   ${documentRevisionSql(sql`updated_at`)} as updated_at`,
+        "objects",
+      );
+      if (!created.length) throw new AppError(`custom field "${scoped}" already exists`, 409);
+      after = created[0]!;
     }
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'custom_field_defs', ${after.id}, ${before ? 'update' : 'insert'},
-              ${JSON.stringify({ ...(before ? { before } : {}), after, source })}::jsonb, ${userId})`)
-    customFields.add(scoped)
+      values (${orgId}, 'custom_field_defs', ${after.id}, ${before ? "update" : "insert"},
+              ${JSON.stringify({ ...(before ? { before } : {}), after, source })}::jsonb, ${userId})`);
+    customFields.add(scoped);
   }
 
-  return { recordTypes: [...recordTypes], customFields: [...customFields] }
+  return { recordTypes: [...recordTypes], customFields: [...customFields] };
 }
 
-async function withdrawExtensionPages(tx: { execute: typeof db.execute }, orgId: string, actorId: string, appId: string, reason: string) {
-  const changed = await tx.execute<{ id: string; extension_version_id: string }>(sql`update page_specs set is_active=false,updated_at=now(),updated_by=${actorId}
-    where org_id=${orgId} and is_active and extension_version_id in (select id from app_versions where org_id=${orgId} and app_id=${appId}) returning id,extension_version_id`, 'objects')
-  for (const row of changed) await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-    values(${orgId},'page_specs',${row.id},'update',${JSON.stringify({ event:'extension_page_withdrawn',reason,before:{is_active:true,versionId:row.extension_version_id},after:{is_active:false,versionId:row.extension_version_id} })}::jsonb,${actorId})`)
+async function withdrawExtensionPages(
+  tx: { execute: typeof db.execute },
+  orgId: string,
+  actorId: string,
+  appId: string,
+  reason: string,
+) {
+  const changed = await tx.execute<{ id: string; extension_version_id: string }>(
+    sql`update page_specs set is_active=false,updated_at=now(),updated_by=${actorId}
+    where org_id=${orgId} and is_active and extension_version_id in (select id from app_versions where org_id=${orgId} and app_id=${appId}) returning id,extension_version_id`,
+    "objects",
+  );
+  for (const row of changed)
+    await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+    values(${orgId},'page_specs',${row.id},'update',${JSON.stringify({ event: "extension_page_withdrawn", reason, before: { is_active: true, versionId: row.extension_version_id }, after: { is_active: false, versionId: row.extension_version_id } })}::jsonb,${actorId})`);
 }
 
 export async function setAppStatus(
   orgId: string,
   userId: string,
   key: string,
-  status: 'installed' | 'disabled',
+  status: "installed" | "disabled",
 ): Promise<{ affectedRows: number }> {
   return await db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`)
-    if (status === 'installed') {
-      await acquireFeatureGateLock(orgId, tx)
-      if (!(await lockAndCheckOrgFeature(tx, orgId, 'apps'))) throw new AppError('Apps feature is disabled', 409)
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`,
+    );
+    if (status === "installed") {
+      await acquireFeatureGateLock(orgId, tx);
+      if (!(await lockAndCheckOrgFeature(tx, orgId, "apps")))
+        throw new AppError("Apps feature is disabled", 409);
     }
     const existing = await tx.execute<{
-      id: string
-      key: string
-      name: string
-      status: 'installed' | 'disabled'
-      grantedPermissions: string[] | null
-    }>(sql`
+      id: string;
+      key: string;
+      name: string;
+      status: "installed" | "disabled";
+      grantedPermissions: string[] | null;
+    }>(
+      sql`
       select id, key, name, status, granted_permissions as "grantedPermissions"
         from apps
        where org_id = ${orgId} and key = ${key}
-       for update`, 'objects')
-    const app = existing[0]
+       for update`,
+      "objects",
+    );
+    const app = existing[0];
     if (!app) {
       throw new AppError(
         `App "${key}" was not found in this organization. Install it or GET /api/apps/${key} to confirm the key before changing status.`,
         404,
-      )
+      );
     }
     if (app.status === status) {
-      const other = status === 'installed' ? 'disabled' : 'installed'
+      const other = status === "installed" ? "disabled" : "installed";
       throw new AppError(
         `App "${key}" is already ${status}. PATCH status to "${other}" if you need a status change.`,
         409,
-      )
+      );
     }
 
-    const version = (await tx.execute<{ id: string; manifest: AppManifest }>(sql`select v.id,v.manifest from app_versions v join apps a on a.org_id=v.org_id and a.id=v.app_id where a.org_id=${orgId} and a.id=${app.id} and v.id=a.active_version_id`, 'objects'))[0]
-    if (status === 'disabled') {
-      await withdrawExtensionPages(tx, orgId, userId, app.id, 'Disable extension')
-      await withdrawSupplementalContributions(tx, { orgId, actorId:userId,extensionId:app.id,extensionKey:key,reason:'Disable extension' })
+    const version = (
+      await tx.execute<{ id: string; manifest: AppManifest }>(
+        sql`select v.id,v.manifest from app_versions v join apps a on a.org_id=v.org_id and a.id=v.app_id where a.org_id=${orgId} and a.id=${app.id} and v.id=a.active_version_id`,
+        "objects",
+      )
+    )[0];
+    if (status === "disabled") {
+      await withdrawExtensionPages(tx, orgId, userId, app.id, "Disable extension");
+      await withdrawSupplementalContributions(tx, {
+        orgId,
+        actorId: userId,
+        extensionId: app.id,
+        extensionKey: key,
+        reason: "Disable extension",
+      });
     } else if (version) {
-      await assertInstallerHoldsGrant(tx, orgId, userId, app.grantedPermissions ?? [])
-      for (const contribution of version.manifest.contributions ?? []) if (!(await actorHasPermission(tx, orgId, userId, EXTENSION_CONTRIBUTION_PERMISSIONS[contribution.kind]))) throw new AppError('Permission required to enable these extension contributions', 403)
-      for (const contribution of version.manifest.contributions ?? []) if (contribution.kind === 'page') await projectExtensionPage(tx, { orgId,actorId:userId,extensionId:app.id,extensionKey:key,version:version.manifest.version,versionId:version.id,contribution,reason:'Enable extension' })
-      await projectSupplementalContributions(tx,{orgId,actorId:userId,extensionId:app.id,extensionKey:key,versionId:version.id,previousVersionId:version.id,contributions:(version.manifest.contributions ?? []).filter(item=>item.kind!=='page'),reason:'Enable extension'})
+      await assertInstallerHoldsGrant(tx, orgId, userId, app.grantedPermissions ?? []);
+      for (const contribution of version.manifest.contributions ?? [])
+        if (
+          !(await actorHasPermission(
+            tx,
+            orgId,
+            userId,
+            EXTENSION_CONTRIBUTION_PERMISSIONS[contribution.kind],
+          ))
+        )
+          throw new AppError("Permission required to enable these extension contributions", 403);
+      for (const contribution of version.manifest.contributions ?? [])
+        if (contribution.kind === "page")
+          await projectExtensionPage(tx, {
+            orgId,
+            actorId: userId,
+            extensionId: app.id,
+            extensionKey: key,
+            version: version.manifest.version,
+            versionId: version.id,
+            contribution,
+            reason: "Enable extension",
+          });
+      await projectSupplementalContributions(tx, {
+        orgId,
+        actorId: userId,
+        extensionId: app.id,
+        extensionKey: key,
+        versionId: version.id,
+        previousVersionId: version.id,
+        contributions: (version.manifest.contributions ?? []).filter(
+          (item) => item.kind !== "page",
+        ),
+        reason: "Enable extension",
+      });
     }
-    const updated = await tx.execute<{ id: string }>(sql`
+    const updated = await tx.execute<{ id: string }>(
+      sql`
       update apps
          set status = ${status}, updated_at = now(), updated_by = ${userId}
        where org_id = ${orgId} and id = ${app.id} and status is distinct from ${status}
-      returning id`, 'objects')
+      returning id`,
+      "objects",
+    );
     if (!updated.length) {
       throw new AppError(
         `App "${key}" status was not changed to ${status}. Confirm the app is still visible in this organization and retry.`,
         409,
-      )
+      );
     }
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'apps', ${app.id}, 'update',
         ${JSON.stringify({
-          event: 'app_status_changed',
+          event: "app_status_changed",
           before: { key: app.key, name: app.name, status: app.status },
           after: { key: app.key, name: app.name, status },
         })}::jsonb,
-        ${userId})`)
-    return { affectedRows: updated.length }
-  })
+        ${userId})`);
+    return { affectedRows: updated.length };
+  });
 }
 
-export async function deleteApp(orgId: string, userId: string, key: string): Promise<{ affectedRows: number }> {
+export async function deleteApp(
+  orgId: string,
+  userId: string,
+  key: string,
+): Promise<{ affectedRows: number }> {
   return await db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`)
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${orgId}`}, 0))`,
+    );
     const existing = await tx.execute<{
-      id: string
-      orgId: string
-      key: string
-      name: string
-      description: string | null
-      iconKey: string
-      status: 'installed' | 'disabled'
-      activeVersionId: string | null
-      grantedPermissions: string[]
-      sortOrder: number
-      provisioned: unknown
-      createdAt: Date
-      createdBy: string | null
-      updatedAt: Date
-      updatedBy: string | null
-      version: string | null
-      manifest: AppManifest | null
-    }>(sql`
+      id: string;
+      orgId: string;
+      key: string;
+      name: string;
+      description: string | null;
+      iconKey: string;
+      status: "installed" | "disabled";
+      activeVersionId: string | null;
+      grantedPermissions: string[];
+      sortOrder: number;
+      provisioned: unknown;
+      createdAt: Date;
+      createdBy: string | null;
+      updatedAt: Date;
+      updatedBy: string | null;
+      version: string | null;
+      manifest: AppManifest | null;
+    }>(
+      sql`
       select a.id, a.org_id as "orgId", a.key, a.name, a.description,
              a.icon_key as "iconKey", a.status,
              a.active_version_id as "activeVersionId",
@@ -622,53 +886,71 @@ export async function deleteApp(orgId: string, userId: string, key: string): Pro
         from apps a
         left join app_versions v on v.id = a.active_version_id and v.org_id = a.org_id
        where a.org_id = ${orgId} and a.key = ${key}
-       for update of a`, 'objects')
-    const app = existing[0]
+       for update of a`,
+      "objects",
+    );
+    const app = existing[0];
     if (!app) {
       throw new AppError(
         `App "${key}" was not found in this organization. Confirm the key is installed here before uninstalling.`,
         404,
-      )
+      );
     }
 
     // App-owned rows cascade with the app. Capture the complete execution and
     // code evidence first so the audit row remains useful after uninstall.
-    const versions = await tx.execute(sql`
+    const versions = await tx.execute(
+      sql`
       select id, org_id as "orgId", app_id as "appId", version, manifest, status,
              created_at as "createdAt", created_by as "createdBy",
              updated_at as "updatedAt", updated_by as "updatedBy"
         from app_versions
        where org_id = ${orgId} and app_id = ${app.id}
-       order by created_at, id`, 'objects')
-    const files = await tx.execute(sql`
+       order by created_at, id`,
+      "objects",
+    );
+    const files = await tx.execute(
+      sql`
       select id, org_id as "orgId", app_id as "appId", version_id as "versionId", path,
              kind, content_type as "contentType", content, is_binary as "isBinary", size,
              created_at as "createdAt", created_by as "createdBy",
              updated_at as "updatedAt", updated_by as "updatedBy"
         from app_files
        where org_id = ${orgId} and app_id = ${app.id}
-       order by version_id, path`, 'objects')
-    const runs = await tx.execute(sql`
+       order by version_id, path`,
+      "objects",
+    );
+    const runs = await tx.execute(
+      sql`
       select id, org_id as "orgId", app_id as "appId", version_id as "versionId", endpoint,
              status, units, logs, error_message as "errorMessage", duration_ms as "durationMs",
              actor_id as "actorId", at
         from app_runs
        where org_id = ${orgId} and app_id = ${app.id}
-       order by at, id`, 'objects')
-    const storage = await tx.execute(sql`
+       order by at, id`,
+      "objects",
+    );
+    const storage = await tx.execute(
+      sql`
       select id, org_id as "orgId", app_id as "appId", namespace, key, value,
              created_at as "createdAt", created_by as "createdBy",
              updated_at as "updatedAt", updated_by as "updatedBy"
         from app_storage
        where org_id = ${orgId} and app_id = ${app.id}
-       order by namespace, key`, 'objects')
+       order by namespace, key`,
+      "objects",
+    );
 
-    const preserveHistory = versions.some(version => Array.isArray((version.manifest as AppManifest | null)?.contributions) && ((version.manifest as AppManifest).contributions?.length ?? 0) > 0)
+    const preserveHistory = versions.some(
+      (version) =>
+        Array.isArray((version.manifest as AppManifest | null)?.contributions) &&
+        ((version.manifest as AppManifest).contributions?.length ?? 0) > 0,
+    );
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'apps', ${app.id}, ${preserveHistory ? 'update' : 'delete'},
+      values (${orgId}, 'apps', ${app.id}, ${preserveHistory ? "update" : "delete"},
         ${JSON.stringify({
-          event: 'app_uninstall',
+          event: "app_uninstall",
           // Keep associated versions/files/runs under `before`; unlike the
           // app row, these children are about to disappear via FK cascade.
           before: {
@@ -678,31 +960,43 @@ export async function deleteApp(orgId: string, userId: string, key: string): Pro
             runs,
             storage,
           },
-          after: preserveHistory ? { status: 'disabled', historyPreserved: true } : null,
+          after: preserveHistory ? { status: "disabled", historyPreserved: true } : null,
         })}::jsonb,
-        ${userId})`)
+        ${userId})`);
 
-    await withdrawExtensionPages(tx,orgId,userId,app.id,'Uninstall extension')
-    await withdrawSupplementalContributions(tx,{orgId,actorId:userId,extensionId:app.id,extensionKey:key,reason:'Uninstall extension'})
+    await withdrawExtensionPages(tx, orgId, userId, app.id, "Uninstall extension");
+    await withdrawSupplementalContributions(tx, {
+      orgId,
+      actorId: userId,
+      extensionId: app.id,
+      extensionKey: key,
+      reason: "Uninstall extension",
+    });
     if (preserveHistory) {
-      const updated = await tx.execute<{ id: string }>(sql`update apps set status='disabled',updated_at=now(),updated_by=${userId} where org_id=${orgId} and id=${app.id} returning id`, 'objects')
+      const updated = await tx.execute<{ id: string }>(
+        sql`update apps set status='disabled',updated_at=now(),updated_by=${userId} where org_id=${orgId} and id=${app.id} returning id`,
+        "objects",
+      );
       if (!updated.length) {
         throw new AppError(
           `App "${key}" was not uninstalled. Confirm the app is still visible in this organization and retry.`,
           409,
-        )
+        );
       }
-      return { affectedRows: updated.length }
+      return { affectedRows: updated.length };
     }
-    const deleted = await tx.execute<{ id: string }>(sql`delete from apps where org_id = ${orgId} and id = ${app.id} returning id`, 'objects')
+    const deleted = await tx.execute<{ id: string }>(
+      sql`delete from apps where org_id = ${orgId} and id = ${app.id} returning id`,
+      "objects",
+    );
     if (!deleted.length) {
       throw new AppError(
         `App "${key}" was not uninstalled. Confirm the app is still visible in this organization and retry.`,
         409,
-      )
+      );
     }
-    return { affectedRows: deleted.length }
-  })
+    return { affectedRows: deleted.length };
+  });
 }
 
 /** Build the inlined frontend bundle the AppFrame renders. */
@@ -711,30 +1005,36 @@ export async function getFrontendBundle(
   key: string,
   expectedVersionId?: string,
 ): Promise<{ entry: string; entryHtml: string; replacements: Record<string, string> }> {
-  const app = await getAppByKey(orgId, key)
-  if (!app) throw new AppError('app not found', 404)
-  if (app.status !== 'installed') throw new AppError('app is disabled', 403)
-  if (!app.activeVersionId || !app.manifest) throw new AppError('app has no active version', 409)
+  const app = await getAppByKey(orgId, key);
+  if (!app) throw new AppError("app not found", 404);
+  if (app.status !== "installed") throw new AppError("app is disabled", 403);
+  if (!app.activeVersionId || !app.manifest) throw new AppError("app has no active version", 409);
 
-  const files = await rows<{ path: string; contentType: string; content: string; isBinary: boolean }>(sql`
+  const files = await rows<{
+    path: string;
+    contentType: string;
+    content: string;
+    isBinary: boolean;
+  }>(sql`
     select path, content_type as "contentType", content, is_binary as "isBinary"
       from app_files
-     where org_id = ${orgId} and version_id = ${app.activeVersionId} and kind in ('frontend', 'asset')`)
+     where org_id = ${orgId} and version_id = ${app.activeVersionId} and kind in ('frontend', 'asset')`);
 
-  if (expectedVersionId && expectedVersionId !== app.activeVersionId) throw new AppError('This app version changed. Reload the app before continuing.',409)
-  const entry = app.manifest.frontend.entry
-  const entryFile = files.find((f) => f.path === entry)
-  if (!entryFile) throw new AppError('frontend entry missing from bundle', 500)
+  if (expectedVersionId && expectedVersionId !== app.activeVersionId)
+    throw new AppError("This app version changed. Reload the app before continuing.", 409);
+  const entry = app.manifest.frontend.entry;
+  const entryFile = files.find((f) => f.path === entry);
+  if (!entryFile) throw new AppError("frontend entry missing from bundle", 500);
 
-  const replacements: Record<string, string> = {}
+  const replacements: Record<string, string> = {};
   for (const f of files) {
-    if (f.path === entry) continue
-    const mediatype = f.contentType.replace(/;\s*/g, ';') // data URLs can't contain spaces
-    const b64 = f.isBinary ? f.content : Buffer.from(f.content, 'utf8').toString('base64')
-    replacements[f.path] = `data:${mediatype};base64,${b64}`
+    if (f.path === entry) continue;
+    const mediatype = f.contentType.replace(/;\s*/g, ";"); // data URLs can't contain spaces
+    const b64 = f.isBinary ? f.content : Buffer.from(f.content, "utf8").toString("base64");
+    replacements[f.path] = `data:${mediatype};base64,${b64}`;
   }
 
-  return { entry, entryHtml: entryFile.content, replacements }
+  return { entry, entryHtml: entryFile.content, replacements };
 }
 
 // ---------------------------------------------------------------------------
@@ -746,27 +1046,29 @@ function storageAdapter(orgId: string, appId: string): AppStorageAdapter {
     async get(key, namespace) {
       const r = await rows<{ value: unknown }>(
         sql`select value from app_storage where org_id = ${orgId} and app_id = ${appId} and namespace = ${namespace} and key = ${key} limit 1`,
-      )
-      return r[0]?.value ?? null
+      );
+      return r[0]?.value ?? null;
     },
     async set(key, value, namespace) {
       await db.execute(sql`
         insert into app_storage (org_id, app_id, namespace, key, value)
         values (${orgId}, ${appId}, ${namespace}, ${key}, ${JSON.stringify(value ?? null)}::jsonb)
         on conflict (app_id, namespace, key) do update set value = excluded.value, updated_at = now()
-        where app_storage.org_id = ${orgId}`)
+        where app_storage.org_id = ${orgId}`);
     },
     async list(prefix, namespace) {
-      const like = prefix.replace(/[%_\\]/g, (m) => '\\' + m) + '%'
+      const like = prefix.replace(/[%_\\]/g, (m) => "\\" + m) + "%";
       return rows<{ key: string; value: unknown }>(sql`
         select key, value from app_storage
          where org_id = ${orgId} and app_id = ${appId} and namespace = ${namespace} and key like ${like}
-         order by key limit 500`)
+         order by key limit 500`);
     },
     async delete(key, namespace) {
-      await db.execute(sql`delete from app_storage where org_id = ${orgId} and app_id = ${appId} and namespace = ${namespace} and key = ${key}`)
+      await db.execute(
+        sql`delete from app_storage where org_id = ${orgId} and app_id = ${appId} and namespace = ${namespace} and key = ${key}`,
+      );
     },
-  }
+  };
 }
 
 function recordsAdapter(
@@ -780,49 +1082,57 @@ function recordsAdapter(
    * even when the live type no longer declares the field.
    */
   function scopeFor(type: RecordTypeRow): SQL {
-    const lint = lintRecordFields(type.fields, type.name)
+    const lint = lintRecordFields(type.fields, type.name);
     const cond = recordVisibleInSubsidiaryFenceSql(
       allowedSubsidiaryIds,
       lint.success && hasSubsidiaryField(lint.sections),
-    )
-    return cond ? sql`and ${cond}` : sql``
+    );
+    return cond ? sql`and ${cond}` : sql``;
   }
   return {
     async list(typeKey, filters) {
-      const type = await loadRecordTypeByKey(orgId, typeKey)
+      const type = await loadRecordTypeByKey(orgId, typeKey);
       if (
         !type ||
-        type.status !== 'published' ||
-        !inTypeAudience(user.roles.map(({ key }) => key), type.allowed_roles)
-      ) return []
-      const status = typeof filters?.status === 'string' ? (filters.status as string) : null
-      const scope = scopeFor(type)
+        type.status !== "published" ||
+        !inTypeAudience(
+          user.roles.map(({ key }) => key),
+          type.allowed_roles,
+        )
+      )
+        return [];
+      const status = typeof filters?.status === "string" ? (filters.status as string) : null;
+      const scope = scopeFor(type);
       return rows(sql`
         select id, record_number as "recordNumber", status, data
           from custom_records
          where org_id = ${orgId} and type_key = ${typeKey}
            ${status ? sql`and status = ${status}` : sql``}
            ${scope}
-         order by created_at desc limit 200`)
+         order by created_at desc limit 200`);
     },
     async get(typeKey, id) {
-      if (!isUuid(id)) return null
-      const type = await loadRecordTypeByKey(orgId, typeKey)
+      if (!isUuid(id)) return null;
+      const type = await loadRecordTypeByKey(orgId, typeKey);
       if (
         !type ||
-        type.status !== 'published' ||
-        !inTypeAudience(user.roles.map(({ key }) => key), type.allowed_roles)
-      ) return null
-      const scope = scopeFor(type)
+        type.status !== "published" ||
+        !inTypeAudience(
+          user.roles.map(({ key }) => key),
+          type.allowed_roles,
+        )
+      )
+        return null;
+      const scope = scopeFor(type);
       const r = await rows(sql`
         select id, record_number as "recordNumber", status, data
           from custom_records
          where org_id = ${orgId} and type_key = ${typeKey} and id = ${id}
            ${scope}
-         limit 1`)
-      return r[0] ?? null
+         limit 1`);
+      return r[0] ?? null;
     },
-  }
+  };
 }
 
 /**
@@ -832,19 +1142,19 @@ function recordsAdapter(
  */
 /** Caller-supplied bridge JSON views as an object for field reads. */
 function isBridgePayloadObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+  return typeof value === "object" && value !== null;
 }
 
 /** Absent sub-object: the same `{}` every options/body/filters default used. */
-const EMPTY_PAYLOAD_OBJECT: Record<string, unknown> = {}
+const EMPTY_PAYLOAD_OBJECT: Record<string, unknown> = {};
 
 function platformReadNeedsFreshInvocation(method: string): boolean {
   return (
-    method === 'platform.query' ||
-    method === 'platform.schema' ||
-    method === 'platform.list' ||
-    method === 'platform.get'
-  )
+    method === "platform.query" ||
+    method === "platform.schema" ||
+    method === "platform.list" ||
+    method === "platform.get"
+  );
 }
 
 /**
@@ -857,43 +1167,48 @@ function requireBridgeInvocationKey(
   method: string,
   key: unknown,
 ): { ok: true; key: string } | { ok: false; error: string; status: number } {
-  if (typeof key !== 'string' || key.length === 0) {
+  if (typeof key !== "string" || key.length === 0) {
     return {
       ok: false,
       error: `${method} requires an invocationKey: generate one key per action (for example a uuid) and send the same key when retrying that action`,
       status: 400,
-    }
+    };
   }
   if (!isValidAppInvocationKey(key)) {
     return {
       ok: false,
       error: `invalid invocationKey for ${method}: use 8-200 characters of letters, digits, dots, underscores, colons or dashes`,
       status: 400,
-    }
+    };
   }
-  return { ok: true, key }
+  return { ok: true, key };
 }
 
 export async function runBridgeMethod(opts: {
-  orgId: string
-  user: SessionUser
-  key: string
-  method: string
-  payload: unknown
-  expectedVersionId?: string
+  orgId: string;
+  user: SessionUser;
+  key: string;
+  method: string;
+  payload: unknown;
+  expectedVersionId?: string;
   /** Client-generated invocation key (one per action; retries reuse it). Required for writes. */
-  invocationKey?: string
-  userCan: (perm: string) => boolean
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  invocationKey?: string;
+  userCan: (perm: string) => boolean;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<{ ok: true; result: unknown } | { ok: false; error: string; status: number }> {
-  const app = await getAppByKey(opts.orgId, opts.key)
-  if (!app || !app.manifest) return { ok: false, error: 'app not found', status: 404 }
-  if (app.status !== 'installed') return { ok: false, error: 'app is disabled', status: 403 }
-  if (opts.expectedVersionId && opts.expectedVersionId !== app.activeVersionId) return { ok:false,error:'This app version changed. Reload the app before continuing.',status:409 }
+  const app = await getAppByKey(opts.orgId, opts.key);
+  if (!app || !app.manifest) return { ok: false, error: "app not found", status: 404 };
+  if (app.status !== "installed") return { ok: false, error: "app is disabled", status: 403 };
+  if (opts.expectedVersionId && opts.expectedVersionId !== app.activeVersionId)
+    return {
+      ok: false,
+      error: "This app version changed. Reload the app before continuing.",
+      status: 409,
+    };
 
   const recordsGranted =
     permissionSetCovers(new Set(app.grantedPermissions), APP_CAPABILITIES.RECORDS_READ) &&
-    opts.userCan(APP_CAPABILITIES.RECORDS_READ)
+    opts.userCan(APP_CAPABILITIES.RECORDS_READ);
 
   const platform = createAppPlatformAdapter({
     orgId: opts.orgId,
@@ -901,88 +1216,97 @@ export async function runBridgeMethod(opts: {
     grantedPermissions: app.grantedPermissions,
     userCan: opts.userCan,
     allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
-  })
+  });
 
   // Field reads go through the object view (a non-object payload reads as
   // absent, exactly like the previous `?.` chain); the idempotency hash below
   // keeps the original value.
-  const payload = isBridgePayloadObject(opts.payload) ? opts.payload : {}
+  const payload = isBridgePayloadObject(opts.payload) ? opts.payload : {};
 
-  if (opts.method.startsWith('platform.')) {
-    const typeKey = String(payload.typeKey ?? '')
-    const id = String(payload.id ?? '')
-    const units = platformBridgeUnits(opts.method)
-    const started = Date.now()
+  if (opts.method.startsWith("platform.")) {
+    const typeKey = String(payload.typeKey ?? "");
+    const id = String(payload.id ?? "");
+    const units = platformBridgeUnits(opts.method);
+    const started = Date.now();
     // The dispatch itself decides the terminal outcome; infrastructure faults
     // REJECT and are recorded as refusal evidence by the envelope.
     async function attemptDispatch(): Promise<AppInvocationAttempt> {
       try {
-        let result: unknown
+        let result: unknown;
         switch (opts.method) {
-          case 'platform.query':
-            result = await platform.query!(payload.plan)
-            break
-          case 'platform.schema':
-            result = await platform.schema()
-            break
-          case 'platform.list':
+          case "platform.query":
+            result = await platform.query!(payload.plan);
+            break;
+          case "platform.schema":
+            result = await platform.schema();
+            break;
+          case "platform.list":
             result = await platform.list(
               typeKey,
               isBridgePayloadObject(payload.options) ? payload.options : EMPTY_PAYLOAD_OBJECT,
-            )
-            break
-          case 'platform.get':
-            result = await platform.get(typeKey, id)
-            break
-          case 'platform.create':
-          case 'platform.update': {
-            // writeRecord rejects a non-object body with this 400; raise it
-            // here with the same envelope instead of laundering the type.
-            const body = payload.body ?? EMPTY_PAYLOAD_OBJECT
-            if (!isBridgePayloadObject(body) || Array.isArray(body)) {
-              throw new AppPlatformError('record body must be an object', 400)
+            );
+            break;
+          case "platform.get":
+            result = await platform.get(typeKey, id);
+            break;
+          case "platform.create":
+          case "platform.update":
+            {
+              // writeRecord rejects a non-object body with this 400; raise it
+              // here with the same envelope instead of laundering the type.
+              const body = payload.body ?? EMPTY_PAYLOAD_OBJECT;
+              if (!isBridgePayloadObject(body) || Array.isArray(body)) {
+                throw new AppPlatformError("record body must be an object", 400);
+              }
+              result =
+                opts.method === "platform.create"
+                  ? await platform.create(typeKey, body)
+                  : await platform.update(typeKey, id, body);
+              break;
             }
-            result =
-              opts.method === 'platform.create'
-                ? await platform.create(typeKey, body)
-                : await platform.update(typeKey, id, body)
-            break
-          }
-            break
-          case 'platform.delete':
-            result = await platform.delete(typeKey, id)
-            break
+            break;
+          case "platform.delete":
+            result = await platform.delete(typeKey, id);
+            break;
           default:
             return {
-              status: 'error',
+              status: "error",
               error: `unknown method: ${opts.method}`,
               logs: [],
               units,
               durationMs: Date.now() - started,
-            }
+            };
         }
-        return { status: 'ok', response: result, logs: [], units, durationMs: Date.now() - started }
+        return {
+          status: "ok",
+          response: result,
+          logs: [],
+          units,
+          durationMs: Date.now() - started,
+        };
       } catch (error) {
         return {
-          status:
-            error instanceof AppPlatformError && error.status === 403 ? 'forbidden' : 'error',
+          status: error instanceof AppPlatformError && error.status === 403 ? "forbidden" : "error",
           error: (error as Error).message,
           logs: [],
           units,
           durationMs: Date.now() - started,
-        }
+        };
       }
     }
     // Writes run under the caller's invocation key (required here): two
     // intentional repeats carry different keys and execute independently,
     // while the same key retries into the stored response. Reads keep the
     // derived key below, which mints a nonce per fetch.
-    const isWrite = opts.method === 'platform.create' || opts.method === 'platform.update' || opts.method === 'platform.delete'
-    let invocationKey: string | null = null
+    const isWrite =
+      opts.method === "platform.create" ||
+      opts.method === "platform.update" ||
+      opts.method === "platform.delete";
+    let invocationKey: string | null = null;
     if (isWrite) {
-      const keyed = requireBridgeInvocationKey(opts.method, opts.invocationKey)
-      if (!keyed.ok) return keyed
-      invocationKey = keyed.key
+      const keyed = requireBridgeInvocationKey(opts.method, opts.invocationKey);
+      if (!keyed.ok) return keyed;
+      invocationKey = keyed.key;
     }
     try {
       // Reads mint a nonce so a later identical fetch is a new claim, not a
@@ -994,48 +1318,50 @@ export async function runBridgeMethod(opts: {
         appId: app.id,
         versionId: app.activeVersionId,
         endpoint: opts.method,
-        operation: `apps.${opts.method.replaceAll('.', '_')}`,
-        idempotencyKey: invocationKey ?? deriveAppInvocationKey({
-          method: opts.method,
-          typeKey,
-          id,
-          payload: payload.body ?? payload.options ?? payload.plan ?? null,
-          ...(platformReadNeedsFreshInvocation(opts.method)
-            ? { readInvocation: crypto.randomUUID() }
-            : {}),
-        }),
+        operation: `apps.${opts.method.replaceAll(".", "_")}`,
+        idempotencyKey:
+          invocationKey ??
+          deriveAppInvocationKey({
+            method: opts.method,
+            typeKey,
+            id,
+            payload: payload.body ?? payload.options ?? payload.plan ?? null,
+            ...(platformReadNeedsFreshInvocation(opts.method)
+              ? { readInvocation: crypto.randomUUID() }
+              : {}),
+          }),
         requestHash: requestHash({ method: opts.method, typeKey, id, payload: opts.payload }),
         authorize: () => lockInstalledAppForInvocation(opts.orgId, app.id, app.activeVersionId),
         run: attemptDispatch,
         audit: insertAppRun,
-      })
-      if (outcome.attempt.status !== 'ok') {
-        const status = outcome.attempt.status === 'forbidden' ? 403 : 400
-        return { ok: false, error: outcome.attempt.error ?? outcome.attempt.status, status }
+      });
+      if (outcome.attempt.status !== "ok") {
+        const status = outcome.attempt.status === "forbidden" ? 403 : 400;
+        return { ok: false, error: outcome.attempt.error ?? outcome.attempt.status, status };
       }
-      return { ok: true, result: outcome.attempt.response }
+      return { ok: true, result: outcome.attempt.response };
     } catch (error) {
-      return invocationRefusal(error)
+      return invocationRefusal(error);
     }
   }
 
-  if (opts.method === 'records.list' || opts.method === 'records.get') {
-    if (!recordsGranted) return { ok: false, error: 'records.read not granted', status: 403 }
-    const rec = recordsAdapter(opts.orgId, opts.user, opts.allowedSubsidiaryIds)
+  if (opts.method === "records.list" || opts.method === "records.get") {
+    if (!recordsGranted) return { ok: false, error: "records.read not granted", status: 403 };
+    const rec = recordsAdapter(opts.orgId, opts.user, opts.allowedSubsidiaryIds);
     const result =
-      opts.method === 'records.list'
+      opts.method === "records.list"
         ? await rec.list(
-            String(payload.typeKey ?? ''),
+            String(payload.typeKey ?? ""),
             isBridgePayloadObject(payload.filters) ? payload.filters : EMPTY_PAYLOAD_OBJECT,
           )
-        : await rec.get(String(payload.typeKey ?? ''), String(payload.id ?? ''))
-    return { ok: true, result }
+        : await rec.get(String(payload.typeKey ?? ""), String(payload.id ?? ""));
+    return { ok: true, result };
   }
 
-  if (opts.method === 'callBackend') {
-    const endpointName = String(payload.endpoint ?? '')
-    const keyed = requireBridgeInvocationKey(opts.method, opts.invocationKey)
-    if (!keyed.ok) return keyed
+  if (opts.method === "callBackend") {
+    const endpointName = String(payload.endpoint ?? "");
+    const keyed = requireBridgeInvocationKey(opts.method, opts.invocationKey);
+    if (!keyed.ok) return keyed;
     return invokeAppEndpointHandler({
       orgId: opts.orgId,
       user: opts.user,
@@ -1047,10 +1373,10 @@ export async function runBridgeMethod(opts: {
       operation: `apps.call_backend.${endpointName}`,
       auditEndpoint: endpointName,
       idempotencyKey: keyed.key,
-    })
+    });
   }
 
-  return { ok: false, error: `unknown method: ${opts.method}`, status: 400 }
+  return { ok: false, error: `unknown method: ${opts.method}`, status: 400 };
 }
 
 /**
@@ -1064,47 +1390,49 @@ export async function runBridgeMethod(opts: {
  * intentional repeats are two invocations, and only the same key replays.
  */
 export async function invokeAppEndpointHandler(opts: {
-  orgId: string
-  user: SessionUser
-  key: string
-  endpoint: string
-  body: unknown
-  userCan: (perm: string) => boolean
-  allowedSubsidiaryIds: ReadonlySet<string> | null
-  operation: string
-  auditEndpoint: string
+  orgId: string;
+  user: SessionUser;
+  key: string;
+  endpoint: string;
+  body: unknown;
+  userCan: (perm: string) => boolean;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
+  operation: string;
+  auditEndpoint: string;
   /** Only app-tool invocations set this from the installed manifest. */
-  readOnlyTool?: boolean
+  readOnlyTool?: boolean;
   /** Caller key (bridge invocationKey, assistant per-call key). Always required. */
-  idempotencyKey: string
+  idempotencyKey: string;
 }): Promise<{ ok: true; result: unknown } | { ok: false; error: string; status: number }> {
-  const app = await getAppByKey(opts.orgId, opts.key)
-  if (!app || !app.manifest) return { ok: false, error: 'app not found', status: 404 }
-  if (app.status !== 'installed') return { ok: false, error: 'app is disabled', status: 403 }
-  const endpoint = app.manifest.endpoints.find((e) => e.name === opts.endpoint)
-  if (!endpoint) return { ok: false, error: `no such endpoint: ${opts.endpoint}`, status: 404 }
+  const app = await getAppByKey(opts.orgId, opts.key);
+  if (!app || !app.manifest) return { ok: false, error: "app not found", status: 404 };
+  if (app.status !== "installed") return { ok: false, error: "app is disabled", status: 403 };
+  const endpoint = app.manifest.endpoints.find((e) => e.name === opts.endpoint);
+  if (!endpoint) return { ok: false, error: `no such endpoint: ${opts.endpoint}`, status: 404 };
 
   const recordsGranted =
     permissionSetCovers(new Set(app.grantedPermissions), APP_CAPABILITIES.RECORDS_READ) &&
-    opts.userCan(APP_CAPABILITIES.RECORDS_READ)
+    opts.userCan(APP_CAPABILITIES.RECORDS_READ);
   const glGranted =
-    permissionSetCovers(new Set(app.grantedPermissions), APP_CAPABILITIES.GL_POST) && opts.userCan(APP_CAPABILITIES.GL_POST)
+    permissionSetCovers(new Set(app.grantedPermissions), APP_CAPABILITIES.GL_POST) &&
+    opts.userCan(APP_CAPABILITIES.GL_POST);
   const platform = createAppPlatformAdapter({
     orgId: opts.orgId,
     user: opts.user,
     grantedPermissions: app.grantedPermissions,
     userCan: opts.userCan,
     allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
-  })
+  });
 
   const src = await rows<{ content: string }>(
     sql`select content from app_files where org_id = ${opts.orgId} and version_id = ${app.activeVersionId} and path = ${endpoint.file} and kind = 'backend' limit 1`,
-  )
-  if (!src[0]) return { ok: false, error: 'endpoint source missing', status: 500 }
-  const handlerSource = src[0].content
+  );
+  if (!src[0]) return { ok: false, error: "endpoint source missing", status: 500 };
+  const handlerSource = src[0].content;
 
-  let adapters: AppHostAdapters = { storage: storageAdapter(opts.orgId, app.id) }
-  if (recordsGranted) adapters.records = recordsAdapter(opts.orgId, opts.user, opts.allowedSubsidiaryIds)
+  let adapters: AppHostAdapters = { storage: storageAdapter(opts.orgId, app.id) };
+  if (recordsGranted)
+    adapters.records = recordsAdapter(opts.orgId, opts.user, opts.allowedSubsidiaryIds);
   if (glGranted) {
     // The caller's subsidiary scope travels with the write, so an App
     // backend cannot journal into an entity the signed-in user may not see.
@@ -1114,13 +1442,13 @@ export async function invokeAppEndpointHandler(opts: {
           post,
           allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
         }),
-    }
+    };
   }
-  adapters.platform = platform
-  if (opts.readOnlyTool) adapters = readOnlyAppHostAdapters(adapters)
+  adapters.platform = platform;
+  if (opts.readOnlyTool) adapters = readOnlyAppHostAdapters(adapters);
 
   const request: AppRequest = {
-    method: endpoint.method === 'ANY' ? 'POST' : endpoint.method,
+    method: endpoint.method === "ANY" ? "POST" : endpoint.method,
     endpoint: opts.endpoint,
     query: {},
     body: opts.body ?? null,
@@ -1129,7 +1457,7 @@ export async function invokeAppEndpointHandler(opts: {
       name: opts.user.name,
       roles: opts.user.roles.map(({ key }) => key),
     },
-  }
+  };
   // ONE invocation unit: claim an idempotency key, run the handler inside a
   // savepoint of one tenant transaction, and commit every material effect
   // (journal posts, platform CRUD, app storage) together with its app_runs
@@ -1148,17 +1476,23 @@ export async function invokeAppEndpointHandler(opts: {
       idempotencyKey: opts.idempotencyKey,
       requestHash: requestHash({ endpoint: opts.endpoint, payload: opts.body ?? null }),
       authorize: () => lockInstalledAppForInvocation(opts.orgId, app.id, app.activeVersionId),
-      run: async () => runAppEndpoint({ source: handlerSource, request, adapters, settings: await appSettingSnapshot(opts.orgId, app.key, app.manifest) }),
+      run: async () =>
+        runAppEndpoint({
+          source: handlerSource,
+          request,
+          adapters,
+          settings: await appSettingSnapshot(opts.orgId, app.key, app.manifest),
+        }),
       audit: insertAppRun,
-    })
-    const run = outcome.attempt
-    if (run.status !== 'ok') {
-      const status = run.status === 'forbidden' ? 403 : run.status === 'timeout' ? 504 : 400
-      return { ok: false, error: run.error ?? run.status, status }
+    });
+    const run = outcome.attempt;
+    if (run.status !== "ok") {
+      const status = run.status === "forbidden" ? 403 : run.status === "timeout" ? 504 : 400;
+      return { ok: false, error: run.error ?? run.status, status };
     }
-    return { ok: true, result: run.response }
+    return { ok: true, result: run.response };
   } catch (error) {
-    return invocationRefusal(error)
+    return invocationRefusal(error);
   }
 }
 
@@ -1168,20 +1502,32 @@ export async function invokeAppEndpointHandler(opts: {
  * so a backend reading an undeclared setting is refused rather than handed
  * another app's configuration or an implicit zero.
  */
-export async function appSettingSnapshot(orgId: string, appKey: string, manifest: AppManifest | null, runner: SqlExecutor = db): Promise<Record<string, unknown>> {
-  const declared = (manifest?.contributions ?? []).flatMap((item) => item.kind === 'setting' ? [item] : [])
-  if (!declared.length) return {}
-  const stored = (await getExtensionSettings(orgId, runner))[appKey] ?? {}
-  return Object.fromEntries(declared.map((item) => [item.key,
-    Object.hasOwn(stored, item.key) ? stored[item.key] : (item.defaultValue ?? null)]))
+export async function appSettingSnapshot(
+  orgId: string,
+  appKey: string,
+  manifest: AppManifest | null,
+  runner: SqlExecutor = db,
+): Promise<Record<string, unknown>> {
+  const declared = (manifest?.contributions ?? []).flatMap((item) =>
+    item.kind === "setting" ? [item] : [],
+  );
+  if (!declared.length) return {};
+  const stored = (await getExtensionSettings(orgId, runner))[appKey] ?? {};
+  return Object.fromEntries(
+    declared.map((item) => [
+      item.key,
+      Object.hasOwn(stored, item.key) ? stored[item.key] : (item.defaultValue ?? null),
+    ]),
+  );
 }
 
 function platformBridgeUnits(method: string): number {
-  if (method === 'platform.query') return 80
-  if (method === 'platform.schema' || method === 'platform.list') return 20
-  if (method === 'platform.get') return 10
-  if (method === 'platform.create' || method === 'platform.update' || method === 'platform.delete') return 50
-  return 0
+  if (method === "platform.query") return 80;
+  if (method === "platform.schema" || method === "platform.list") return 20;
+  if (method === "platform.get") return 10;
+  if (method === "platform.create" || method === "platform.update" || method === "platform.delete")
+    return 50;
+  return 0;
 }
 
 /**
@@ -1193,30 +1539,30 @@ function platformBridgeUnits(method: string): number {
  */
 function invocationRefusal(error: unknown): { ok: false; error: string; status: number } {
   if (error instanceof AppInvocationInFlightError) {
-    return { ok: false, error: error.message, status: 409 }
+    return { ok: false, error: error.message, status: 409 };
   }
   if (error instanceof AppInvocationRequestMismatchError) {
-    return { ok: false, error: error.message, status: 409 }
+    return { ok: false, error: error.message, status: 409 };
   }
   if (error instanceof AppInvocationDisabledError) {
-    return { ok: false, error: error.message, status: 403 }
+    return { ok: false, error: error.message, status: 403 };
   }
   // Drizzle wraps driver errors; carry the cause chain so the operator sees
   // WHY the invocation refused instead of a bare "failed query" wrapper.
-  const text = fullErrorMessage(error)
-  return { ok: false, error: text || 'app invocation failed', status: 500 }
+  const text = fullErrorMessage(error);
+  return { ok: false, error: text || "app invocation failed", status: 500 };
 }
 
 function fullErrorMessage(error: unknown): string {
-  let current: unknown = error
-  let text = ''
-  let hops = 0
+  let current: unknown = error;
+  let text = "";
+  let hops = 0;
   while (current instanceof Error && hops < 5) {
-    text += (hops ? ': ' : '') + current.message
-    current = (current as Error & { cause?: unknown }).cause
-    hops++
+    text += (hops ? ": " : "") + current.message;
+    current = (current as Error & { cause?: unknown }).cause;
+    hops++;
   }
-  return text || String(error)
+  return text || String(error);
 }
 
 /**
@@ -1229,25 +1575,25 @@ async function insertAppRun(row: AppInvocationAuditRow): Promise<void> {
   await db.execute(sql`
     insert into app_runs (org_id, app_id, version_id, endpoint, status, units, logs, error_message, duration_ms, actor_id)
     values (${row.orgId}, ${row.appId}, ${row.versionId}, ${row.endpoint}, ${row.status}, ${Math.round(row.units)},
-            ${JSON.stringify(row.logs)}::jsonb, ${row.errorMessage}, ${Math.round(row.durationMs)}, ${row.actorId})`)
+            ${JSON.stringify(row.logs)}::jsonb, ${row.errorMessage}, ${Math.round(row.durationMs)}, ${row.actorId})`);
 }
 
 /** Read-only source inspection for installed package versions. */
 export type AppFileRow = {
-  path: string
-  kind: 'frontend' | 'backend' | 'asset'
-  contentType: string
-  isBinary: boolean
-  size: number
-  updatedAt: string
+  path: string;
+  kind: "frontend" | "backend" | "asset";
+  contentType: string;
+  isBinary: boolean;
+  size: number;
+  updatedAt: string;
 };
 
 export async function listAppFiles(orgId: string, key: string): Promise<AppFileRow[]> {
-  const app = await getAppByKey(orgId, key)
-  if (!app || !app.activeVersionId) throw new AppError('app not found', 404)
+  const app = await getAppByKey(orgId, key);
+  if (!app || !app.activeVersionId) throw new AppError("app not found", 404);
   return rows<AppFileRow>(sql`
     select path, kind, content_type as "contentType", is_binary as "isBinary", size, updated_at as "updatedAt"
-      from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId} order by path`)
+      from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId} order by path`);
 }
 
 export async function readAppFile(
@@ -1255,30 +1601,35 @@ export async function readAppFile(
   key: string,
   path: string,
 ): Promise<{ path: string; content: string; isBinary: boolean; contentType: string }> {
-  const app = await getAppByKey(orgId, key)
-  if (!app || !app.activeVersionId) throw new AppError('app not found', 404)
-  const r = await rows<{ path: string; content: string; isBinary: boolean; contentType: string }>(sql`
+  const app = await getAppByKey(orgId, key);
+  if (!app || !app.activeVersionId) throw new AppError("app not found", 404);
+  const r = await rows<{
+    path: string;
+    content: string;
+    isBinary: boolean;
+    contentType: string;
+  }>(sql`
     select path, content, is_binary as "isBinary", content_type as "contentType"
-      from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId} and path = ${path} limit 1`)
-  if (!r[0]) throw new AppError('file not found', 404)
-  return r[0]
+      from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId} and path = ${path} limit 1`);
+  if (!r[0]) throw new AppError("file not found", 404);
+  return r[0];
 }
 
 /** Published, immutable library snapshots. */
 export type ListingRow = {
-  id: string
-  key: string
-  name: string
-  description: string | null
-  iconKey: string
-  version: string
-  publisherOrgId: string
-  updatedAt: string
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  iconKey: string;
+  version: string;
+  publisherOrgId: string;
+  updatedAt: string;
 };
 
 export interface ListingPage {
-  listings: ListingRow[]
-  total: number
+  listings: ListingRow[];
+  total: number;
 }
 
 /** Browse active listings (any org), with server-side search and pagination. */
@@ -1287,13 +1638,15 @@ export async function listListings({
   page,
   perPage,
 }: {
-  query?: string
-  page: number
-  perPage: number
+  query?: string;
+  page: number;
+  perPage: number;
 }): Promise<ListingPage> {
-  const where = sql`is_active = true${query
-    ? sql` and (name ilike ${'%' + query + '%'} or key ilike ${'%' + query + '%'} or coalesce(description, '') ilike ${'%' + query + '%'})`
-    : sql``}`
+  const where = sql`is_active = true${
+    query
+      ? sql` and (name ilike ${"%" + query + "%"} or key ilike ${"%" + query + "%"} or coalesce(description, '') ilike ${"%" + query + "%"})`
+      : sql``
+  }`;
   const [listings, count] = await Promise.all([
     rows<ListingRow>(sql`
       select id, key, name, description, icon_key as "iconKey", version,
@@ -1303,8 +1656,8 @@ export async function listListings({
        order by name, key
        limit ${perPage} offset ${(page - 1) * perPage}`),
     rows<{ total: string }>(sql`select count(*) as total from app_listings where ${where}`),
-  ])
-  return { listings, total: Number(count[0]?.total ?? 0) }
+  ]);
+  return { listings, total: Number(count[0]?.total ?? 0) };
 }
 
 /** Whether an active marketplace listing exists for an app key. */
@@ -1313,48 +1666,69 @@ export async function isAppPublished(key: string, publisherOrgId?: string): Prom
     select true as found
       from app_listings
      where key = ${key} and is_active = true ${publisherOrgId ? sql`and publisher_org_id=${publisherOrgId}` : sql``}
-     limit 1`)
-  return found.length > 0
+     limit 1`);
+  return found.length > 0;
 }
 
 /**
  * Publish an installed App's ACTIVE bundle to the marketplace. One listing per
  * app key deployment-wide; only the original publisher org may update it.
  */
-export async function publishApp(orgId: string, userId: string, key: string): Promise<{ id: string }> {
+export async function publishApp(
+  orgId: string,
+  userId: string,
+  key: string,
+): Promise<{ id: string }> {
   // A listing is installable by every organization, and an App acts for
   // whoever opens it. Publishing is therefore a platform decision, not a
   // tenant one.
   // bypass: user-keyed-lookup — a platform administrator's home identity can belong to another organization.
-  const platformAdmin = (await withBypassContext(() => db.execute<{ present: boolean }>(sql`
-    select exists (select 1 from users where id = ${userId} and is_active and is_super_admin) as present`, 'objects')))[0]?.present === true
+  const platformAdmin =
+    (
+      await withBypassContext(() =>
+        db.execute<{ present: boolean }>(
+          sql`
+    select exists (select 1 from users where id = ${userId} and is_active and is_super_admin) as present`,
+          "objects",
+        ),
+      )
+    )[0]?.present === true;
   if (!platformAdmin) {
     throw new AppError(
-      'Publishing to the shared marketplace makes this App installable by every organization, so it requires a platform administrator. Ask a platform administrator to review the App and publish it.',
+      "Publishing to the shared marketplace makes this App installable by every organization, so it requires a platform administrator. Ask a platform administrator to review the App and publish it.",
       403,
-    )
+    );
   }
-  return db.transaction(async tx => {
-  await tx.execute(sql`select id from apps where org_id=${orgId} and key=${key} for share`)
-  const app = await getAppByKey(orgId, key)
-  if (!app || !app.activeVersionId || !app.manifest) throw new AppError('app not found or has no active version', 404)
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`select id from apps where org_id=${orgId} and key=${key} for share`);
+    const app = await getAppByKey(orgId, key);
+    if (!app || !app.activeVersionId || !app.manifest)
+      throw new AppError("app not found or has no active version", 404);
 
-  const files = await rows<{ path: string; content: string; isBinary: boolean }>(sql`
+    const files = await rows<{ path: string; content: string; isBinary: boolean }>(sql`
     select path, content, is_binary as "isBinary"
-      from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId} order by path`)
+      from app_files where org_id = ${orgId} and version_id = ${app.activeVersionId} order by path`);
 
-  const existing = await rows<{ id: string; publisherOrgId: string; isApp: boolean }>(
-    sql`select id, publisher_org_id as "publisherOrgId", manifest ? 'frontend' as "isApp" from app_listings where key = ${key} limit 1`,
-  )
-  if (existing[0] && existing[0].publisherOrgId !== orgId) {
-    throw new AppError(`"${key}" is already published by another org`, 409)
-  }
+    const existing = await rows<{ id: string; publisherOrgId: string; isApp: boolean }>(
+      sql`select id, publisher_org_id as "publisherOrgId", manifest ? 'frontend' as "isApp" from app_listings where key = ${key} limit 1`,
+    );
+    if (existing[0] && existing[0].publisherOrgId !== orgId) {
+      throw new AppError(`"${key}" is already published by another org`, 409);
+    }
 
-  if (existing[0] && !existing[0].isApp) throw new AppError(`"${key}" is already published as a module`, 409)
-  const filesJson = JSON.stringify(files)
-  const manifestJson = JSON.stringify(app.manifest)
-  const before = (await tx.execute(sql`select id,version,manifest,files,is_active from app_listings where key=${key} and publisher_org_id=${orgId} for update`, 'objects'))[0] ?? null
-  const r = (await tx.execute<{ id: string }>(sql`
+    if (existing[0] && !existing[0].isApp)
+      throw new AppError(`"${key}" is already published as a module`, 409);
+    const filesJson = JSON.stringify(files);
+    const manifestJson = JSON.stringify(app.manifest);
+    const before =
+      (
+        await tx.execute(
+          sql`select id,version,manifest,files,is_active from app_listings where key=${key} and publisher_org_id=${orgId} for update`,
+          "objects",
+        )
+      )[0] ?? null;
+    const r = await tx.execute<{ id: string }>(
+      sql`
     insert into app_listings (publisher_org_id, key, name, description, icon_key, version, manifest, files, is_active, created_by, updated_by)
     values (${orgId}, ${key}, ${app.name}, ${app.description}, ${app.iconKey}, ${app.version},
             ${manifestJson}::jsonb, ${filesJson}::jsonb, true, ${userId}, ${userId})
@@ -1363,29 +1737,59 @@ export async function publishApp(orgId: string, userId: string, key: string): Pr
       version = excluded.version, manifest = excluded.manifest, files = excluded.files,
       is_active = true, updated_at = now(), updated_by = ${userId}
     where app_listings.publisher_org_id = ${orgId}
-    returning id`, 'objects'))
-  const id = r[0]?.id
-  if (!id) throw new AppError(`"${key}" is already published by another organization`, 409)
-  await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'app_listings',${id},${before ? 'update' : 'insert'},${JSON.stringify({ event:'app_listing_published', reason:'Publish active app version', appKey:key, versionId:app.activeVersionId, before, after:{version:app.version,manifest:app.manifest,files,is_active:true} })}::jsonb,${userId})`)
-  return { id }
-  })
+    returning id`,
+      "objects",
+    );
+    const id = r[0]?.id;
+    if (!id) throw new AppError(`"${key}" is already published by another organization`, 409);
+    await tx.execute(
+      sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'app_listings',${id},${before ? "update" : "insert"},${JSON.stringify({ event: "app_listing_published", reason: "Publish active app version", appKey: key, versionId: app.activeVersionId, before, after: { version: app.version, manifest: app.manifest, files, is_active: true } })}::jsonb,${userId})`,
+    );
+    return { id };
+  });
 }
 
 /** Install a marketplace listing into the caller's org via the normal path. */
 export class AppError extends Error {
-  constructor(message: string, public readonly status = 400) { super(message); this.name = 'AppError' }
+  constructor(
+    message: string,
+    public readonly status = 400,
+  ) {
+    super(message);
+    this.name = "AppError";
+  }
 }
 
 export async function unpublishApp(orgId: string, userId: string, key: string): Promise<void> {
-  await db.transaction(async tx => {
-    const listing = (await tx.execute<{ id: string; is_active: boolean; version: string }>(sql`select id,is_active,version from app_listings where key=${key} and publisher_org_id=${orgId} for update`, 'objects'))[0]
-    if (!listing) throw new AppError('No app listing owned by this organization', 404)
+  await db.transaction(async (tx) => {
+    const listing = (
+      await tx.execute<{ id: string; is_active: boolean; version: string }>(
+        sql`select id,is_active,version from app_listings where key=${key} and publisher_org_id=${orgId} for update`,
+        "objects",
+      )
+    )[0];
+    if (!listing) throw new AppError("No app listing owned by this organization", 404);
     // A silent return here is a no-op: no UPDATE, no audit. Callers then
     // report {ok:true} for work no later read can observe. FOR UPDATE
     // serializes concurrent withdraws so the loser hits this refusal.
-    if (!listing.is_active) throw new AppError(`Nothing was withdrawn: "${key}" is already unpublished. Publish it again from the app library if you need to withdraw a live listing.`, 409)
-    const withdrawn = (await tx.execute<{ id: string }>(sql`update app_listings set is_active=false,updated_by=${userId},updated_at=now() where id=${listing.id} and publisher_org_id=${orgId} and is_active=true returning id`, 'objects'))[0]
-    if (!withdrawn) throw new AppError(`Nothing was withdrawn: "${key}" is already unpublished. Publish it again from the app library if you need to withdraw a live listing.`, 409)
-    await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'app_listings',${listing.id},'update',${JSON.stringify({ event:'app_listing_withdrawn',before:{isActive:true,version:listing.version},after:{isActive:false,version:listing.version} })}::jsonb,${userId})`)
-  })
+    if (!listing.is_active)
+      throw new AppError(
+        `Nothing was withdrawn: "${key}" is already unpublished. Publish it again from the app library if you need to withdraw a live listing.`,
+        409,
+      );
+    const withdrawn = (
+      await tx.execute<{ id: string }>(
+        sql`update app_listings set is_active=false,updated_by=${userId},updated_at=now() where id=${listing.id} and publisher_org_id=${orgId} and is_active=true returning id`,
+        "objects",
+      )
+    )[0];
+    if (!withdrawn)
+      throw new AppError(
+        `Nothing was withdrawn: "${key}" is already unpublished. Publish it again from the app library if you need to withdraw a live listing.`,
+        409,
+      );
+    await tx.execute(
+      sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'app_listings',${listing.id},'update',${JSON.stringify({ event: "app_listing_withdrawn", before: { isActive: true, version: listing.version }, after: { isActive: false, version: listing.version } })}::jsonb,${userId})`,
+    );
+  });
 }

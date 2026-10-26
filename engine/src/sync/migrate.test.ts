@@ -8,41 +8,100 @@ import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!env.OPENBOOKS_DB_URL;
 
-test("reconcilable account imports require currency and preserve existing denomination controls", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const source: MigrationSource = {
-    name: "migration-test", refKey: "migrationTest", baseCurrency: "CAD",
-    accountingPeriods: async () => [], entities: async () => [],
-    nativeChanges: async () => { throw new Error("not used"); },
-    trialBalance: async () => [], monthlyActivity: async () => [],
-  };
-  const load = (records: import("./source.ts").SourceEntity[]) => withOrg(org.orgId, () =>
-    loadEntities(source, org.orgId, null, undefined, undefined, [{ resource: "accounts", records }]));
-  try {
-    const account = { sourceRef: "card", fields: { number: "2200.67", name: "Corporate card", type: "liability_card", reconcilable: true, currencyRestriction: "CAD" } };
-    const first = await load([account,
-      { sourceRef: "foreign-bank", fields: { name: "US dollar bank", type: "asset_bank", reconcilable: true, currencyRestriction: "USD" } },
-      { sourceRef: "missing", fields: { name: "Missing currency", type: "asset_bank", reconcilable: true } }]);
-    assert.ok(first.accounts);
-    assert.equal(first.accounts.created, 2);
-    assert.equal(first.accounts.failed, 1);
-    assert.ok(first.accounts.errors[0]);
-    assert.match(first.accounts.errors[0].message, /reconcilable account missing requires an explicit currency/);
-    const replay = await load([account]);
-    assert.ok(replay.accounts);
-    assert.equal(replay.accounts.updated, 1);
-    const conflict = await load([{ ...account, fields: { ...account.fields, name: "Changed card", currencyRestriction: "USD" } }]);
-    assert.ok(conflict.accounts);
-    assert.equal(conflict.accounts.updated, 0);
-    assert.equal(conflict.accounts.failed, 1);
-    assert.ok(conflict.accounts.errors[0]);
-    assert.match(conflict.accounts.errors[0].message, /source currency conflicts with its existing currency control/);
-    const stored = await withOrg(org.orgId, () => db.execute(sql`select name, currency_restriction from accounts where org_id=${org.orgId} and custom->>'migrationTest'='card'`, "objects"));
-    assert.deepEqual(stored, [{ name: "Corporate card", currency_restriction: "CAD" }]);
-    const foreign = await withOrg(org.orgId, () => db.execute(sql`select currency_restriction from accounts where org_id=${org.orgId} and custom->>'migrationTest'='foreign-bank'`, "objects"));
-    assert.deepEqual(foreign, [{ currency_restriction: "USD" }]);
-  } finally { await dropScratchOrg(org.orgId); }
-});
+test(
+  "reconcilable account imports require currency and preserve existing denomination controls",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const source: MigrationSource = {
+      name: "migration-test",
+      refKey: "migrationTest",
+      baseCurrency: "CAD",
+      accountingPeriods: async () => [],
+      entities: async () => [],
+      nativeChanges: async () => {
+        throw new Error("not used");
+      },
+      trialBalance: async () => [],
+      monthlyActivity: async () => [],
+    };
+    const load = (records: import("./source.ts").SourceEntity[]) =>
+      withOrg(org.orgId, () =>
+        loadEntities(source, org.orgId, null, undefined, undefined, [
+          { resource: "accounts", records },
+        ]),
+      );
+    try {
+      const account = {
+        sourceRef: "card",
+        fields: {
+          number: "2200.67",
+          name: "Corporate card",
+          type: "liability_card",
+          reconcilable: true,
+          currencyRestriction: "CAD",
+        },
+      };
+      const first = await load([
+        account,
+        {
+          sourceRef: "foreign-bank",
+          fields: {
+            name: "US dollar bank",
+            type: "asset_bank",
+            reconcilable: true,
+            currencyRestriction: "USD",
+          },
+        },
+        {
+          sourceRef: "missing",
+          fields: { name: "Missing currency", type: "asset_bank", reconcilable: true },
+        },
+      ]);
+      assert.ok(first.accounts);
+      assert.equal(first.accounts.created, 2);
+      assert.equal(first.accounts.failed, 1);
+      assert.ok(first.accounts.errors[0]);
+      assert.match(
+        first.accounts.errors[0].message,
+        /reconcilable account missing requires an explicit currency/,
+      );
+      const replay = await load([account]);
+      assert.ok(replay.accounts);
+      assert.equal(replay.accounts.updated, 1);
+      const conflict = await load([
+        {
+          ...account,
+          fields: { ...account.fields, name: "Changed card", currencyRestriction: "USD" },
+        },
+      ]);
+      assert.ok(conflict.accounts);
+      assert.equal(conflict.accounts.updated, 0);
+      assert.equal(conflict.accounts.failed, 1);
+      assert.ok(conflict.accounts.errors[0]);
+      assert.match(
+        conflict.accounts.errors[0].message,
+        /source currency conflicts with its existing currency control/,
+      );
+      const stored = await withOrg(org.orgId, () =>
+        db.execute(
+          sql`select name, currency_restriction from accounts where org_id=${org.orgId} and custom->>'migrationTest'='card'`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(stored, [{ name: "Corporate card", currency_restriction: "CAD" }]);
+      const foreign = await withOrg(org.orgId, () =>
+        db.execute(
+          sql`select currency_restriction from accounts where org_id=${org.orgId} and custom->>'migrationTest'='foreign-bank'`,
+          "objects",
+        ),
+      );
+      assert.deepEqual(foreign, [{ currency_restriction: "USD" }]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test(
   "master-data row upsert failures are reported separately with their source error",
@@ -63,32 +122,25 @@ test(
         monthlyActivity: async () => [],
       };
       const stats = await withOrg(org.orgId, () =>
-        loadEntities(
-          source,
-          org.orgId,
-          null,
-          undefined,
-          undefined,
-          [
-            {
-              resource: "items",
-              records: [
-                {
-                  sourceRef: "broken-item",
-                  fields: {
-                    name: "Broken item",
-                    kind: "service",
-                    defaultCost: "not-a-decimal",
-                  },
+        loadEntities(source, org.orgId, null, undefined, undefined, [
+          {
+            resource: "items",
+            records: [
+              {
+                sourceRef: "broken-item",
+                fields: {
+                  name: "Broken item",
+                  kind: "service",
+                  defaultCost: "not-a-decimal",
                 },
-                {
-                  sourceRef: "good-item",
-                  fields: { name: "Good item", kind: "service" },
-                },
-              ],
-            },
-          ],
-        ),
+              },
+              {
+                sourceRef: "good-item",
+                fields: { name: "Good item", kind: "service" },
+              },
+            ],
+          },
+        ]),
       );
 
       assert.deepEqual(stats.items, {
@@ -104,12 +156,15 @@ test(
         ],
       });
       const landed = await withOrg(org.orgId, () =>
-        db.execute<{ sourceRef: string }>(sql`
+        db.execute<{ sourceRef: string }>(
+          sql`
           select custom->>'migrationTest' as "sourceRef"
             from items
            where org_id = ${org.orgId}
              and custom->>'migrationTest' = 'good-item'
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.deepEqual(landed, [{ sourceRef: "good-item" }]);
     } finally {
@@ -118,63 +173,52 @@ test(
   },
 );
 
-test(
-  "master-data row failures carry the database SQLSTATE and cause",
-  { skip: !DB },
-  async () => {
-    // A database rejection behind a driver wrapper must not be recorded as a
-    // bare "Failed query: …": the run summary needs the SQLSTATE and the
-    // reason or the next 42702 hides the same way. A non-numeric credit limit
-    // reaches PostgreSQL raw (the loader passes it through) and fails with
-    // 22P02 invalid_text_representation.
-    const org = await createScratchOrg();
-    try {
-      const source: MigrationSource = {
-        name: "migration-test",
-        refKey: "migrationTest",
-        baseCurrency: "CAD",
-        accountingPeriods: async () => [],
-        entities: async () => [],
-        nativeChanges: async () => {
-          throw new Error("not used by this test");
-        },
-        trialBalance: async () => [],
-        monthlyActivity: async () => [],
-      };
-      const stats = await withOrg(org.orgId, () =>
-        loadEntities(
-          source,
-          org.orgId,
-          null,
-          undefined,
-          undefined,
-          [
+test("master-data row failures carry the database SQLSTATE and cause", { skip: !DB }, async () => {
+  // A database rejection behind a driver wrapper must not be recorded as a
+  // bare "Failed query: …": the run summary needs the SQLSTATE and the
+  // reason or the next 42702 hides the same way. A non-numeric credit limit
+  // reaches PostgreSQL raw (the loader passes it through) and fails with
+  // 22P02 invalid_text_representation.
+  const org = await createScratchOrg();
+  try {
+    const source: MigrationSource = {
+      name: "migration-test",
+      refKey: "migrationTest",
+      baseCurrency: "CAD",
+      accountingPeriods: async () => [],
+      entities: async () => [],
+      nativeChanges: async () => {
+        throw new Error("not used by this test");
+      },
+      trialBalance: async () => [],
+      monthlyActivity: async () => [],
+    };
+    const stats = await withOrg(org.orgId, () =>
+      loadEntities(source, org.orgId, null, undefined, undefined, [
+        {
+          resource: "parties",
+          records: [
             {
-              resource: "parties",
-              records: [
-                {
-                  sourceRef: "bad-credit",
-                  fields: {
-                    displayName: "Bad Credit Co",
-                    kind: "company",
-                    customerRole: { creditLimit: "not-a-decimal" },
-                  },
-                },
-              ],
+              sourceRef: "bad-credit",
+              fields: {
+                displayName: "Bad Credit Co",
+                kind: "company",
+                customerRole: { creditLimit: "not-a-decimal" },
+              },
             },
           ],
-        ),
-      );
-      assert.equal(stats.parties?.failed ?? -1, 1);
-      const message = stats.parties?.errors[0]?.message ?? "";
-      assert.match(message, /Failed query: insert into customer_roles/);
-      assert.match(message, /SQLSTATE 22P02/);
-      assert.match(message, /invalid input syntax|invalid_text_representation/i);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+        },
+      ]),
+    );
+    assert.equal(stats.parties?.failed ?? -1, 1);
+    const message = stats.parties?.errors[0]?.message ?? "";
+    assert.match(message, /Failed query: insert into customer_roles/);
+    assert.match(message, /SQLSTATE 22P02/);
+    assert.match(message, /invalid input syntax|invalid_text_representation/i);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "master-data mirror updates persist instead of failing on connector identity",
@@ -201,25 +245,34 @@ test(
         trialBalance: async () => [],
         monthlyActivity: async () => [],
       };
-      await withOrg(org.orgId, () => db.execute(sql`
+      await withOrg(org.orgId, () =>
+        db.execute(sql`
         insert into subsidiaries (org_id, parent_id, name, base_currency, country, custom)
         values (${org.orgId}, ${org.subsidiaryId}, 'Old Sub', 'CAD', 'CA',
                 '{"migrationTest": "SUB-1"}'::jsonb)
-      `));
-      await withOrg(org.orgId, () => db.execute(sql`
+      `),
+      );
+      await withOrg(org.orgId, () =>
+        db.execute(sql`
         insert into parties (org_id, kind, display_name, custom)
         values (${org.orgId}, 'company', 'Old Party', '{"migrationTest": "PTY-1"}'::jsonb)
-      `));
-      await withOrg(org.orgId, () => db.execute(sql`
+      `),
+      );
+      await withOrg(org.orgId, () =>
+        db.execute(sql`
         insert into payment_terms (org_id, name, net_days, custom)
         values (${org.orgId}, 'Old Term', 30, '{"migrationTest": "TRM-1"}'::jsonb)
-      `));
+      `),
+      );
       const stats = await withOrg(org.orgId, () =>
         loadEntities(source, org.orgId, null, undefined, undefined, [
           {
             resource: "subsidiaries",
             records: [
-              { sourceRef: "SUB-1", fields: { name: "New Sub", baseCurrency: "CAD", country: "CA" } },
+              {
+                sourceRef: "SUB-1",
+                fields: { name: "New Sub", baseCurrency: "CAD", country: "CA" },
+              },
             ],
           },
           {
@@ -230,9 +283,7 @@ test(
           },
           {
             resource: "payment_terms",
-            records: [
-              { sourceRef: "TRM-1", fields: { name: "New Term", netDays: 45 } },
-            ],
+            records: [{ sourceRef: "TRM-1", fields: { name: "New Term", netDays: 45 } }],
           },
         ]),
       );
@@ -244,13 +295,18 @@ test(
         [stats.subsidiaries?.failed, stats.parties?.failed, stats.payment_terms?.failed],
         [0, 0, 0],
       );
-      const names = await withOrg(org.orgId, () => db.execute<{ name: string }>(sql`
+      const names = await withOrg(org.orgId, () =>
+        db.execute<{ name: string }>(
+          sql`
         select name from subsidiaries where org_id = ${org.orgId} and custom->>'migrationTest' = 'SUB-1'
         union all
         select display_name as name from parties where org_id = ${org.orgId} and custom->>'migrationTest' = 'PTY-1'
         union all
         select name from payment_terms where org_id = ${org.orgId} and custom->>'migrationTest' = 'TRM-1'
-      `, "objects"));
+      `,
+          "objects",
+        ),
+      );
       assert.deepEqual(names.map((row) => row.name).sort(), ["New Party", "New Sub", "New Term"]);
     } finally {
       await dropScratchOrg(org.orgId);
@@ -258,79 +314,83 @@ test(
   },
 );
 
-test(
-  "tax-code mirrors never rewrite closed or future rate windows",
-  { skip: !DB },
-  async () => {
-    // Rate windows are dated statutory history: the calculation engine
-    // resolves the rate for a document's own date, so rewriting every window
-    // to the source's current rate reinterprets history (and destroys a
-    // tenant-planned future window). Only the currently open window states
-    // the source's current rate.
-    const org = await createScratchOrg();
-    try {
-      const source: MigrationSource = {
-        name: "migration-test",
-        refKey: "migrationTest",
-        baseCurrency: "CAD",
-        accountingPeriods: async () => [],
-        entities: async () => [],
-        nativeChanges: async () => {
-          throw new Error("not used by this test");
-        },
-        trialBalance: async () => [],
-        monthlyActivity: async () => [],
-      };
-      const [code] = await withOrg(org.orgId, () =>
-        db.execute<{ id: string }>(sql`
+test("tax-code mirrors never rewrite closed or future rate windows", { skip: !DB }, async () => {
+  // Rate windows are dated statutory history: the calculation engine
+  // resolves the rate for a document's own date, so rewriting every window
+  // to the source's current rate reinterprets history (and destroys a
+  // tenant-planned future window). Only the currently open window states
+  // the source's current rate.
+  const org = await createScratchOrg();
+  try {
+    const source: MigrationSource = {
+      name: "migration-test",
+      refKey: "migrationTest",
+      baseCurrency: "CAD",
+      accountingPeriods: async () => [],
+      entities: async () => [],
+      nativeChanges: async () => {
+        throw new Error("not used by this test");
+      },
+      trialBalance: async () => [],
+      monthlyActivity: async () => [],
+    };
+    const [code] = await withOrg(org.orgId, () =>
+      db.execute<{ id: string }>(
+        sql`
           insert into tax_codes (org_id, code, name, applies_to, custom)
           values (${org.orgId}, 'TAX-HIST', 'History Tax', 'both',
                   '{"migrationTest": "TAX-HIST"}'::jsonb)
           returning id
-        `, "objects"),
-      );
-      await withOrg(org.orgId, () => db.execute(sql`
+        `,
+        "objects",
+      ),
+    );
+    await withOrg(org.orgId, () =>
+      db.execute(sql`
         insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from, effective_to)
         values (${org.orgId}, ${code!.id}, '5.0000', '2020-01-01', '2022-12-31'),
                (${org.orgId}, ${code!.id}, '13.0000', '2023-01-01', '2026-12-31'),
                (${org.orgId}, ${code!.id}, '15.0000', '2027-01-01', null)
-      `));
-      const stats = await withOrg(org.orgId, () =>
-        loadEntities(source, org.orgId, null, undefined, undefined, [
-          {
-            resource: "tax_codes",
-            records: [
-              {
-                sourceRef: "TAX-HIST",
-                fields: { code: "TAX-HIST", name: "History Tax", ratePercent: "13" },
-              },
-            ],
-          },
-        ]),
-      );
-      assert.equal(stats.tax_codes?.updated, 1);
-      const windows = await withOrg(org.orgId, () =>
-        db.execute<{ rate: string; from: string; to: string | null }>(sql`
+      `),
+    );
+    const stats = await withOrg(org.orgId, () =>
+      loadEntities(source, org.orgId, null, undefined, undefined, [
+        {
+          resource: "tax_codes",
+          records: [
+            {
+              sourceRef: "TAX-HIST",
+              fields: { code: "TAX-HIST", name: "History Tax", ratePercent: "13" },
+            },
+          ],
+        },
+      ]),
+    );
+    assert.equal(stats.tax_codes?.updated, 1);
+    const windows = await withOrg(org.orgId, () =>
+      db.execute<{ rate: string; from: string; to: string | null }>(
+        sql`
           select rate_percent::text as rate, effective_from::text as "from",
                  effective_to::text as "to"
             from tax_rates
            where org_id = ${org.orgId} and tax_code_id = ${code!.id}
            order by effective_from
-        `, "objects"),
-      );
-      assert.deepEqual(
-        windows.map((row) => [row.rate, row.from, row.to]),
-        [
-          ["5.0000", "2020-01-01", "2022-12-31"],
-          ["13.0000", "2023-01-01", "2026-12-31"],
-          ["15.0000", "2027-01-01", null],
-        ],
-      );
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+        `,
+        "objects",
+      ),
+    );
+    assert.deepEqual(
+      windows.map((row) => [row.rate, row.from, row.to]),
+      [
+        ["5.0000", "2020-01-01", "2022-12-31"],
+        ["13.0000", "2023-01-01", "2026-12-31"],
+        ["15.0000", "2027-01-01", null],
+      ],
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "tax-code mirrors still land the source rate on the open current window",
@@ -381,12 +441,15 @@ test(
       );
       assert.equal(again.tax_codes?.updated, 1);
       const windows = await withOrg(org.orgId, () =>
-        db.execute<{ rate: string }>(sql`
+        db.execute<{ rate: string }>(
+          sql`
           select rate_percent::text as rate
             from tax_rates tr
             join tax_codes tc on tc.id = tr.tax_code_id and tc.org_id = tr.org_id
            where tr.org_id = ${org.orgId} and tc.code = 'TAX-OPEN'
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.deepEqual(windows, [{ rate: "13.0000" }]);
     } finally {

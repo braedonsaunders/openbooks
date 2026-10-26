@@ -13,52 +13,52 @@
 
 export interface DocArticle {
   /** Stable URL id (never change once shipped — links/bookmarks depend on it). */
-  slug: string
-  title: string
+  slug: string;
+  title: string;
   /** Category key (see DocCategory.key). */
-  category: string
+  category: string;
   /** Optional topic-group key (see DocSection.key). */
-  section?: string
+  section?: string;
   /** Sort order within the containing section or category root. */
-  order: number
+  order: number;
   /** One-line summary shown on cards and in search results. */
-  summary: string
+  summary: string;
   /** ISO date (YYYY-MM-DD) the article content was last revised. */
-  updated: string
+  updated: string;
   /** Markdown body. See authoring conventions above. */
-  body: string
+  body: string;
   /** Optional related-article slugs shown at the foot of the page. */
-  related?: string[]
+  related?: string[];
   /** Optional keywords to widen search matching beyond title/summary. */
-  keywords?: string[]
+  keywords?: string[];
 }
 
 export interface DocCategory {
   /** Stable category key. */
-  key: string
-  title: string
+  key: string;
+  title: string;
   /** Stable catalog key for the localized title (`docs` namespace). */
-  titleKey: string
+  titleKey: string;
   /** One-line description shown on the docs home cards. */
-  description: string
+  description: string;
   /** Stable catalog key for the localized description (`docs` namespace). */
-  descriptionKey: string
+  descriptionKey: string;
   /** nav-icon key (see components/sidebar-nav ICONS). */
-  icon: string
+  icon: string;
   /** Sort order across the docs home + sidebar. */
-  order: number
+  order: number;
 }
 
 export interface DocSection {
   /** Stable key, unique across the documentation registry. */
-  key: string
-  title: string
+  key: string;
+  title: string;
   /** Stable catalog key for the localized title (`docs` namespace). */
-  titleKey: string
+  titleKey: string;
   /** Category this topic group belongs to. */
-  category: string
+  category: string;
   /** Optional parent section for arbitrarily deep navigation trees. */
-  parentKey?: string
+  parentKey?: string;
   /** Sort order beside sibling sections. */
-  order: number
+  order: number;
 }

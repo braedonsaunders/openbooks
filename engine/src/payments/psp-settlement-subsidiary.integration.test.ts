@@ -10,11 +10,7 @@ import {
   PspSettlementError,
 } from "./psp-settlement.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 /**
  * PSP subsidiary lifecycle and reference-scope behavior.
@@ -43,12 +39,15 @@ async function batchState(orgId: string, batchId: string) {
     status: string;
     subsidiaryId: string | null;
     journalEntryId: string | null;
-  }>(sql`
+  }>(
+    sql`
     select status, subsidiary_id as "subsidiaryId",
            journal_entry_id as "journalEntryId"
       from psp_settlement_batches
      where id = ${batchId} and org_id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows[0]!;
 }
 
@@ -76,25 +75,27 @@ test(
         stripeParsed(externalRef, org.date),
         accounts,
       );
-      await assert.rejects(
-        postSettlementBatch(org.orgId, batchId, actor, null),
-        (error) => {
-          assert.ok(error instanceof PspSettlementError);
-          assert.match(error.message, /subsidiary/);
-          assert.doesNotMatch(error.message, /bank account/);
-          assert.doesNotMatch(error.message, /clearing account/);
-          assert.doesNotMatch(error.message, /fee account/);
-          return true;
-        },
-      );
+      await assert.rejects(postSettlementBatch(org.orgId, batchId, actor, null), (error) => {
+        assert.ok(error instanceof PspSettlementError);
+        assert.match(error.message, /subsidiary/);
+        assert.doesNotMatch(error.message, /bank account/);
+        assert.doesNotMatch(error.message, /clearing account/);
+        assert.doesNotMatch(error.message, /fee account/);
+        return true;
+      });
       assert.equal((await batchState(org.orgId, batchId)).status, "draft");
 
       // The evidence is identical, so the re-import repairs the unposted
       // draft's missing subsidiary instead of conflicting with it.
-      const repair = await importSettlementBatch(org.orgId, actor, stripeParsed(externalRef, org.date), {
-        ...accounts,
-        subsidiaryId: secondSub,
-      });
+      const repair = await importSettlementBatch(
+        org.orgId,
+        actor,
+        stripeParsed(externalRef, org.date),
+        {
+          ...accounts,
+          subsidiaryId: secondSub,
+        },
+      );
       assert.deepEqual(repair, { batchId, created: false });
       const after = await batchState(org.orgId, batchId);
       assert.equal(after.status, "draft");
@@ -109,87 +110,84 @@ test(
   },
 );
 
-test(
-  "a single-entity org posts a subsidiary-less draft to the root",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actor = (await seedFlowActors(org.orgId)).adminId;
-      const { batchId } = await importSettlementBatch(
-        org.orgId,
-        actor,
-        stripeParsed(`payout-singlesub-${org.orgId}`, org.date),
-        {
-          bankAccountId: org.accounts.bank,
-          feeAccountId: org.accounts.freight,
-          clearingAccountId: org.accounts.clearing,
-        },
-      );
-      const { entryId } = await postSettlementBatch(org.orgId, batchId, actor, null);
-      const after = await batchState(org.orgId, batchId);
-      assert.equal(after.status, "posted");
-      assert.equal(after.subsidiaryId, org.subsidiaryId);
-      const entry = (await db.execute<{ subsidiaryId: string }>(sql`
-        select subsidiary_id as "subsidiaryId" from journal_entries
-         where id = ${entryId} and org_id = ${org.orgId}
-      `, "objects"))[0]!;
-      assert.equal(entry.subsidiaryId, org.subsidiaryId);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
-
-test(
-  "import refuses malformed, foreign, and inactive subsidiaries",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    try {
-      const actor = (await seedFlowActors(org.orgId)).adminId;
-      const accounts = {
+test("a single-entity org posts a subsidiary-less draft to the root", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const { batchId } = await importSettlementBatch(
+      org.orgId,
+      actor,
+      stripeParsed(`payout-singlesub-${org.orgId}`, org.date),
+      {
         bankAccountId: org.accounts.bank,
         feeAccountId: org.accounts.freight,
         clearingAccountId: org.accounts.clearing,
-      };
-      await assert.rejects(
-        importSettlementBatch(
-          org.orgId,
-          actor,
-          stripeParsed(`payout-badsub-${org.orgId}`, org.date),
-          { ...accounts, subsidiaryId: "not-a-uuid" },
-        ),
-        /not a valid subsidiary reference/,
-      );
-      await assert.rejects(
-        importSettlementBatch(
-          org.orgId,
-          actor,
-          stripeParsed(`payout-foreignsub-${org.orgId}`, org.date),
-          { ...accounts, subsidiaryId: randomUUID() },
-        ),
-        /not a subsidiary of this organization/,
-      );
-      const inactiveSub = randomUUID();
-      await db.execute(sql`
+      },
+    );
+    const { entryId } = await postSettlementBatch(org.orgId, batchId, actor, null);
+    const after = await batchState(org.orgId, batchId);
+    assert.equal(after.status, "posted");
+    assert.equal(after.subsidiaryId, org.subsidiaryId);
+    const entry = (
+      await db.execute<{ subsidiaryId: string }>(
+        sql`
+        select subsidiary_id as "subsidiaryId" from journal_entries
+         where id = ${entryId} and org_id = ${org.orgId}
+      `,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(entry.subsidiaryId, org.subsidiaryId);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("import refuses malformed, foreign, and inactive subsidiaries", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const accounts = {
+      bankAccountId: org.accounts.bank,
+      feeAccountId: org.accounts.freight,
+      clearingAccountId: org.accounts.clearing,
+    };
+    await assert.rejects(
+      importSettlementBatch(
+        org.orgId,
+        actor,
+        stripeParsed(`payout-badsub-${org.orgId}`, org.date),
+        { ...accounts, subsidiaryId: "not-a-uuid" },
+      ),
+      /not a valid subsidiary reference/,
+    );
+    await assert.rejects(
+      importSettlementBatch(
+        org.orgId,
+        actor,
+        stripeParsed(`payout-foreignsub-${org.orgId}`, org.date),
+        { ...accounts, subsidiaryId: randomUUID() },
+      ),
+      /not a subsidiary of this organization/,
+    );
+    const inactiveSub = randomUUID();
+    await db.execute(sql`
         insert into subsidiaries (id, org_id, name, base_currency, country, parent_id, tax_ids, is_elimination, is_active, custom)
         values (${inactiveSub}, ${org.orgId}, 'Dormant Co', 'CAD', 'CA', ${org.subsidiaryId}, '{}'::jsonb, false, false, '{}'::jsonb)
       `);
-      await assert.rejects(
-        importSettlementBatch(
-          org.orgId,
-          actor,
-          stripeParsed(`payout-inactivesub-${org.orgId}`, org.date),
-          { ...accounts, subsidiaryId: inactiveSub },
-        ),
-        /is inactive/,
-      );
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    await assert.rejects(
+      importSettlementBatch(
+        org.orgId,
+        actor,
+        stripeParsed(`payout-inactivesub-${org.orgId}`, org.date),
+        { ...accounts, subsidiaryId: inactiveSub },
+      ),
+      /is inactive/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test(
   "a scoped PSP retry cannot replace a draft owned by another subsidiary",
@@ -203,11 +201,19 @@ test(
         insert into subsidiaries (id, org_id, name, base_currency, country, parent_id, tax_ids, is_elimination, is_active, custom)
         values (${subsidiaryB}, ${org.orgId}, 'Second Co', 'CAD', 'CA', ${org.subsidiaryId}, '{}'::jsonb, false, true, '{}'::jsonb)
       `);
-      await db.execute(sql`update accounts set subsidiary_id = ${subsidiaryB} where id = ${org.accounts.bank} and org_id = ${org.orgId}`);
+      await db.execute(
+        sql`update accounts set subsidiary_id = ${subsidiaryB} where id = ${org.accounts.bank} and org_id = ${org.orgId}`,
+      );
       await assert.rejects(
-        importSettlementBatch(org.orgId, actor, stripeParsed(`payout-hidden-account-${org.orgId}`, org.date), {
-          bankAccountId: org.accounts.bank,
-        }, new Set([org.subsidiaryId])),
+        importSettlementBatch(
+          org.orgId,
+          actor,
+          stripeParsed(`payout-hidden-account-${org.orgId}`, org.date),
+          {
+            bankAccountId: org.accounts.bank,
+          },
+          new Set([org.subsidiaryId]),
+        ),
         (error) => error instanceof ScopeNotFoundError,
       );
       const externalRef = `payout-cross-subsidiary-${org.orgId}`;
@@ -219,21 +225,29 @@ test(
         subsidiaryId: subsidiaryB,
       };
       const { batchId } = await importSettlementBatch(org.orgId, actor, original, accounts);
-      const before = (await db.execute<{
-        subsidiaryId: string | null;
-        grossAmount: string;
-        memo: string | null;
-        sourcePayload: Record<string, unknown> | null;
-      }>(sql`
+      const before = (
+        await db.execute<{
+          subsidiaryId: string | null;
+          grossAmount: string;
+          memo: string | null;
+          sourcePayload: Record<string, unknown> | null;
+        }>(
+          sql`
         select subsidiary_id as "subsidiaryId", gross_amount::text as "grossAmount",
                memo, source_payload as "sourcePayload"
           from psp_settlement_batches where id = ${batchId} and org_id = ${org.orgId}
-      `, "objects"))[0]!;
-      const beforeLines = await db.execute(sql`
+      `,
+          "objects",
+        )
+      )[0]!;
+      const beforeLines = await db.execute(
+        sql`
         select line_number, kind, external_ref, description, amount::text as amount, currency, meta
           from psp_settlement_lines where batch_id = ${batchId} and org_id = ${org.orgId}
          order by line_number
-      `, "objects");
+      `,
+        "objects",
+      );
       const changed = {
         ...original,
         memo: "replacement from subsidiary A",
@@ -241,23 +255,37 @@ test(
       };
 
       await assert.rejects(
-        importSettlementBatch(org.orgId, actor, changed, {
-          ...accounts,
-          subsidiaryId: org.subsidiaryId,
-        }, new Set([org.subsidiaryId])),
+        importSettlementBatch(
+          org.orgId,
+          actor,
+          changed,
+          {
+            ...accounts,
+            subsidiaryId: org.subsidiaryId,
+          },
+          new Set([org.subsidiaryId]),
+        ),
         /settlement bank account is outside the authorized subsidiary scope/,
       );
 
-      const after = (await db.execute(sql`
+      const after = (
+        await db.execute(
+          sql`
         select subsidiary_id as "subsidiaryId", gross_amount::text as "grossAmount",
                memo, source_payload as "sourcePayload"
           from psp_settlement_batches where id = ${batchId} and org_id = ${org.orgId}
-      `, "objects"))[0];
-      const afterLines = await db.execute(sql`
+      `,
+          "objects",
+        )
+      )[0];
+      const afterLines = await db.execute(
+        sql`
         select line_number, kind, external_ref, description, amount::text as amount, currency, meta
           from psp_settlement_lines where batch_id = ${batchId} and org_id = ${org.orgId}
          order by line_number
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.deepEqual(after, before);
       assert.deepEqual(afterLines, beforeLines);
     } finally {

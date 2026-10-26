@@ -24,17 +24,30 @@ function taxCtx(): NativeContext {
 
 function invoiceMove(): OdooMove {
   return {
-    id: 501, name: "INV/001", move_type: "out_invoice", state: "posted",
-    partner_id: false, invoice_date: "2026-08-27", invoice_date_due: "2026-09-27",
-    date: "2026-08-27", ref: false, payment_id: false,
-    statement_line_id: false, write_date: "2026-08-28 10:00:00",
+    id: 501,
+    name: "INV/001",
+    move_type: "out_invoice",
+    state: "posted",
+    partner_id: false,
+    invoice_date: "2026-08-27",
+    invoice_date_due: "2026-09-27",
+    date: "2026-08-27",
+    ref: false,
+    payment_id: false,
+    statement_line_id: false,
+    write_date: "2026-08-28 10:00:00",
   };
 }
 
 function line(partial: Partial<OdooMoveLine> & { id: number }): OdooMoveLine {
   return {
-    move_id: [501, "INV/001"], account_id: [20, "Sales"], name: "item",
-    balance: 0, display_type: "product", tax_ids: [], tax_line_id: false,
+    move_id: [501, "INV/001"],
+    account_id: [20, "Sales"],
+    name: "item",
+    balance: 0,
+    display_type: "product",
+    tax_ids: [],
+    tax_line_id: false,
     partner_id: false,
     ...partial,
   };
@@ -47,9 +60,29 @@ test("Odoo invoice tax keeps its sign across a reduction tax line", () => {
     line({ id: 601, account_id: [20, "Sales"], balance: -100, tax_ids: [7] }),
     // Odoo nets the discount into the per-tax total as its own tax line with
     // the opposite debit/credit sign: −10 on the +100 line, +2 back.
-    line({ id: 602, account_id: [30, "Tax payable"], balance: -10, display_type: "tax", tax_ids: [], tax_line_id: [7, "Tax 10%"] }),
-    line({ id: 603, account_id: [30, "Tax payable"], balance: 2, display_type: "tax", tax_ids: [], tax_line_id: [7, "Tax 10%"] }),
-    line({ id: 604, account_id: [11, "Receivable"], balance: 108, display_type: "payment_term", name: "receivable" }),
+    line({
+      id: 602,
+      account_id: [30, "Tax payable"],
+      balance: -10,
+      display_type: "tax",
+      tax_ids: [],
+      tax_line_id: [7, "Tax 10%"],
+    }),
+    line({
+      id: 603,
+      account_id: [30, "Tax payable"],
+      balance: 2,
+      display_type: "tax",
+      tax_ids: [],
+      tax_line_id: [7, "Tax 10%"],
+    }),
+    line({
+      id: 604,
+      account_id: [11, "Receivable"],
+      balance: 108,
+      display_type: "payment_term",
+      name: "receivable",
+    }),
   ];
   const built = buildNativeFromOdoo(taxCtx(), invoiceMove(), lines, opts());
   assert.ok(!("skip" in built));
@@ -63,8 +96,21 @@ test("Odoo invoice tax keeps its sign across a reduction tax line", () => {
 test("Odoo standard single-line tax is untouched by signed aggregation", () => {
   const lines: OdooMoveLine[] = [
     line({ id: 601, account_id: [20, "Sales"], balance: -100, tax_ids: [7] }),
-    line({ id: 602, account_id: [30, "Tax payable"], balance: -10, display_type: "tax", tax_ids: [], tax_line_id: [7, "Tax 10%"] }),
-    line({ id: 604, account_id: [11, "Receivable"], balance: 110, display_type: "payment_term", name: "receivable" }),
+    line({
+      id: 602,
+      account_id: [30, "Tax payable"],
+      balance: -10,
+      display_type: "tax",
+      tax_ids: [],
+      tax_line_id: [7, "Tax 10%"],
+    }),
+    line({
+      id: 604,
+      account_id: [11, "Receivable"],
+      balance: 110,
+      display_type: "payment_term",
+      name: "receivable",
+    }),
   ];
   const built = buildNativeFromOdoo(taxCtx(), invoiceMove(), lines, opts());
   assert.ok(!("skip" in built));

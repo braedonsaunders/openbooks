@@ -36,10 +36,18 @@ export function currencyPrecisionRemedy(currency: string): string {
   );
 }
 
-export async function resolveCurrencyQuantum(runner: SqlExecutor, currency: string): Promise<number> {
-  const row = (await runner.execute<{ minor_units: number | null }>(sql`
+export async function resolveCurrencyQuantum(
+  runner: SqlExecutor,
+  currency: string,
+): Promise<number> {
+  const row = (
+    await runner.execute<{ minor_units: number | null }>(
+      sql`
     select minor_units from currencies where code = ${currency}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const quantum = row?.minor_units;
   if (quantum == null || !Number.isInteger(quantum) || quantum < 0 || quantum > 4) {
     throw new UnknownCurrencyPrecisionError(currency);

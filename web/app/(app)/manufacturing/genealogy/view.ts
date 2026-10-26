@@ -2,7 +2,11 @@ import "server-only";
 
 import { column, link, page, ref, text, type PageSpec } from "@braedonsaunders/appkit-viewspec";
 import { registeredListTable } from "../../../../lib/list/prepared-spec";
-import { searchManufacturingGenealogySeeds, traceManufacturingGenealogy, type GenealogyEdge } from "@openbooks/engine/manufacturing/genealogy";
+import {
+  searchManufacturingGenealogySeeds,
+  traceManufacturingGenealogy,
+  type GenealogyEdge,
+} from "@openbooks/engine/manufacturing/genealogy";
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { getLocale, getTranslations } from "next-intl/server";
@@ -68,12 +72,19 @@ function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function traceHref(kind: "lot" | "serial", id: string, direction: "forward" | "backward", maxDepth: number) {
+function traceHref(
+  kind: "lot" | "serial",
+  id: string,
+  direction: "forward" | "backward",
+  maxDepth: number,
+) {
   const params = new URLSearchParams({ kind, id, direction, maxDepth: String(maxDepth) });
   return `/manufacturing/genealogy?${params.toString()}`;
 }
 
-export function loadManufacturingGenealogy(sp: Record<string, string | string[] | undefined>): Promise<GenealogyPageData> {
+export function loadManufacturingGenealogy(
+  sp: Record<string, string | string[] | undefined>,
+): Promise<GenealogyPageData> {
   return loadManufacturingGenealogyData(sp);
 }
 
@@ -135,17 +146,26 @@ async function loadManufacturingGenealogyData(
     received: t("received"),
   };
   const data: GenealogyData = {
-    edges: trace?.edges.map((edge) => ({
-      ...edge,
-      evidenceLabel: t(`basis.${edge.allocationBasis}`),
-      issuedLabel: formatDecimal(locale, edge.componentQuantity, { maximumFractionDigits: 4 }),
-      receivedLabel: formatDecimal(locale, edge.outputQuantity, { maximumFractionDigits: 4 }),
-      orderHref: `/manufacturing/work-orders?record=${encodeURIComponent(edge.orderId)}`,
-      componentLotHref: edge.componentLotId ? traceHref("lot", edge.componentLotId, "backward", maxDepth) : null,
-      componentSerialHref: edge.componentSerialId ? traceHref("serial", edge.componentSerialId, "backward", maxDepth) : null,
-      outputLotHref: edge.outputLotId ? traceHref("lot", edge.outputLotId, "forward", maxDepth) : null,
-      outputSerialHref: edge.outputSerialId ? traceHref("serial", edge.outputSerialId, "forward", maxDepth) : null,
-    })) ?? [],
+    edges:
+      trace?.edges.map((edge) => ({
+        ...edge,
+        evidenceLabel: t(`basis.${edge.allocationBasis}`),
+        issuedLabel: formatDecimal(locale, edge.componentQuantity, { maximumFractionDigits: 4 }),
+        receivedLabel: formatDecimal(locale, edge.outputQuantity, { maximumFractionDigits: 4 }),
+        orderHref: `/manufacturing/work-orders?record=${encodeURIComponent(edge.orderId)}`,
+        componentLotHref: edge.componentLotId
+          ? traceHref("lot", edge.componentLotId, "backward", maxDepth)
+          : null,
+        componentSerialHref: edge.componentSerialId
+          ? traceHref("serial", edge.componentSerialId, "backward", maxDepth)
+          : null,
+        outputLotHref: edge.outputLotId
+          ? traceHref("lot", edge.outputLotId, "forward", maxDepth)
+          : null,
+        outputSerialHref: edge.outputSerialId
+          ? traceHref("serial", edge.outputSerialId, "forward", maxDepth)
+          : null,
+      })) ?? [],
     columns,
     emptyTitle: trace ? t("empty") : t("choose"),
     emptyDescription: trace ? t("emptyNote") : t("chooseNote"),
@@ -158,7 +178,9 @@ async function loadManufacturingGenealogyData(
     ...(mrpEnabled ? [{ href: "/manufacturing/mrp", label: tNav("manufacturing-mrp") }] : []),
     { href: "/manufacturing/quality", label: tNav("manufacturing-quality") },
     { href: "/manufacturing/genealogy", label: t("title"), active: true },
-    ...([...productionTimeGrants.all, ...productionTimeGrants.own].some((permission) => can(authz, permission))
+    ...([...productionTimeGrants.all, ...productionTimeGrants.own].some((permission) =>
+      can(authz, permission),
+    )
       ? [{ href: "/manufacturing/time", label: tNav("manufacturing-time") }]
       : []),
   ];
@@ -197,12 +219,21 @@ export function genealogySpec(_data: GenealogyData): PageSpec {
           column(f("columns.depth"), text(row("depth"))),
           column(f("columns.order"), link(row("orderNumber"), row("orderHref"))),
           column(f("columns.component"), text(row("componentItem"))),
-          column(f("columns.componentLot"), link(row("componentLotNumber"), row("componentLotHref"))),
-          column(f("columns.componentSerial"), link(row("componentSerialNumber"), row("componentSerialHref"))),
+          column(
+            f("columns.componentLot"),
+            link(row("componentLotNumber"), row("componentLotHref")),
+          ),
+          column(
+            f("columns.componentSerial"),
+            link(row("componentSerialNumber"), row("componentSerialHref")),
+          ),
           column(f("columns.issued"), text(row("issuedLabel"))),
           column(f("columns.output"), text(row("outputItem"))),
           column(f("columns.outputLot"), link(row("outputLotNumber"), row("outputLotHref"))),
-          column(f("columns.outputSerial"), link(row("outputSerialNumber"), row("outputSerialHref"))),
+          column(
+            f("columns.outputSerial"),
+            link(row("outputSerialNumber"), row("outputSerialHref")),
+          ),
           column(f("columns.received"), text(row("receivedLabel"))),
         ],
       }),

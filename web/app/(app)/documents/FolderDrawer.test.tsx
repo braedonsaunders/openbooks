@@ -1,56 +1,61 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
 // F4T-6 (create/rename/delete toasted generic failures, dropping the
 // server's named refusal; delete parsed after the check): the status is
 // checked first through the shared helper in all three mutations.
-const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/documents?folder=folder-1', scrollIntoView: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/documents?folder=folder-1",
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 declare global {
-  var __folderToasts: { kind: string; message: string }[] | undefined
-  var __folderFetchImpl: ((url: string, init?: { method?: string }) => Promise<Response>) | undefined
+  var __folderToasts: { kind: string; message: string }[] | undefined;
+  var __folderFetchImpl:
+    ((url: string, init?: { method?: string }) => Promise<Response>) | undefined;
 }
 
 Object.assign(globalThis, {
   __folderToasts: [] as { kind: string; message: string }[],
-  __folderFetchImpl: undefined as ((url: string, init?: { method?: string }) => Promise<Response>) | undefined,
-})
-const { registerHooks } = await import('node:module')
-const { stubModules } = await import('../../../testing/stub-modules')
-stubModules({ navigation: { pathname: '/documents' } })
+  __folderFetchImpl: undefined as
+    ((url: string, init?: { method?: string }) => Promise<Response>) | undefined,
+});
+const { registerHooks } = await import("node:module");
+const { stubModules } = await import("../../../testing/stub-modules");
+stubModules({ navigation: { pathname: "/documents" } });
 registerHooks({
   resolve(specifier, context, next) {
-
-    if (specifier === 'next/link') {
+    if (specifier === "next/link") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export default function Link(p){return p.children}',
-      }
+        url: "data:text/javascript,export default function Link(p){return p.children}",
+      };
     }
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
         url: "data:text/javascript,export const toast={success(m){(globalThis.__folderToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__folderToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
-      }
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { createRoot } = await import('react-dom/client')
-const { act } = await import('react')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../messages/en')).default
-const { FolderDrawer } = await import('./FolderDrawer')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { createRoot } = await import("react-dom/client");
+const { act } = await import("react");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../messages/en")).default;
+const { FolderDrawer } = await import("./FolderDrawer");
 
-const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
+const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
 const folder = {
-  id: 'folder-1',
-  name: 'Contracts',
+  id: "folder-1",
+  name: "Contracts",
   parentId: null,
   isSystem: false,
   systemKind: null,
@@ -60,116 +65,123 @@ const folder = {
   recordId: null,
   childCount: 0,
   fileCount: 0,
-}
+};
 
 async function mountEdit() {
-  ;(globalThis as Record<string, unknown>).__folderToasts = []
+  (globalThis as Record<string, unknown>).__folderToasts = [];
   globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
     return (globalThis.__folderFetchImpl ?? (async () => Response.json({ ok: true })))(
       String(url),
       init,
-    )
-  }) as typeof fetch
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+    );
+  }) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <FolderDrawer mode="edit" folder={folder} folders={[folder]} canManage />
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-  })
-  return { host, root }
+    );
+    await tick();
+    await tick();
+  });
+  return { host, root };
 }
 
 function findButton(scope: ParentNode, label: string): HTMLButtonElement {
-  const btn = [...scope.querySelectorAll('button')].find(
-    (b) => (b.textContent ?? '').trim() === label,
-  ) as HTMLButtonElement | undefined
-  assert.ok(btn, `must offer a ${label} button`)
-  return btn
+  const btn = [...scope.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === label,
+  ) as HTMLButtonElement | undefined;
+  assert.ok(btn, `must offer a ${label} button`);
+  return btn;
 }
 
 function errors(): string[] {
-  return (globalThis.__folderToasts ?? []).filter((t) => t.kind === 'error').map((t) => t.message)
+  return (globalThis.__folderToasts ?? []).filter((t) => t.kind === "error").map((t) => t.message);
 }
 
-test('a non-JSON 500 on rename names the failure (F4T-6)', async (t) => {
-  const { host, root } = await mountEdit()
+test("a non-JSON 500 on rename names the failure (F4T-6)", async (t) => {
+  const { host, root } = await mountEdit();
   t.after(async () => {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  ;(globalThis as Record<string, unknown>).__folderFetchImpl = async () => new Response('', { status: 500 })
+      root.unmount();
+    });
+    host.remove();
+  });
+  (globalThis as Record<string, unknown>).__folderFetchImpl = async () =>
+    new Response("", { status: 500 });
   await act(async () => {
-    findButton(document.body, 'Edit').click()
-    await tick()
-  })
-  const input = document.body.querySelector('input#folder-name') as HTMLInputElement | null
-  assert.ok(input, 'edit mode must offer the name input')
-  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')
+    findButton(document.body, "Edit").click();
+    await tick();
+  });
+  const input = document.body.querySelector("input#folder-name") as HTMLInputElement | null;
+  assert.ok(input, "edit mode must offer the name input");
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value");
   await act(async () => {
-    descriptor?.set?.call(input, 'Renamed')
-    input.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await tick()
-  })
+    descriptor?.set?.call(input, "Renamed");
+    input.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await tick();
+  });
   await act(async () => {
-    findButton(document.body, 'Save').click()
-    await tick()
-    await tick()
-    await tick()
-  })
-  assert.match(errors().join('\n'), /Could not rename folder \(status 500\)/)
-})
+    findButton(document.body, "Save").click();
+    await tick();
+    await tick();
+    await tick();
+  });
+  assert.match(errors().join("\n"), /Could not rename folder \(status 500\)/);
+});
 
-test('a named 422 on create surfaces the server refusal (F4T-6)', async (t) => {
-  ;(globalThis as Record<string, unknown>).__folderToasts = []
-  ;(globalThis as Record<string, unknown>).__folderFetchImpl = async (url: string, init?: { method?: string }) =>
-    url === '/api/file-cabinet/folders' && init?.method === 'POST'
-      ? Response.json({ error: 'a folder with this name exists' }, { status: 409 })
-      : Response.json({ ok: true })
+test("a named 422 on create surfaces the server refusal (F4T-6)", async (t) => {
+  (globalThis as Record<string, unknown>).__folderToasts = [];
+  (globalThis as Record<string, unknown>).__folderFetchImpl = async (
+    url: string,
+    init?: { method?: string },
+  ) =>
+    url === "/api/file-cabinet/folders" && init?.method === "POST"
+      ? Response.json({ error: "a folder with this name exists" }, { status: 409 })
+      : Response.json({ ok: true });
   globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
     return (globalThis.__folderFetchImpl ?? (async () => Response.json({ ok: true })))(
       String(url),
       init,
-    )
-  }) as typeof fetch
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+    );
+  }) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <FolderDrawer mode="create" folders={[]} />
       </NextIntlClientProvider>,
-    )
-    await tick()
-    await tick()
-  })
+    );
+    await tick();
+    await tick();
+  });
   t.after(async () => {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
-  })
-  const input = document.body.querySelector('input#folder-name') as HTMLInputElement | null
-  assert.ok(input, 'create mode must offer the name input')
-  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')
+      root.unmount();
+    });
+    host.remove();
+  });
+  const input = document.body.querySelector("input#folder-name") as HTMLInputElement | null;
+  assert.ok(input, "create mode must offer the name input");
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), "value");
   await act(async () => {
-    descriptor?.set?.call(input, 'Taken')
-    input.dispatchEvent(new window.Event('change', { bubbles: true }))
-    await tick()
-  })
+    descriptor?.set?.call(input, "Taken");
+    input.dispatchEvent(new window.Event("change", { bubbles: true }));
+    await tick();
+  });
   await act(async () => {
-    findButton(document.body, 'Create folder').click()
-    await tick()
-    await tick()
-    await tick()
-  })
-  assert.ok(errors().some((m) => m.includes('a folder with this name exists')), 'the toast carries the named refusal')
-})
+    findButton(document.body, "Create folder").click();
+    await tick();
+    await tick();
+    await tick();
+  });
+  assert.ok(
+    errors().some((m) => m.includes("a folder with this name exists")),
+    "the toast carries the named refusal",
+  );
+});

@@ -34,7 +34,8 @@ const linkBodySchema = z.discriminatedUnion("action", [
 ]);
 
 function notFoundWhenMissing(error: unknown) {
-  if (error instanceof CommerceError && error.code === "channel_not_found") return notFound("channel");
+  if (error instanceof CommerceError && error.code === "channel_not_found")
+    return notFound("channel");
   throw error;
 }
 
@@ -50,7 +51,10 @@ export const GET = defineRoute({
     const objectType = new URL(request.url).searchParams.get("objectType") ?? "";
     if (!(EXTERNAL_LINK_OBJECT_TYPES as readonly string[]).includes(objectType)) {
       return NextResponse.json(
-        { error: "objectType_required", remedy: `Choose one of ${EXTERNAL_LINK_OBJECT_TYPES.join(", ")}.` },
+        {
+          error: "objectType_required",
+          remedy: `Choose one of ${EXTERNAL_LINK_OBJECT_TYPES.join(", ")}.`,
+        },
         { status: 422 },
       );
     }

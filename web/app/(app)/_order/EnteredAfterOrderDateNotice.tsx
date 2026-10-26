@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
-import { useTranslations } from 'next-intl'
-import { Alert, AlertDescription } from '@openbooks/ui'
+import { useTranslations } from "next-intl";
+import { Alert, AlertDescription } from "@openbooks/ui";
 
 /**
  * Informational notice that a purchase order was entered well after its order
@@ -10,11 +10,11 @@ import { Alert, AlertDescription } from '@openbooks/ui'
  * and it blocks nothing.
  */
 export function EnteredAfterOrderDateNotice({ days }: { days: number | null | undefined }) {
-  const t = useTranslations('purchaseOrders.shared')
-  if (days === null || days === undefined) return null
+  const t = useTranslations("purchaseOrders.shared");
+  if (days === null || days === undefined) return null;
   return (
     <Alert>
-      <AlertDescription>{t('enteredAfterOrderDate', { days })}</AlertDescription>
+      <AlertDescription>{t("enteredAfterOrderDate", { days })}</AlertDescription>
     </Alert>
-  )
+  );
 }

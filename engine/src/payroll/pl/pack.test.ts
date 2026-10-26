@@ -17,10 +17,28 @@ import { PL_TAX_YEARS } from "./rates.ts";
 /** Minimal adapter context: PIT-2 filed, KUP 250, birth year 1990. */
 function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
   return {
-    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} },
+    supplementalTaxMethod: "per_run",
+    programBases: {},
+    pensionableNonPeriodic: "0",
+    insurableNonPeriodic: "0",
+    programNonPeriodicBases: {},
     // A payer running its payroll here since January, five months of 8 000 zł committed.
-    tx: { execute: async (_query: unknown, mode?: string) => Promise.resolve({ rows: [{ dochod: "33265.0000", podstawa: "40000.0000", payer_first_pay: "2026-01-15", payer_first_period: "2026-01-01" }] }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)) },
+    tx: {
+      execute: async (_query: unknown, mode?: string) =>
+        Promise.resolve({
+          rows: [
+            {
+              dochod: "33265.0000",
+              podstawa: "40000.0000",
+              payer_first_pay: "2026-01-15",
+              payer_first_period: "2026-01-01",
+            },
+          ],
+        }).then(<T extends { rows: unknown }>(result: T) =>
+          mode === "objects" ? result.rows : result,
+        ),
+    },
     orgId: "org",
     subsidiaryId: "payer",
     documentId: "doc",
@@ -34,7 +52,7 @@ function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
     filingAccountId: null,
     periodsPerYear: 12,
     resolveStatutoryRates: async () => ({
-      values: (key: string) => key === "pl_wypadkowe" ? { stopa: "1.67" } : null,
+      values: (key: string) => (key === "pl_wypadkowe" ? { stopa: "1.67" } : null),
     }),
     income: "8000.00",
     nonPeriodic: "0",
@@ -44,9 +62,7 @@ function makeCtx(taxYear: number): PayrollStatutoryComputeContext {
     pushStatutory: () => {},
     storedCertificates: [],
     certificateFor: (key: string) =>
-      key === "pl_pit2"
-        ? { answers: { pomniejszenie: "1/12", kup: "miejscowy" } }
-        : null,
+      key === "pl_pit2" ? { answers: { pomniejszenie: "1/12", kup: "miejscowy" } } : null,
     bool: () => false,
     assertRegionSupported: () => {},
     employerLevies: {
@@ -92,7 +108,18 @@ test("PL statutory slots are named, assessed, and routable", () => {
   // The PIT advance moves with pre-tax deductions; every contribution is
   // rate × base.
   assert.equal(bySystemKey.get("pit|deduction")?.assessedOn, "taxable_income");
-  for (const key of ["zus_emeryt|deduction", "zus_rent|deduction", "zus_chor|deduction", "zus_zdr|deduction", "zus_emeryt_er|employer_contribution", "zus_rent_er|employer_contribution", "wypadkowe_er|employer_contribution", "fp_er|employer_contribution", "fs_er|employer_contribution", "fgsp_er|employer_contribution"]) {
+  for (const key of [
+    "zus_emeryt|deduction",
+    "zus_rent|deduction",
+    "zus_chor|deduction",
+    "zus_zdr|deduction",
+    "zus_emeryt_er|employer_contribution",
+    "zus_rent_er|employer_contribution",
+    "wypadkowe_er|employer_contribution",
+    "fp_er|employer_contribution",
+    "fs_er|employer_contribution",
+    "fgsp_er|employer_contribution",
+  ]) {
     assert.equal(bySystemKey.get(key)?.assessedOn, "earnings", key);
   }
   assert.equal(bySystemKey.get("pit|deduction")?.remittance, "tax_authority");
@@ -118,7 +145,9 @@ test("PL certificate declares the PIT-2 answers, not a W-4 clone", () => {
   assert.deepEqual(
     declared.certificates.map((certificate) => [certificate.key, certificate.storage]),
     [
-      ["pl_pit2", "certificate_rows"], ["pl_wiek", "profile_columns"], ["pl_zatrudnienie", "certificate_rows"],
+      ["pl_pit2", "certificate_rows"],
+      ["pl_wiek", "profile_columns"],
+      ["pl_zatrudnienie", "certificate_rows"],
       ["pl_otwarcie_roku", "certificate_rows"],
     ],
   );
@@ -232,10 +261,7 @@ test("PL computeStatutory prices the standard month and refuses the gaps", async
     ...makeCtx(2026),
     certificateFor: () => null,
   } as unknown as PayrollStatutoryComputeContext;
-  await assert.rejects(
-    () => PL_PAYROLL_PACK.computeStatutory(noCert),
-    /pl_pit2/,
-  );
+  await assert.rejects(() => PL_PAYROLL_PACK.computeStatutory(noCert), /pl_pit2/);
   await assert.rejects(
     () => PL_PAYROLL_PACK.computeStatutory(makeCtx(2027)),
     /has not been transcribed/,
@@ -258,10 +284,11 @@ test("PL tenant-declared rate: wypadkowe rides the org", () => {
 test("PL employment calendar: 12 statutory days off, no pay computation", () => {
   const byKey = new Map(PL_PAYROLL_PACK.jurisdictions.map((j) => [j.key, j]));
   assert.equal(byKey.get("PL-PL")?.holidays.length, 12);
-  assert.ok(
-    byKey.get("PL-PL")?.holidays.some((h) => h.key === "pl_corpus_christi"),
+  assert.ok(byKey.get("PL-PL")?.holidays.some((h) => h.key === "pl_corpus_christi"));
+  assert.equal(
+    PL_PAYROLL_PACK.jurisdictions.every((j) => j.holidayPay === null),
+    true,
   );
-  assert.equal(PL_PAYROLL_PACK.jurisdictions.every((j) => j.holidayPay === null), true);
 });
 
 test("PL profile jurisdiction resolves to a declared employment calendar", () => {

@@ -124,8 +124,7 @@ const codeRow = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const mappedConfig = () =>
-  configRow({ settings: { jurisdictionTaxCodes: { TX: "TAX-ON" } } });
+const mappedConfig = () => configRow({ settings: { jurisdictionTaxCodes: { TX: "TAX-ON" } } });
 
 test("a matching immutable quote resolves to the stored evidence components", async (t) => {
   t.mock.method(db, "execute", evidenceReads([[mappedConfig()], [quoteRow()], [codeRow()]]));
@@ -139,7 +138,9 @@ test("a matching immutable quote resolves to the stored evidence components", as
 
 test("a component bound to the wrong tax code is refused even when amounts match", async (t) => {
   t.mock.method(db, "execute", evidenceReads([[mappedConfig()], [quoteRow()], [codeRow()]]));
-  const swapped = deps({ taxComponentsByLine: new Map([["line-1", [component({ taxCodeId: "OTHER" })]]]) });
+  const swapped = deps({
+    taxComponentsByLine: new Map([["line-1", [component({ taxCodeId: "OTHER" })]]]),
+  });
   await assert.rejects(
     () => resolveProviderTaxPlans(doc(), [line()], swapped),
     (e: unknown) =>
@@ -149,17 +150,11 @@ test("a component bound to the wrong tax code is refused even when amounts match
 });
 
 test("migrations bypass provider tax without touching evidence", async () => {
-  assert.deepEqual(
-    await resolveProviderTaxPlans(doc(), [line()], deps({ migration: true })),
-    [],
-  );
+  assert.deepEqual(await resolveProviderTaxPlans(doc(), [line()], deps({ migration: true })), []);
 });
 
 test("documents outside the provider-tax kinds bypass without evidence reads", async () => {
-  assert.deepEqual(
-    await resolveProviderTaxPlans(doc({ kind: "journal" }), [line()], deps()),
-    [],
-  );
+  assert.deepEqual(await resolveProviderTaxPlans(doc({ kind: "journal" }), [line()], deps()), []);
 });
 
 test("a line without a tax profile resolves to no plan and reads no quote", async (t) => {
@@ -179,16 +174,16 @@ test("a missing immutable quote fails closed before posting", async (t) => {
   t.mock.method(db, "execute", evidenceReads([[configRow()], []]));
   await assert.rejects(
     () => resolveProviderTaxPlans(doc(), [line()], deps()),
-    (e: unknown) =>
-      e instanceof PostingError && /no immutable tax-provider quote/.test(e.message),
+    (e: unknown) => e instanceof PostingError && /no immutable tax-provider quote/.test(e.message),
   );
 });
 
 test("a quote from another provider config is refused as ambiguous provenance", async (t) => {
-  t.mock.method(db, "execute", evidenceReads([
-    [configRow()],
-    [quoteRow({ provider_config_id: "cfg-2" })],
-  ]));
+  t.mock.method(
+    db,
+    "execute",
+    evidenceReads([[configRow()], [quoteRow({ provider_config_id: "cfg-2" })]]),
+  );
   await assert.rejects(
     () => resolveProviderTaxPlans(doc(), [line()], deps()),
     (e: unknown) =>
@@ -197,14 +192,14 @@ test("a quote from another provider config is refused as ambiguous provenance", 
 });
 
 test("a stale quote that no longer matches the document is refused", async (t) => {
-  t.mock.method(db, "execute", evidenceReads([
-    [configRow()],
-    [quoteRow({ quoted_on: "2026-08-01" })],
-  ]));
+  t.mock.method(
+    db,
+    "execute",
+    evidenceReads([[configRow()], [quoteRow({ quoted_on: "2026-08-01" })]]),
+  );
   await assert.rejects(
     () => resolveProviderTaxPlans(doc(), [line()], deps()),
-    (e: unknown) =>
-      e instanceof PostingError && /does not match the document/.test(e.message),
+    (e: unknown) => e instanceof PostingError && /does not match the document/.test(e.message),
   );
 });
 
@@ -243,7 +238,13 @@ test("posting replays the frozen quote snapshot, never the party's live address"
 test("the document's own location change is detected against the snapshot", () => {
   const snapshot = {
     shipFrom: {},
-    shipTo: { line1: "1 Yonge St", city: "Toronto", region: "ON", postalCode: "M5E 1E5", country: "CA" },
+    shipTo: {
+      line1: "1 Yonge St",
+      city: "Toronto",
+      region: "ON",
+      postalCode: "M5E 1E5",
+      country: "CA",
+    },
   };
   assert.equal(documentLocationChange(null, snapshot), null);
   assert.equal(documentLocationChange({}, snapshot), null);

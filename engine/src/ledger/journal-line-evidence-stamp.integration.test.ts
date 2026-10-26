@@ -63,7 +63,9 @@ async function insertBalancedPair(
 }
 
 async function postEntry(org: Org, entryId: string): Promise<void> {
-  await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`);
+  await db.execute(
+    sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`,
+  );
 }
 
 /**
@@ -72,15 +74,25 @@ async function postEntry(org: Org, entryId: string): Promise<void> {
  * Marks the account reconcilable so the connector's mirror predicate
  * (which only stamps reconcilable accounts) selects the line.
  */
-async function postedEntryWithDeactivatedAccount(org: Org, number: string): Promise<{ entryId: string; lineId: string }> {
+async function postedEntryWithDeactivatedAccount(
+  org: Org,
+  number: string,
+): Promise<{ entryId: string; lineId: string }> {
   const entryId = await draftEntry(org, number);
   await insertBalancedPair(org, entryId, org.accounts.bank, org.accounts.revenue);
   await postEntry(org, entryId);
   // Reconcilable accounts must carry a currency restriction
   // (accounts_reconcilable_currency_required); CAD matches the posted legs.
-  await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD', is_active = false where id = ${org.accounts.bank} and org_id = ${org.orgId}`);
-  const lineId = (await db.execute<{ id: string }>(sql`
-    select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and line_number = 1`, "objects"))[0]!.id;
+  await db.execute(
+    sql`update accounts set reconcilable = true, currency_restriction = 'CAD', is_active = false where id = ${org.accounts.bank} and org_id = ${org.orgId}`,
+  );
+  const lineId = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and line_number = 1`,
+      "objects",
+    )
+  )[0]!.id;
   return { entryId, lineId };
 }
 
@@ -98,73 +110,107 @@ async function mirrorClearedStamp(org: Org, entryId: string, accountId: string, 
     returning jl.id`);
 }
 
-test("0236: evidence-only stamp on a deactivated account succeeds and returns the line id", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const { entryId, lineId } = await postedEntryWithDeactivatedAccount(org, "EV-0236-A");
-    // Pre-fix this raises 'account <uuid> is inactive' and fails the run.
-    const stamped = await mirrorClearedStamp(org, entryId, org.accounts.bank, "external_ledger");
-    assert.equal(stamped.rows.length, 1);
-    assert.equal(stamped.rows[0]!.id, lineId);
-    const row = (await db.execute<{ d: string; c: string }>(sql`
+test(
+  "0236: evidence-only stamp on a deactivated account succeeds and returns the line id",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { entryId, lineId } = await postedEntryWithDeactivatedAccount(org, "EV-0236-A");
+      // Pre-fix this raises 'account <uuid> is inactive' and fails the run.
+      const stamped = await mirrorClearedStamp(org, entryId, org.accounts.bank, "external_ledger");
+      assert.equal(stamped.rows.length, 1);
+      assert.equal(stamped.rows[0]!.id, lineId);
+      const row = (
+        await db.execute<{ d: string; c: string }>(
+          sql`
       select source_cleared_date::text as d, source_cleared_connector as c
-        from journal_lines where id = ${lineId} and org_id = ${org.orgId}`, "objects"))[0]!;
-    assert.equal(row.d, org.date);
-    assert.equal(row.c, "external_ledger");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+        from journal_lines where id = ${lineId} and org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(row.d, org.date);
+      assert.equal(row.c, "external_ledger");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("0236: inserting a line into an inactive account is still refused", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await db.execute(sql`update accounts set is_active = false where id = ${org.accounts.bank} and org_id = ${org.orgId}`);
-    const entryId = await draftEntry(org, "EV-0236-B");
-    await assert.rejects(
-      insertBalancedPair(org, entryId, org.accounts.bank, org.accounts.revenue),
-      (e: unknown) => errorChainMatches(e, /is inactive/),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "0236: inserting a line into an inactive account is still refused",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await db.execute(
+        sql`update accounts set is_active = false where id = ${org.accounts.bank} and org_id = ${org.orgId}`,
+      );
+      const entryId = await draftEntry(org, "EV-0236-B");
+      await assert.rejects(
+        insertBalancedPair(org, entryId, org.accounts.bank, org.accounts.revenue),
+        (e: unknown) => errorChainMatches(e, /is inactive/),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("0236: an update touching money on a deactivated account's line is still refused", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const { lineId } = await postedEntryWithDeactivatedAccount(org, "EV-0236-C");
-    await assert.rejects(
-      db.execute(sql`update journal_lines set amount = 200, txn_amount = 200 where id = ${lineId} and org_id = ${org.orgId}`),
-      // jl_check_account fires before jl_guard: the refusal names the account rule.
-      (e: unknown) => errorChainMatches(e, /is inactive|immutable/),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "0236: an update touching money on a deactivated account's line is still refused",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { lineId } = await postedEntryWithDeactivatedAccount(org, "EV-0236-C");
+      await assert.rejects(
+        db.execute(
+          sql`update journal_lines set amount = 200, txn_amount = 200 where id = ${lineId} and org_id = ${org.orgId}`,
+        ),
+        // jl_check_account fires before jl_guard: the refusal names the account rule.
+        (e: unknown) => errorChainMatches(e, /is inactive|immutable/),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("0236: retargeting a line at an inactive account is still refused", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const { entryId } = await postedEntryWithDeactivatedAccount(org, "EV-0236-D");
-    const liveLine = (await db.execute<{ id: string }>(sql`
-      select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and line_number = 2`, "objects"))[0]!.id;
-    await assert.rejects(
-      db.execute(sql`update journal_lines set account_id = ${org.accounts.bank} where id = ${liveLine} and org_id = ${org.orgId}`),
-      (e: unknown) => errorChainMatches(e, /is inactive|immutable/),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "0236: retargeting a line at an inactive account is still refused",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { entryId } = await postedEntryWithDeactivatedAccount(org, "EV-0236-D");
+      const liveLine = (
+        await db.execute<{ id: string }>(
+          sql`
+      select id from journal_lines where entry_id = ${entryId} and org_id = ${org.orgId} and line_number = 2`,
+          "objects",
+        )
+      )[0]!.id;
+      await assert.rejects(
+        db.execute(
+          sql`update journal_lines set account_id = ${org.accounts.bank} where id = ${liveLine} and org_id = ${org.orgId}`,
+        ),
+        (e: unknown) => errorChainMatches(e, /is inactive|immutable/),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("0236: a summary account still refuses posting", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     // Freight carries no lines, so reclassifying it does not trip the
     // classification guard; the posting guard must still refuse the line.
-    await db.execute(sql`update accounts set is_summary = true where id = ${org.accounts.freight} and org_id = ${org.orgId}`);
+    await db.execute(
+      sql`update accounts set is_summary = true where id = ${org.accounts.freight} and org_id = ${org.orgId}`,
+    );
     const entryId = await draftEntry(org, "EV-0236-E");
     await assert.rejects(
       insertBalancedPair(org, entryId, org.accounts.freight, org.accounts.revenue),
@@ -175,34 +221,48 @@ test("0236: a summary account still refuses posting", { skip: !DB }, async () =>
   }
 });
 
-test("0236: a currency-restricted account still refuses wrong-currency postings", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await db.execute(sql`update accounts set currency_restriction = 'CAD' where id = ${org.accounts.bank} and org_id = ${org.orgId}`);
-    const entryId = await draftEntry(org, "EV-0236-F");
-    await assert.rejects(
-      insertBalancedPair(org, entryId, org.accounts.bank, org.accounts.revenue, "USD"),
-      (e: unknown) => errorChainMatches(e, /only accepts CAD postings/),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "0236: a currency-restricted account still refuses wrong-currency postings",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await db.execute(
+        sql`update accounts set currency_restriction = 'CAD' where id = ${org.accounts.bank} and org_id = ${org.orgId}`,
+      );
+      const entryId = await draftEntry(org, "EV-0236-F");
+      await assert.rejects(
+        insertBalancedPair(org, entryId, org.accounts.bank, org.accounts.revenue, "USD"),
+        (e: unknown) => errorChainMatches(e, /only accepts CAD postings/),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("0236: moving already-set cleared evidence is still refused append-only", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const { entryId, lineId } = await postedEntryWithDeactivatedAccount(org, "EV-0236-G");
-    await mirrorClearedStamp(org, entryId, org.accounts.bank, "external_ledger");
-    await assert.rejects(
-      db.execute(sql`update journal_lines set source_cleared_date = '2026-09-21', source_cleared_connector = 'external_ledger' where id = ${lineId} and org_id = ${org.orgId}`),
-      (e: unknown) => errorChainMatches(e, /append-only/),
-    );
-    await assert.rejects(
-      db.execute(sql`update journal_lines set source_cleared_connector = 'other' where id = ${lineId} and org_id = ${org.orgId}`),
-      (e: unknown) => errorChainMatches(e, /append-only/),
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "0236: moving already-set cleared evidence is still refused append-only",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { entryId, lineId } = await postedEntryWithDeactivatedAccount(org, "EV-0236-G");
+      await mirrorClearedStamp(org, entryId, org.accounts.bank, "external_ledger");
+      await assert.rejects(
+        db.execute(
+          sql`update journal_lines set source_cleared_date = '2026-09-21', source_cleared_connector = 'external_ledger' where id = ${lineId} and org_id = ${org.orgId}`,
+        ),
+        (e: unknown) => errorChainMatches(e, /append-only/),
+      );
+      await assert.rejects(
+        db.execute(
+          sql`update journal_lines set source_cleared_connector = 'other' where id = ${lineId} and org_id = ${org.orgId}`,
+        ),
+        (e: unknown) => errorChainMatches(e, /append-only/),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMoney } from '@/components/money-provider'
+import { useMoney } from "@/components/money-provider";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -42,8 +42,8 @@ import {
   ADJUSTMENT_TARGET_TYPES,
   ADJUSTMENT_TEXT_TARGETS,
 } from "../../../../../lib/rate-adjustment-types";
-import { InteractiveTableRow } from '@/components/interactive-table-row'
-import { DateField } from '@/components/date-field';
+import { InteractiveTableRow } from "@/components/interactive-table-row";
+import { DateField } from "@/components/date-field";
 
 export interface BillCardRow {
   id: string;
@@ -187,8 +187,9 @@ export function LaborBillRateCards(props: {
         // shared helper so message, remedy and code render instead of a
         // missing-key lookup.
         toast.error(
-          (t.has(`errors.${code}` as never) ? t(`errors.${code}` as never) : null)
-          ?? refusalMessageFromBody(failure, { fallback: t("errors.save") }) ?? t("errors.save"),
+          (t.has(`errors.${code}` as never) ? t(`errors.${code}` as never) : null) ??
+            refusalMessageFromBody(failure, { fallback: t("errors.save") }) ??
+            t("errors.save"),
         );
         return;
       }
@@ -216,7 +217,14 @@ export function LaborBillRateCards(props: {
         <SearchInput placeholder={t("search")} />
         <Select
           value={props.timeFilter}
-          onChange={(event) => router.push(mergeHref(base, props.currentParams, { time: event.target.value === "active" ? undefined : event.target.value, page: undefined }))}
+          onChange={(event) =>
+            router.push(
+              mergeHref(base, props.currentParams, {
+                time: event.target.value === "active" ? undefined : event.target.value,
+                page: undefined,
+              }),
+            )
+          }
           className="w-auto min-w-40"
           aria-label={t("filters.time")}
         >
@@ -227,20 +235,26 @@ export function LaborBillRateCards(props: {
         </Select>
         <Select
           value={props.dimensionFilter}
-          onChange={(event) => router.push(mergeHref(base, props.currentParams, { dimension: event.target.value === "all" ? undefined : event.target.value, page: undefined }))}
+          onChange={(event) =>
+            router.push(
+              mergeHref(base, props.currentParams, {
+                dimension: event.target.value === "all" ? undefined : event.target.value,
+                page: undefined,
+              }),
+            )
+          }
           className="w-auto min-w-44"
           aria-label={t("filters.dimension")}
         >
           <option value="all">{t("filters.allDimensions")}</option>
           <option value="unscoped">{t("filters.unscoped")}</option>
-          {subsidiaryAwareTypes(SCOPE_TYPES, props.options).map((type) => <option key={type} value={type}>{t(`scopeTypes.${type}`)}</option>)}
+          {subsidiaryAwareTypes(SCOPE_TYPES, props.options).map((type) => (
+            <option key={type} value={type}>
+              {t(`scopeTypes.${type}`)}
+            </option>
+          ))}
         </Select>
-        <Button
-          size="sm"
-          className="ml-auto"
-          disabled={creatingCard}
-          onClick={createCard}
-        >
+        <Button size="sm" className="ml-auto" disabled={creatingCard} onClick={createCard}>
           <Plus size={14} />
           {t("add")}
         </Button>
@@ -260,10 +274,7 @@ export function LaborBillRateCards(props: {
           <TableBody>
             {props.cards.length === 0 ? (
               <TableRow>
-                <TableCell
-                  colSpan={6}
-                  className="py-10 text-center text-slate-500"
-                >
+                <TableCell colSpan={6} className="py-10 text-center text-slate-500">
                   {t("empty")}
                 </TableCell>
               </TableRow>
@@ -287,30 +298,18 @@ export function LaborBillRateCards(props: {
                     >
                       {card.name}
                     </Link>
-                    <div className="font-mono text-xs text-slate-400">
-                      {card.code}
-                    </div>
+                    <div className="font-mono text-xs text-slate-400">{card.code}</div>
                   </TableCell>
                   <TableCell>{card.currency}</TableCell>
                   <TableCell className="tabular-nums">
                     {card.effective_from} – {card.effective_to ?? "—"}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {card.line_count}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {card.assignment_count}
-                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{card.line_count}</TableCell>
+                  <TableCell className="text-right tabular-nums">{card.assignment_count}</TableCell>
                   <TableCell>
-                    <Badge
-                      variant={
-                        card.status === "active" ? "success" : "secondary"
-                      }
-                    >
+                    <Badge variant={card.status === "active" ? "success" : "secondary"}>
                       {common(
-                        card.status === "retired"
-                          ? "status.inactive"
-                          : `status.${card.status}`,
+                        card.status === "retired" ? "status.inactive" : `status.${card.status}`,
                       )}
                     </Badge>
                   </TableCell>
@@ -388,7 +387,6 @@ function RateCardDrawer(
     [props.options, itemOptions],
   );
 
-
   async function save() {
     setBusy(true);
     try {
@@ -408,8 +406,9 @@ function RateCardDrawer(
         const code = typeof failure?.errorCode === "string" ? failure.errorCode : "save";
         // Mapped codes keep their copy (see the create branch above).
         toast.error(
-          (t.has(`errors.${code}` as never) ? t(`errors.${code}` as never) : null)
-          ?? refusalMessageFromBody(failure, { fallback: t("errors.save") }) ?? t("errors.save"),
+          (t.has(`errors.${code}` as never) ? t(`errors.${code}` as never) : null) ??
+            refusalMessageFromBody(failure, { fallback: t("errors.save") }) ??
+            t("errors.save"),
         );
         return;
       }
@@ -524,12 +523,7 @@ function RateCardDrawer(
           editing={editing}
           t={t}
         />
-        <TermsSection
-          draft={draft}
-          setDraft={setDraft}
-          editing={editing}
-          t={t}
-        />
+        <TermsSection draft={draft} setDraft={setDraft} editing={editing} t={t} />
       </div>
     </TransactionDrawer>
   );
@@ -549,9 +543,7 @@ function renderHeaderField(args: {
   common: ReturnType<typeof useTranslations>;
 }) {
   const { placement, editable, draft, setDraft, props, t, common } = args;
-  const customKey = placement.key.startsWith("cf_")
-    ? placement.key.slice(3)
-    : null;
+  const customKey = placement.key.startsWith("cf_") ? placement.key.slice(3) : null;
   if (customKey) {
     const def = props.customFieldDefs.find((x) => x.key === customKey);
     if (!def) return null;
@@ -579,8 +571,7 @@ function renderHeaderField(args: {
     status: t("status"),
     derivation_policy: t("derivation"),
   };
-  const label =
-    placement.labelOverride || labels[placement.key] || placement.key;
+  const label = placement.labelOverride || labels[placement.key] || placement.key;
   const value =
     placement.key === "effective_from"
       ? draft.effective_from
@@ -590,10 +581,7 @@ function renderHeaderField(args: {
           ? draft.derivation_policy
           : placement.key === "rate_book_id"
             ? draft.rate_book_id
-            : String(
-                (draft as unknown as Record<string, unknown>)[placement.key] ??
-                  "",
-              );
+            : String((draft as unknown as Record<string, unknown>)[placement.key] ?? "");
   const set = (v: string) =>
     setDraft((row) => ({
       ...row,
@@ -611,11 +599,7 @@ function renderHeaderField(args: {
         label={label}
         value={
           placement.key === "status"
-            ? common(
-                draft.status === "retired"
-                  ? "status.inactive"
-                  : `status.${draft.status}`,
-              )
+            ? common(draft.status === "retired" ? "status.inactive" : `status.${draft.status}`)
             : placement.key === "derivation_policy"
               ? t(`derivations.${draft.derivation_policy}`)
               : value || "—"
@@ -650,12 +634,10 @@ function renderHeaderField(args: {
             </option>
           ))}
         </Select>
+      ) : placement.key.startsWith("effective_") ? (
+        <DateField value={value} onChange={(next) => set(next)} />
       ) : (
-        placement.key.startsWith("effective_") ? (
-          <DateField value={value} onChange={(next) => set(next)} />
-        ) : (
-          <Input value={value} onChange={(e) => set(e.target.value)} />
-        )
+        <Input value={value} onChange={(e) => set(e.target.value)} />
       )}
     </div>
   );
@@ -674,10 +656,7 @@ function ScopeSection({
   editing: boolean;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const setScope = (
-    i: number,
-    patch: Partial<BillCardDetail["scopes"][number]>,
-  ) =>
+  const setScope = (i: number, patch: Partial<BillCardDetail["scopes"][number]>) =>
     setDraft((row) => ({
       ...row,
       scopes: row.scopes.map((x, n) => (n === i ? { ...x, ...patch } : x)),
@@ -772,9 +751,7 @@ function ScopeSection({
                       <input
                         type="checkbox"
                         checked={s.includeChildren}
-                        onChange={(e) =>
-                          setScope(i, { includeChildren: e.target.checked })
-                        }
+                        onChange={(e) => setScope(i, { includeChildren: e.target.checked })}
                       />
                     </TableCell>
                     <TableCell>
@@ -842,17 +819,12 @@ function LineSection({
   layout: FormLayoutConfig;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const { money } = useMoney()
+  const { money } = useMoney();
   const extras = timeTypes.filter((x) => Number(x.bill_multiplier) !== 1);
-  const visible = new Set(
-    layout.lines.columns.filter((x) => x.visible).map((x) => x.key),
-  );
+  const visible = new Set(layout.lines.columns.filter((x) => x.visible).map((x) => x.key));
   const showItem = visible.has("item_id"),
     showRate = visible.has("bill_rate");
-  const setLine = (
-    i: number,
-    patch: Partial<BillCardDetail["lines"][number]>,
-  ) =>
+  const setLine = (i: number, patch: Partial<BillCardDetail["lines"][number]>) =>
     setDraft((row) => ({
       ...row,
       lines: row.lines.map((x, n) => (n === i ? { ...x, ...patch } : x)),
@@ -864,9 +836,7 @@ function LineSection({
           <TableHeader>
             <TableRow>
               {showItem ? <TableHead>{t("item")}</TableHead> : null}
-              {showRate ? (
-                <TableHead className="text-right">{t("regular")}</TableHead>
-              ) : null}
+              {showRate ? <TableHead className="text-right">{t("regular")}</TableHead> : null}
               {extras.map((tt) => (
                 <TableHead key={tt.id} className="text-right">
                   {tt.name}
@@ -884,9 +854,7 @@ function LineSection({
                       <Select
                         value={line.itemId}
                         onChange={(e) => {
-                          const item = items.find(
-                            (x) => x.id === e.target.value,
-                          );
+                          const item = items.find((x) => x.id === e.target.value);
                           setLine(i, {
                             itemId: e.target.value,
                             itemName: item?.name ?? "",
@@ -911,12 +879,10 @@ function LineSection({
                         className="text-right tabular-nums"
                         inputMode="decimal"
                         value={line.regular ?? ""}
-                        onChange={(e) =>
-                          setLine(i, { regular: e.target.value })
-                        }
+                        onChange={(e) => setLine(i, { regular: e.target.value })}
                       />
                     ) : (
-                      money(line.regular, { currency: draft.currency, currencyDisplay: 'code' })
+                      money(line.regular, { currency: draft.currency, currencyDisplay: "code" })
                     )}
                   </TableCell>
                 ) : null}
@@ -937,10 +903,10 @@ function LineSection({
                         }
                       />
                     ) : (
-                      money(
-                        line.timeTypeRates?.[tt.id] ?? null,
-                        { currency: draft.currency, currencyDisplay: 'code' },
-                      )
+                      money(line.timeTypeRates?.[tt.id] ?? null, {
+                        currency: draft.currency,
+                        currencyDisplay: "code",
+                      })
                     )}
                   </TableCell>
                 ))}
@@ -1008,15 +974,10 @@ function AdjustmentSection({
   editing: boolean;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const setAdjustment = (
-    i: number,
-    patch: Partial<BillCardDetail["adjustments"][number]>,
-  ) =>
+  const setAdjustment = (i: number, patch: Partial<BillCardDetail["adjustments"][number]>) =>
     setDraft((row) => ({
       ...row,
-      adjustments: row.adjustments.map((x, n) =>
-        n === i ? { ...x, ...patch } : x,
-      ),
+      adjustments: row.adjustments.map((x, n) => (n === i ? { ...x, ...patch } : x)),
     }));
   const targetLabel = (x: ApplicabilityTarget) =>
     `${t(`targetTypes.${x.targetType}`)} · ${x.targetLabel ?? x.targetValueText ?? t("unknownValue")}`;
@@ -1032,22 +993,15 @@ function AdjustmentSection({
               >
                 <div className="flex items-center justify-between">
                   <div className="font-medium">{a.name}</div>
-                  <Badge variant="outline">
-                    {t(`categories.${a.category}`)}
-                  </Badge>
+                  <Badge variant="outline">{t(`categories.${a.category}`)}</Badge>
                 </div>
                 <div className="mt-1 text-xs text-slate-500">
-                  {a.targets.length
-                    ? a.targets.map(targetLabel).join(" · ")
-                    : t("wholeCard")}{" "}
-                  · {t(`calculations.${a.calculation}`)}
+                  {a.targets.length ? a.targets.map(targetLabel).join(" · ") : t("wholeCard")} ·{" "}
+                  {t(`calculations.${a.calculation}`)}
                   {a.value != null ? ` · ${a.value}` : ""}
-                  {a.unit ? ` ${a.unit}` : ""} ·{" "}
-                  {t(`presentations.${a.presentation}`)}
+                  {a.unit ? ` ${a.unit}` : ""} · {t(`presentations.${a.presentation}`)}
                 </div>
-                {a.referenceText ? (
-                  <p className="mt-2 text-sm">{a.referenceText}</p>
-                ) : null}
+                {a.referenceText ? <p className="mt-2 text-sm">{a.referenceText}</p> : null}
               </div>
             ))}
           </div>
@@ -1075,34 +1029,26 @@ function AdjustmentSection({
                     <TableCell>
                       <Input
                         value={a.name}
-                        onChange={(e) =>
-                          setAdjustment(i, { name: e.target.value })
-                        }
+                        onChange={(e) => setAdjustment(i, { name: e.target.value })}
                       />
                       <Input
                         className="mt-1 font-mono text-xs"
                         aria-label={t("adjustmentCode")}
                         value={a.code}
-                        onChange={(e) =>
-                          setAdjustment(i, { code: e.target.value })
-                        }
+                        onChange={(e) => setAdjustment(i, { code: e.target.value })}
                       />
                       <Textarea
                         className="mt-1"
                         rows={2}
                         aria-label={t("referenceText")}
                         value={a.referenceText ?? ""}
-                        onChange={(e) =>
-                          setAdjustment(i, { referenceText: e.target.value })
-                        }
+                        onChange={(e) => setAdjustment(i, { referenceText: e.target.value })}
                       />
                     </TableCell>
                     <TableCell>
                       <Select
                         value={a.category}
-                        onChange={(e) =>
-                          setAdjustment(i, { category: e.target.value })
-                        }
+                        onChange={(e) => setAdjustment(i, { category: e.target.value })}
                       >
                         {ADJUSTMENT_CATEGORIES.map((x) => (
                           <option key={x} value={x}>
@@ -1155,18 +1101,14 @@ function AdjustmentSection({
                           {t("addTarget")}
                         </Button>
                         {a.targets.length === 0 ? (
-                          <div className="text-xs text-slate-500">
-                            {t("wholeCard")}
-                          </div>
+                          <div className="text-xs text-slate-500">{t("wholeCard")}</div>
                         ) : null}
                       </div>
                     </TableCell>
                     <TableCell>
                       <Select
                         value={a.calculation}
-                        onChange={(e) =>
-                          setAdjustment(i, { calculation: e.target.value })
-                        }
+                        onChange={(e) => setAdjustment(i, { calculation: e.target.value })}
                       >
                         {ADJUSTMENT_CALCULATIONS.map((x) => (
                           <option key={x} value={x}>
@@ -1188,9 +1130,7 @@ function AdjustmentSection({
                               inputMode="decimal"
                               className="text-right tabular-nums"
                               value={a.value ?? ""}
-                              onChange={(e) =>
-                                setAdjustment(i, { value: e.target.value })
-                              }
+                              onChange={(e) => setAdjustment(i, { value: e.target.value })}
                             />
                             {a.calculation === "percent" ? (
                               <span className="text-muted-foreground text-sm">%</span>
@@ -1201,9 +1141,7 @@ function AdjustmentSection({
                               className="mt-1"
                               aria-label={t("adjustmentUnit")}
                               value={a.unit ?? ""}
-                              onChange={(e) =>
-                                setAdjustment(i, { unit: e.target.value })
-                              }
+                              onChange={(e) => setAdjustment(i, { unit: e.target.value })}
                             />
                           )}
                         </>
@@ -1212,9 +1150,7 @@ function AdjustmentSection({
                     <TableCell>
                       <Select
                         value={a.presentation}
-                        onChange={(e) =>
-                          setAdjustment(i, { presentation: e.target.value })
-                        }
+                        onChange={(e) => setAdjustment(i, { presentation: e.target.value })}
                       >
                         {ADJUSTMENT_PRESENTATIONS.map((x) => (
                           <option key={x} value={x}>
@@ -1231,9 +1167,7 @@ function AdjustmentSection({
                         onClick={() =>
                           setDraft((row) => ({
                             ...row,
-                            adjustments: row.adjustments.filter(
-                              (_, n) => n !== i,
-                            ),
+                            adjustments: row.adjustments.filter((_, n) => n !== i),
                           }))
                         }
                       >
@@ -1306,9 +1240,7 @@ function TargetEditor({
             // All-labor / all-materials selectors carry their echo text so
             // the row stays displayable and saveable; the save re-derives it.
             targetValueText:
-              e.target.value === "labor" || e.target.value === "material"
-                ? e.target.value
-                : null,
+              e.target.value === "labor" || e.target.value === "material" ? e.target.value : null,
             targetLabel: null,
           })
         }
@@ -1364,12 +1296,7 @@ function TargetEditor({
           ))}
         </Select>
       )}
-      <Button
-        variant="ghost"
-        size="sm"
-        aria-label={t("removeTarget")}
-        onClick={onRemove}
-      >
+      <Button variant="ghost" size="sm" aria-label={t("removeTarget")} onClick={onRemove}>
         <Trash2 size={14} />
       </Button>
     </div>
@@ -1387,10 +1314,7 @@ function TermsSection({
   editing: boolean;
   t: ReturnType<typeof useTranslations>;
 }) {
-  const setTerm = (
-    i: number,
-    patch: Partial<BillCardDetail["terms"][number]>,
-  ) =>
+  const setTerm = (i: number, patch: Partial<BillCardDetail["terms"][number]>) =>
     setDraft((row) => ({
       ...row,
       terms: row.terms.map((x, n) => (n === i ? { ...x, ...patch } : x)),
@@ -1402,12 +1326,8 @@ function TermsSection({
           <div className="space-y-3">
             {draft.terms.map((term, i) => (
               <div key={term.id ?? i}>
-                <div className="text-xs font-medium text-slate-500">
-                  {term.label}
-                </div>
-                <div className="whitespace-pre-wrap text-sm">
-                  {term.content}
-                </div>
+                <div className="text-xs font-medium text-slate-500">{term.label}</div>
+                <div className="whitespace-pre-wrap text-sm">{term.content}</div>
               </div>
             ))}
           </div>
@@ -1449,9 +1369,7 @@ function TermsSection({
                   <TableCell>
                     <Select
                       value={term.placement}
-                      onChange={(e) =>
-                        setTerm(i, { placement: e.target.value })
-                      }
+                      onChange={(e) => setTerm(i, { placement: e.target.value })}
                     >
                       {["header", "conditions", "footer"].map((x) => (
                         <option key={x} value={x}>
@@ -1505,24 +1423,14 @@ function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-xs text-slate-500">{label}</div>
-      <div className="font-medium text-slate-900 dark:text-slate-100">
-        {value}
-      </div>
+      <div className="font-medium text-slate-900 dark:text-slate-100">{value}</div>
     </div>
   );
 }
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="space-y-2">
-      <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-        {title}
-      </h4>
+      <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</h4>
       {children}
     </section>
   );

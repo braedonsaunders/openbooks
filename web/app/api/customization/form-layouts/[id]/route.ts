@@ -21,10 +21,9 @@ import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
 
-const layoutBody = z.json().refine(
-  (value) => parseFormLayout(value).success,
-  "layout must match the form layout schema",
-);
+const layoutBody = z
+  .json()
+  .refine((value) => parseFormLayout(value).success, "layout must match the form layout schema");
 
 async function loadOwn(orgId: string, id: string) {
   if (!isUuid(id)) return null;
@@ -37,11 +36,14 @@ async function loadOwn(orgId: string, id: string) {
     isActive: boolean;
     allowedRoles: unknown;
     layout: unknown;
-  }>(sql`
+  }>(
+    sql`
     select id, record_type as "recordType", name, description, is_default as "isDefault",
            is_active as "isActive", allowed_roles as "allowedRoles", layout
       from form_layouts where org_id = ${orgId} and id = ${id}
-  `, "objects");
+  `,
+    "objects",
+  );
   return r[0] ?? null;
 }
 
@@ -54,14 +56,10 @@ export const GET = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
     const row = await loadOwn(gate.user.orgId, id);
     if (!row) return notFound("record");
-    const refused = await refuseDisabledRecordType(
-      gate.user.orgId,
-      row.recordType,
-    );
+    const refused = await refuseDisabledRecordType(gate.user.orgId, row.recordType);
     if (refused) return refused;
     return NextResponse.json(row);
   },
@@ -79,23 +77,23 @@ export const PATCH = defineRoute({
       name: z.string().trim().min(1, "name cannot be empty").max(200).optional(),
       description: z.string().trim().max(2000).nullable().optional(),
       layout: layoutBody.optional(),
-      allowedRoles: z.array(uuidString("allowedRoles must contain role UUIDs"), { error: "allowedRoles must be a list of UUID role ids" }).nullable().optional(),
-    isDefault: z.boolean({ error: "isDefault must be a boolean" }).optional(),
-    isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
+      allowedRoles: z
+        .array(uuidString("allowedRoles must contain role UUIDs"), {
+          error: "allowedRoles must be a list of UUID role ids",
+        })
+        .nullable()
+        .optional(),
+      isDefault: z.boolean({ error: "isDefault must be a boolean" }).optional(),
+      isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
     })
     .refine((body) => Object.keys(body).length > 0, "provide at least one form field to update"),
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { user } = gate;
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
     const existing = await loadOwn(user.orgId, id);
-    if (!existing)
-      return notFound("record");
-    const refused = await refuseDisabledRecordType(
-      user.orgId,
-      existing.recordType,
-    );
+    if (!existing) return notFound("record");
+    const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
     if (refused) return refused;
 
     const body = routeBody as {
@@ -109,20 +107,14 @@ export const PATCH = defineRoute({
     let proposedLayout: FormLayoutConfig | undefined;
     const sets: ReturnType<typeof sql>[] = [];
     if (body.name !== undefined && typeof body.name !== "string") {
-      return NextResponse.json(
-        { error: "name must be a string" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "name must be a string" }, { status: 400 });
     }
     // A supplied name is an explicit write. Collection POST already refuses
     // !body.name?.trim(); dropping whitespace here would report
     // {ok:true, changed:false} (or apply sibling fields) as if the operator
     // asked for a no-op. Refuse by name instead.
     if (body.name !== undefined && !body.name.trim()) {
-      return NextResponse.json(
-        { error: "name cannot be empty" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
     }
     if (body.name !== undefined) {
       const name = body.name.trim();
@@ -157,10 +149,7 @@ export const PATCH = defineRoute({
       // isActive outside the boolean domain would otherwise reach the column
       // and either coerce silently or abort with an unhandled storage 500.
       if (typeof body.isActive !== "boolean") {
-        return NextResponse.json(
-          { error: "isActive must be a boolean" },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
       }
       sets.push(sql`is_active = ${body.isActive}`);
     }
@@ -181,10 +170,7 @@ export const PATCH = defineRoute({
     }
     if (body.isDefault !== undefined) {
       if (typeof body.isDefault !== "boolean") {
-        return NextResponse.json(
-          { error: "isDefault must be a boolean" },
-          { status: 400 },
-        );
+        return NextResponse.json({ error: "isDefault must be a boolean" }, { status: 400 });
       }
       sets.push(sql`is_default = ${body.isDefault}`);
     }
@@ -199,36 +185,35 @@ export const PATCH = defineRoute({
       ...requestFlags,
     });
     if (!requestRefusal.ok)
-      return NextResponse.json(
-        { error: requestRefusal.error },
-        { status: 400 },
-      );
-    if (sets.length === 0)
-      return NextResponse.json({ ok: true, changed: false });
+      return NextResponse.json({ error: requestRefusal.error }, { status: 400 });
+    if (sets.length === 0) return NextResponse.json({ ok: true, changed: false });
 
-    const nextDefaultSql =
-      body.isDefault !== undefined ? sql`${body.isDefault}` : sql`is_default`;
-    const nextActiveSql =
-      body.isActive !== undefined ? sql`${body.isActive}` : sql`is_active`;
+    const nextDefaultSql = body.isDefault !== undefined ? sql`${body.isDefault}` : sql`is_default`;
+    const nextActiveSql = body.isActive !== undefined ? sql`${body.isActive}` : sql`is_active`;
 
     try {
       // db.execute goes through the pool (each statement may land on a different
       // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
       const updated = await db.transaction(async (tx) => {
-        const locked = (await tx.execute<{
+        const locked = (
+          await tx.execute<{
             id: string;
             recordType: string;
             isDefault: boolean;
             isActive: boolean;
             snapshot: Record<string, unknown>;
             layout: unknown;
-          }>(sql`
+          }>(
+            sql`
         select id, record_type as "recordType",
                is_default as "isDefault", is_active as "isActive",
                to_jsonb(form_layouts) as snapshot, layout
           from form_layouts
          where id = ${id} and org_id = ${user.orgId}
-         for update`, "objects"))[0];
+         for update`,
+            "objects",
+          )
+        )[0];
         if (!locked) return { kind: "not_found" as const };
         if (proposedLayout) {
           const currentLayout = parseFormLayout(locked.layout);
@@ -258,14 +243,19 @@ export const PATCH = defineRoute({
              and is_default and id <> ${id}`);
         // Next-state default+inactive must match zero rows even if the JS
         // refusal is skipped — refuse by name, never {ok:true}.
-        const written = (await tx.execute<{
+        const written = (
+          await tx.execute<{
             id: string;
             snapshot: Record<string, unknown>;
-          }>(sql`
+          }>(
+            sql`
         update form_layouts set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
          where id = ${id} and org_id = ${user.orgId}
            and not (${nextDefaultSql} and not ${nextActiveSql})
-         returning id, to_jsonb(form_layouts) as snapshot`, "objects"))[0];
+         returning id, to_jsonb(form_layouts) as snapshot`,
+            "objects",
+          )
+        )[0];
         if (!written) {
           return {
             kind: "inactive_default" as const,
@@ -281,8 +271,7 @@ export const PATCH = defineRoute({
         values (${user.orgId}, 'form_layouts', ${id}, 'update', ${JSON.stringify({ before: locked.snapshot, after: written.snapshot })}, ${user.id})`);
         return { kind: "ok" as const };
       });
-      if (updated.kind === "not_found")
-        return notFound("record");
+      if (updated.kind === "not_found") return notFound("record");
       if (updated.kind === "locked_entries")
         return NextResponse.json(
           { error: "locked built-in fields cannot be changed" },
@@ -312,24 +301,22 @@ export const DELETE = defineRoute({
   handler: async ({ request: _req, authz: gate, params }) => {
     const { user } = gate;
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
+    if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
     const existing = await loadOwn(user.orgId, id);
-    if (!existing)
-      return notFound("record");
-    const refused = await refuseDisabledRecordType(
-      user.orgId,
-      existing.recordType,
-    );
+    if (!existing) return notFound("record");
+    const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
     if (refused) return refused;
     // Delete + audit in one transaction so the two can't diverge (db.execute
     // pools per-statement). audit_log.changes is jsonb NOT NULL, and a bare name
     // cannot reconstruct the deleted form — so the delete returns the full row
     // as the before-image ({before, after: null}).
     const deleted = await db.transaction(async (tx) => {
-      const r = await tx.execute<{ snapshot: Record<string, unknown> }>(sql`
+      const r = await tx.execute<{ snapshot: Record<string, unknown> }>(
+        sql`
       delete from form_layouts where id = ${id} and org_id = ${user.orgId}
-        returning to_jsonb(form_layouts) as snapshot`, "objects");
+        returning to_jsonb(form_layouts) as snapshot`,
+        "objects",
+      );
       const row = r[0];
       if (!row) return null;
       await tx.execute(sql`
@@ -337,8 +324,7 @@ export const DELETE = defineRoute({
       values (${user.orgId}, 'form_layouts', ${id}, 'delete', ${JSON.stringify({ before: row.snapshot, after: null })}, ${user.id})`);
       return row;
     });
-    if (!deleted)
-      return notFound("record");
+    if (!deleted) return notFound("record");
     return NextResponse.json({ ok: true });
   },
 });

@@ -15,12 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
-export const CRM_FORECAST_CATEGORIES = [
-  "omitted",
-  "worst_case",
-  "most_likely",
-  "upside",
-] as const;
+export const CRM_FORECAST_CATEGORIES = ["omitted", "worst_case", "most_likely", "upside"] as const;
 
 export const crmOpportunities = pgTable(
   "crm_opportunities",
@@ -61,31 +56,15 @@ export const crmOpportunities = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     custom: jsonb("custom").notNull().default({}),
     /** Strictly increasing OCC counter, see documents.revisionSeq (migration 0167). */
-    revisionSeq: bigint("revision_seq", { mode: "number" })
-      .notNull()
-      .default(0),
+    revisionSeq: bigint("revision_seq", { mode: "number" }).notNull().default(0),
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("crm_opportunities_org_number").on(
-      t.orgId,
-      t.opportunityNumber,
-    ),
-    index("crm_opportunities_pipeline").on(
-      t.orgId,
-      t.statusId,
-      t.expectedCloseDate,
-    ),
-    index("crm_opportunities_owner").on(
-      t.orgId,
-      t.ownerUserId,
-      t.expectedCloseDate,
-    ),
+    uniqueIndex("crm_opportunities_org_number").on(t.orgId, t.opportunityNumber),
+    index("crm_opportunities_pipeline").on(t.orgId, t.statusId, t.expectedCloseDate),
+    index("crm_opportunities_owner").on(t.orgId, t.ownerUserId, t.expectedCloseDate),
     index("crm_opportunities_party").on(t.orgId, t.partyId),
-    check(
-      "crm_opportunity_probability",
-      sql`${t.probability} >= 0 and ${t.probability} <= 100`,
-    ),
+    check("crm_opportunity_probability", sql`${t.probability} >= 0 and ${t.probability} <= 100`),
     check(
       "crm_opportunity_amounts",
       sql`${t.projectedAmount} >= 0 and ${t.weightedAmount} >= 0 and (${t.rangeLow} is null or ${t.rangeLow} >= 0) and (${t.rangeHigh} is null or ${t.rangeHigh} >= 0) and (${t.rangeLow} is null or ${t.rangeHigh} is null or ${t.rangeHigh} >= ${t.rangeLow})`,
@@ -160,21 +139,16 @@ export const crmSalesQuotas = pgTable("crm_sales_quotas", {
   revision: integer("revision").notNull().default(1),
   ...auditColumns,
 });
-export const crmSalesTerritoryVersions = pgTable(
-  "crm_sales_territory_versions",
-  {
-    id: id(),
-    orgId: orgRef(),
-    territoryId: uuid("territory_id").notNull(),
-    revision: integer("revision").notNull(),
-    effectiveFrom: date("effective_from").notNull(),
-    definition: jsonb("definition").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    createdBy: uuid("created_by"),
-  },
-);
+export const crmSalesTerritoryVersions = pgTable("crm_sales_territory_versions", {
+  id: id(),
+  orgId: orgRef(),
+  territoryId: uuid("territory_id").notNull(),
+  revision: integer("revision").notNull(),
+  effectiveFrom: date("effective_from").notNull(),
+  definition: jsonb("definition").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdBy: uuid("created_by"),
+});
 export const crmSalesEvidence = pgTable("crm_sales_evidence", {
   id: id(),
   orgId: orgRef(),
@@ -191,8 +165,6 @@ export const crmSalesEvidence = pgTable("crm_sales_evidence", {
   amount: money("amount").notNull(),
   effectiveDate: date("effective_date"),
   reversesId: uuid("reverses_id"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   createdBy: uuid("created_by"),
 });

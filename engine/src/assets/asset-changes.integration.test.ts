@@ -16,16 +16,8 @@ import {
 } from "../testing/fixtures.ts";
 import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
 import { decideGate } from "../flows/gates.ts";
-import {
-  buildSchedule,
-  runDepreciation,
-  recordDepreciationInput,
-} from "./depreciation.ts";
-import {
-  proposeAssetChange,
-  applyAssetChange,
-  type AssetChangeInput,
-} from "./asset-changes.ts";
+import { buildSchedule, runDepreciation, recordDepreciationInput } from "./depreciation.ts";
+import { proposeAssetChange, applyAssetChange, type AssetChangeInput } from "./asset-changes.ts";
 import { disposeAsset, remeasureAsset } from "./asset-lifecycle.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 type Fixture = {
@@ -43,9 +35,12 @@ async function fixture(work: (f: Fixture) => Promise<void>, postJuly = true) {
     await db.execute(
       sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.submitterId},'assets.manage','grant')`,
     );
-    const calendar = (await db.execute<{ id: string }>(
-        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`, "objects",
-      ))[0]!.id;
+    const calendar = (
+      await db.execute<{ id: string }>(
+        sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`,
+        "objects",
+      )
+    )[0]!.id;
     for (const [month, last] of [
       ["08", "31"],
       ["09", "30"],
@@ -61,12 +56,7 @@ async function fixture(work: (f: Fixture) => Promise<void>, postJuly = true) {
     );
     await buildSchedule(assetId, org.orgId, actors.submitterId, org.bookId);
     if (postJuly) {
-      const result = await runDepreciation(
-        org.orgId,
-        "2026-07-31",
-        actors.submitterId,
-        assetId,
-      );
+      const result = await runDepreciation(org.orgId, "2026-07-31", actors.submitterId, assetId);
       assert.equal(result.posted, 1);
       assert.deepEqual(result.problems, []);
     }
@@ -82,16 +72,12 @@ async function fixture(work: (f: Fixture) => Promise<void>, postJuly = true) {
     await dropScratchOrg(org.orgId);
   }
 }
-function input(
-  f: Fixture,
-  patch: Partial<AssetChangeInput> = {},
-): AssetChangeInput {
+function input(f: Fixture, patch: Partial<AssetChangeInput> = {}): AssetChangeInput {
   return {
     operation: "partial_disposal",
     effectiveOn: "2026-08-01",
     reason: "Sold one quarter of the homogeneous production fixtures",
-    assessment:
-      "Identical components have equal cost and service; one quarter is derecognized",
+    assessment: "Identical components have equal cost and service; one quarter is derecognized",
     idempotencyKey: randomUUID(),
     portion: { percent: "25" },
     proceeds: "600",
@@ -101,9 +87,12 @@ function input(
 }
 async function approve(f: Fixture, id: string) {
   await submitFinancialChange(f.org.orgId, id, f.actors.submitterId);
-  const gate = (await db.execute<{ id: string }>(
-      sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`, "objects",
-    ))[0]!;
+  const gate = (
+    await db.execute<{ id: string }>(
+      sql`select id from flow_gates where org_id=${f.org.orgId} and subject_id=${id} and status='pending'`,
+      "objects",
+    )
+  )[0]!;
   await decideGate({
     gateId: gate.id,
     userId: f.actors.approver1Id,
@@ -111,13 +100,16 @@ async function approve(f: Fixture, id: string) {
   });
 }
 async function carrying(f: Fixture) {
-  return (await db.execute<{
+  return (
+    await db.execute<{
       cost: string;
       accumulated: string;
       carrying_value: string;
     }>(
-      sql`select cost::text,accumulated::text,carrying_value::text from asset_book_carrying_values where org_id=${f.org.orgId} and asset_id=${f.assetId} and book_id=${f.org.bookId}`, "objects",
-    ))[0]!;
+      sql`select cost::text,accumulated::text,carrying_value::text from asset_book_carrying_values where org_id=${f.org.orgId} and asset_id=${f.assetId} and book_id=${f.org.bookId}`,
+      "objects",
+    )
+  )[0]!;
 }
 async function rehomeTestAsset(orgId: string, assetId: string, subsidiaryId: string) {
   await db.transaction(async (tx) => {
@@ -137,53 +129,30 @@ test(
   () =>
     fixture(async (f) => {
       const old = await db.execute(
-          sql`select l.* from depreciation_schedule_lines l join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id where s.org_id=${f.org.orgId} and s.asset_id=${f.assetId} and l.posted_amount is not null`, "objects",
-        );
+        sql`select l.* from depreciation_schedule_lines l join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id where s.org_id=${f.org.orgId} and s.asset_id=${f.assetId} and l.posted_amount is not null`,
+        "objects",
+      );
       const p = input(f),
-        id = await proposeAssetChange(
-          f.org.orgId,
-          f.assetId,
-          f.actors.submitterId,
-          p,
-        );
+        id = await proposeAssetChange(f.org.orgId, f.assetId, f.actors.submitterId, p);
       await assert.rejects(
         () => applyAssetChange(f.org.orgId, id, f.actors.submitterId),
         /approval policy/,
       );
       await approve(f, id);
-      const result = await applyAssetChange(
-        f.org.orgId,
-        id,
-        f.actors.submitterId,
-      );
-      assert.deepEqual(
-        await applyAssetChange(f.org.orgId, id, f.actors.submitterId),
-        result,
-      );
-      assert.equal(
-        await proposeAssetChange(
-          f.org.orgId,
-          f.assetId,
-          f.actors.submitterId,
-          p,
-        ),
-        id,
-      );
+      const result = await applyAssetChange(f.org.orgId, id, f.actors.submitterId);
+      assert.deepEqual(await applyAssetChange(f.org.orgId, id, f.actors.submitterId), result);
+      assert.equal(await proposeAssetChange(f.org.orgId, f.assetId, f.actors.submitterId, p), id);
       assert.deepEqual(await carrying(f), {
         cost: "2250.0000",
         accumulated: "750.0000",
         carrying_value: "1500.0000",
       });
       const retained = await db.execute(
-          sql`select l.* from depreciation_schedule_lines l join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id where s.org_id=${f.org.orgId} and s.asset_id=${f.assetId} and l.posted_amount is not null`, "objects",
-        );
-      assert.deepEqual(retained, old);
-      await buildSchedule(
-        f.assetId,
-        f.org.orgId,
-        f.actors.submitterId,
-        f.org.bookId,
+        sql`select l.* from depreciation_schedule_lines l join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id where s.org_id=${f.org.orgId} and s.asset_id=${f.assetId} and l.posted_amount is not null`,
+        "objects",
       );
+      assert.deepEqual(retained, old);
+      await buildSchedule(f.assetId, f.org.orgId, f.actors.submitterId, f.org.bookId);
       const future = await runDepreciation(
         f.org.orgId,
         "2026-09-30",
@@ -193,9 +162,12 @@ test(
       assert.deepEqual(future.problems, []);
       assert.equal(future.totalAmount, "1500.0000");
       assert.equal((await carrying(f)).carrying_value, "0.0000");
-      const cost = (await db.execute<{ cost: string }>(
-          sql`select acquisition_cost::text as cost from fixed_assets where org_id=${f.org.orgId} and id=${f.assetId}`, "objects",
-        ))[0]!.cost;
+      const cost = (
+        await db.execute<{ cost: string }>(
+          sql`select acquisition_cost::text as cost from fixed_assets where org_id=${f.org.orgId} and id=${f.assetId}`,
+          "objects",
+        )
+      )[0]!.cost;
       assert.equal(cost, "3000.0000");
     }),
 );
@@ -204,12 +176,7 @@ test(
   { skip: !DB },
   () =>
     fixture(async (f) => {
-      const id = await proposeAssetChange(
-        f.org.orgId,
-        f.assetId,
-        f.actors.submitterId,
-        input(f),
-      );
+      const id = await proposeAssetChange(f.org.orgId, f.assetId, f.actors.submitterId, input(f));
       await approve(f, id);
       await applyAssetChange(f.org.orgId, id, f.actors.submitterId);
       const sale = await disposeAsset(f.org.orgId, f.assetId, {
@@ -222,35 +189,32 @@ test(
       assert.equal(sale.gainLoss, "100.0000");
     }),
 );
-test(
-  "unposted earlier depreciation refuses by book and period",
-  { skip: !DB },
-  () =>
-    fixture(async (f) => {
-      await assert.rejects(
-        () =>
-          proposeAssetChange(
-            f.org.orgId,
-            f.assetId,
-            f.actors.submitterId,
-            input(f, { effectiveOn: "2026-09-01" }),
-          ),
-        /run depreciation for Primary through 2026-08-31 before proposing this change/,
-      );
-      const remaining = (await db.execute<{ n: number }>(sql`
+test("unposted earlier depreciation refuses by book and period", { skip: !DB }, () =>
+  fixture(async (f) => {
+    await assert.rejects(
+      () =>
+        proposeAssetChange(
+          f.org.orgId,
+          f.assetId,
+          f.actors.submitterId,
+          input(f, { effectiveOn: "2026-09-01" }),
+        ),
+      /run depreciation for Primary through 2026-08-31 before proposing this change/,
+    );
+    const remaining = (
+      await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n from financial_changes where org_id=${f.org.orgId}
-      `, "objects"))[0]!;
-      assert.equal(remaining.n, 0, "refused depreciation readiness must not leave a change proposal");
-    }),
+      `,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(remaining.n, 0, "refused depreciation readiness must not leave a change proposal");
+  }),
 );
 test("a stale independently approved change cannot post", { skip: !DB }, () =>
   fixture(async (f) => {
-    const id = await proposeAssetChange(
-      f.org.orgId,
-      f.assetId,
-      f.actors.submitterId,
-      input(f),
-    );
+    const id = await proposeAssetChange(f.org.orgId, f.assetId, f.actors.submitterId, input(f));
     await approve(f, id);
     await db.execute(
       sql`update fixed_assets set name='New evidence after approval',updated_at=clock_timestamp() where org_id=${f.org.orgId} and id=${f.assetId}`,
@@ -274,21 +238,12 @@ test(
         input(f, { effectiveOn: "2026-07-16", proceeds: "0" }),
       );
       await approve(f, id);
-      const result = await applyAssetChange(
-        f.org.orgId,
-        id,
-        f.actors.submitterId,
-      );
+      const result = await applyAssetChange(f.org.orgId, id, f.actors.submitterId);
       assert.equal((result.entryIds as string[]).length, 2);
       const value = await carrying(f);
       assert.equal(value.cost, "2250.0000");
       assert.equal(value.accumulated, "362.9032");
-      await runDepreciation(
-        f.org.orgId,
-        "2026-09-30",
-        f.actors.submitterId,
-        f.assetId,
-      );
+      await runDepreciation(f.org.orgId, "2026-09-30", f.actors.submitterId, f.assetId);
       assert.equal((await carrying(f)).carrying_value, "0.0000");
     }, false),
 );
@@ -347,36 +302,32 @@ test(
             "Group retains original cost and remaining two-month service; internal profit creates 25 percent deductible temporary difference",
         },
       });
-      const id = await proposeAssetChange(
-        f.org.orgId,
-        f.assetId,
-        f.actors.submitterId,
-        request,
-      );
+      const id = await proposeAssetChange(f.org.orgId, f.assetId, f.actors.submitterId, request);
       await approve(f, id);
-      const applied = await applyAssetChange(
-        f.org.orgId,
-        id,
-        f.actors.submitterId,
-      );
+      const applied = await applyAssetChange(f.org.orgId, id, f.actors.submitterId);
       assert.equal((applied.entryIds as string[]).length, 2);
       const received = String(applied.receivingAssetId);
       assert.notEqual(received, f.assetId);
-      const target = (await db.execute<{
+      const target = (
+        await db.execute<{
           acquisition_cost: string;
           subsidiary_id: string;
           transferred_from_asset_id: string;
         }>(
-          sql`select acquisition_cost::text,subsidiary_id,transferred_from_asset_id from fixed_assets where org_id=${f.org.orgId} and id=${received}`, "objects",
-        ))[0]!;
+          sql`select acquisition_cost::text,subsidiary_id,transferred_from_asset_id from fixed_assets where org_id=${f.org.orgId} and id=${received}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(target.acquisition_cost, "2400.0000");
       assert.equal(target.subsidiary_id, buyer);
       assert.equal(target.transferred_from_asset_id, f.assetId);
-      const august = (await db.execute<{ id: string }>(
-          sql`select id from accounting_periods where org_id=${f.org.orgId} and name='2026-08'`, "objects",
-        ))[0]!.id;
-      const { consolidateAssetTransfers } =
-        await import("../consolidation/asset-transfers.ts");
+      const august = (
+        await db.execute<{ id: string }>(
+          sql`select id from accounting_periods where org_id=${f.org.orgId} and name='2026-08'`,
+          "objects",
+        )
+      )[0]!.id;
+      const { consolidateAssetTransfers } = await import("../consolidation/asset-transfers.ts");
       const first = await db.transaction((tx) =>
         consolidateAssetTransfers(tx, f.org.orgId, august, f.actors.adminId),
       );
@@ -405,9 +356,12 @@ test(
         ),
         [],
       );
-      const basis = (await db.execute<{ target_balances: Record<string, string> }>(
-          sql`select target_balances from asset_transfer_consolidation_entries where org_id=${f.org.orgId} and journal_entry_id=${updated[0]}`, "objects",
-        ))[0]!.target_balances;
+      const basis = (
+        await db.execute<{ target_balances: Record<string, string> }>(
+          sql`select target_balances from asset_transfer_consolidation_entries where org_id=${f.org.orgId} and journal_entry_id=${updated[0]}`,
+          "objects",
+        )
+      )[0]!.target_balances;
       assert.equal(basis[f.org.accounts.invAsset], "600.0000");
       assert.equal(basis[f.org.accounts.clearing], "-800.0000");
       assert.equal(basis[f.org.accounts.deferred], "50.0000");
@@ -419,18 +373,16 @@ test(
       await assert.rejects(
         () =>
           db.transaction((tx) =>
-            consolidateAssetTransfers(
-              tx,
-              f.org.orgId,
-              august,
-              f.actors.adminId,
-            ),
+            consolidateAssetTransfers(tx, f.org.orgId, august, f.actors.adminId),
           ),
         /Group valuation/,
       );
-      const sourceEvent = (await db.execute<{ id: string }>(
-          sql`select id from asset_events where org_id=${f.org.orgId} and asset_id=${received} and journal_entry_id=${impairment.entryId}`, "objects",
-        ))[0]!.id;
+      const sourceEvent = (
+        await db.execute<{ id: string }>(
+          sql`select id from asset_events where org_id=${f.org.orgId} and asset_id=${received} and journal_entry_id=${impairment.entryId}`,
+          "objects",
+        )
+      )[0]!.id;
       const { proposeAssetGroupValuation, applyAssetGroupValuation } =
         await import("./group-valuations.ts");
       const groupInput = {
@@ -440,8 +392,7 @@ test(
         buyerToGroupRate: "1",
         assessment:
           "Receiving book fair value decline remains above the retained group carrying basis",
-        reason:
-          "Independent group recoverability assessment after the legal valuation",
+        reason: "Independent group recoverability assessment after the legal valuation",
         idempotencyKey: randomUUID(),
         remainingPlan: [{ date: "2026-09-30", amount: "1000" }],
       };
@@ -452,12 +403,7 @@ test(
         groupInput,
       );
       await assert.rejects(
-        () =>
-          applyAssetGroupValuation(
-            f.org.orgId,
-            groupChange,
-            f.actors.submitterId,
-          ),
+        () => applyAssetGroupValuation(f.org.orgId, groupChange, f.actors.submitterId),
         /approval policy/,
       );
       await approve(f, groupChange);
@@ -468,20 +414,11 @@ test(
       );
       assert.equal(measured.groupValuationDelta, "0.0000");
       assert.deepEqual(
-        await applyAssetGroupValuation(
-          f.org.orgId,
-          groupChange,
-          f.actors.submitterId,
-        ),
+        await applyAssetGroupValuation(f.org.orgId, groupChange, f.actors.submitterId),
         measured,
       );
       assert.equal(
-        await proposeAssetGroupValuation(
-          f.org.orgId,
-          received,
-          f.actors.submitterId,
-          groupInput,
-        ),
+        await proposeAssetGroupValuation(f.org.orgId, received, f.actors.submitterId, groupInput),
         groupChange,
       );
       // Replays use the current asset owner, not the frozen subsidiaries in
@@ -499,12 +436,7 @@ test(
       `);
       await rehomeTestAsset(f.org.orgId, received, inaccessibleOwner);
       await assert.rejects(
-        () => proposeAssetGroupValuation(
-          f.org.orgId,
-          received,
-          f.actors.submitterId,
-          groupInput,
-        ),
+        () => proposeAssetGroupValuation(f.org.orgId, received, f.actors.submitterId, groupInput),
         /not found/,
       );
       await rehomeTestAsset(f.org.orgId, received, buyer);
@@ -516,9 +448,12 @@ test(
         consolidateAssetTransfers(tx, f.org.orgId, august, f.actors.adminId),
       );
       assert.equal(groupEntries.length, 1);
-      const measuredTarget = (await db.execute<{ target_balances: Record<string, string> }>(
-          sql`select target_balances from asset_transfer_consolidation_entries where org_id=${f.org.orgId} and journal_entry_id=${groupEntries[0]}`, "objects",
-        ))[0]!.target_balances;
+      const measuredTarget = (
+        await db.execute<{ target_balances: Record<string, string> }>(
+          sql`select target_balances from asset_transfer_consolidation_entries where org_id=${f.org.orgId} and journal_entry_id=${groupEntries[0]}`,
+          "objects",
+        )
+      )[0]!.target_balances;
       assert.equal(measuredTarget[f.org.accounts.deferred], "25.0000");
       assert.equal(measuredTarget[f.org.accounts.recognized], "300.0000");
       assert.deepEqual(
@@ -567,32 +502,36 @@ test(
                       '2026-09-01',-600,-400,0,null,${f.actors.submitterId})
             `);
           }),
-        (error: unknown) => errorChainMatches(error, /group component basis must match its independently approved/),
+        (error: unknown) =>
+          errorChainMatches(error, /group component basis must match its independently approved/),
         "publishing the approved legal disposal without its group measurement must fail",
       );
       await applyAssetChange(f.org.orgId, component, f.actors.submitterId);
-      const frozen = (await db.execute<{
+      const frozen = (
+        await db.execute<{
           group_component: { removedCost: string; removedAccumulated: string };
         }>(
-          sql`select group_component from asset_basis_changes where org_id=${f.org.orgId} and change_id=${component} and book_id=${f.org.bookId}`, "objects",
-        ))[0]!.group_component;
+          sql`select group_component from asset_basis_changes where org_id=${f.org.orgId} and change_id=${component} and book_id=${f.org.bookId}`,
+          "objects",
+        )
+      )[0]!.group_component;
       assert.equal(frozen.removedCost, "1200.0000");
       assert.equal(frozen.removedAccumulated, "900.0000");
-      const september = (await db.execute<{ id: string }>(
-          sql`select id from accounting_periods where org_id=${f.org.orgId} and name='2026-09'`, "objects",
-        ))[0]!.id;
+      const september = (
+        await db.execute<{ id: string }>(
+          sql`select id from accounting_periods where org_id=${f.org.orgId} and name='2026-09'`,
+          "objects",
+        )
+      )[0]!.id;
       const componentEntries = await db.transaction((tx) =>
-        consolidateAssetTransfers(
-          tx,
-          f.org.orgId,
-          september,
-          f.actors.adminId,
-          "2026-09-01",
-        ),
+        consolidateAssetTransfers(tx, f.org.orgId, september, f.actors.adminId, "2026-09-01"),
       );
-      const componentTarget = (await db.execute<{ target_balances: Record<string, string> }>(
-          sql`select target_balances from asset_transfer_consolidation_entries where org_id=${f.org.orgId} and journal_entry_id=${componentEntries[0]}`, "objects",
-        ))[0]!.target_balances;
+      const componentTarget = (
+        await db.execute<{ target_balances: Record<string, string> }>(
+          sql`select target_balances from asset_transfer_consolidation_entries where org_id=${f.org.orgId} and journal_entry_id=${componentEntries[0]}`,
+          "objects",
+        )
+      )[0]!.target_balances;
       assert.equal(
         componentTarget[f.org.accounts.invAsset],
         "0.0000",
@@ -605,57 +544,39 @@ test(
       );
       assert.deepEqual(
         await db.transaction((tx) =>
-          consolidateAssetTransfers(
-            tx,
-            f.org.orgId,
-            september,
-            f.actors.adminId,
-            "2026-09-01",
-          ),
+          consolidateAssetTransfers(tx, f.org.orgId, september, f.actors.adminId, "2026-09-01"),
         ),
         [],
       );
-      const { proposeAssetReversal } =
-        await import("./asset-change-reversals.ts");
-      const correcting = await proposeAssetReversal(
-        f.org.orgId,
-        component,
-        f.actors.submitterId,
-        {
-          effectiveOn: "2026-09-01",
-          reason: "Correct identified sale before subsequent asset use",
-          idempotencyKey: randomUUID(),
-        },
-      );
+      const { proposeAssetReversal } = await import("./asset-change-reversals.ts");
+      const correcting = await proposeAssetReversal(f.org.orgId, component, f.actors.submitterId, {
+        effectiveOn: "2026-09-01",
+        reason: "Correct identified sale before subsequent asset use",
+        idempotencyKey: randomUUID(),
+      });
       await approve(f, correcting);
       await applyAssetChange(f.org.orgId, correcting, f.actors.submitterId);
-      const { assetGroupHistory } =
-        await import("../organization/asset-group-history.ts");
-      const transfer = (await db.execute<{ id: string }>(
-          sql`select id from asset_transfer_bases where org_id=${f.org.orgId} and receiving_asset_id=${received} and book_id=${f.org.bookId}`, "objects",
-        ))[0]!.id;
-      const correctedHistory = await assetGroupHistory(
-        db,
-        f.org.orgId,
-        transfer,
-        "2026-09-01",
-      );
+      const { assetGroupHistory } = await import("../organization/asset-group-history.ts");
+      const transfer = (
+        await db.execute<{ id: string }>(
+          sql`select id from asset_transfer_bases where org_id=${f.org.orgId} and receiving_asset_id=${received} and book_id=${f.org.bookId}`,
+          "objects",
+        )
+      )[0]!.id;
+      const correctedHistory = await assetGroupHistory(db, f.org.orgId, transfer, "2026-09-01");
       assert.ok(
         correctedHistory.every((e) => e.kind !== "component"),
         "linked correction removes the component only from effective history",
       );
       const correctedEntries = await db.transaction((tx) =>
-        consolidateAssetTransfers(
-          tx,
-          f.org.orgId,
-          september,
-          f.actors.adminId,
-          "2026-09-01",
-        ),
+        consolidateAssetTransfers(tx, f.org.orgId, september, f.actors.adminId, "2026-09-01"),
       );
-      const correctedTarget = (await db.execute<{ target_balances: Record<string, string> }>(
-          sql`select target_balances from asset_transfer_consolidation_entries where org_id=${f.org.orgId} and journal_entry_id=${correctedEntries[0]}`, "objects",
-        ))[0]!.target_balances;
+      const correctedTarget = (
+        await db.execute<{ target_balances: Record<string, string> }>(
+          sql`select target_balances from asset_transfer_consolidation_entries where org_id=${f.org.orgId} and journal_entry_id=${correctedEntries[0]}`,
+          "objects",
+        )
+      )[0]!.target_balances;
       assert.equal(correctedTarget[f.org.accounts.invAsset], "600.0000");
       assert.equal(correctedTarget[f.org.accounts.recognized], "300.0000");
 
@@ -666,23 +587,23 @@ test(
         newCarryingValue: "900",
         actorId: f.actors.submitterId,
       });
-      const source2 = (await db.execute<{ id: string }>(sql`
+      const source2 = (
+        await db.execute<{ id: string }>(
+          sql`
         select id from asset_events where org_id=${f.org.orgId}
           and asset_id=${received} and journal_entry_id=${impairment2.entryId}
-      `, "objects"))[0]!.id;
-      const group2 = await proposeAssetGroupValuation(
-        f.org.orgId,
-        received,
-        f.actors.submitterId,
-        {
-          ...groupInput,
-          sourceEventId: source2,
-          effectiveOn: "2026-09-01",
-          carryingValue: "800",
-          idempotencyKey: randomUUID(),
-          remainingPlan: [{ date: "2026-09-30", amount: "800" }],
-        },
-      );
+      `,
+          "objects",
+        )
+      )[0]!.id;
+      const group2 = await proposeAssetGroupValuation(f.org.orgId, received, f.actors.submitterId, {
+        ...groupInput,
+        sourceEventId: source2,
+        effectiveOn: "2026-09-01",
+        carryingValue: "800",
+        idempotencyKey: randomUUID(),
+        remainingPlan: [{ date: "2026-09-30", amount: "800" }],
+      });
       await approve(f, group2);
       await applyAssetGroupValuation(f.org.orgId, group2, f.actors.submitterId);
       const nextBuyer = randomUUID();
@@ -694,55 +615,43 @@ test(
         insert into intercompany_pairs(org_id,from_subsidiary_id,to_subsidiary_id,due_from_account_id,due_to_account_id)
         values(${f.org.orgId},${buyer},${nextBuyer},${dueFrom},${dueTo})
       `);
-      const onward = await proposeAssetChange(
-        f.org.orgId,
-        received,
-        f.actors.submitterId,
-        {
-          ...request,
-          effectiveOn: "2026-09-01",
-          idempotencyKey: randomUUID(),
-          proceeds: "250",
-          portion: {
-            books: [
-              {
-                bookId: f.org.bookId,
-                cost: "600",
-                accumulated: "400",
+      const onward = await proposeAssetChange(f.org.orgId, received, f.actors.submitterId, {
+        ...request,
+        effectiveOn: "2026-09-01",
+        idempotencyKey: randomUUID(),
+        proceeds: "250",
+        portion: {
+          books: [
+            {
+              bookId: f.org.bookId,
+              cost: "600",
+              accumulated: "400",
+              salvage: "0",
+              group: {
+                cost: "1200",
+                accumulated: "1000",
                 salvage: "0",
-                group: {
-                  cost: "1200",
-                  accumulated: "1000",
-                  salvage: "0",
-                  remainingPlan: [{ date: "2026-09-30", amount: "600" }],
-                  removedPlan: [{ date: "2026-09-30", amount: "200" }],
-                  unimpairedAccumulated: "900",
-                  unimpairedRemainingPlan: [
-                    { date: "2026-09-30", amount: "700" },
-                  ],
-                  unimpairedRemovedPlan: [
-                    { date: "2026-09-30", amount: "300" },
-                  ],
-                },
+                remainingPlan: [{ date: "2026-09-30", amount: "600" }],
+                removedPlan: [{ date: "2026-09-30", amount: "200" }],
+                unimpairedAccumulated: "900",
+                unimpairedRemainingPlan: [{ date: "2026-09-30", amount: "700" }],
+                unimpairedRemovedPlan: [{ date: "2026-09-30", amount: "300" }],
               },
-            ],
-          },
-          transfer: {
-            ...request.transfer!,
-            subsidiaryId: nextBuyer,
-            assetNumber: "RECEIVED-2",
-            buyerAmount: "250",
-            lifeMonths: 1,
-          },
+            },
+          ],
         },
-      );
+        transfer: {
+          ...request.transfer!,
+          subsidiaryId: nextBuyer,
+          assetNumber: "RECEIVED-2",
+          buyerAmount: "250",
+          lifeMonths: 1,
+        },
+      });
       await approve(f, onward);
-      const onwardResult = await applyAssetChange(
-        f.org.orgId,
-        onward,
-        f.actors.submitterId,
-      );
-      const nextBasis = (await db.execute<{
+      const onwardResult = await applyAssetChange(f.org.orgId, onward, f.actors.submitterId);
+      const nextBasis = (
+        await db.execute<{
           basis: {
             groupCost: string;
             groupAccumulated: string;
@@ -752,10 +661,14 @@ test(
               plan: { amount: string }[];
             };
           };
-        }>(sql`
+        }>(
+          sql`
         select basis from asset_transfer_bases where org_id=${f.org.orgId}
           and receiving_asset_id=${String(onwardResult.receivingAssetId)} and book_id=${f.org.bookId}
-      `, "objects"))[0]!.basis;
+      `,
+          "objects",
+        )
+      )[0]!.basis;
       assert.equal(nextBasis.groupCost, "1200.0000");
       assert.equal(nextBasis.groupAccumulated, "1000.0000");
       assert.equal(nextBasis.groupPlan[0]!.amount, "200.0000");
@@ -769,48 +682,24 @@ test(
   { skip: !DB },
   () =>
     fixture(async (f) => {
-      const id = await proposeAssetChange(
-        f.org.orgId,
-        f.assetId,
-        f.actors.submitterId,
-        input(f),
-      );
+      const id = await proposeAssetChange(f.org.orgId, f.assetId, f.actors.submitterId, input(f));
       await approve(f, id);
-      const disposed = await applyAssetChange(
-        f.org.orgId,
-        id,
-        f.actors.submitterId,
-      );
-      const { proposeAssetReversal } =
-        await import("./asset-change-reversals.ts");
+      const disposed = await applyAssetChange(f.org.orgId, id, f.actors.submitterId);
+      const { proposeAssetReversal } = await import("./asset-change-reversals.ts");
       const proposal = {
         effectiveOn: "2026-08-01",
         reason: "Sale rescinded before any subsequent use or ownership change",
         idempotencyKey: randomUUID(),
       };
-      const reversal = await proposeAssetReversal(
-        f.org.orgId,
-        id,
-        f.actors.submitterId,
-        proposal,
-      );
+      const reversal = await proposeAssetReversal(f.org.orgId, id, f.actors.submitterId, proposal);
       await approve(f, reversal);
-      const applied = await applyAssetChange(
-        f.org.orgId,
-        reversal,
-        f.actors.submitterId,
-      );
+      const applied = await applyAssetChange(f.org.orgId, reversal, f.actors.submitterId);
       assert.deepEqual(
         await applyAssetChange(f.org.orgId, reversal, f.actors.submitterId),
         applied,
       );
       assert.equal(
-        await proposeAssetReversal(
-          f.org.orgId,
-          id,
-          f.actors.submitterId,
-          proposal,
-        ),
+        await proposeAssetReversal(f.org.orgId, id, f.actors.submitterId, proposal),
         reversal,
       );
       assert.deepEqual(await carrying(f), {
@@ -818,21 +707,24 @@ test(
         accumulated: "1000.0000",
         carrying_value: "2000.0000",
       });
-      const original = (await db.execute<{ status: string }>(
-          sql`select status from journal_entries where org_id=${f.org.orgId} and id=${(disposed.entryIds as string[])[0]}`, "objects",
-        ))[0]!;
+      const original = (
+        await db.execute<{ status: string }>(
+          sql`select status from journal_entries where org_id=${f.org.orgId} and id=${(disposed.entryIds as string[])[0]}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(original.status, "reversed");
       const links = await db.execute<{
-          source_id: string;
-          reversal_id: string | null;
-          book_id: string;
-          reversed_book: string | null;
-        }>(
-          sql`select e.id as source_id,r.id as reversal_id,e.book_id,r.book_id as reversed_book from asset_events e left join asset_events r on r.org_id=e.org_id and r.reverses_event_id=e.id where e.org_id=${f.org.orgId} and e.financial_change_id=${id}`, "objects",
-        );
+        source_id: string;
+        reversal_id: string | null;
+        book_id: string;
+        reversed_book: string | null;
+      }>(
+        sql`select e.id as source_id,r.id as reversal_id,e.book_id,r.book_id as reversed_book from asset_events e left join asset_events r on r.org_id=e.org_id and r.reverses_event_id=e.id where e.org_id=${f.org.orgId} and e.financial_change_id=${id}`,
+        "objects",
+      );
       assert.ok(
-        links.length > 0 &&
-          links.every((e) => e.reversal_id && e.book_id === e.reversed_book),
+        links.length > 0 && links.every((e) => e.reversal_id && e.book_id === e.reversed_book),
         "each original event must have exactly linked book reversal evidence",
       );
       await db.execute(
@@ -873,12 +765,7 @@ test(
   { skip: !DB },
   () =>
     fixture(async (f) => {
-      const id = await proposeAssetChange(
-        f.org.orgId,
-        f.assetId,
-        f.actors.submitterId,
-        input(f),
-      );
+      const id = await proposeAssetChange(f.org.orgId, f.assetId, f.actors.submitterId, input(f));
       await approve(f, id);
       const functionName = `reject_asset_${randomUUID().replaceAll("-", "")}`;
       try {
@@ -893,21 +780,18 @@ test(
           ),
         );
         await withOrg(f.org.orgId, async () => {
-          await assert.rejects(() =>
-            applyAssetChange(f.org.orgId, id, f.actors.submitterId),
-          );
+          await assert.rejects(() => applyAssetChange(f.org.orgId, id, f.actors.submitterId));
           assert.equal((await carrying(f)).cost, "3000.0000");
         });
-        const count = (await db.execute<{ n: number }>(
-            sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId} and entry_number like ${`AST-${id}%`}`, "objects",
-          ))[0]!.n;
+        const count = (
+          await db.execute<{ n: number }>(
+            sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId} and entry_number like ${`AST-${id}%`}`,
+            "objects",
+          )
+        )[0]!.n;
         assert.equal(count, 0);
       } finally {
-        await db.execute(
-          sql.raw(
-            `drop trigger if exists ${functionName} on asset_basis_changes`,
-          ),
-        );
+        await db.execute(sql.raw(`drop trigger if exists ${functionName} on asset_basis_changes`));
         await db.execute(sql.raw(`drop function if exists ${functionName}()`));
       }
     }),
@@ -922,25 +806,32 @@ for (const impair of [false, true])
         await db.execute(
           sql`update fixed_assets set depreciation_method='units_of_production',depreciation_units_total=300 where org_id=${f.org.orgId} and id=${f.assetId}`,
         );
-        await buildSchedule(
-          f.assetId,
-          f.org.orgId,
-          f.actors.submitterId,
-          f.org.bookId,
-        );
-        assert.equal((await db.execute<{ count: number }>(sql`
+        await buildSchedule(f.assetId, f.org.orgId, f.actors.submitterId, f.org.bookId);
+        assert.equal(
+          (
+            await db.execute<{ count: number }>(
+              sql`
           select count(*)::int as count from depreciation_schedule_lines l
           join depreciation_schedules s on s.org_id=l.org_id and s.id=l.schedule_id
           where s.org_id=${f.org.orgId} and s.asset_id=${f.assetId}
             and s.book_id=${f.org.bookId} and l.source='formula'
-        `, "objects"))[0]!.count, 0, "unposted formula estimates must not reserve production basis after a method change");
+        `,
+              "objects",
+            )
+          )[0]!.count,
+          0,
+          "unposted formula estimates must not reserve production basis after a method change",
+        );
         const folderId = randomUUID();
         await db.execute(
           sql`insert into folders(id,org_id,name,record_table,record_id,created_by,updated_by) values(${folderId},${f.org.orgId},'Production evidence','fixed_assets',${f.assetId},${f.actors.submitterId},${f.actors.submitterId})`,
         );
-        const evidenceFileId = (await db.execute<{ id: string }>(
-            sql`insert into files(org_id,folder_id,name,file_type,content_type,size_bytes,created_by,updated_by) values(${f.org.orgId},${folderId},'Production meter.pdf','pdf','application/pdf',1,${f.actors.submitterId},${f.actors.submitterId}) returning id`, "objects",
-          ))[0]!.id;
+        const evidenceFileId = (
+          await db.execute<{ id: string }>(
+            sql`insert into files(org_id,folder_id,name,file_type,content_type,size_bytes,created_by,updated_by) values(${f.org.orgId},${folderId},'Production meter.pdf','pdf','application/pdf',1,${f.actors.submitterId},${f.actors.submitterId}) returning id`,
+            "objects",
+          )
+        )[0]!.id;
         await db.execute(
           sql`insert into file_attachments(org_id,file_id,target_table,target_id,created_by) values(${f.org.orgId},${evidenceFileId},'fixed_assets',${f.assetId},${f.actors.submitterId})`,
         );
@@ -966,17 +857,15 @@ for (const impair of [false, true])
           f.assetId,
         );
         assert.deepEqual(posted.problems, []);
-        const id = await proposeAssetChange(
-          f.org.orgId,
-          f.assetId,
-          f.actors.submitterId,
-          input(f),
-        );
+        const id = await proposeAssetChange(f.org.orgId, f.assetId, f.actors.submitterId, input(f));
         await approve(f, id);
         await applyAssetChange(f.org.orgId, id, f.actors.submitterId);
-        const basis = (await db.execute<{ units: string; amount: string }>(
-            sql`select units_remaining::text as units,depreciable_after::text as amount from asset_basis_changes where org_id=${f.org.orgId} and change_id=${id}`, "objects",
-          ))[0]!;
+        const basis = (
+          await db.execute<{ units: string; amount: string }>(
+            sql`select units_remaining::text as units,depreciable_after::text as amount from asset_basis_changes where org_id=${f.org.orgId} and change_id=${id}`,
+            "objects",
+          )
+        )[0]!;
         assert.deepEqual(basis, { units: "150.0000", amount: "1500.0000" });
         if (impair)
           await remeasureAsset(f.org.orgId, f.assetId, {
@@ -1002,61 +891,41 @@ for (const impair of [false, true])
       }, false),
   );
 
-test(
-  "tax depreciation cannot silently omit an approved partial disposal",
-  { skip: !DB },
-  () =>
-    fixture(async (f) => {
+test("tax depreciation cannot silently omit an approved partial disposal", { skip: !DB }, () =>
+  fixture(async (f) => {
+    await db.execute(
+      sql`update asset_categories set tax_attributes=jsonb_build_object('ca_cca_class','8') where org_id=${f.org.orgId} and id=${f.categoryId}`,
+    );
+    // A pre-event historical run is unaffected by the future book change.
+    const id = await proposeAssetChange(f.org.orgId, f.assetId, f.actors.submitterId, input(f));
+    await approve(f, id);
+    await applyAssetChange(f.org.orgId, id, f.actors.submitterId);
+    await runTaxPool(f.org.orgId, f.org.bookId, f.org.subsidiaryId, "ca_cca", 2025, {
+      yearStart: "2025-01-01",
+      yearEnd: "2025-12-31",
+      actorId: f.actors.submitterId,
+    });
+    const before = await db.execute(
+      sql`select * from tax_pool_periods where org_id=${f.org.orgId} order by id`,
+      "objects",
+    );
+    await assert.rejects(
+      runTaxPool(f.org.orgId, f.org.bookId, f.org.subsidiaryId, "ca_cca", 2026, {
+        yearStart: "2026-01-01",
+        yearEnd: "2026-12-31",
+        actorId: f.actors.submitterId,
+      }),
+      /requires native statutory basis treatment.*no tax result has been produced/,
+    );
+    assert.deepEqual(
       await db.execute(
-        sql`update asset_categories set tax_attributes=jsonb_build_object('ca_cca_class','8') where org_id=${f.org.orgId} and id=${f.categoryId}`,
-      );
-      // A pre-event historical run is unaffected by the future book change.
-      const id = await proposeAssetChange(
-        f.org.orgId,
-        f.assetId,
-        f.actors.submitterId,
-        input(f),
-      );
-      await approve(f, id);
-      await applyAssetChange(f.org.orgId, id, f.actors.submitterId);
-      await runTaxPool(
-        f.org.orgId,
-        f.org.bookId,
-        f.org.subsidiaryId,
-        "ca_cca",
-        2025,
-        {
-          yearStart: "2025-01-01",
-          yearEnd: "2025-12-31",
-          actorId: f.actors.submitterId,
-        },
-      );
-      const before = await db.execute(
-          sql`select * from tax_pool_periods where org_id=${f.org.orgId} order by id`, "objects",
-        );
-      await assert.rejects(
-        runTaxPool(
-          f.org.orgId,
-          f.org.bookId,
-          f.org.subsidiaryId,
-          "ca_cca",
-          2026,
-          {
-            yearStart: "2026-01-01",
-            yearEnd: "2026-12-31",
-            actorId: f.actors.submitterId,
-          },
-        ),
-        /requires native statutory basis treatment.*no tax result has been produced/,
-      );
-      assert.deepEqual(
-        await db.execute(
-            sql`select * from tax_pool_periods where org_id=${f.org.orgId} order by id`, "objects",
-          ),
-        before,
-        "refusal must persist no calculated tax period",
-      );
-    }),
+        sql`select * from tax_pool_periods where org_id=${f.org.orgId} order by id`,
+        "objects",
+      ),
+      before,
+      "refusal must persist no calculated tax period",
+    );
+  }),
 );
 
 test(
@@ -1068,12 +937,7 @@ test(
       await db.execute(
         sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values(${secondary},${f.org.orgId},'ALT','Alternate non-posting',false,true,false)`,
       );
-      await buildSchedule(
-        f.assetId,
-        f.org.orgId,
-        f.actors.submitterId,
-        secondary,
-      );
+      await buildSchedule(f.assetId, f.org.orgId, f.actors.submitterId, secondary);
       const recognized = await runDepreciation(
         f.org.orgId,
         "2026-07-31",
@@ -1091,61 +955,91 @@ test(
       );
       await approve(f, change);
       await applyAssetChange(f.org.orgId, change, f.actors.submitterId);
-      const { proposeAssetReversal } =
-        await import("./asset-change-reversals.ts");
-      const reverse = await proposeAssetReversal(
-        f.org.orgId,
-        change,
-        f.actors.submitterId,
-        {
-          effectiveOn: "2026-08-01",
-          reason: "Correction of the approved sale before further use",
-          idempotencyKey: randomUUID(),
-        },
-      );
+      const { proposeAssetReversal } = await import("./asset-change-reversals.ts");
+      const reverse = await proposeAssetReversal(f.org.orgId, change, f.actors.submitterId, {
+        effectiveOn: "2026-08-01",
+        reason: "Correction of the approved sale before further use",
+        idempotencyKey: randomUUID(),
+      });
       await approve(f, reverse);
       await applyAssetChange(f.org.orgId, reverse, f.actors.submitterId);
       const rows = await db.execute<{
-          book_id: string;
-          journal_entry_id: string | null;
-          reverses_event_id: string | null;
-        }>(
-          sql`select book_id,journal_entry_id,reverses_event_id from asset_events where org_id=${f.org.orgId} and financial_change_id=${reverse} order by book_id`, "objects",
-        );
+        book_id: string;
+        journal_entry_id: string | null;
+        reverses_event_id: string | null;
+      }>(
+        sql`select book_id,journal_entry_id,reverses_event_id from asset_events where org_id=${f.org.orgId} and financial_change_id=${reverse} order by book_id`,
+        "objects",
+      );
       assert.equal(rows.length, 2);
       assert.ok(rows.every((r) => r.reverses_event_id));
-      assert.equal(
-        rows.find((r) => r.book_id === secondary)!.journal_entry_id,
-        null,
-      );
-      const basis = (await db.execute<{ cost: string }>(
-          sql`select cost::text from asset_book_carrying_values where org_id=${f.org.orgId} and asset_id=${f.assetId} and book_id=${secondary}`, "objects",
-        ))[0]!;
+      assert.equal(rows.find((r) => r.book_id === secondary)!.journal_entry_id, null);
+      const basis = (
+        await db.execute<{ cost: string }>(
+          sql`select cost::text from asset_book_carrying_values where org_id=${f.org.orgId} and asset_id=${f.assetId} and book_id=${secondary}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(basis.cost, "3000.0000");
     }),
 );
 
-
-test("later reporting-book recognition prevents an asset change reversal from erasing service", { skip: !DB }, () =>
-  fixture(async (f) => {
-    const secondary = randomUUID();
-    await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
+test(
+  "later reporting-book recognition prevents an asset change reversal from erasing service",
+  { skip: !DB },
+  () =>
+    fixture(async (f) => {
+      const secondary = randomUUID();
+      await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
       values(${secondary},${f.org.orgId},'ALT','Reporting history',false,true,false)`);
-    await buildSchedule(f.assetId, f.org.orgId, f.actors.submitterId, secondary);
-    const july = await runDepreciation(f.org.orgId, "2026-07-31", f.actors.submitterId, f.assetId, undefined, secondary);
-    assert.deepEqual(july.problems, []);
-    assert.equal(july.recorded, 1);
-    const change = await proposeAssetChange(f.org.orgId, f.assetId, f.actors.submitterId, input(f));
-    await approve(f, change);
-    await applyAssetChange(f.org.orgId, change, f.actors.submitterId);
-    const august = await runDepreciation(f.org.orgId, "2026-08-31", f.actors.submitterId, f.assetId, undefined, secondary);
-    assert.deepEqual(august.problems, []);
-    assert.equal(august.recorded, 1);
-    assert.equal(august.posted, 0);
-    const { proposeAssetReversal } = await import("./asset-change-reversals.ts");
-    await assert.rejects(proposeAssetReversal(f.org.orgId, change, f.actors.submitterId, {
-      effectiveOn:"2026-08-01",reason:"Attempt to erase later reporting-book use",idempotencyKey:randomUUID(),
-    }), /subsequent financial history/);
-    assert.equal((await db.execute<{ n:number }>(sql`
-      select count(*)::int as n from journal_entries where org_id=${f.org.orgId} and book_id=${secondary}`, "objects"))[0]!.n,0);
-  }));
+      await buildSchedule(f.assetId, f.org.orgId, f.actors.submitterId, secondary);
+      const july = await runDepreciation(
+        f.org.orgId,
+        "2026-07-31",
+        f.actors.submitterId,
+        f.assetId,
+        undefined,
+        secondary,
+      );
+      assert.deepEqual(july.problems, []);
+      assert.equal(july.recorded, 1);
+      const change = await proposeAssetChange(
+        f.org.orgId,
+        f.assetId,
+        f.actors.submitterId,
+        input(f),
+      );
+      await approve(f, change);
+      await applyAssetChange(f.org.orgId, change, f.actors.submitterId);
+      const august = await runDepreciation(
+        f.org.orgId,
+        "2026-08-31",
+        f.actors.submitterId,
+        f.assetId,
+        undefined,
+        secondary,
+      );
+      assert.deepEqual(august.problems, []);
+      assert.equal(august.recorded, 1);
+      assert.equal(august.posted, 0);
+      const { proposeAssetReversal } = await import("./asset-change-reversals.ts");
+      await assert.rejects(
+        proposeAssetReversal(f.org.orgId, change, f.actors.submitterId, {
+          effectiveOn: "2026-08-01",
+          reason: "Attempt to erase later reporting-book use",
+          idempotencyKey: randomUUID(),
+        }),
+        /subsequent financial history/,
+      );
+      assert.equal(
+        (
+          await db.execute<{ n: number }>(
+            sql`
+      select count(*)::int as n from journal_entries where org_id=${f.org.orgId} and book_id=${secondary}`,
+            "objects",
+          )
+        )[0]!.n,
+        0,
+      );
+    }),
+);

@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../../lib/list/prepared-spec'
-import { getTranslations } from 'next-intl/server'
+import { registeredListTable } from "../../../../lib/list/prepared-spec";
+import { getTranslations } from "next-intl/server";
 import {
   badge,
   column,
@@ -15,12 +15,9 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { notFound } from 'next/navigation'
-import {
-  documentsAuthz,
-  loadDocumentsHome,
-} from '../../../../lib/hrm/documents-home'
+} from "@braedonsaunders/appkit-viewspec";
+import { notFound } from "next/navigation";
+import { documentsAuthz, loadDocumentsHome } from "../../../../lib/hrm/documents-home";
 
 /**
  * Documents tab: statTiles (awaiting signature, expiring, retention
@@ -34,64 +31,64 @@ import {
  * the loader 404s otherwise.
  */
 
-const f = field
-const item = field
+const f = field;
+const item = field;
 
-export type DocumentsPageData = NonNullable<Awaited<ReturnType<typeof loadDocumentsHome>>>
+export type DocumentsPageData = NonNullable<Awaited<ReturnType<typeof loadDocumentsHome>>>;
 
 export function documentsSpec(data: DocumentsPageData): PageSpec {
   return page({
-    route: '/hrm/documents',
-    layout: 'list',
+    route: "/hrm/documents",
+    layout: "list",
     // Whole-page scroll in normal block flow: this page has no internal
     // scroll panel (unlike the app-feel HRM tabs), so a viewport-height
     // flex lock here would compress the register grid below its content
     // and let the setup sections paint over its rows (CK-32b).
-    bodyClassName: 'space-y-4',
+    bodyClassName: "space-y-4",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
           widget(
-            'link-button',
-            { href: f('addHref'), label: f('addLabel'), iconKey: 'plus' },
-            f('canManage'),
+            "link-button",
+            { href: f("addHref"), label: f("addLabel"), iconKey: "plus" },
+            f("canManage"),
           ),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
-      grid('grid grid-cols-2 gap-3 xl:grid-cols-4', [
+      grid("grid grid-cols-2 gap-3 xl:grid-cols-4", [
         statTile({
-          iconKey: f('tiles.0.iconKey'),
-          accent: f('tiles.0.accent'),
-          label: f('tiles.0.label'),
-          value: f('tiles.0.value'),
-          tone: f('tiles.0.tone'),
+          iconKey: f("tiles.0.iconKey"),
+          accent: f("tiles.0.accent"),
+          label: f("tiles.0.label"),
+          value: f("tiles.0.value"),
+          tone: f("tiles.0.tone"),
         }),
         statTile({
-          iconKey: f('tiles.1.iconKey'),
-          accent: f('tiles.1.accent'),
-          label: f('tiles.1.label'),
-          value: f('tiles.1.value'),
-          tone: f('tiles.1.tone'),
+          iconKey: f("tiles.1.iconKey"),
+          accent: f("tiles.1.accent"),
+          label: f("tiles.1.label"),
+          value: f("tiles.1.value"),
+          tone: f("tiles.1.tone"),
         }),
         statTile({
-          iconKey: f('tiles.2.iconKey'),
-          accent: f('tiles.2.accent'),
-          label: f('tiles.2.label'),
-          value: f('tiles.2.value'),
-          tone: f('tiles.2.tone'),
+          iconKey: f("tiles.2.iconKey"),
+          accent: f("tiles.2.accent"),
+          label: f("tiles.2.label"),
+          value: f("tiles.2.value"),
+          tone: f("tiles.2.tone"),
         }),
         statTile({
-          iconKey: f('tiles.3.iconKey'),
-          accent: f('tiles.3.accent'),
-          label: f('tiles.3.label'),
-          value: f('tiles.3.value'),
-          tone: f('tiles.3.tone'),
+          iconKey: f("tiles.3.iconKey"),
+          accent: f("tiles.3.accent"),
+          label: f("tiles.3.label"),
+          value: f("tiles.3.value"),
+          tone: f("tiles.3.tone"),
         }),
       ]),
       // The register sizes to its content in normal flow: a flex item
@@ -99,92 +96,84 @@ export function documentsSpec(data: DocumentsPageData): PageSpec {
       // rows, and the setup sections below paint over the overflowed
       // rows and intercept their clicks (CK-32/CK-32b). A single-column
       // grid cannot shrink under its content. The page scrolls as a whole.
-      grid('grid gap-4', [
-        widgetBlock('filter-chips', {
-          basePath: '/hrm/documents',
+      grid("grid gap-4", [
+        widgetBlock("filter-chips", {
+          basePath: "/hrm/documents",
           currentParams: data.currentParams,
-          paramKey: 'status',
+          paramKey: "status",
           label: data.segmentsLabel,
           allLabel: data.allLabel,
           options: data.segmentOptions,
         }),
-        registeredListTable('hrm_documents', {
-          variant: 'app',
-          rows: f('rows'),
-          rowKey: item('id'),
-          empty: { title: f('empty') },
+        registeredListTable("hrm_documents", {
+          variant: "app",
+          rows: f("rows"),
+          rowKey: item("id"),
+          empty: { title: f("empty") },
           columns: [
-            column(data.columns.title, link(item('title'), item('href'))),
-            column(
-              data.columns.person,
-              text(item('person'), { fallback: '—' }),
-            ),
-            column(data.columns.category, text(item('category'))),
-            column(data.columns.sent, text(item('sent'), { fallback: '—' })),
-            column(
-              data.columns.expires,
-              text(item('expires'), { fallback: '—' }),
-            ),
+            column(data.columns.title, link(item("title"), item("href"))),
+            column(data.columns.person, text(item("person"), { fallback: "—" })),
+            column(data.columns.category, text(item("category"))),
+            column(data.columns.sent, text(item("sent"), { fallback: "—" })),
+            column(data.columns.expires, text(item("expires"), { fallback: "—" })),
             column(
               data.columns.status,
-              badge(item('statusLabel'), { variant: item('statusVariant') }),
+              badge(item("statusLabel"), { variant: item("statusVariant") }),
             ),
           ],
         }),
       ]),
       {
-        ...widgetBlock('hrm-documents-drawer', { drawer: data.drawer }),
-        when: f('drawerOpen'),
+        ...widgetBlock("hrm-documents-drawer", { drawer: data.drawer }),
+        when: f("drawerOpen"),
       },
       {
-        ...widgetBlock('hrm-documents-generate-dialog', {
+        ...widgetBlock("hrm-documents-generate-dialog", {
           generate: data.generate,
         }),
-        when: f('generateOpen'),
+        when: f("generateOpen"),
       },
       widgetBlock(
-        'setup-section',
+        "setup-section",
         {
-          entityKey: 'hrm-document-templates',
+          entityKey: "hrm-document-templates",
           sp: data.currentParams,
-          basePath: '/hrm/documents',
-          rowParam: 'template',
+          basePath: "/hrm/documents",
+          rowParam: "template",
         },
-        f('canManage'),
+        f("canManage"),
       ),
       widgetBlock(
-        'setup-section',
+        "setup-section",
         {
-          entityKey: 'hrm-document-categories',
+          entityKey: "hrm-document-categories",
           sp: data.currentParams,
-          basePath: '/hrm/documents',
-          rowParam: 'category',
+          basePath: "/hrm/documents",
+          rowParam: "category",
         },
-        f('canManage'),
+        f("canManage"),
       ),
       widgetBlock(
-        'setup-section',
+        "setup-section",
         {
-          entityKey: 'hrm-retention-schedules',
+          entityKey: "hrm-retention-schedules",
           sp: data.currentParams,
-          basePath: '/hrm/documents',
-          rowParam: 'retention',
+          basePath: "/hrm/documents",
+          rowParam: "retention",
         },
-        f('canManage'),
+        f("canManage"),
       ),
     ],
-  })
+  });
 }
 
 export async function documentsTitle(): Promise<string> {
-  const t = await getTranslations('hrm')
-  return t('documents.title')
+  const t = await getTranslations("hrm");
+  return t("documents.title");
 }
 
-export async function loadDocumentsPage(
-  sp: Record<string, string | undefined>,
-) {
-  const authz = await documentsAuthz()
-  if (!authz) notFound()
-  return loadDocumentsHome(authz, sp)
+export async function loadDocumentsPage(sp: Record<string, string | undefined>) {
+  const authz = await documentsAuthz();
+  if (!authz) notFound();
+  return loadDocumentsHome(authz, sp);
 }

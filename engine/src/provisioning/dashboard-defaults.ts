@@ -1,8 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  DASHBOARD_ROLE_KEYS,
-  defaultDashboardLayoutForRole,
-} from "@openbooks/schema";
+import { DASHBOARD_ROLE_KEYS, defaultDashboardLayoutForRole } from "@openbooks/schema";
 import { db } from "../platform/db.ts";
 
 /**

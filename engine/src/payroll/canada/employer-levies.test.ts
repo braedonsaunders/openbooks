@@ -63,19 +63,13 @@ test("the assessable base sums assessable earning lines only", () => {
 test("an exclusion for one levy leaves the other levies assessable", () => {
   // The retiring-allowance shape: excluded from workers' compensation,
   // assessable for health tax.
-  const lines: BaseLine[] = [
-    earning("1000.00"),
-    earning("200.00", { wcb: false }),
-  ];
+  const lines: BaseLine[] = [earning("1000.00"), earning("200.00", { wcb: false })];
   assert.equal(levyAssessableBase(lines, "wcb"), "1000.0000");
   assert.equal(levyAssessableBase(lines, "eht"), "1200.0000");
 });
 
 test("absent applicability means assessable: only stamped exclusions remove a line", () => {
-  const lines: BaseLine[] = [
-    earning("1000.00"),
-    earning("200.00", { eht: false }),
-  ];
+  const lines: BaseLine[] = [earning("1000.00"), earning("200.00", { eht: false })];
   assert.equal(levyAssessableBase(lines, "wcb"), "1200.0000");
   assert.equal(levyAssessableBase(lines, "eht"), "1000.0000");
 });

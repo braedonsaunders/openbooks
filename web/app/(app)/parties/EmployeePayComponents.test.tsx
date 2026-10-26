@@ -16,7 +16,10 @@ declare global {
 }
 
 // jsdom first: the panel reads browser globals at render.
-await bootJsdomEnvironment({ url: "http://localhost:4800/entities/employees", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/entities/employees",
+  matchMediaMatches: false,
+});
 
 stubModules({
   navigation: false,
@@ -60,14 +63,29 @@ interface PostedAssignment {
 }
 
 const COMPONENTS = [
-  { id: "comp-coveralls", code: "COVERALLS", name: "Coveralls", kind: "deduction", basis: "fixed_amount", value: "25", paymentKind: "cash", country: "CA" },
+  {
+    id: "comp-coveralls",
+    code: "COVERALLS",
+    name: "Coveralls",
+    kind: "deduction",
+    basis: "fixed_amount",
+    value: "25",
+    paymentKind: "cash",
+    country: "CA",
+  },
 ];
 
-async function renderPanel(posted: PostedAssignment[], postQueue: Response[], assignments: Record<string, unknown>[] = []) {
+async function renderPanel(
+  posted: PostedAssignment[],
+  postQueue: Response[],
+  assignments: Record<string, unknown>[] = [],
+) {
   globalThis.__payComponentToasts = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url.startsWith("/api/payroll/employee-components")) {
       if (init?.method === "POST") {
         posted.push({ url, body: JSON.parse(String(init.body)) as Record<string, unknown> });
@@ -116,7 +134,11 @@ async function enabledButton(label: string): Promise<HTMLButtonElement> {
 
 /** A match outside any drawer still playing its exit animation. */
 function live<T extends Element>(selector: string): T | null {
-  return ([...document.querySelectorAll(selector)] as T[]).find((node) => !node.closest("[data-overlay-exiting]")) ?? null;
+  return (
+    ([...document.querySelectorAll(selector)] as T[]).find(
+      (node) => !node.closest("[data-overlay-exiting]"),
+    ) ?? null
+  );
 }
 
 /** The list's top-right add action; enabled once the panel has loaded. */
@@ -149,8 +171,10 @@ function setNativeSelect(select: HTMLSelectElement, value: string) {
 
 async function chooseComponent() {
   await openAssignmentDrawer();
-  const select = [...document.querySelectorAll("select")].find((candidate) =>
-    !candidate.closest("[data-overlay-exiting]") && candidate.querySelector('option[value="comp-coveralls"]'),
+  const select = [...document.querySelectorAll("select")].find(
+    (candidate) =>
+      !candidate.closest("[data-overlay-exiting]") &&
+      candidate.querySelector('option[value="comp-coveralls"]'),
   );
   assert.ok(select, "the form must offer a component picker");
   await act(async () => {
@@ -213,7 +237,8 @@ test("assigning posts canonical decimal strings and clears the value", async (t)
 
 test("a refused save pins the server reason on the record", async (t) => {
   const posted: PostedAssignment[] = [];
-  const refusal = "Route Assignment Employee already holds COVERALLS for 2026-01-01 to open — end that assignment before starting an overlapping one";
+  const refusal =
+    "Route Assignment Employee already holds COVERALLS for 2026-01-01 to open — end that assignment before starting an overlapping one";
   const { done } = await renderPanel(posted, [Response.json({ error: refusal }, { status: 422 })]);
   t.after(done);
   await chooseComponent();
@@ -224,40 +249,70 @@ test("a refused save pins the server reason on the record", async (t) => {
   assert.ok(alert, "the refusal must stay visible on the record");
   assert.match(alert.textContent ?? "", /already holds COVERALLS/);
   const toasts = globalThis.__payComponentToasts ?? [];
-  assert.ok(toasts.some((toast) => toast.kind === "error"), "the refusal must also toast an error");
+  assert.ok(
+    toasts.some((toast) => toast.kind === "error"),
+    "the refusal must also toast an error",
+  );
 
   await clickAdd();
   assert.equal(posted.length, 2, "the next attempt must post again");
-  assert.equal(document.querySelector('[role="alert"]'), null, "the next attempt must clear the pinned refusal");
+  assert.equal(
+    document.querySelector('[role="alert"]'),
+    null,
+    "the next attempt must clear the pinned refusal",
+  );
 });
 
 test("existing assignments render their component and window", async (t) => {
   const posted: PostedAssignment[] = [];
-  const { done } = await renderPanel(posted, [], [{
-    id: "assignment-9", employeePartyId: "employee-1", employmentId: null,
-    componentId: "comp-coveralls", componentCode: "COVERALLS", componentName: "Coveralls",
-    componentKind: "deduction", componentBasis: "fixed_amount", value: null, componentValue: "25",
-    effectiveFrom: "2026-01-01", effectiveTo: null, isCurrent: true,
-  }]);
+  const { done } = await renderPanel(
+    posted,
+    [],
+    [
+      {
+        id: "assignment-9",
+        employeePartyId: "employee-1",
+        employmentId: null,
+        componentId: "comp-coveralls",
+        componentCode: "COVERALLS",
+        componentName: "Coveralls",
+        componentKind: "deduction",
+        componentBasis: "fixed_amount",
+        value: null,
+        componentValue: "25",
+        effectiveFrom: "2026-01-01",
+        effectiveTo: null,
+        isCurrent: true,
+      },
+    ],
+  );
   t.after(done);
   await addButton();
   assert.match(document.body.textContent ?? "", /COVERALLS/);
   assert.match(document.body.textContent ?? "", new RegExp(COPY.title));
 });
 
-
 test("regular-only assignments retain the selected policy in the API and reset after saving", async (t) => {
   const posted: PostedAssignment[] = [];
   const { done } = await renderPanel(posted, []);
   t.after(done);
   await chooseComponent();
-  const select = [...document.querySelectorAll('select')].find(candidate => candidate.querySelector('option[value="regular_only"]')) as HTMLSelectElement;
+  const select = [...document.querySelectorAll("select")].find((candidate) =>
+    candidate.querySelector('option[value="regular_only"]'),
+  ) as HTMLSelectElement;
   assert.ok(select);
-  await act(async () => { setNativeSelect(select, 'regular_only'); await tick(); });
+  await act(async () => {
+    setNativeSelect(select, "regular_only");
+    await tick();
+  });
   await clickAdd();
   assert.equal(posted.length, 1);
-  assert.equal(posted[0]!.body.runApplicability, 'regular_only');
+  assert.equal(posted[0]!.body.runApplicability, "regular_only");
   await openAssignmentDrawer();
-  const reopened = [...document.querySelectorAll('select')].find(candidate => !candidate.closest('[data-overlay-exiting]') && candidate.querySelector('option[value="regular_only"]')) as HTMLSelectElement;
-  assert.equal(reopened.value, 'standard_runs');
+  const reopened = [...document.querySelectorAll("select")].find(
+    (candidate) =>
+      !candidate.closest("[data-overlay-exiting]") &&
+      candidate.querySelector('option[value="regular_only"]'),
+  ) as HTMLSelectElement;
+  assert.equal(reopened.value, "standard_runs");
 });

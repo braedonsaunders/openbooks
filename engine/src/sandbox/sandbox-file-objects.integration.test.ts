@@ -40,7 +40,10 @@ async function runTeardowns(...steps: Array<() => Promise<unknown>>): Promise<vo
 // No skip guard: a DB-owned test that self-skips turns CI red, so these
 // fail loud without a database instead of skipping silently.
 
-async function seedS3File(orgId: string, storageKind: string): Promise<{
+async function seedS3File(
+  orgId: string,
+  storageKind: string,
+): Promise<{
   fileId: string;
   versionId: string;
   bytes: Buffer;
@@ -49,7 +52,9 @@ async function seedS3File(orgId: string, storageKind: string): Promise<{
   const fileId = randomUUID();
   const versionId = randomUUID();
   const bytes = Buffer.from(`cabinet-bytes-${versionId}`);
-  await db.execute(sql`insert into folders (id, org_id, name) values (${folderId}, ${orgId}, 'Cabinet')`);
+  await db.execute(
+    sql`insert into folders (id, org_id, name) values (${folderId}, ${orgId}, 'Cabinet')`,
+  );
   await db.execute(sql`insert into files (id, org_id, folder_id, name, content_type, size_bytes, storage_kind, content_hash)
     values (${fileId}, ${orgId}, ${folderId}, 'statement.pdf', 'application/pdf', ${bytes.length}, ${storageKind}, 'hash-s3')`);
   await db.execute(sql`insert into file_versions (id, file_id, version_number, size_bytes, content_type, storage_kind, content_hash)
@@ -57,10 +62,15 @@ async function seedS3File(orgId: string, storageKind: string): Promise<{
   return { fileId, versionId, bytes };
 }
 
-async function sandboxVersionId(sandboxOrgId: string): Promise<{ id: string; storage_kind: string }> {
-  const rows = await db.execute<{ id: string; storage_kind: string }>(sql`
+async function sandboxVersionId(
+  sandboxOrgId: string,
+): Promise<{ id: string; storage_kind: string }> {
+  const rows = await db.execute<{ id: string; storage_kind: string }>(
+    sql`
     select fv.id, fv.storage_kind from file_versions fv
-     join files f on f.id = fv.file_id where f.org_id = ${sandboxOrgId}`, "objects");
+     join files f on f.id = fv.file_id where f.org_id = ${sandboxOrgId}`,
+    "objects",
+  );
   assert.equal(rows.length, 1);
   return rows[0]!;
 }
@@ -93,7 +103,10 @@ test("unmasked clone copies S3 objects to the rebased keys", async () => {
 
     // Refresh keeps the cabinet readable (same deterministic keys).
     await refreshSandbox(sandboxId);
-    assert.equal((await getS3Blob((await sandboxVersionId(created.sandboxOrgId)).id))?.toString(), seeded.bytes.toString());
+    assert.equal(
+      (await getS3Blob((await sandboxVersionId(created.sandboxOrgId)).id))?.toString(),
+      seeded.bytes.toString(),
+    );
 
     // Delete removes the sandbox's objects and keeps production's.
     await deleteSandbox(sandboxId);
@@ -102,10 +115,7 @@ test("unmasked clone copies S3 objects to the rebased keys", async () => {
     assert.equal((await getS3Blob(seeded.versionId))?.toString(), seeded.bytes.toString());
   } finally {
     const sid = sandboxId;
-    await runTeardowns(
-      ...(sid ? [() => deleteSandbox(sid)] : []),
-      () => dropScratchOrg(org.orgId),
-    );
+    await runTeardowns(...(sid ? [() => deleteSandbox(sid)] : []), () => dropScratchOrg(org.orgId));
     setFileBlobStoreForTests(null);
   }
 });
@@ -133,10 +143,7 @@ test("masked clone copies no S3 objects", async () => {
     assert.equal(sbx.storage_kind, "masked");
   } finally {
     const sid = sandboxId;
-    await runTeardowns(
-      ...(sid ? [() => deleteSandbox(sid)] : []),
-      () => dropScratchOrg(org.orgId),
-    );
+    await runTeardowns(...(sid ? [() => deleteSandbox(sid)] : []), () => dropScratchOrg(org.orgId));
     setFileBlobStoreForTests(null);
   }
 });
@@ -151,11 +158,18 @@ test("failed object copy cleans up partial keys and reports the failure", async 
     // Production S3 version row with NO object behind it (simulates the
     // object missing mid-clone); the sandbox holds its rebased row.
     const seeded = await seedS3File(prod.orgId, "s3");
-    const rebased = (await db.execute<{ id: string }>(sql`
-      select ob_rebase(${seeded.versionId}, ${seed}) as id`, "objects"))[0]!.id;
+    const rebased = (
+      await db.execute<{ id: string }>(
+        sql`
+      select ob_rebase(${seeded.versionId}, ${seed}) as id`,
+        "objects",
+      )
+    )[0]!.id;
     const folderId = randomUUID();
     const fileId = randomUUID();
-    await db.execute(sql`insert into folders (id, org_id, name) values (${folderId}, ${sbx.orgId}, 'Cabinet')`);
+    await db.execute(
+      sql`insert into folders (id, org_id, name) values (${folderId}, ${sbx.orgId}, 'Cabinet')`,
+    );
     await db.execute(sql`insert into files (id, org_id, folder_id, name, content_type, size_bytes, storage_kind, content_hash)
       values (${fileId}, ${sbx.orgId}, ${folderId}, 'statement.pdf', 'application/pdf', 8, 's3', 'hash-s3')`);
     await db.execute(sql`insert into file_versions (id, file_id, version_number, size_bytes, content_type, storage_kind, content_hash)
@@ -169,7 +183,11 @@ test("failed object copy cleans up partial keys and reports the failure", async 
 
     // The store healthy again: the same copy succeeds and resolves.
     await putS3Blob(seeded.versionId, seeded.bytes, "application/pdf");
-    const result = await copyClonedFileObjects({ productionOrgId: prod.orgId, sandboxOrgId: sbx.orgId, seed });
+    const result = await copyClonedFileObjects({
+      productionOrgId: prod.orgId,
+      sandboxOrgId: sbx.orgId,
+      seed,
+    });
     assert.equal(result.objectsCopied, 1);
     assert.equal((await getS3Blob(rebased))?.toString(), seeded.bytes.toString());
 

@@ -25,8 +25,7 @@ const routeState: ActRouteState = {
   budgetsOn: false,
   seenCtx: [],
 };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
-  routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
@@ -99,10 +98,7 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (
-      specifier === "@/lib/authz" &&
-      context.parentURL?.endsWith("/web/lib/api/route.ts")
-    ) {
+    if (specifier === "@/lib/authz" && context.parentURL?.endsWith("/web/lib/api/route.ts")) {
       return { url: "mock:authz", shortCircuit: true };
     }
     // The real context builder reaches authz through a sibling-relative
@@ -171,8 +167,7 @@ test("POST preserves the unrestricted marker instead of an empty boundary", asyn
   const response = await act({ itemId: "flows_approval:gate:1", actionKey: "approve" });
 
   assert.equal(response.status, 200);
-  const scope = (
-    routeState.seenCtx[0]!.ctx as { scope?: { allowedSubsidiaryIds?: unknown } }
-  ).scope;
+  const scope = (routeState.seenCtx[0]!.ctx as { scope?: { allowedSubsidiaryIds?: unknown } })
+    .scope;
   assert.strictEqual(scope?.allowedSubsidiaryIds, null);
 });

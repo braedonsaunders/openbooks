@@ -55,17 +55,12 @@ import { lockActorCommandAuthority } from "../organization/actor-command-authori
 
 /** Versioned identity for the evidence token and the report envelope. */
 export const EMPLOYMENT_MIGRATION_REF_PREFIX = "hrm-employment-migration/v1";
-export const EMPLOYMENT_MIGRATION_REPORT_VERSION =
-  "openbooks/hrm-employment-migration-report/v1";
+export const EMPLOYMENT_MIGRATION_REPORT_VERSION = "openbooks/hrm-employment-migration-report/v1";
 
 /** Stable assignment slot key for the single slot the migration opens. */
 export const MIGRATION_ASSIGNMENT_KEY = "migration-primary";
 
-export type PersonMigrationOutcome =
-  | "migrated"
-  | "already_migrated"
-  | "would_migrate"
-  | "refused";
+export type PersonMigrationOutcome = "migrated" | "already_migrated" | "would_migrate" | "refused";
 
 export interface MigrationBindingDiff {
   readonly expected: {
@@ -229,10 +224,7 @@ export function hashEmploymentMigrationReport(
   const { generatedAt: _generatedAt, ...stable } = report;
   void _generatedAt;
   return createHash("sha256")
-    .update(
-      `${EMPLOYMENT_MIGRATION_REPORT_VERSION}\n${canonicalEncode(stable)}`,
-      "utf8",
-    )
+    .update(`${EMPLOYMENT_MIGRATION_REPORT_VERSION}\n${canonicalEncode(stable)}`, "utf8")
     .digest("hex");
 }
 
@@ -366,12 +358,15 @@ async function findEmploymentsByNaturalKey(
   workerPartyId: string,
   employerSubsidiaryId: string,
 ): Promise<string[]> {
-  const found = await db.execute<{ id: string }>(sql`
+  const found = await db.execute<{ id: string }>(
+    sql`
     select id::text as id from worker_employments
      where org_id = ${orgId}
        and worker_party_id = ${workerPartyId}::uuid
        and employer_subsidiary_id = ${employerSubsidiaryId}::uuid
-     order by created_at, id`, "objects");
+     order by created_at, id`,
+    "objects",
+  );
   return found.map((row) => row.id);
 }
 
@@ -422,7 +417,8 @@ function personKey(
  * single migration transaction, under tenant RLS with bypass off.
  */
 async function loadStoredBindings(orgId: string): Promise<StoredBinding[]> {
-  const found = await db.execute<EvidenceRow>(sql`
+  const found = await db.execute<EvidenceRow>(
+    sql`
     select c.recorded_source_ref as ref, c.employment_id::text as employment_id,
            to_char(c.recorded_at, 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as bound_at,
            e.worker_party_id::text as worker_party_id,
@@ -433,15 +429,15 @@ async function loadStoredBindings(orgId: string): Promise<StoredBinding[]> {
      where c.org_id = ${orgId}
        and c.recorded_source = 'system'
        and c.recorded_source_ref like ${`${EMPLOYMENT_MIGRATION_REF_PREFIX} %`}
-     order by c.recorded_at, c.id`, "objects");
+     order by c.recorded_at, c.id`,
+    "objects",
+  );
   if (found.length === 0) return [];
   // A write that matches rows no read can observe is not a save: every
   // evidence row must join a live employment, or the binding is corrupt.
   // (The composite FK makes this unreachable except through the governed
   // amend path; fail closed rather than assume it.)
-  const orphans = found.filter(
-    (row) => row.employment_id === null || row.worker_party_id === null,
-  );
+  const orphans = found.filter((row) => row.employment_id === null || row.worker_party_id === null);
   if (orphans.length > 0) {
     throw new EmploymentMigrationError(
       `employment migration evidence for org ${orgId} names ${orphans.length} ` +
@@ -539,9 +535,10 @@ export async function executeEmploymentMigration(
   }
 
   return withOrgTransaction(orgId, async () => {
-    const actorScope = appliedBy === undefined
-      ? null
-      : await lockActorCommandAuthority(db, orgId, appliedBy, null, "hrm.employment.manage");
+    const actorScope =
+      appliedBy === undefined
+        ? null
+        : await lockActorCommandAuthority(db, orgId, appliedBy, null, "hrm.employment.manage");
     if (!dryRun) {
       // Serialize concurrent applies per org: without this two operators
       // could double-migrate the same persons past each other's evidence
@@ -605,8 +602,7 @@ export async function executeEmploymentMigration(
       if (
         row.existingBinding !== null &&
         storedBinding !== undefined &&
-        row.existingBinding.canonicalEmploymentId !==
-          storedBinding.binding.canonicalEmploymentId
+        row.existingBinding.canonicalEmploymentId !== storedBinding.binding.canonicalEmploymentId
       ) {
         throw new EmploymentMigrationError(
           `source row ${row.sourceNamespace}/${row.sourceId} carries a ` +
@@ -622,8 +618,11 @@ export async function executeEmploymentMigration(
 
     const preflight = preflightEmploymentMigration(withBindings, { appliedBy });
     for (const row of preflight.rows) {
-      if (row.candidate !== null && actorScope !== null &&
-          !actorScope.has(row.candidate.employerSubsidiaryId)) {
+      if (
+        row.candidate !== null &&
+        actorScope !== null &&
+        !actorScope.has(row.candidate.employerSubsidiaryId)
+      ) {
         throw new EmploymentMigrationError(
           "The applying user cannot manage this employer — use an employment manager " +
             "with access to the reviewed legal entity",
@@ -724,8 +723,7 @@ export async function executeEmploymentMigration(
           bindingKey(evaluated.sourceNamespace, evaluated.sourceId),
         );
         if (natural?.kind === "reuse-db" || natural?.kind === "reuse-run") {
-          const employmentId =
-            natural.kind === "reuse-db" ? natural.employmentId : null;
+          const employmentId = natural.kind === "reuse-db" ? natural.employmentId : null;
           return {
             ...base,
             outcome: "already_migrated" as const,
@@ -872,8 +870,7 @@ export async function executeEmploymentMigration(
         if (person.outcome !== "migrated") continue;
         const evaluated = preflight.rows.find(
           (row) =>
-            row.sourceNamespace === person.sourceNamespace &&
-            row.sourceId === person.sourceId,
+            row.sourceNamespace === person.sourceNamespace && row.sourceId === person.sourceId,
         );
         const candidate = evaluated?.candidate;
         if (candidate === null || candidate === undefined) continue;
@@ -929,8 +926,7 @@ export async function executeEmploymentMigration(
           person.candidateDigest,
           withBindings.find(
             (row) =>
-              row.sourceNamespace === person.sourceNamespace &&
-              row.sourceId === person.sourceId,
+              row.sourceNamespace === person.sourceNamespace && row.sourceId === person.sourceId,
           )?.sourceVersion ?? "",
         );
         const change = await insertOne<{ id: string }>(
@@ -939,9 +935,11 @@ export async function executeEmploymentMigration(
                 (org_id, employment_id, revision, change_kind, prior_snapshot,
                  reason, recorded_source, recorded_source_ref)
               values (${orgId}, ${employment.id}::uuid, 1, 'created', '{}'::jsonb,
-                      ${`One-time employment migration: ${person.sourceNamespace}/${person.sourceId} ` +
+                      ${
+                        `One-time employment migration: ${person.sourceNamespace}/${person.sourceId} ` +
                         `migrated as ${candidate.status} effective ${candidate.effectiveFrom}; ` +
-                        `candidate digest ${person.candidateDigest}; historical coverage unknown.`},
+                        `candidate digest ${person.candidateDigest}; historical coverage unknown.`
+                      },
                       'system', ${ref})
               returning id::text as id`,
         );
@@ -972,17 +970,14 @@ export async function executeEmploymentMigration(
         if (person.outcome === "migrated") {
           return {
             ...person,
-            employmentId:
-              written.get(bindingKey(person.sourceNamespace, person.sourceId)) ?? null,
+            employmentId: written.get(bindingKey(person.sourceNamespace, person.sourceId)) ?? null,
           };
         }
         if (person.outcome === "already_migrated" && person.employmentId === null) {
           // Reuse of an employment this same run inserted: resolve the id
           // from the earlier row's write. A missing write is a failure, not
           // a null — the decision promised exactly one insert for the key.
-          const sourceKey = reuseOf.get(
-            bindingKey(person.sourceNamespace, person.sourceId),
-          );
+          const sourceKey = reuseOf.get(bindingKey(person.sourceNamespace, person.sourceId));
           if (sourceKey !== undefined) {
             const resolved = written.get(sourceKey);
             if (resolved === undefined) {

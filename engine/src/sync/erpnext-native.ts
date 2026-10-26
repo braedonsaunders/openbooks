@@ -29,7 +29,13 @@ export interface ErpInvoice {
   debit_to?: string;
   credit_to?: string;
   remarks?: string | null;
-  items: { item_code?: string | null; income_account?: string; expense_account?: string; base_net_amount: number; description?: string | null }[];
+  items: {
+    item_code?: string | null;
+    income_account?: string;
+    expense_account?: string;
+    base_net_amount: number;
+    description?: string | null;
+  }[];
   taxes?: { account_head: string; base_tax_amount: number }[];
 }
 
@@ -56,7 +62,13 @@ export interface ErpJournal {
   user_remark?: string | null;
   // ERPNext JE lines carry their own party (party_type Customer/Supplier +
   // party) — its per-line AR/AP subledger mechanism.
-  accounts: { account: string; debit: number; credit: number; party_type?: string | null; party?: string | null }[];
+  accounts: {
+    account: string;
+    debit: number;
+    credit: number;
+    party_type?: string | null;
+    party?: string | null;
+  }[];
 }
 
 const num = (v: number): bigint => toUnits(String(v ?? 0));
@@ -69,25 +81,44 @@ function line(
   partyId: string | null = null,
 ): NativeDocLine {
   return {
-    accountId, itemId: null, amount: fromUnits(amountUnits),
-    taxAmount: "0", taxOverridden: false, taxCodeId: null,
-    partyId, departmentId: null, projectId: null, description, lineNumber: n,
+    accountId,
+    itemId: null,
+    amount: fromUnits(amountUnits),
+    taxAmount: "0",
+    taxOverridden: false,
+    taxCodeId: null,
+    partyId,
+    departmentId: null,
+    projectId: null,
+    description,
+    lineNumber: n,
   };
 }
 
 /** ERPNext JE line party (party_type Customer/Supplier) → openbooks party. */
-function erpLineParty(ctx: NativeContext, row: { party_type?: string | null; party?: string | null }): string | null {
+function erpLineParty(
+  ctx: NativeContext,
+  row: { party_type?: string | null; party?: string | null },
+): string | null {
   if (!row.party) return null;
   const prefix = row.party_type === "Supplier" ? "S:" : "C:";
   return ctx.partyByRef.get(`${prefix}${row.party}`) ?? null;
 }
 
-export function buildErpInvoice(ctx: NativeContext, inv: ErpInvoice): NativeDocument | { skip: string } {
-  if (inv.docstatus !== 1) return { skip: inv.docstatus === 2 ? "cancelled" : `docstatus=${inv.docstatus}` };
+export function buildErpInvoice(
+  ctx: NativeContext,
+  inv: ErpInvoice,
+): NativeDocument | { skip: string } {
+  if (inv.docstatus !== 1)
+    return { skip: inv.docstatus === 2 ? "cancelled" : `docstatus=${inv.docstatus}` };
   const isSales = inv.customer !== undefined && inv.customer !== null && inv.customer !== "";
   const kind = isSales
-    ? (inv.is_return ? "customer_credit" : "customer_invoice")
-    : (inv.is_return ? "vendor_credit" : "vendor_bill");
+    ? inv.is_return
+      ? "customer_credit"
+      : "customer_invoice"
+    : inv.is_return
+      ? "vendor_credit"
+      : "vendor_bill";
   const sign = inv.is_return ? -1n : 1n;
   const partyRef = isSales ? `C:${inv.customer}` : `S:${inv.supplier}`;
   const controlRef = isSales ? inv.debit_to : inv.credit_to;
@@ -98,7 +129,9 @@ export function buildErpInvoice(ctx: NativeContext, inv: ErpInvoice): NativeDocu
     const ref = isSales ? it.income_account : it.expense_account;
     const accountId = ctx.accountByRef.get(ref ?? "")?.id;
     if (!accountId) return { skip: `unmapped account ${ref}` };
-    lines.push(line(accountId, num(it.base_net_amount) * sign, ++n, it.description || it.item_code || null));
+    lines.push(
+      line(accountId, num(it.base_net_amount) * sign, ++n, it.description || it.item_code || null),
+    );
   }
   if (lines.length === 0) return { skip: "no items" };
 
@@ -124,9 +157,7 @@ export function buildErpInvoice(ctx: NativeContext, inv: ErpInvoice): NativeDocu
     if (amt === 0n) continue;
     const codeId = ctx.taxCodeByRef.get(head);
     if (!codeId) return { skip: `unmapped tax code ${head}` };
-    const carrier = taxCarrierAssigned
-      ? line(lines[0]!.accountId!, 0n, ++n)
-      : lines[0]!;
+    const carrier = taxCarrierAssigned ? line(lines[0]!.accountId!, 0n, ++n) : lines[0]!;
     carrier.taxAmount = fromUnits(amt);
     carrier.taxOverridden = true;
     carrier.taxCodeId = codeId;
@@ -148,8 +179,12 @@ export function buildErpInvoice(ctx: NativeContext, inv: ErpInvoice): NativeDocu
   };
 }
 
-export function buildErpPayment(ctx: NativeContext, p: ErpPayment): NativeDocument | { skip: string } {
-  if (p.docstatus !== 1) return { skip: p.docstatus === 2 ? "cancelled" : `docstatus=${p.docstatus}` };
+export function buildErpPayment(
+  ctx: NativeContext,
+  p: ErpPayment,
+): NativeDocument | { skip: string } {
+  if (p.docstatus !== 1)
+    return { skip: p.docstatus === 2 ? "cancelled" : `docstatus=${p.docstatus}` };
   const base = {
     sourceRef: p.name,
     posting: true,
@@ -188,8 +223,13 @@ export function buildErpPayment(ctx: NativeContext, p: ErpPayment): NativeDocume
       lines: [{ ...line(from, num(p.base_paid_amount), 1), ...evidence }],
     };
   }
-  if (p.payment_type === "Internal Transfer" && num(p.base_paid_amount) !== num(p.base_received_amount)) {
-    return { skip: `cross-currency internal transfer ${p.name} has different base-paid and base-received amounts; import it with explicit FX legs` };
+  if (
+    p.payment_type === "Internal Transfer" &&
+    num(p.base_paid_amount) !== num(p.base_received_amount)
+  ) {
+    return {
+      skip: `cross-currency internal transfer ${p.name} has different base-paid and base-received amounts; import it with explicit FX legs`,
+    };
   }
   // Internal Transfer: DR paid_to, CR paid_from.
   return {
@@ -204,8 +244,12 @@ export function buildErpPayment(ctx: NativeContext, p: ErpPayment): NativeDocume
   };
 }
 
-export function buildErpJournal(ctx: NativeContext, je: ErpJournal): NativeDocument | { skip: string } {
-  if (je.docstatus !== 1) return { skip: je.docstatus === 2 ? "cancelled" : `docstatus=${je.docstatus}` };
+export function buildErpJournal(
+  ctx: NativeContext,
+  je: ErpJournal,
+): NativeDocument | { skip: string } {
+  if (je.docstatus !== 1)
+    return { skip: je.docstatus === 2 ? "cancelled" : `docstatus=${je.docstatus}` };
   const lines: NativeDocLine[] = [];
   let n = 0;
   for (const row of je.accounts) {

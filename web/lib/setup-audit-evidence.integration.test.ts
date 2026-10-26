@@ -1,162 +1,361 @@
-import assert from 'node:assert/strict';
-import { seedSetupActor, setupWriteSender } from '../testing/setup-write-fixture.ts';
-import { randomUUID } from 'node:crypto';
-import { registerHooks } from 'node:module';
-import test from 'node:test';
-import pg from 'pg';
-import { sql } from 'drizzle-orm';
-import { db, env } from '@openbooks/engine/platform/db';
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from '@openbooks/engine/testing/fixtures';
-import { waitForLockWaiter } from '@openbooks/engine/testing/lock-wait';
+import assert from "node:assert/strict";
+import { seedSetupActor, setupWriteSender } from "../testing/setup-write-fixture.ts";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import pg from "pg";
+import { sql } from "drizzle-orm";
+import { db, env } from "@openbooks/engine/platform/db";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  type ScratchOrg,
+} from "@openbooks/engine/testing/fixtures";
+import { waitForLockWaiter } from "@openbooks/engine/testing/lock-wait";
 
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
 Object.assign(globalThis, { __setupEvidence: state });
-registerHooks({ resolve(specifier, context, next) {
-  if (specifier === '@/lib/authz' || (specifier.endsWith('/lib/authz') && context.parentURL?.includes('/api/admin/setup/'))) {
-    return { shortCircuit: true, url: 'data:text/javascript,export async function guardPermission(){return globalThis.__setupEvidence.gate}' };
-  }
-  return next(specifier, context);
-} });
-const { POST, PATCH, DELETE } = await import('../app/api/admin/setup/[entity]/route');
+registerHooks({
+  resolve(specifier, context, next) {
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/setup/"))
+    ) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function guardPermission(){return globalThis.__setupEvidence.gate}",
+      };
+    }
+    return next(specifier, context);
+  },
+});
+const { POST, PATCH, DELETE } = await import("../app/api/admin/setup/[entity]/route");
 
 const authenticate = (org: ScratchOrg) => seedSetupActor(org, state);
 const send = setupWriteSender({ POST, PATCH, DELETE });
 const json = (value: unknown) => JSON.parse(JSON.stringify(value));
 async function row(table: string, id: string) {
-  return (await db.execute(sql`select * from ${sql.identifier(table)} where id=${id}`, 'objects'))[0];
+  return (
+    await db.execute(sql`select * from ${sql.identifier(table)} where id=${id}`, "objects")
+  )[0];
 }
 async function evidence(id: string, action: string) {
-  return (await db.execute<{changes:Record<string,unknown>;actor_id:string}>(sql`select changes,actor_id from audit_log where row_id=${id} and action=${action} order by at desc limit 1`, 'objects'))[0]!;
+  return (
+    await db.execute<{ changes: Record<string, unknown>; actor_id: string }>(
+      sql`select changes,actor_id from audit_log where row_id=${id} and action=${action} order by at desc limit 1`,
+      "objects",
+    )
+  )[0]!;
 }
 
-test('root subsidiary metadata saves while structural protections remain enforced', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await authenticate(org);
-    const before = await row('subsidiaries',org.subsidiaryId);
-    const body = {id:org.subsidiaryId,name:'Reviewed root',legalName:'Reviewed legal name',country:'CA',parentId:null,isActive:true,isElimination:false};
-    const saved = await send('PATCH','subsidiaries',body);
-    assert.equal(saved.status,200,JSON.stringify(await saved.json()));
-    const after = await row('subsidiaries',org.subsidiaryId);
-    const audit = await evidence(org.subsidiaryId,'update');
-    assert.deepEqual(audit.changes,json({before,after}));assert.equal(audit.actor_id,actorId);
-    for (const change of [{parentId:org.subsidiaryId},{isActive:false}]) {
-      const response = await send('PATCH','subsidiaries',{...body,...change});
-      assert.equal(response.status,400,JSON.stringify(await response.json()));
-    }
-    const deleted = await send('DELETE','subsidiaries',{id:org.subsidiaryId});
-    assert.equal(deleted.status,400,JSON.stringify(await deleted.json()));
-    assert.deepEqual(await row('subsidiaries',org.subsidiaryId),after);
-  } finally {state.gate=null;await dropScratchOrg(org.orgId);}
-});
-
-for (const action of ['insert','update','delete'] as const) {
-  test(`generic setup ${action} stores its actual configuration snapshots`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test(
+  "root subsidiary metadata saves while structural protections remain enforced",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
     const org = await createScratchOrg();
     try {
-      const actorId=await authenticate(org);
-      const body={code:'EVIDENCE',name:'Evidence department',isActive:true};
-      const created=await send('POST','departments',body);assert.equal(created.status,200,JSON.stringify(await created.clone().json()));
-      const {id}=await created.json();const before=await row('departments',id);
-      let expected:Record<string,unknown>={after:before};
-      if(action==='update') {
-        const response=await send('PATCH','departments',{...body,id,name:'Changed department'});assert.equal(response.status,200);
-        expected={before,after:await row('departments',id)};
-      } else if(action==='delete') {
-        const response=await send('DELETE','departments',{id});assert.equal(response.status,200);expected={before};
+      const actorId = await authenticate(org);
+      const before = await row("subsidiaries", org.subsidiaryId);
+      const body = {
+        id: org.subsidiaryId,
+        name: "Reviewed root",
+        legalName: "Reviewed legal name",
+        country: "CA",
+        parentId: null,
+        isActive: true,
+        isElimination: false,
+      };
+      const saved = await send("PATCH", "subsidiaries", body);
+      assert.equal(saved.status, 200, JSON.stringify(await saved.json()));
+      const after = await row("subsidiaries", org.subsidiaryId);
+      const audit = await evidence(org.subsidiaryId, "update");
+      assert.deepEqual(audit.changes, json({ before, after }));
+      assert.equal(audit.actor_id, actorId);
+      for (const change of [{ parentId: org.subsidiaryId }, { isActive: false }]) {
+        const response = await send("PATCH", "subsidiaries", { ...body, ...change });
+        assert.equal(response.status, 400, JSON.stringify(await response.json()));
       }
-      const audit=await evidence(id,action);
-      if(action==='insert'){
-        // Idempotent creates persist the request-controlled match image
-        // alongside the stored snapshot for replay comparison.
-        assert.deepEqual(audit.changes.after,json(before));
-        assert.ok(audit.changes.match && typeof audit.changes.match==='object');
-      } else assert.deepEqual(audit.changes,json(expected));
-      assert.equal(audit.actor_id,actorId);
-    } finally {state.gate=null;await dropScratchOrg(org.orgId);}
-  });
+      const deleted = await send("DELETE", "subsidiaries", { id: org.subsidiaryId });
+      assert.equal(deleted.status, 400, JSON.stringify(await deleted.json()));
+      assert.deepEqual(await row("subsidiaries", org.subsidiaryId), after);
+    } finally {
+      state.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+for (const action of ["insert", "update", "delete"] as const) {
+  test(
+    `generic setup ${action} stores its actual configuration snapshots`,
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
+      const org = await createScratchOrg();
+      try {
+        const actorId = await authenticate(org);
+        const body = { code: "EVIDENCE", name: "Evidence department", isActive: true };
+        const created = await send("POST", "departments", body);
+        assert.equal(created.status, 200, JSON.stringify(await created.clone().json()));
+        const { id } = await created.json();
+        const before = await row("departments", id);
+        let expected: Record<string, unknown> = { after: before };
+        if (action === "update") {
+          const response = await send("PATCH", "departments", {
+            ...body,
+            id,
+            name: "Changed department",
+          });
+          assert.equal(response.status, 200);
+          expected = { before, after: await row("departments", id) };
+        } else if (action === "delete") {
+          const response = await send("DELETE", "departments", { id });
+          assert.equal(response.status, 200);
+          expected = { before };
+        }
+        const audit = await evidence(id, action);
+        if (action === "insert") {
+          // Idempotent creates persist the request-controlled match image
+          // alongside the stored snapshot for replay comparison.
+          assert.deepEqual(audit.changes.after, json(before));
+          assert.ok(audit.changes.match && typeof audit.changes.match === "object");
+        } else assert.deepEqual(audit.changes, json(expected));
+        assert.equal(audit.actor_id, actorId);
+      } finally {
+        state.gate = null;
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
 }
 
-test('tax group evidence preserves ordered members through creation, edit and deletion', {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
- const org=await createScratchOrg();
- try{
-  await authenticate(org);const members:string[]=[];
-  for(const code of ['EVIDENCE-A','EVIDENCE-B']){
-   const response=await send('POST','tax-codes',{code,name:code,isActive:true});assert.equal(response.status,200);members.push((await response.json()).id);
-  }
-  const body={code:'EVIDENCE-GROUP',name:'Evidence group',priceIncludesTax:false,isActive:true,members};
-  const created=await send('POST','tax-groups',body);assert.equal(created.status,200,JSON.stringify(await created.clone().json()));
-  const {id}=await created.json();const before={...await row('tax_groups',id),members};
-  const creation=await evidence(id,'insert');assert.deepEqual(creation.changes.after,json(before));assert.ok(creation.changes.match && typeof creation.changes.match==='object');
-  const next=[members[1]!,members[0]!];const updated=await send('PATCH','tax-groups',{...body,id,members:next});assert.equal(updated.status,200);
-  const after={...await row('tax_groups',id),members:next};assert.deepEqual((await evidence(id,'update')).changes,json({before,after}));
-  const deleted=await send('DELETE','tax-groups',{id});assert.equal(deleted.status,200);
-  assert.deepEqual((await evidence(id,'delete')).changes,json({before:after}));
- }finally{state.gate=null;await dropScratchOrg(org.orgId);}
-});
+test(
+  "tax group evidence preserves ordered members through creation, edit and deletion",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await authenticate(org);
+      const members: string[] = [];
+      for (const code of ["EVIDENCE-A", "EVIDENCE-B"]) {
+        const response = await send("POST", "tax-codes", { code, name: code, isActive: true });
+        assert.equal(response.status, 200);
+        members.push((await response.json()).id);
+      }
+      const body = {
+        code: "EVIDENCE-GROUP",
+        name: "Evidence group",
+        priceIncludesTax: false,
+        isActive: true,
+        members,
+      };
+      const created = await send("POST", "tax-groups", body);
+      assert.equal(created.status, 200, JSON.stringify(await created.clone().json()));
+      const { id } = await created.json();
+      const before = { ...(await row("tax_groups", id)), members };
+      const creation = await evidence(id, "insert");
+      assert.deepEqual(creation.changes.after, json(before));
+      assert.ok(creation.changes.match && typeof creation.changes.match === "object");
+      const next = [members[1]!, members[0]!];
+      const updated = await send("PATCH", "tax-groups", { ...body, id, members: next });
+      assert.equal(updated.status, 200);
+      const after = { ...(await row("tax_groups", id)), members: next };
+      assert.deepEqual((await evidence(id, "update")).changes, json({ before, after }));
+      const deleted = await send("DELETE", "tax-groups", { id });
+      assert.equal(deleted.status, 200);
+      assert.deepEqual((await evidence(id, "delete")).changes, json({ before: after }));
+    } finally {
+      state.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-for (const method of ['POST','PATCH','DELETE'] as const) {
- test(`generic setup ${method} rolls back when evidence cannot be appended`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-  const org=await createScratchOrg();let cleanup:(()=>Promise<void>)|undefined;
-  try{
-   const actorId=await authenticate(org);const body={code:'ATOMIC',name:'Atomic department',isActive:true};
-   let id:string|undefined;
-   if(method!=='POST') {const response=await send('POST','departments',body);assert.equal(response.status,200);id=(await response.json()).id;}
-   const snapshot=async()=>await db.execute(sql`select (select jsonb_agg(to_jsonb(d) order by id) from departments d where org_id=${org.orgId}) as rows,(select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${org.orgId} and table_name='departments') as audits`, 'objects');
-   const before=await snapshot();const name=`setup_audit_${randomUUID().replaceAll('-','')}`;
-   await db.execute(sql.raw(`create function public."${name}"() returns trigger language plpgsql as $$ begin if new.table_name='departments' and new.actor_id='${actorId}'::uuid then raise exception 'forced setup audit failure'; end if; return new; end $$; create trigger "${name}" before insert on audit_log for each row execute function public."${name}"();`));
-   cleanup=async()=>{await db.execute(sql.raw(`drop trigger if exists "${name}" on audit_log; drop function if exists public."${name}"();`));};
-   const response=await send(method,'departments',{...body,id,name:'Unrecorded department'});assert.equal(response.status,400);
-   assert.deepEqual(await snapshot(),before);
-  }finally{await cleanup?.();state.gate=null;await dropScratchOrg(org.orgId);}
- });
+for (const method of ["POST", "PATCH", "DELETE"] as const) {
+  test(
+    `generic setup ${method} rolls back when evidence cannot be appended`,
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
+      const org = await createScratchOrg();
+      let cleanup: (() => Promise<void>) | undefined;
+      try {
+        const actorId = await authenticate(org);
+        const body = { code: "ATOMIC", name: "Atomic department", isActive: true };
+        let id: string | undefined;
+        if (method !== "POST") {
+          const response = await send("POST", "departments", body);
+          assert.equal(response.status, 200);
+          id = (await response.json()).id;
+        }
+        const snapshot = async () =>
+          await db.execute(
+            sql`select (select jsonb_agg(to_jsonb(d) order by id) from departments d where org_id=${org.orgId}) as rows,(select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id=${org.orgId} and table_name='departments') as audits`,
+            "objects",
+          );
+        const before = await snapshot();
+        const name = `setup_audit_${randomUUID().replaceAll("-", "")}`;
+        await db.execute(
+          sql.raw(
+            `create function public."${name}"() returns trigger language plpgsql as $$ begin if new.table_name='departments' and new.actor_id='${actorId}'::uuid then raise exception 'forced setup audit failure'; end if; return new; end $$; create trigger "${name}" before insert on audit_log for each row execute function public."${name}"();`,
+          ),
+        );
+        cleanup = async () => {
+          await db.execute(
+            sql.raw(
+              `drop trigger if exists "${name}" on audit_log; drop function if exists public."${name}"();`,
+            ),
+          );
+        };
+        const response = await send(method, "departments", {
+          ...body,
+          id,
+          name: "Unrecorded department",
+        });
+        assert.equal(response.status, 400);
+        assert.deepEqual(await snapshot(), before);
+      } finally {
+        await cleanup?.();
+        state.gate = null;
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
 }
 
-test('a referenced tax group refuses deletion and restores all removed members', {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
- const org=await createScratchOrg();
- try{
-  await authenticate(org);const code=randomUUID(),group=randomUUID(),document=randomUUID(),line=randomUUID();
-  await db.execute(sql`insert into tax_codes(id,org_id,code,name,is_active) values(${code},${org.orgId},'REFERENCED','Referenced tax',true)`);
-  await db.execute(sql`insert into tax_groups(id,org_id,code,name,is_active) values(${group},${org.orgId},'REFERENCED','Referenced group',true)`);
-  await db.execute(sql`insert into tax_group_members(tax_group_id,tax_code_id,sequence) values(${group},${code},1)`);
-  await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,fx_rate,subtotal,tax_total,total) values(${document},${org.orgId},'vendor_bill','draft','GROUP-REF',${org.subsidiaryId},${org.vendorId},${org.date},'CAD','1','100','0','100')`);
-  await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,account_id,amount,tax_input_amount,tax_amount,tax_group_id,quantity,unit_price) values(${line},${org.orgId},${document},1,${org.accounts.cogs},'100','100','0',${group},'1','100')`);
-  const before=await db.execute(sql`select * from tax_group_members where tax_group_id=${group}`, 'objects');
-  const response=await send('DELETE','tax-groups',{id:group});assert.equal(response.status,409);
-  assert.ok(await row('tax_groups',group));assert.deepEqual(await db.execute(sql`select * from tax_group_members where tax_group_id=${group}`, 'objects'),before);
-  assert.equal((await db.execute(sql`select id from audit_log where row_id=${group}`, 'objects')).length,0);
- }finally{state.gate=null;await dropScratchOrg(org.orgId);}
-});
+test(
+  "a referenced tax group refuses deletion and restores all removed members",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await authenticate(org);
+      const code = randomUUID(),
+        group = randomUUID(),
+        document = randomUUID(),
+        line = randomUUID();
+      await db.execute(
+        sql`insert into tax_codes(id,org_id,code,name,is_active) values(${code},${org.orgId},'REFERENCED','Referenced tax',true)`,
+      );
+      await db.execute(
+        sql`insert into tax_groups(id,org_id,code,name,is_active) values(${group},${org.orgId},'REFERENCED','Referenced group',true)`,
+      );
+      await db.execute(
+        sql`insert into tax_group_members(tax_group_id,tax_code_id,sequence) values(${group},${code},1)`,
+      );
+      await db.execute(
+        sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,fx_rate,subtotal,tax_total,total) values(${document},${org.orgId},'vendor_bill','draft','GROUP-REF',${org.subsidiaryId},${org.vendorId},${org.date},'CAD','1','100','0','100')`,
+      );
+      await db.execute(
+        sql`insert into document_lines(id,org_id,document_id,line_number,account_id,amount,tax_input_amount,tax_amount,tax_group_id,quantity,unit_price) values(${line},${org.orgId},${document},1,${org.accounts.cogs},'100','100','0',${group},'1','100')`,
+      );
+      const before = await db.execute(
+        sql`select * from tax_group_members where tax_group_id=${group}`,
+        "objects",
+      );
+      const response = await send("DELETE", "tax-groups", { id: group });
+      assert.equal(response.status, 409);
+      assert.ok(await row("tax_groups", group));
+      assert.deepEqual(
+        await db.execute(
+          sql`select * from tax_group_members where tax_group_id=${group}`,
+          "objects",
+        ),
+        before,
+      );
+      assert.equal(
+        (await db.execute(sql`select id from audit_log where row_id=${group}`, "objects")).length,
+        0,
+      );
+    } finally {
+      state.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test('setup evidence reads the committed before-image after waiting for another writer', {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
- const org=await createScratchOrg();const writer=new pg.Client({connectionString:process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL});let pending:Promise<Response>|undefined;
- try{
-  await authenticate(org);const body={code:'CONCURRENT',name:'Original department',isActive:true};
-  const created=await send('POST','departments',body);assert.equal(created.status,200);const {id}=await created.json();
-  await writer.connect();await writer.query('begin');
-  // Raw clients skip the pool's RLS-GUC wrapper: without an explicit scope
-  // the update matches zero rows under enforcement, takes no lock, and the
-  // PATCH below never blocks. Scope the writer and assert its footprint so
-  // a blind writer fails fast instead of after the 10s poll.
-  await writer.query("select set_config('app.bypass_rls','on',true)"); // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
-  const committed = await writer.query('update departments set name=$1 where id=$2',['Concurrent committed name',id]);
-  assert.equal(committed.rowCount, 1, 'concurrent writer must hold the department row');
-  pending=send('PATCH','departments',{...body,id,name:'Final reviewed name'});void pending.catch(()=>{});
-  await waitForLockWaiter(writer,{label:'the department PATCH'});await writer.query('commit');assert.equal((await pending).status,200);
-  const audit=await evidence(id,'update');assert.equal((audit.changes.before as Record<string,unknown>).name,'Concurrent committed name');
-  assert.deepEqual(audit.changes.after,json(await row('departments',id)));
- }finally{await writer.query('rollback').catch(()=>{});await pending?.catch(()=>{});await writer.end();state.gate=null;await dropScratchOrg(org.orgId);}
-});
+test(
+  "setup evidence reads the committed before-image after waiting for another writer",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await createScratchOrg();
+    const writer = new pg.Client({
+      connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL,
+    });
+    let pending: Promise<Response> | undefined;
+    try {
+      await authenticate(org);
+      const body = { code: "CONCURRENT", name: "Original department", isActive: true };
+      const created = await send("POST", "departments", body);
+      assert.equal(created.status, 200);
+      const { id } = await created.json();
+      await writer.connect();
+      await writer.query("begin");
+      // Raw clients skip the pool's RLS-GUC wrapper: without an explicit scope
+      // the update matches zero rows under enforcement, takes no lock, and the
+      // PATCH below never blocks. Scope the writer and assert its footprint so
+      // a blind writer fails fast instead of after the 10s poll.
+      await writer.query("select set_config('app.bypass_rls','on',true)"); // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
+      const committed = await writer.query("update departments set name=$1 where id=$2", [
+        "Concurrent committed name",
+        id,
+      ]);
+      assert.equal(committed.rowCount, 1, "concurrent writer must hold the department row");
+      pending = send("PATCH", "departments", { ...body, id, name: "Final reviewed name" });
+      void pending.catch(() => {});
+      await waitForLockWaiter(writer, { label: "the department PATCH" });
+      await writer.query("commit");
+      assert.equal((await pending).status, 200);
+      const audit = await evidence(id, "update");
+      assert.equal(
+        (audit.changes.before as Record<string, unknown>).name,
+        "Concurrent committed name",
+      );
+      assert.deepEqual(audit.changes.after, json(await row("departments", id)));
+    } finally {
+      await writer.query("rollback").catch(() => {});
+      await pending?.catch(() => {});
+      await writer.end();
+      state.gate = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-for(const method of ['PATCH','DELETE'] as const){
- test(`setup ${method} cannot snapshot or mutate another tenant's row`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-  const org=await createScratchOrg(),other=await createScratchOrg();
-  try{
-   await authenticate(org);const body={code:'ISOLATED',name:'Isolated department',isActive:true};
-   const created=await send('POST','departments',body);assert.equal(created.status,200);const {id}=await created.json();const before=await row('departments',id);
-   await authenticate(other);const response=await send(method,'departments',{...body,id,name:'Cross tenant write'});assert.equal(response.status,404);
-   assert.deepEqual(await row('departments',id),before);
-   assert.equal((await db.execute(sql`select id from audit_log where org_id=${other.orgId} and row_id=${id}`, 'objects')).length,0);
-  }finally{state.gate=null;await dropScratchOrg(org.orgId);await dropScratchOrg(other.orgId);}
- });
+for (const method of ["PATCH", "DELETE"] as const) {
+  test(
+    `setup ${method} cannot snapshot or mutate another tenant's row`,
+    { skip: !process.env.OPENBOOKS_DB_URL },
+    async () => {
+      const org = await createScratchOrg(),
+        other = await createScratchOrg();
+      try {
+        await authenticate(org);
+        const body = { code: "ISOLATED", name: "Isolated department", isActive: true };
+        const created = await send("POST", "departments", body);
+        assert.equal(created.status, 200);
+        const { id } = await created.json();
+        const before = await row("departments", id);
+        await authenticate(other);
+        const response = await send(method, "departments", {
+          ...body,
+          id,
+          name: "Cross tenant write",
+        });
+        assert.equal(response.status, 404);
+        assert.deepEqual(await row("departments", id), before);
+        assert.equal(
+          (
+            await db.execute(
+              sql`select id from audit_log where org_id=${other.orgId} and row_id=${id}`,
+              "objects",
+            )
+          ).length,
+          0,
+        );
+      } finally {
+        state.gate = null;
+        await dropScratchOrg(org.orgId);
+        await dropScratchOrg(other.orgId);
+      }
+    },
+  );
 }

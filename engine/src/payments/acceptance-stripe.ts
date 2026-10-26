@@ -74,7 +74,10 @@ export function normalizeStripeNotification(event: unknown): WebhookEvent | null
       // quarantine tests) still classify un-normalizable amounts.
       paidAmount:
         settled && obj.amount_total != null
-          ? fromMinorUnits(BigInt(obj.amount_total as string | number | bigint | boolean), currency ?? "USD")
+          ? fromMinorUnits(
+              BigInt(obj.amount_total as string | number | bigint | boolean),
+              currency ?? "USD",
+            )
           : null,
       paidCurrency: settled ? currency : null,
       raw: root,
@@ -119,7 +122,12 @@ export function normalizeStripeNotification(event: unknown): WebhookEvent | null
   if (type === "checkout.session.expired") {
     // No metadata fallback here: expired sessions only ever resolved on the
     // direct client reference.
-    return { externalRef: String(obj.id ?? ""), linkToken: stringLinkToken(obj.client_reference_id), status: "cancelled", raw: root };
+    return {
+      externalRef: String(obj.id ?? ""),
+      linkToken: stringLinkToken(obj.client_reference_id),
+      status: "cancelled",
+      raw: root,
+    };
   }
   if (type === "charge.refunded" || type === "charge.refund.updated") {
     // Checkout stores the session id as external_ref and persists
@@ -142,12 +150,17 @@ export function normalizeStripeNotification(event: unknown): WebhookEvent | null
       providerEventId: typeof root.id === "string" ? root.id : null,
       refundedAmount:
         refundedRaw != null && refundCurrency
-          ? fromMinorUnits(BigInt(refundedRaw as string | number | bigint | boolean), refundCurrency)
+          ? fromMinorUnits(
+              BigInt(refundedRaw as string | number | bigint | boolean),
+              refundCurrency,
+            )
           : null,
       refundCurrency,
       refundAmountBasis: "cumulative",
-      providerRefundId: type === "charge.refunded" && typeof obj.id === "string" && refundedRaw != null
-        ? `${obj.id}:${String(refundedRaw)}` : null,
+      providerRefundId:
+        type === "charge.refunded" && typeof obj.id === "string" && refundedRaw != null
+          ? `${obj.id}:${String(refundedRaw)}`
+          : null,
       refundObservation: type === "charge.refund.updated",
       raw: root,
     };
@@ -175,7 +188,10 @@ export function normalizeStripeNotification(event: unknown): WebhookEvent | null
         id: String(obj.id ?? ""),
         amount:
           obj.amount != null && disputeCurrency
-            ? fromMinorUnits(BigInt(obj.amount as string | number | bigint | boolean), disputeCurrency)
+            ? fromMinorUnits(
+                BigInt(obj.amount as string | number | bigint | boolean),
+                disputeCurrency,
+              )
             : "0",
         currency: disputeCurrency ?? "",
         reason: typeof obj.reason === "string" ? obj.reason : null,
@@ -261,12 +277,23 @@ export const stripeAdapter: PaymentProviderAdapter = {
     const res = await fetchFn(`${base}/v1/checkout/sessions`, {
       method: "POST",
       redirect: "error",
-      headers: { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}`, "content-type": "application/x-www-form-urlencoded" },
+      headers: {
+        authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
       body: params.toString(),
     });
     const json = await fetchJsonBody(res);
-    if (res.status >= 400) throw new PaymentAcceptanceError(`stripe checkout failed: ${jsonObject(json.error).message ?? res.status}`);
-    if (typeof json.id !== "string" || json.id === "" || typeof json.url !== "string" || json.url === "") {
+    if (res.status >= 400)
+      throw new PaymentAcceptanceError(
+        `stripe checkout failed: ${jsonObject(json.error).message ?? res.status}`,
+      );
+    if (
+      typeof json.id !== "string" ||
+      json.id === "" ||
+      typeof json.url !== "string" ||
+      json.url === ""
+    ) {
       throw new PaymentAcceptanceError("stripe checkout returned no session url");
     }
     return { redirectUrl: json.url, externalRef: json.id };
@@ -274,7 +301,10 @@ export const stripeAdapter: PaymentProviderAdapter = {
   async createSetupSession(secrets, req, fetchFn = defaultFetch) {
     if (!secrets.apiKey) throw new PaymentAcceptanceError("stripe secret key is not configured");
     const base = resolveAcceptanceProviderApiBase("stripe", secrets.apiBase);
-    const auth = { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}`, "content-type": "application/x-www-form-urlencoded" };
+    const auth = {
+      authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}`,
+      "content-type": "application/x-www-form-urlencoded",
+    };
     let customerId = req.providerCustomerId ?? null;
     if (!customerId) {
       const customerParams = new URLSearchParams();
@@ -288,7 +318,9 @@ export const stripeAdapter: PaymentProviderAdapter = {
       });
       const customer = await fetchJsonBody(customerRes);
       if (customerRes.status >= 400 || typeof customer.id !== "string" || !customer.id) {
-        throw new PaymentAcceptanceError(`stripe customer create failed: ${jsonObject(customer.error).message ?? customerRes.status}`);
+        throw new PaymentAcceptanceError(
+          `stripe customer create failed: ${jsonObject(customer.error).message ?? customerRes.status}`,
+        );
       }
       customerId = customer.id;
     }
@@ -306,8 +338,16 @@ export const stripeAdapter: PaymentProviderAdapter = {
       body: params.toString(),
     });
     const json = await fetchJsonBody(res);
-    if (res.status >= 400) throw new PaymentAcceptanceError(`stripe setup session failed: ${jsonObject(json.error).message ?? res.status}`);
-    if (typeof json.id !== "string" || json.id === "" || typeof json.url !== "string" || json.url === "") {
+    if (res.status >= 400)
+      throw new PaymentAcceptanceError(
+        `stripe setup session failed: ${jsonObject(json.error).message ?? res.status}`,
+      );
+    if (
+      typeof json.id !== "string" ||
+      json.id === "" ||
+      typeof json.url !== "string" ||
+      json.url === ""
+    ) {
       throw new PaymentAcceptanceError("stripe setup session returned no url");
     }
     return { redirectUrl: json.url, externalRef: json.id, providerCustomerId: customerId };
@@ -336,14 +376,28 @@ export const stripeAdapter: PaymentProviderAdapter = {
     const json = await fetchJsonBody(res);
     if (res.status >= 400) {
       const err = jsonObject(json.error);
-      const code = typeof err.decline_code === "string" ? err.decline_code : typeof err.code === "string" ? err.code : null;
-      return { status: "failed", providerRef: typeof json.id === "string" ? json.id : null, declineCode: code };
+      const code =
+        typeof err.decline_code === "string"
+          ? err.decline_code
+          : typeof err.code === "string"
+            ? err.code
+            : null;
+      return {
+        status: "failed",
+        providerRef: typeof json.id === "string" ? json.id : null,
+        declineCode: code,
+      };
     }
     const id = typeof json.id === "string" ? json.id : "";
     if (json.status === "succeeded") return { status: "succeeded", providerRef: id };
     if (json.status === "processing") return { status: "processing", providerRef: id };
     const lastError = jsonObject(json.last_payment_error);
-    const code = typeof lastError.decline_code === "string" ? lastError.decline_code : typeof lastError.code === "string" ? lastError.code : "payment_intent_requires_action";
+    const code =
+      typeof lastError.decline_code === "string"
+        ? lastError.decline_code
+        : typeof lastError.code === "string"
+          ? lastError.code
+          : "payment_intent_requires_action";
     if (json.status === "requires_action") {
       // The issuer wants the customer, not another blind charge: hand back
       // the hosted verification URL when Stripe offers one (redirect-based
@@ -358,14 +412,23 @@ export const stripeAdapter: PaymentProviderAdapter = {
   async detachMethod(secrets, req, fetchFn = defaultFetch) {
     if (!secrets.apiKey) throw new PaymentAcceptanceError("stripe secret key is not configured");
     const base = resolveAcceptanceProviderApiBase("stripe", secrets.apiBase);
-    const res = await fetchFn(`${base}/v1/payment_methods/${encodeURIComponent(req.providerMethodId)}/detach`, {
-      method: "POST",
-      redirect: "error",
-      headers: { authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}`, "content-type": "application/x-www-form-urlencoded" },
-    });
+    const res = await fetchFn(
+      `${base}/v1/payment_methods/${encodeURIComponent(req.providerMethodId)}/detach`,
+      {
+        method: "POST",
+        redirect: "error",
+        headers: {
+          authorization: `Basic ${Buffer.from(`${secrets.apiKey}:`).toString("base64")}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+      },
+    );
     if (res.status === 404) return; // already detached: removal stays idempotent
     const json = await fetchJsonBody(res);
-    if (res.status >= 400) throw new PaymentAcceptanceError(`stripe detach failed: ${jsonObject(json.error).message ?? res.status}`);
+    if (res.status >= 400)
+      throw new PaymentAcceptanceError(
+        `stripe detach failed: ${jsonObject(json.error).message ?? res.status}`,
+      );
   },
   verifyWebhookDelivery: verifyStripeWebhookDelivery,
   verifyWebhook(headers, rawBody, secrets) {

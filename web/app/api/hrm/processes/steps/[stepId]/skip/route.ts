@@ -16,17 +16,10 @@ export const POST = defineRoute({
   params: z.object({ stepId: z.string().min(1) }),
   body: skipStepBody,
   invalidBodyStatus: 400,
-  handler: async ({
-    authz: gate,
-    params: routeParams,
-    body: body,
-  }) => {
+  handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { stepId } = routeParams;
     if (!isUuid(stepId))
-      return NextResponse.json(
-        { error: "step id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "step id must be a uuid" }, { status: 400 });
 
     try {
       await skipProcessStep({

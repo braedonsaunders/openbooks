@@ -49,10 +49,7 @@ export function applicationContextFromSession(
   return { authz, source, requestId, apiKeyId: null };
 }
 
-export function assertApplicationPermission(
-  context: ApplicationContext,
-  permission: string,
-): void {
+export function assertApplicationPermission(context: ApplicationContext, permission: string): void {
   if (!can(context.authz, permission)) throw forbidden(permission);
 }
 

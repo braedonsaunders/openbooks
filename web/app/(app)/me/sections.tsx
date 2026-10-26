@@ -5,28 +5,47 @@
  * loader-resolved empty line (a person with no address on file is
  * legitimate) rather than a blank panel pretending to load.
  */
-import { Table as SharedTable, TableBody as SharedTableBody, TableRow as SharedTableRow, TableCell as SharedTableCell } from "@openbooks/ui"
-import { UrlDrawer } from '@openbooks/ui'
-import type { MeOverviewData } from '../../../lib/hrm/self-service'
+import {
+  Table as SharedTable,
+  TableBody as SharedTableBody,
+  TableRow as SharedTableRow,
+  TableCell as SharedTableCell,
+} from "@openbooks/ui";
+import { UrlDrawer } from "@openbooks/ui";
+import type { MeOverviewData } from "../../../lib/hrm/self-service";
 
-type PayExplain = NonNullable<MeOverviewData['payExplain']>;
+type PayExplain = NonNullable<MeOverviewData["payExplain"]>;
 
-type CapLabels = { ytd: string; maximum: string; remaining: string; cappedNoteTemplate: string }
+type CapLabels = { ytd: string; maximum: string; remaining: string; cappedNoteTemplate: string };
 
-function TraceTable({ rows, amountLabel, capLabels }: {
+function TraceTable({
+  rows,
+  amountLabel,
+  capLabels,
+}: {
   rows: {
-    description: string; hours: string | null; rate: string | null; amount: string; treatment: string | null;
-    ytd?: string | null; annualMaximum?: string | null; remainingBeforeMax?: string | null; capped?: boolean;
+    description: string;
+    hours: string | null;
+    rate: string | null;
+    amount: string;
+    treatment: string | null;
+    ytd?: string | null;
+    annualMaximum?: string | null;
+    remainingBeforeMax?: string | null;
+    capped?: boolean;
   }[];
   amountLabel: string;
   capLabels?: CapLabels | null;
 }) {
-  if (rows.length === 0) return null
+  if (rows.length === 0) return null;
   return (
     <SharedTable className="w-full text-sm">
       <SharedTableBody>
         {rows.map((row) => (
-          <SharedTableRow key={row.description} className="border-t border-slate-100 dark:border-slate-800">
+          <SharedTableRow
+            key={row.description}
+            className="border-t border-slate-100 dark:border-slate-800"
+          >
             <SharedTableCell className="py-1 pr-2">
               {row.description}
               {row.hours !== null && row.rate !== null ? (
@@ -35,18 +54,24 @@ function TraceTable({ rows, amountLabel, capLabels }: {
                 </span>
               ) : null}
               {row.treatment ? (
-                <span className="block text-xs text-slate-500 dark:text-slate-400">{row.treatment}</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">
+                  {row.treatment}
+                </span>
               ) : null}
               {capLabels && row.ytd != null ? (
                 <span className="block text-xs text-slate-500 tabular-nums dark:text-slate-400">
                   {capLabels.ytd} {row.ytd}
-                  {row.annualMaximum != null ? ` · ${capLabels.maximum} ${row.annualMaximum}` : null}
-                  {row.remainingBeforeMax != null ? ` · ${capLabels.remaining} ${row.remainingBeforeMax}` : null}
+                  {row.annualMaximum != null
+                    ? ` · ${capLabels.maximum} ${row.annualMaximum}`
+                    : null}
+                  {row.remainingBeforeMax != null
+                    ? ` · ${capLabels.remaining} ${row.remainingBeforeMax}`
+                    : null}
                 </span>
               ) : null}
               {capLabels && row.capped ? (
                 <span className="block text-xs font-medium text-slate-700 dark:text-slate-200">
-                  {capLabels.cappedNoteTemplate.replace('{amount}', row.amount)}
+                  {capLabels.cappedNoteTemplate.replace("{amount}", row.amount)}
                 </span>
               ) : null}
             </SharedTableCell>
@@ -56,20 +81,20 @@ function TraceTable({ rows, amountLabel, capLabels }: {
       </SharedTableBody>
       <caption className="sr-only">{amountLabel}</caption>
     </SharedTable>
-  )
+  );
 }
 
 /** The Explain drawer (?explain=<stubId>): the deterministic trace as a
  *  table with diff chips. No LLM is needed — the trace cites record ids
  *  and the figures govern. Renders nothing without an explanation. */
 export function ExplainDrawer({ explain }: { explain: PayExplain | null }) {
-  if (!explain) return null
+  if (!explain) return null;
   const capLabels: CapLabels = {
     ytd: explain.ytdLabel,
     maximum: explain.maximumLabel,
     remaining: explain.remainingLabel,
     cappedNoteTemplate: explain.cappedNoteTemplate,
-  }
+  };
   return (
     <UrlDrawer open closeHref={explain.closeHref} title={explain.title}>
       {explain.missing || !explain.trace ? (
@@ -86,7 +111,9 @@ export function ExplainDrawer({ explain }: { explain: PayExplain | null }) {
               <dd className="font-medium tabular-nums">{explain.trace.netPay}</dd>
             </div>
             <div>
-              <dt className="text-xs text-slate-500 dark:text-slate-400">{explain.employerCostLabel}</dt>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">
+                {explain.employerCostLabel}
+              </dt>
               <dd className="font-medium tabular-nums">{explain.trace.employerCost}</dd>
             </div>
           </dl>
@@ -96,12 +123,20 @@ export function ExplainDrawer({ explain }: { explain: PayExplain | null }) {
           </section>
           <section>
             <h3 className="mb-1 text-sm font-medium">{explain.deductionsTitle}</h3>
-            <TraceTable rows={explain.trace.deductions} amountLabel={explain.deductionsTitle} capLabels={capLabels} />
+            <TraceTable
+              rows={explain.trace.deductions}
+              amountLabel={explain.deductionsTitle}
+              capLabels={capLabels}
+            />
           </section>
           {explain.trace.employerContributions.length > 0 ? (
             <section>
               <h3 className="mb-1 text-sm font-medium">{explain.contributionsTitle}</h3>
-              <TraceTable rows={explain.trace.employerContributions} amountLabel={explain.contributionsTitle} capLabels={capLabels} />
+              <TraceTable
+                rows={explain.trace.employerContributions}
+                amountLabel={explain.contributionsTitle}
+                capLabels={capLabels}
+              />
             </section>
           ) : null}
           {explain.trace.diffVsPrevious.changes.length > 0 ? (
@@ -111,7 +146,7 @@ export function ExplainDrawer({ explain }: { explain: PayExplain | null }) {
                 {explain.trace.diffVsPrevious.changes.map((change) => (
                   <li
                     key={change.description}
-                    title={`${change.previousAmount ?? '—'} → ${change.amount ?? '—'}: ${change.input}`}
+                    title={`${change.previousAmount ?? "—"} → ${change.amount ?? "—"}: ${change.input}`}
                     className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200"
                   >
                     {change.description}
@@ -125,12 +160,16 @@ export function ExplainDrawer({ explain }: { explain: PayExplain | null }) {
             <ul className="text-xs text-slate-500 dark:text-slate-400">
               {explain.trace.sources.map((source) => (
                 <li key={`${source.kind}:${source.id}`}>
-                  {source.kind === 'pay_stub' ? (
+                  {source.kind === "pay_stub" ? (
                     // The self-service stub view re-checks own-stub scope, so
                     // this link never opens another person's payslip.
-                    <a className="underline" href={`/me?explain=${source.id}`}>{source.kind} · {source.id}</a>
+                    <a className="underline" href={`/me?explain=${source.id}`}>
+                      {source.kind} · {source.id}
+                    </a>
                   ) : (
-                    <>{source.kind} · {source.id}</>
+                    <>
+                      {source.kind} · {source.id}
+                    </>
                   )}
                 </li>
               ))}
@@ -139,27 +178,31 @@ export function ExplainDrawer({ explain }: { explain: PayExplain | null }) {
         </div>
       )}
     </UrlDrawer>
-  )
+  );
 }
 // HR-21 end: the Explain drawer lives above; HrmFacts follows untouched.
 export function HrmFacts({
   facts,
   empty,
 }: {
-  facts: { label: string; value: string }[]
-  empty?: string | null
+  facts: { label: string; value: string }[];
+  empty?: string | null;
 }) {
   if (facts.length === 0) {
-    return empty ? <p className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">{empty}</p> : null
+    return empty ? (
+      <p className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">{empty}</p>
+    ) : null;
   }
   return (
     <dl className="divide-y divide-slate-100 dark:divide-slate-800">
       {facts.map((fact) => (
         <div key={fact.label} className="flex items-baseline justify-between gap-4 px-4 py-2.5">
           <dt className="shrink-0 text-sm text-slate-500 dark:text-slate-400">{fact.label}</dt>
-          <dd className="text-right text-sm font-medium text-slate-900 tabular-nums dark:text-slate-100">{fact.value}</dd>
+          <dd className="text-right text-sm font-medium text-slate-900 tabular-nums dark:text-slate-100">
+            {fact.value}
+          </dd>
         </div>
       ))}
     </dl>
-  )
+  );
 }

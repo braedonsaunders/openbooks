@@ -11,7 +11,11 @@ export const GB_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     refusalReason:
       "The plan determines its threshold and repayment; the engine must not infer a plan or omit a selected repayment.",
     required: true,
-    producer: { kind: "certificate", certificate: "gb_starter_checklist", field: "student_loan_plan" },
+    producer: {
+      kind: "certificate",
+      certificate: "gb_starter_checklist",
+      field: "student_loan_plan",
+    },
   },
   {
     key: "gb_postgraduate_loan",
@@ -43,7 +47,11 @@ export const GB_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     label: "worker age band for automatic enrolment",
     refusalReason: "The employer's automatic-enrolment duties depend on the worker's age band.",
     required: true,
-    producer: { kind: "certificate", certificate: "gb_workplace_pension_assessment", field: "age_band" },
+    producer: {
+      kind: "certificate",
+      certificate: "gb_workplace_pension_assessment",
+      field: "age_band",
+    },
   },
   {
     key: "gb_ae_membership_status",
@@ -53,7 +61,9 @@ export const GB_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     refusalReason: "The engine must know whether automatic-enrolment contributions are due.",
     required: true,
     producer: {
-      kind: "certificate", certificate: "gb_workplace_pension_assessment", field: "membership_status",
+      kind: "certificate",
+      certificate: "gb_workplace_pension_assessment",
+      field: "membership_status",
     },
   },
   {
@@ -64,7 +74,9 @@ export const GB_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     refusalReason: "The qualifying-earnings band and contribution basis determine the amount due.",
     required: true,
     producer: {
-      kind: "certificate", certificate: "gb_workplace_pension_assessment", field: "scheme_basis",
+      kind: "certificate",
+      certificate: "gb_workplace_pension_assessment",
+      field: "scheme_basis",
     },
   },
   {
@@ -75,7 +87,9 @@ export const GB_EMPLOYEE_FACTS: readonly PayrollEmployeeFact[] = [
     refusalReason: "The method changes employee withholding and tax treatment.",
     required: true,
     producer: {
-      kind: "certificate", certificate: "gb_workplace_pension_assessment", field: "deduction_method",
+      kind: "certificate",
+      certificate: "gb_workplace_pension_assessment",
+      field: "deduction_method",
     },
   },
 ];

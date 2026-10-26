@@ -1,11 +1,18 @@
-import { assertQpipReportingBasis, qpipReportingBasisColumns } from "./canada/qpip-reporting-basis.ts";
-import { requireUsW2OpeningSource } from './us/opening-ytd-source.ts';
-import { readCanadianOpeningYearEndSlices } from './canada/opening-reporting-yearend.ts';
-import { withOpeningReportingSnapshot } from './opening-reporting-snapshot.ts';
-import { currentOpeningLevySourceSql } from './opening-levy-source-correction-authority.ts';
-import { roeLaterSpellStubSql, roeProfileAdmission } from './canada/roe-event-source.ts';
-import { parseRoeEventRow, roeEventRow } from './roe-event-row.ts';
-import { roeWindowContext, readRoeReportingWindow, ROE_REPORTING_COUNTS } from './roe-reporting-window.ts';
+import {
+  assertQpipReportingBasis,
+  qpipReportingBasisColumns,
+} from "./canada/qpip-reporting-basis.ts";
+import { requireUsW2OpeningSource } from "./us/opening-ytd-source.ts";
+import { readCanadianOpeningYearEndSlices } from "./canada/opening-reporting-yearend.ts";
+import { withOpeningReportingSnapshot } from "./opening-reporting-snapshot.ts";
+import { currentOpeningLevySourceSql } from "./opening-levy-source-correction-authority.ts";
+import { roeLaterSpellStubSql, roeProfileAdmission } from "./canada/roe-event-source.ts";
+import { parseRoeEventRow, roeEventRow } from "./roe-event-row.ts";
+import {
+  roeWindowContext,
+  readRoeReportingWindow,
+  ROE_REPORTING_COUNTS,
+} from "./roe-reporting-window.ts";
 import { assertPayrollCountryKnown } from "./country.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -94,7 +101,10 @@ function caYearCaps(taxYear: number): { mie: string; yampe: string; qpipMie: str
  */
 export function capAnnualEarnings(
   rows: readonly {
-    employeePartyId: string; insurable: string; pensionable: string; qpipInsurable: string;
+    employeePartyId: string;
+    insurable: string;
+    pensionable: string;
+    qpipInsurable: string;
   }[],
   caps: { mie: string; yampe: string; qpipMie: string },
 ): { box24EiInsurable: string; box26CppPensionable: string; box56QpipInsurable: string }[] {
@@ -286,8 +296,11 @@ export function assertUsOpeningYtdEinAttribution(
   for (const [employeePartyId, opening] of openings) {
     const accounts = accountsByEmployee.get(employeePartyId);
     const hasAmounts = [
-      opening.pensionableYtd, opening.insurableYtd, opening.taxableYtd,
-      opening.taxYtd, opening.ficaWithheldYtd,
+      opening.pensionableYtd,
+      opening.insurableYtd,
+      opening.taxableYtd,
+      opening.taxYtd,
+      opening.ficaWithheldYtd,
     ].some((amount) => cmp(amount, "0") !== 0);
     if (hasAmounts && accounts && accounts.size > 1) {
       throw new PayrollError(
@@ -349,14 +362,23 @@ async function openingYearEndYtdByEmployee(
   taxYear: number,
   country: string,
 ): Promise<Map<string, OpeningYearEndYtd>> {
-  const rows = (await db.execute<{
+  const rows = await db.execute<{
     employee_party_id: string;
-    pensionable_ytd: unknown; insurable_ytd: unknown;
-    cpp_ytd: unknown; cpp2_ytd: unknown; ei_ytd: unknown; qpip_ytd: unknown;
-    taxable_ytd: unknown; tax_ytd: unknown; fica_withheld_ytd: unknown;
-    employer_cpp_ytd: unknown; employer_cpp2_ytd: unknown; employer_ei_ytd: unknown;
+    pensionable_ytd: unknown;
+    insurable_ytd: unknown;
+    cpp_ytd: unknown;
+    cpp2_ytd: unknown;
+    ei_ytd: unknown;
+    qpip_ytd: unknown;
+    taxable_ytd: unknown;
+    tax_ytd: unknown;
+    fica_withheld_ytd: unknown;
+    employer_cpp_ytd: unknown;
+    employer_cpp2_ytd: unknown;
+    employer_ei_ytd: unknown;
     union_dues_ytd: unknown;
-  }>(sql`
+  }>(
+    sql`
     select b.employee_party_id,
            b.pensionable_ytd, b.insurable_ytd, b.cpp_ytd, b.cpp2_ytd, b.ei_ytd, b.qpip_ytd,
            b.taxable_ytd, b.tax_ytd, b.fica_withheld_ytd,
@@ -365,7 +387,7 @@ async function openingYearEndYtdByEmployee(
       join payroll_opening_levy_source_authorities original
         on original.org_id=b.org_id and original.opening_balance_id=b.id
        and original.sealed and original.original_country=${country}
-       and ${currentOpeningLevySourceSql('original')}
+       and ${currentOpeningLevySourceSql("original")}
      where b.org_id = ${orgId} and b.tax_year = ${taxYear}
        and (
          coalesce(b.pensionable_ytd, 0) <> 0 or coalesce(b.insurable_ytd, 0) <> 0
@@ -388,11 +410,17 @@ async function openingYearEndYtdByEmployee(
               and pb.tax_year = b.tax_year and coalesce(pb.insurable_ytd, 0) <> 0
          )
        )
-  `, "objects"));
+  `,
+    "objects",
+  );
   const programs = await openingProgramBasesByEmployee(orgId, taxYear);
   const accountRows = await db.execute<{
-    employee_party_id: string; program_key: string; filing_account_id: string; insurable_ytd: unknown;
-  }>(sql`
+    employee_party_id: string;
+    program_key: string;
+    filing_account_id: string;
+    insurable_ytd: unknown;
+  }>(
+    sql`
     select ab.employee_party_id, ab.program_key, ab.filing_account_id, ab.insurable_ytd
       from payroll_opening_account_bases ab
       join payroll_opening_balances b
@@ -400,37 +428,57 @@ async function openingYearEndYtdByEmployee(
       join payroll_opening_levy_source_authorities original
         on original.org_id=b.org_id and original.opening_balance_id=b.id
        and original.sealed and original.original_country=${country}
-       and ${currentOpeningLevySourceSql('original')}
+       and ${currentOpeningLevySourceSql("original")}
      where ab.org_id = ${orgId} and ab.tax_year = ${taxYear}
-  `, "objects");
-  const accountBasesByEmployee = new Map<string, Record<string, { filingAccountId: string; insurableYtd: string }[]>>();
+  `,
+    "objects",
+  );
+  const accountBasesByEmployee = new Map<
+    string,
+    Record<string, { filingAccountId: string; insurableYtd: string }[]>
+  >();
   for (const row of accountRows) {
     const bases = accountBasesByEmployee.get(row.employee_party_id) ?? {};
     bases[row.program_key] ??= [];
-    bases[row.program_key]!.push({ filingAccountId: row.filing_account_id, insurableYtd: normalizeMoney(String(row.insurable_ytd)) });
+    bases[row.program_key]!.push({
+      filingAccountId: row.filing_account_id,
+      insurableYtd: normalizeMoney(String(row.insurable_ytd)),
+    });
     accountBasesByEmployee.set(row.employee_party_id, bases);
   }
-  const originalAmounts = new Map<string, OpeningYearEndYtd>(rows.map((row) => [row.employee_party_id, {
-    pensionableYtd: normalizeMoney(String(row.pensionable_ytd ?? "0")),
-    insurableYtd: normalizeMoney(String(row.insurable_ytd ?? "0")),
-    cppYtd: normalizeMoney(String(row.cpp_ytd ?? "0")),
-    cpp2Ytd: normalizeMoney(String(row.cpp2_ytd ?? "0")),
-    eiYtd: normalizeMoney(String(row.ei_ytd ?? "0")),
-    qpipYtd: normalizeMoney(String(row.qpip_ytd ?? "0")),
-    taxableYtd: normalizeMoney(String(row.taxable_ytd ?? "0")),
-    taxYtd: normalizeMoney(String(row.tax_ytd ?? "0")),
-    ficaWithheldYtd: normalizeMoney(String(row.fica_withheld_ytd ?? "0")),
-    employerCppYtd: normalizeMoney(String(row.employer_cpp_ytd ?? "0")),
-    employerCpp2Ytd: normalizeMoney(String(row.employer_cpp2_ytd ?? "0")),
-    employerEiYtd: normalizeMoney(String(row.employer_ei_ytd ?? "0")),
-    unionDuesYtd: normalizeMoney(String(row.union_dues_ytd ?? "0")),
-    programBasesYtd: programs.get(row.employee_party_id) ?? {},
-  } satisfies OpeningYearEndYtd]));
+  const originalAmounts = new Map<string, OpeningYearEndYtd>(
+    rows.map((row) => [
+      row.employee_party_id,
+      {
+        pensionableYtd: normalizeMoney(String(row.pensionable_ytd ?? "0")),
+        insurableYtd: normalizeMoney(String(row.insurable_ytd ?? "0")),
+        cppYtd: normalizeMoney(String(row.cpp_ytd ?? "0")),
+        cpp2Ytd: normalizeMoney(String(row.cpp2_ytd ?? "0")),
+        eiYtd: normalizeMoney(String(row.ei_ytd ?? "0")),
+        qpipYtd: normalizeMoney(String(row.qpip_ytd ?? "0")),
+        taxableYtd: normalizeMoney(String(row.taxable_ytd ?? "0")),
+        taxYtd: normalizeMoney(String(row.tax_ytd ?? "0")),
+        ficaWithheldYtd: normalizeMoney(String(row.fica_withheld_ytd ?? "0")),
+        employerCppYtd: normalizeMoney(String(row.employer_cpp_ytd ?? "0")),
+        employerCpp2Ytd: normalizeMoney(String(row.employer_cpp2_ytd ?? "0")),
+        employerEiYtd: normalizeMoney(String(row.employer_ei_ytd ?? "0")),
+        unionDuesYtd: normalizeMoney(String(row.union_dues_ytd ?? "0")),
+        programBasesYtd: programs.get(row.employee_party_id) ?? {},
+      } satisfies OpeningYearEndYtd,
+    ]),
+  );
   for (const [employeePartyId, accountBasesYtd] of accountBasesByEmployee) {
     const current = originalAmounts.get(employeePartyId) ?? {
-      pensionableYtd: "0.0000", insurableYtd: "0.0000", cppYtd: "0.0000", cpp2Ytd: "0.0000",
-      eiYtd: "0.0000", qpipYtd: "0.0000", taxableYtd: "0.0000", taxYtd: "0.0000",
-      ficaWithheldYtd: "0.0000", programBasesYtd: programs.get(employeePartyId) ?? {},
+      pensionableYtd: "0.0000",
+      insurableYtd: "0.0000",
+      cppYtd: "0.0000",
+      cpp2Ytd: "0.0000",
+      eiYtd: "0.0000",
+      qpipYtd: "0.0000",
+      taxableYtd: "0.0000",
+      taxYtd: "0.0000",
+      ficaWithheldYtd: "0.0000",
+      programBasesYtd: programs.get(employeePartyId) ?? {},
     };
     originalAmounts.set(employeePartyId, { ...current, accountBasesYtd });
   }
@@ -441,14 +489,26 @@ async function openingEmployeeProfiles(
   orgId: string,
   employeeIds: readonly string[],
   country: string,
-): Promise<Map<string, {
-  name: string; province: string; filingAccountId: string | null; subsidiaryId: string | null;
-}>> {
+): Promise<
+  Map<
+    string,
+    {
+      name: string;
+      province: string;
+      filingAccountId: string | null;
+      subsidiaryId: string | null;
+    }
+  >
+> {
   if (employeeIds.length === 0) return new Map();
-  const rows = (await db.execute<{
-    employee_party_id: string; display_name: string; province: string | null; filing_account_id: string | null;
+  const rows = await db.execute<{
+    employee_party_id: string;
+    display_name: string;
+    province: string | null;
+    filing_account_id: string | null;
     subsidiary_id: string | null;
-  }>(sql`
+  }>(
+    sql`
     select p.id as employee_party_id, p.display_name, p.subsidiary_id,
            coalesce(prof.province, '') as province,
            ${effectiveFilingAccountSql("prof")} as filing_account_id
@@ -456,14 +516,24 @@ async function openingEmployeeProfiles(
       left join employee_payroll_profiles prof
         on prof.org_id = p.org_id and prof.employee_party_id = p.id
        and prof.country = ${country}
-     where p.org_id = ${orgId} and p.id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})
-  `, "objects"));
-  return new Map(rows.map((row) => [row.employee_party_id, {
-    name: row.display_name,
-    province: row.province ?? "",
-    filingAccountId: row.filing_account_id,
-    subsidiaryId: row.subsidiary_id,
-  }]));
+     where p.org_id = ${orgId} and p.id in (${sql.join(
+       employeeIds.map((id) => sql`${id}`),
+       sql`, `,
+     )})
+  `,
+    "objects",
+  );
+  return new Map(
+    rows.map((row) => [
+      row.employee_party_id,
+      {
+        name: row.display_name,
+        province: row.province ?? "",
+        filingAccountId: row.filing_account_id,
+        subsidiaryId: row.subsidiary_id,
+      },
+    ]),
+  );
 }
 
 export interface T4SummaryTotals {
@@ -493,7 +563,7 @@ export interface T4SummaryTotals {
  * is also the only shape in which the data is not a lie.
  */
 export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]> {
-  return withOpeningReportingSnapshot(orgId,taxYear,()=>t4SlipsInTransaction(orgId,taxYear));
+  return withOpeningReportingSnapshot(orgId, taxYear, () => t4SlipsInTransaction(orgId, taxYear));
 }
 
 async function t4SlipsInTransaction(orgId: string, taxYear: number): Promise<T4Slip[]> {
@@ -501,7 +571,8 @@ async function t4SlipsInTransaction(orgId: string, taxYear: number): Promise<T4S
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
   const caps = caYearCaps(taxYear);
   const originalSlices = await readCanadianOpeningYearEndSlices(db, orgId, taxYear);
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     with committed as (
       select s.*
         from pay_stubs s
@@ -549,74 +620,127 @@ async function t4SlipsInTransaction(orgId: string, taxYear: number): Promise<T4S
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
      group by c.employee_party_id, p.display_name, c.filing_account_id, c.province
      order by p.display_name, min(c.pay_date), c.province
-  `, "objects"));
+  `,
+    "objects",
+  );
 
   const stubSlips = rows.map((row) => {
-      const province = String(row.province ?? "");
-      const isQuebec = province === QPIP_PROVINCE;
-      if (isQuebec) assertQpipReportingBasis(String(row.display_name), Number(row.invalid_qpip_bases));
-      return {
-        employeePartyId: String(row.employee_party_id),
-        employeeName: String(row.display_name),
-        province,
-        isQuebec,
-        filingAccountId: (row.filing_account_id as string | null) ?? null,
-        box14EmploymentIncome: num(row.taxable_income),
-        box16Cpp: num(row.cpp),
-        box16aCpp2: num(row.cpp2),
-        box18Ei: num(row.ei),
-        box22IncomeTax: num(row.income_tax),
-        // Keep the uncapped bases here. The opening carry-in is folded into
-        // these same boxes below, then the annual maxima are consumed across
-        // the complete (opening + committed) year-to-date.
-        box24EiInsurable: num(row.insurable),
-        box26CppPensionable: num(row.pensionable),
-        box44UnionDues: num(row.union_dues),
-        box55Qpip: num(row.qpip),
-        // Box 56 is the QPIP program's OWN insurable base — never the EI
-        // base — kept uncapped here like boxes 24/26: the opening carry-in
-        // folds in below then the program maximum is consumed per employee
-        // across slips. Only Quebec employment reports it.
-        box56QpipInsurable: isQuebec ? num(row.qpip_insurable) : "0",
-        employerCpp: num(row.employer_cpp),
-        employerCpp2: num(row.employer_cpp2),
-        employerEi: num(row.employer_ei),
-        stubCount: Number(row.stub_count ?? 0),
-      };
-    });
+    const province = String(row.province ?? "");
+    const isQuebec = province === QPIP_PROVINCE;
+    if (isQuebec)
+      assertQpipReportingBasis(String(row.display_name), Number(row.invalid_qpip_bases));
+    return {
+      employeePartyId: String(row.employee_party_id),
+      employeeName: String(row.display_name),
+      province,
+      isQuebec,
+      filingAccountId: (row.filing_account_id as string | null) ?? null,
+      box14EmploymentIncome: num(row.taxable_income),
+      box16Cpp: num(row.cpp),
+      box16aCpp2: num(row.cpp2),
+      box18Ei: num(row.ei),
+      box22IncomeTax: num(row.income_tax),
+      // Keep the uncapped bases here. The opening carry-in is folded into
+      // these same boxes below, then the annual maxima are consumed across
+      // the complete (opening + committed) year-to-date.
+      box24EiInsurable: num(row.insurable),
+      box26CppPensionable: num(row.pensionable),
+      box44UnionDues: num(row.union_dues),
+      box55Qpip: num(row.qpip),
+      // Box 56 is the QPIP program's OWN insurable base — never the EI
+      // base — kept uncapped here like boxes 24/26: the opening carry-in
+      // folds in below then the program maximum is consumed per employee
+      // across slips. Only Quebec employment reports it.
+      box56QpipInsurable: isQuebec ? num(row.qpip_insurable) : "0",
+      employerCpp: num(row.employer_cpp),
+      employerCpp2: num(row.employer_cpp2),
+      employerEi: num(row.employer_ei),
+      stubCount: Number(row.stub_count ?? 0),
+    };
+  });
   // Original allocations carry their own RP/province and source-attested capped bases.
   // Current employee profiles supply no historical reporting attribution.
   for (const row of rows) {
-    const original = originalSlices.find(slice => slice.employeePartyId === String(row.employee_party_id));
+    const original = originalSlices.find(
+      (slice) => slice.employeePartyId === String(row.employee_party_id),
+    );
     if (original && String(row.first_pay_date).slice(0, 10) <= original.coverageEnd) {
-      throw new PayrollError("Committed payroll overlaps the certified original reporting coverage — reconcile the original carry-in and retained payroll before preparing T4 slips");
+      throw new PayrollError(
+        "Committed payroll overlaps the certified original reporting coverage — reconcile the original carry-in and retained payroll before preparing T4 slips",
+      );
     }
   }
-  const originalSlips: T4Slip[] = originalSlices.map(slice => openingYtdIntoT4Slip({
-    employeePartyId: slice.employeePartyId, employeeName: slice.employeeName,
-    province: slice.allocation.province, isQuebec: slice.allocation.province === QPIP_PROVINCE,
-    filingAccountId: slice.allocation.filingAccountId,
-    box14EmploymentIncome: '0', box16Cpp: '0', box16aCpp2: '0', box18Ei: '0', box22IncomeTax: '0',
-    box24EiInsurable: '0', box26CppPensionable: '0', box44UnionDues: '0', box55Qpip: '0', box56QpipInsurable: '0',
-    employerCpp: '0', employerCpp2: '0', employerEi: '0', stubCount: 0,
-  }, {...slice.ytd, insurableYtd: slice.allocation.reportableBases.ei,
-    pensionableYtd: slice.allocation.reportableBases.cpp,
-    programBasesYtd: {...slice.ytd.programBasesYtd, qpip: slice.allocation.reportableBases.qpip}}));
+  const originalSlips: T4Slip[] = originalSlices.map((slice) =>
+    openingYtdIntoT4Slip(
+      {
+        employeePartyId: slice.employeePartyId,
+        employeeName: slice.employeeName,
+        province: slice.allocation.province,
+        isQuebec: slice.allocation.province === QPIP_PROVINCE,
+        filingAccountId: slice.allocation.filingAccountId,
+        box14EmploymentIncome: "0",
+        box16Cpp: "0",
+        box16aCpp2: "0",
+        box18Ei: "0",
+        box22IncomeTax: "0",
+        box24EiInsurable: "0",
+        box26CppPensionable: "0",
+        box44UnionDues: "0",
+        box55Qpip: "0",
+        box56QpipInsurable: "0",
+        employerCpp: "0",
+        employerCpp2: "0",
+        employerEi: "0",
+        stubCount: 0,
+      },
+      {
+        ...slice.ytd,
+        insurableYtd: slice.allocation.reportableBases.ei,
+        pensionableYtd: slice.allocation.reportableBases.cpp,
+        programBasesYtd: {
+          ...slice.ytd.programBasesYtd,
+          qpip: slice.allocation.reportableBases.qpip,
+        },
+      },
+    ),
+  );
   const all = [...originalSlips, ...stubSlips];
-  const capped = capAnnualEarnings(all.map(slip => ({employeePartyId: slip.employeePartyId,
-    insurable: slip.box24EiInsurable, pensionable: slip.box26CppPensionable, qpipInsurable: slip.box56QpipInsurable})), caps);
+  const capped = capAnnualEarnings(
+    all.map((slip) => ({
+      employeePartyId: slip.employeePartyId,
+      insurable: slip.box24EiInsurable,
+      pensionable: slip.box26CppPensionable,
+      qpipInsurable: slip.box56QpipInsurable,
+    })),
+    caps,
+  );
   const result = new Map<string, T4Slip>();
-  const amountFields = ['box14EmploymentIncome','box16Cpp','box16aCpp2','box18Ei','box22IncomeTax',
-    'box24EiInsurable','box26CppPensionable','box44UnionDues','box55Qpip','box56QpipInsurable',
-    'employerCpp','employerCpp2','employerEi'] as const;
-  all.forEach((slip,index) => {
-    const value = {...slip,...capped[index]!};
-    const key = JSON.stringify([value.employeePartyId,value.filingAccountId,value.province]);
+  const amountFields = [
+    "box14EmploymentIncome",
+    "box16Cpp",
+    "box16aCpp2",
+    "box18Ei",
+    "box22IncomeTax",
+    "box24EiInsurable",
+    "box26CppPensionable",
+    "box44UnionDues",
+    "box55Qpip",
+    "box56QpipInsurable",
+    "employerCpp",
+    "employerCpp2",
+    "employerEi",
+  ] as const;
+  all.forEach((slip, index) => {
+    const value = { ...slip, ...capped[index]! };
+    const key = JSON.stringify([value.employeePartyId, value.filingAccountId, value.province]);
     const prior = result.get(key);
-    if (!prior) {result.set(key,value); return;}
-    const merged = {...prior,stubCount:prior.stubCount+value.stubCount};
-    for (const field of amountFields) merged[field]=add(prior[field],value[field]);
-    result.set(key,merged);
+    if (!prior) {
+      result.set(key, value);
+      return;
+    }
+    const merged = { ...prior, stubCount: prior.stubCount + value.stubCount };
+    for (const field of amountFields) merged[field] = add(prior[field], value[field]);
+    result.set(key, merged);
   });
   return [...result.values()];
 }
@@ -641,9 +765,7 @@ export async function t4Summary(
   const allSlips = await t4Slips(orgId, taxYear);
   const byAccount = scoped ? allSlips.filter((slip) => slip.filingAccountId === account) : allSlips;
   const selected = selectedSlips ? new Set(selectedSlips.map(t4SlipKey)) : null;
-  const slips = selected
-    ? byAccount.filter((slip) => selected.has(t4SlipKey(slip)))
-    : byAccount;
+  const slips = selected ? byAccount.filter((slip) => selected.has(t4SlipKey(slip))) : byAccount;
   // Empty fragments keep the org-wide summary's SQL identical to before.
   const billAccountFilter = scoped
     ? sql`and (custom->'payrollRemittance'->>'filingAccountId') is not distinct from ${account}`
@@ -652,7 +774,8 @@ export async function t4Summary(
   // period and carries no employee dimension, so there is no honest way to
   // attribute part of it to the slips of an amended return. It is an on-screen
   // reconciliation figure and never appears in the transmitted XML.
-  const remitted = (await db.execute<{ amount: string }>(sql`
+  const remitted = await db.execute<{ amount: string }>(
+    sql`
     select coalesce(sum(total), 0) as amount from documents
      -- Live entries only: a voided remittance bill was never remitted to the agency.
      where org_id = ${orgId} and kind = 'vendor_bill' and status = 'posted'
@@ -663,7 +786,9 @@ export async function t4Summary(
            from orgs where id = ${orgId}
        )
        ${billAccountFilter}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const total = (pick: (slip: T4Slip) => string) =>
     slips.reduce((acc, slip) => add(acc, pick(slip)), "0");
   return {
@@ -706,7 +831,8 @@ export async function t4Returns(orgId: string, taxYear: number): Promise<T4Retur
     });
   }
   return returns.sort((a, b) =>
-    (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""));
+    (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""),
+  );
 }
 
 export interface RoePeriod {
@@ -741,37 +867,72 @@ export async function roeWorksheet(
   limit?: number,
   eventId?: string | null,
 ): Promise<{ periods: RoePeriod[]; totalInsurableEarnings: string; totalInsurableHours: string }> {
-  const context=await roeWindowContext(orgId,employeePartyId,eventId);
-  if(limit!==undefined && limit!==ROE_REPORTING_COUNTS[context.frequency]!.hours) {
-    throw new PayrollError('The ROE reporting window follows the configured pay-period type — use its statutory period count');
+  const context = await roeWindowContext(orgId, employeePartyId, eventId);
+  if (limit !== undefined && limit !== ROE_REPORTING_COUNTS[context.frequency]!.hours) {
+    throw new PayrollError(
+      "The ROE reporting window follows the configured pay-period type — use its statutory period count",
+    );
   }
-  const {periods,totalInsurableEarnings,totalInsurableHours}=await readRoeReportingWindow(context);
-  return {periods,totalInsurableEarnings,totalInsurableHours};
+  const { periods, totalInsurableEarnings, totalInsurableHours } =
+    await readRoeReportingWindow(context);
+  return { periods, totalInsurableEarnings, totalInsurableHours };
 }
 
 /** Authorize the header, retained pay sources and explicit nil-period calendar
  * documents used by the same confirmed employment-spell reporting window.
  */
-export async function roeSourceScope(orgId: string, employeeIds: readonly string[]): Promise<{
-  employeeId: string;
-  filingAccountId: string | null;
-  sourceDocumentId: string | null;
-  sourceSubsidiaryId: string | null;
-}[]> {
+export async function roeSourceScope(
+  orgId: string,
+  employeeIds: readonly string[],
+): Promise<
+  {
+    employeeId: string;
+    filingAccountId: string | null;
+    sourceDocumentId: string | null;
+    sourceSubsidiaryId: string | null;
+  }[]
+> {
   if (employeeIds.length === 0) return [];
-  const sources: { employeeId: string; filingAccountId: string | null; sourceDocumentId: string | null; sourceSubsidiaryId: string | null }[]=[];
-  for(const rowId of employeeIds){
-    const selection=parseRoeEventRow(rowId);
-    if(!selection) throw new PayrollError('Choose the native employee and separation event');
-    const employeeId=selection.employeePartyId;
-    const context=await roeWindowContext(orgId,employeeId,selection.eventId);
-    const window=await readRoeReportingWindow(context);
-    sources.push({employeeId,filingAccountId:context.filingAccountId,sourceDocumentId:null,sourceSubsidiaryId:context.subsidiaryId});
-    for(const period of window.historicalPeriods) sources.push({employeeId,filingAccountId:period.filingAccountId,sourceDocumentId:null,sourceSubsidiaryId:period.subsidiaryId});
-    for(const stub of window.sourceDocuments) sources.push({employeeId,filingAccountId:stub.filingAccountId,
-      sourceDocumentId:stub.documentId,sourceSubsidiaryId:stub.subsidiaryId});
-    for(const documentId of window.calendarDocuments) if(!window.sourceDocuments.some(stub=>stub.documentId===documentId))
-      sources.push({employeeId,filingAccountId:context.filingAccountId,sourceDocumentId:documentId,sourceSubsidiaryId:context.subsidiaryId});
+  const sources: {
+    employeeId: string;
+    filingAccountId: string | null;
+    sourceDocumentId: string | null;
+    sourceSubsidiaryId: string | null;
+  }[] = [];
+  for (const rowId of employeeIds) {
+    const selection = parseRoeEventRow(rowId);
+    if (!selection) throw new PayrollError("Choose the native employee and separation event");
+    const employeeId = selection.employeePartyId;
+    const context = await roeWindowContext(orgId, employeeId, selection.eventId);
+    const window = await readRoeReportingWindow(context);
+    sources.push({
+      employeeId,
+      filingAccountId: context.filingAccountId,
+      sourceDocumentId: null,
+      sourceSubsidiaryId: context.subsidiaryId,
+    });
+    for (const period of window.historicalPeriods)
+      sources.push({
+        employeeId,
+        filingAccountId: period.filingAccountId,
+        sourceDocumentId: null,
+        sourceSubsidiaryId: period.subsidiaryId,
+      });
+    for (const stub of window.sourceDocuments)
+      sources.push({
+        employeeId,
+        filingAccountId: stub.filingAccountId,
+        sourceDocumentId: stub.documentId,
+        sourceSubsidiaryId: stub.subsidiaryId,
+      });
+    for (const documentId of window.calendarDocuments)
+      if (!window.sourceDocuments.some((stub) => stub.documentId === documentId))
+        sources.push({
+          employeeId,
+          filingAccountId: context.filingAccountId,
+          sourceDocumentId: documentId,
+          sourceSubsidiaryId: context.subsidiaryId,
+        });
   }
   return sources;
 }
@@ -859,13 +1020,25 @@ export interface RoeRecord {
  * statutory return that also discloses their SSN. Returns null for a non-CA
  * employee so every caller (including the XML builder) fails closed.
  */
-export async function roeRecord(orgId: string, employeePartyId: string, eventId?: string | null): Promise<RoeRecord | null> {
-  const header = (await db.execute<{
-      display_name: string; employee_number: string | null; job_title: string | null;
-      hired_on: string | null; terminated_on: string | null; sin_last3: string | null;
-      frequency: string | null; country: string | null; filing_account_id: string | null;
-      employment_id: string | null; subsidiary_id: string | null;
-    }>(sql`
+export async function roeRecord(
+  orgId: string,
+  employeePartyId: string,
+  eventId?: string | null,
+): Promise<RoeRecord | null> {
+  const header = await db.execute<{
+    display_name: string;
+    employee_number: string | null;
+    job_title: string | null;
+    hired_on: string | null;
+    terminated_on: string | null;
+    sin_last3: string | null;
+    frequency: string | null;
+    country: string | null;
+    filing_account_id: string | null;
+    employment_id: string | null;
+    subsidiary_id: string | null;
+  }>(
+    sql`
     select p.display_name, er.employee_number, er.job_title,
            er.hired_on::text as hired_on, er.terminated_on::text as terminated_on,
            prof.sin_last3, sched.frequency, prof.country as country, prof.employment_id, p.subsidiary_id,
@@ -876,11 +1049,19 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
         on prof.org_id = p.org_id and prof.employee_party_id = p.id
       left join pay_schedules sched on sched.id = prof.pay_schedule_id and sched.org_id = prof.org_id
      where p.org_id = ${orgId} and p.id = ${employeePartyId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = header[0];
   if (!row) return null;
-  const retainedEvent=(await db.execute(sql`select id from payroll_roe_separation_events
-    where org_id=${orgId} and employee_party_id=${employeePartyId} and status in ('draft','confirmed','issued') limit 1`, "objects")).length>0;
+  const retainedEvent =
+    (
+      await db.execute(
+        sql`select id from payroll_roe_separation_events
+    where org_id=${orgId} and employee_party_id=${employeePartyId} and status in ('draft','confirmed','issued') limit 1`,
+        "objects",
+      )
+    ).length > 0;
   if (!roeProfileAdmission(row.country, retainedEvent, row.display_name)) return null;
   const context = await roeWindowContext(orgId, employeePartyId, eventId);
   // Block 6 and the Block 15 window are STATUTORY declarations derived from
@@ -891,38 +1072,61 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
   const frequency = context.frequency;
   if (!frequency) {
     throw new PayrollError(
-      `${row.display_name} has no pay schedule on their payroll profile — Block 6 `
-      + "(pay-period type) and the Block 15 reporting window cannot be declared without one; "
-      + "assign a pay schedule before issuing the ROE",
+      `${row.display_name} has no pay schedule on their payroll profile — Block 6 ` +
+        "(pay-period type) and the Block 15 reporting window cannot be declared without one; " +
+        "assign a pay schedule before issuing the ROE",
     );
   }
   const reportingCounts = ROE_REPORTING_COUNTS[frequency];
   const periodType = ROE_PERIOD_TYPE[frequency];
   if (!reportingCounts || !periodType) {
     throw new PayrollError(
-      `${row.display_name}'s pay schedule frequency "${frequency}" has no ROE pay-period `
-      + "type — Service Canada accepts weekly, biweekly, semi-monthly and monthly ROEs",
+      `${row.display_name}'s pay schedule frequency "${frequency}" has no ROE pay-period ` +
+        "type — Service Canada accepts weekly, biweekly, semi-monthly and monthly ROEs",
     );
   }
   const worksheet = await readRoeReportingWindow(context);
   const finalPeriod = worksheet.periods[0] ?? null;
   if (!finalPeriod) {
-    throw new PayrollError(`${row.display_name} has no committed pay periods for the ROE reporting window`);
+    throw new PayrollError(
+      `${row.display_name} has no committed pay periods for the ROE reporting window`,
+    );
   }
   const addressRows = await db.execute<{
-    line1: string | null; line2: string | null; city: string | null; region: string | null;
-    postal_code: string | null; country: string | null; is_default_billing: boolean; is_default_shipping: boolean;
-  }>(sql`
+    line1: string | null;
+    line2: string | null;
+    city: string | null;
+    region: string | null;
+    postal_code: string | null;
+    country: string | null;
+    is_default_billing: boolean;
+    is_default_shipping: boolean;
+  }>(
+    sql`
     select line1, line2, city, region, postal_code, country, is_default_billing, is_default_shipping
       from addresses
      where org_id = ${orgId} and party_id = ${employeePartyId}
      order by is_default_shipping desc, is_default_billing desc, id
-  `, "objects");
-  const preferredAddresses = addressRows.filter((address) => address.is_default_shipping || address.is_default_billing);
-  const address = preferredAddresses.length === 1 ? preferredAddresses[0]
-    : addressRows.length === 1 ? addressRows[0] : null;
-  if (!address || !address.line1?.trim() || !address.city?.trim() || !address.region?.trim()
-    || !address.postal_code?.trim() || !address.country?.trim()) {
+  `,
+    "objects",
+  );
+  const preferredAddresses = addressRows.filter(
+    (address) => address.is_default_shipping || address.is_default_billing,
+  );
+  const address =
+    preferredAddresses.length === 1
+      ? preferredAddresses[0]
+      : addressRows.length === 1
+        ? addressRows[0]
+        : null;
+  if (
+    !address ||
+    !address.line1?.trim() ||
+    !address.city?.trim() ||
+    !address.region?.trim() ||
+    !address.postal_code?.trim() ||
+    !address.country?.trim()
+  ) {
     throw new PayrollError(
       `${row.display_name} needs one complete, unambiguous mailing address for ROE Block 9 — add a default employee address with street, city, region, postal code and country`,
     );
@@ -931,20 +1135,32 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
   const event = context.event;
   if (!event) {
     throw new PayrollError(
-      `${row.display_name} has no confirmed Record of Employment separation facts — `
-      + "record the interruption date, last insurable earnings date, and any salary-continuance or paid-leave end before issuing the ROE",
+      `${row.display_name} has no confirmed Record of Employment separation facts — ` +
+        "record the interruption date, last insurable earnings date, and any salary-continuance or paid-leave end before issuing the ROE",
     );
   }
-  if (!event.first_day_worked || !event.employment_id || !event.subsidiary_id || !event.source_reference?.trim()) {
-    throw new PayrollError(`${row.display_name} has incomplete ROE employment-spell facts — record the original first day worked, native employment, legal employer and source in the ROE drawer before preparing the filing`);
+  if (
+    !event.first_day_worked ||
+    !event.employment_id ||
+    !event.subsidiary_id ||
+    !event.source_reference?.trim()
+  ) {
+    throw new PayrollError(
+      `${row.display_name} has incomplete ROE employment-spell facts — record the original first day worked, native employment, legal employer and source in the ROE drawer before preparing the filing`,
+    );
   }
   // A final cheque may be paid after the last day for which wages were
   // earned. Retained earning dates distinguish that payment from later work;
   // incomplete attribution must not be accepted as proof of earlier service.
   const earningsCutoff = event.salary_continuance_end_on ?? event.last_insurable_earnings_on;
-  const lateEarnings = (await db.execute<{
-    payDate: string; employmentId: string | null; earnedFrom: string | null; earnedTo: string | null;
-  }>(sql`
+  const lateEarnings = (
+    await db.execute<{
+      payDate: string;
+      employmentId: string | null;
+      earnedFrom: string | null;
+      earnedTo: string | null;
+    }>(
+      sql`
     select stub.pay_date::text as "payDate",
            stub.employment_id::text as "employmentId",
            coalesce(evidence.earned_from,line.earned_from)::text as "earnedFrom", coalesce(evidence.earned_to,line.earned_to)::text as "earnedTo"
@@ -957,7 +1173,7 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
         and evidence.line_snapshot=public.payroll_roe_reporting_line_snapshot(line.id,line.org_id)
      where stub.org_id = ${orgId} and stub.employee_party_id = ${employeePartyId}
        and (stub.employment_id = ${event.employment_id} or stub.employment_id is null)
-       and not ${roeLaterSpellStubSql(orgId,employeePartyId,event.employment_id,event.id,earningsCutoff)}
+       and not ${roeLaterSpellStubSql(orgId, employeePartyId, event.employment_id, event.id, earningsCutoff)}
        and (evidence.is_insurable is null or evidence.is_insurable)
        and not coalesce(evidence.reporting_basis='separation_payment' and evidence.separation_event_id=${event.id}::uuid
          and evidence.separation_basis_snapshot=public.payroll_roe_separation_reporting_basis(evidence.org_id,evidence.separation_event_id,
@@ -972,28 +1188,46 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
        )
      order by stub.pay_date desc, stub.id desc, line.id desc
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (lateEarnings) {
-    if (!lateEarnings.employmentId || !lateEarnings.earnedFrom || !lateEarnings.earnedTo
-      || lateEarnings.earnedFrom > lateEarnings.earnedTo) {
+    if (
+      !lateEarnings.employmentId ||
+      !lateEarnings.earnedFrom ||
+      !lateEarnings.earnedTo ||
+      lateEarnings.earnedFrom > lateEarnings.earnedTo
+    ) {
       throw new PayrollError(
-        `${row.display_name}'s committed earnings paid ${lateEarnings.payDate} have incomplete or invalid employment or earned-period evidence — `
-        + "review the original earning source and use a supported payroll correction for missing or incorrect retained dates before issuing the ROE",
+        `${row.display_name}'s committed earnings paid ${lateEarnings.payDate} have incomplete or invalid employment or earned-period evidence — ` +
+          "review the original earning source and use a supported payroll correction for missing or incorrect retained dates before issuing the ROE",
       );
     }
     throw new PayrollError(
-      `${row.display_name} has committed earnings earned through ${lateEarnings.earnedTo}, after the confirmed `
-      + `separation's last insurable earnings date ${event.last_insurable_earnings_on}`
-      + (event.salary_continuance_end_on ? ` (salary continuance through ${event.salary_continuance_end_on})` : "")
-      + " — review the separation facts and earned-period source before issuing the ROE",
+      `${row.display_name} has committed earnings earned through ${lateEarnings.earnedTo}, after the confirmed ` +
+        `separation's last insurable earnings date ${event.last_insurable_earnings_on}` +
+        (event.salary_continuance_end_on
+          ? ` (salary continuance through ${event.salary_continuance_end_on})`
+          : "") +
+        " — review the separation facts and earned-period source before issuing the ROE",
     );
   }
-  if (!worksheet.sourceDocuments.length && !worksheet.historicalPeriods.some(period=>!period.nilPeriod)) {
-    throw new PayrollError(`${row.display_name} has no retained insurable-pay source in the confirmed ROE employment spell — qualify the original payroll periods before filing`);
+  if (
+    !worksheet.sourceDocuments.length &&
+    !worksheet.historicalPeriods.some((period) => !period.nilPeriod)
+  ) {
+    throw new PayrollError(
+      `${row.display_name} has no retained insurable-pay source in the confirmed ROE employment spell — qualify the original payroll periods before filing`,
+    );
   }
   const earningComponents = await db.execute<{
-    component_id: string; component_name: string; pay_date: string; block: "none" | "17A" | "17C" | null;
-  }>(sql`
+    component_id: string;
+    component_name: string;
+    pay_date: string;
+    block: "none" | "17A" | "17C" | null;
+  }>(
+    sql`
     select distinct component.id as component_id, component.name as component_name,
            stub.pay_date::text as pay_date, coalesce(paid.reporting_block,classification.block) as block
       from pay_stub_lines line
@@ -1018,20 +1252,28 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
       ) classification on true
      where line.org_id = ${orgId} and stub.employee_party_id = ${employeePartyId}
        and stub.employment_id = ${event.employment_id}
-       and line.kind = 'earning' and stub.id=any(${`{${worksheet.sourceDocuments.map(stub=>stub.id).join(',')}}`}::uuid[])
-  `, "objects");
+       and line.kind = 'earning' and stub.id=any(${`{${worksheet.sourceDocuments.map((stub) => stub.id).join(",")}}`}::uuid[])
+  `,
+    "objects",
+  );
   const unmapped = earningComponents.filter((component) => component.block == null);
   if (unmapped.length) {
     const names = [...new Set(unmapped.map((component) => component.component_name))].sort();
     throw new PayrollError(
-      `ROE Block 17 classification is missing for earning components paid in ${row.display_name}'s reporting window: `
-      + `${names.join(", ")} — classify each component in Payroll Setup as Block 17A, Block 17C, or not separation-related`,
+      `ROE Block 17 classification is missing for earning components paid in ${row.display_name}'s reporting window: ` +
+        `${names.join(", ")} — classify each component in Payroll Setup as Block 17A, Block 17C, or not separation-related`,
     );
   }
   const separationRows = await db.execute<{
-    component_id: string; component_name: string; amount: string; payment_status: "paid" | "will_pay";
-    expected_payment_on: string; block: "none" | "17A" | "17C" | null; category_code: string | null;
-  }>(sql`
+    component_id: string;
+    component_name: string;
+    amount: string;
+    payment_status: "paid" | "will_pay";
+    expected_payment_on: string;
+    block: "none" | "17A" | "17C" | null;
+    category_code: string | null;
+  }>(
+    sql`
     select payment.pay_component_id as component_id, component.name as component_name,
            payment.amount::text as amount, payment.payment_status,
            payment.expected_payment_on::text as expected_payment_on,
@@ -1051,14 +1293,16 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
       ) classification on true
      where payment.org_id = ${orgId} and payment.separation_event_id = ${event.id}
      order by payment.expected_payment_on, payment.id
-  `, "objects");
+  `,
+    "objects",
+  );
   const missingCategories = separationRows
     .filter((payment) => payment.block !== "17A" && payment.block !== "17C")
     .map((payment) => payment.component_name);
   if (missingCategories.length) {
     throw new PayrollError(
-      `ROE separation amounts for ${row.display_name} have no effective Block 17 category for `
-      + `${[...new Set(missingCategories)].join(", ")} — classify each component in Payroll Setup before issuing the ROE`,
+      `ROE separation amounts for ${row.display_name} have no effective Block 17 category for ` +
+        `${[...new Set(missingCategories)].join(", ")} — classify each component in Payroll Setup before issuing the ROE`,
     );
   }
   const groupedAmounts = new Map<string, RoeSeparationAmount>();
@@ -1078,10 +1322,14 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
       groupedAmounts.set(key, {
         ...previous,
         amount: add(previous.amount, payment.amount),
-        expectedPaymentOn: payment.expected_payment_on > previous.expectedPaymentOn
-          ? payment.expected_payment_on
-          : previous.expectedPaymentOn,
-        paymentStatus: previous.paymentStatus === "paid" && payment.payment_status === "paid" ? "paid" : "will_pay",
+        expectedPaymentOn:
+          payment.expected_payment_on > previous.expectedPaymentOn
+            ? payment.expected_payment_on
+            : previous.expectedPaymentOn,
+        paymentStatus:
+          previous.paymentStatus === "paid" && payment.payment_status === "paid"
+            ? "paid"
+            : "will_pay",
       });
     }
   }
@@ -1137,17 +1385,29 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
  * Canadian employees only — the same predicate `t4Slips` and `roeRecord` use.
  * A US employee has no Record of Employment and must never be offered as one.
  */
-export async function roeCandidates(orgId: string, taxYear: number): Promise<{
-  roeRowId: string;
-  eventId: string | null;
-  employeePartyId: string;
-  employeeName: string;
-  terminatedOn: string | null;
-  lastPayDate: string | null;
-  /** The recorded separation event's facts status; null when none is recorded yet. */
-  factsStatus: string | null;
-}[]> {
-  const rows = (await db.execute<{ id: string; display_name: string; country: string | null; terminated_on: string | null; last_pay_date: string | null }>(sql`
+export async function roeCandidates(
+  orgId: string,
+  taxYear: number,
+): Promise<
+  {
+    roeRowId: string;
+    eventId: string | null;
+    employeePartyId: string;
+    employeeName: string;
+    terminatedOn: string | null;
+    lastPayDate: string | null;
+    /** The recorded separation event's facts status; null when none is recorded yet. */
+    factsStatus: string | null;
+  }[]
+> {
+  const rows = await db.execute<{
+    id: string;
+    display_name: string;
+    country: string | null;
+    terminated_on: string | null;
+    last_pay_date: string | null;
+  }>(
+    sql`
     select p.id, p.display_name, prof.country as country, er.terminated_on::text as terminated_on,
            max(s.pay_date)::text as last_pay_date
       from parties p
@@ -1164,29 +1424,59 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
        and (extract(year from er.terminated_on)::int = ${taxYear} or r.run_type = 'termination')
      group by p.id, p.display_name, prof.country, er.terminated_on
      order by p.display_name
-  `, "objects"));
-  const events=await db.execute<{id:string;employeePartyId:string;employeeName:string;lastDay:string;status:string}>(sql`
+  `,
+    "objects",
+  );
+  const events = await db.execute<{
+    id: string;
+    employeePartyId: string;
+    employeeName: string;
+    lastDay: string;
+    status: string;
+  }>(
+    sql`
     select e.id,e.employee_party_id as "employeePartyId",p.display_name as "employeeName",
       e.last_insurable_earnings_on::text as "lastDay",e.status
     from payroll_roe_separation_events e join parties p on p.org_id=e.org_id and p.id=e.employee_party_id
     where e.org_id=${orgId} and extract(year from e.interruption_on)::int=${taxYear}
-      and e.status in ('draft','confirmed','issued') order by p.display_name,e.interruption_on,e.id`, "objects");
-  const declaredEmployees=new Set(events.map(e=>e.employeePartyId));
+      and e.status in ('draft','confirmed','issued') order by p.display_name,e.interruption_on,e.id`,
+    "objects",
+  );
+  const declaredEmployees = new Set(events.map((e) => e.employeePartyId));
   const unknown = rows.filter((row) => row.country == null && !declaredEmployees.has(row.id));
   if (unknown.length > 0) {
-    const names = unknown.map((row) => row.display_name).sort().join(", ");
+    const names = unknown
+      .map((row) => row.display_name)
+      .sort()
+      .join(", ");
     throw new PayrollError(
       `an ROE cannot be listed for ${names} — ${
         unknown.length === 1 ? "the employee has" : "they have"
-      } no payroll country on file. Set each employee's country on their Payroll tab `
-      + "before issuing Records of Employment",
+      } no payroll country on file. Set each employee's country on their Payroll tab ` +
+        "before issuing Records of Employment",
     );
   }
   return [
-    ...events.map(e=>({roeRowId:roeEventRow(e.employeePartyId,e.id),eventId:e.id,employeePartyId:e.employeePartyId,
-      employeeName:e.employeeName,terminatedOn:e.lastDay,lastPayDate:null,factsStatus:e.status})),
-    ...rows.filter(row=>!declaredEmployees.has(row.id)).map(row=>({roeRowId:row.id,eventId:null,
-      employeePartyId:row.id,employeeName:row.display_name,terminatedOn:row.terminated_on,lastPayDate:row.last_pay_date,factsStatus:null})),
+    ...events.map((e) => ({
+      roeRowId: roeEventRow(e.employeePartyId, e.id),
+      eventId: e.id,
+      employeePartyId: e.employeePartyId,
+      employeeName: e.employeeName,
+      terminatedOn: e.lastDay,
+      lastPayDate: null,
+      factsStatus: e.status,
+    })),
+    ...rows
+      .filter((row) => !declaredEmployees.has(row.id))
+      .map((row) => ({
+        roeRowId: row.id,
+        eventId: null,
+        employeePartyId: row.id,
+        employeeName: row.display_name,
+        terminatedOn: row.terminated_on,
+        lastPayDate: row.last_pay_date,
+        factsStatus: null,
+      })),
   ];
 }
 
@@ -1204,7 +1494,13 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
 export async function periodicReturnAccountResolver(
   orgId: string,
   country: string,
-): Promise<(stubAccountId: string | null, sourceSubsidiaryId: string | null, sourceDate: string) => string | null> {
+): Promise<
+  (
+    stubAccountId: string | null,
+    sourceSubsidiaryId: string | null,
+    sourceDate: string,
+  ) => string | null
+> {
   if (!payrollPack(country).periodicReturnFilesByEmployerAccount) {
     return (stubAccountId) => stubAccountId;
   }
@@ -1214,9 +1510,14 @@ export async function periodicReturnAccountResolver(
 }
 
 /** A filed amount retains its pay-run owner and date, independent of the current employee profile. */
-function usFilingSource(row: { source_subsidiary_id?: unknown; source_date?: unknown }): { subsidiaryId: string; date: string } {
+function usFilingSource(row: { source_subsidiary_id?: unknown; source_date?: unknown }): {
+  subsidiaryId: string;
+  date: string;
+} {
   if (!isUuid(row.source_subsidiary_id) || !isIsoCalendarDate(row.source_date)) {
-    throw new PayrollError('US filing evidence needs the original pay-run legal employer and pay date — qualify its retained source before preparing returns');
+    throw new PayrollError(
+      "US filing evidence needs the original pay-run legal employer and pay date — qualify its retained source before preparing returns",
+    );
   }
   return { subsidiaryId: row.source_subsidiary_id, date: row.source_date };
 }
@@ -1252,7 +1553,8 @@ export interface Form941Quarter {
 export async function form941Worksheet(orgId: string, taxYear: number): Promise<Form941Quarter[]> {
   await assertPayrollCountryKnown(db, orgId, taxYear);
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select extract(quarter from s.pay_date)::int as quarter,
            s.filing_account_id as filing_account_id,
            d.subsidiary_id as source_subsidiary_id,
@@ -1286,19 +1588,25 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
       join documents d on d.org_id = r.org_id and d.id = r.document_id and d.kind = 'pay_run' and d.status <> 'voided'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
      group by 1, 2, 3, 4
-  `, "objects"));
+  `,
+    "objects",
+  );
   const returnAccountOf = await periodicReturnAccountResolver(orgId, "US");
   const byReturn = new Map<string, Form941Quarter>();
   for (const row of rows) {
     const quarter = Number(row.quarter) as 1 | 2 | 3 | 4;
     const source = usFilingSource(row);
     const filingAccountId = returnAccountOf(
-      (row.filing_account_id as string | null) ?? null, source.subsidiaryId, source.date,
+      (row.filing_account_id as string | null) ?? null,
+      source.subsidiaryId,
+      source.date,
     );
     const key = `${filingAccountId ?? ""}:${quarter}`;
     const prior = byReturn.get(key);
-    const sum = (field: keyof Omit<Form941Quarter, "quarter" | "filingAccountId">, value: unknown) =>
-      prior ? add(prior[field], num(value)) : normalizeMoney(num(value));
+    const sum = (
+      field: keyof Omit<Form941Quarter, "quarter" | "filingAccountId">,
+      value: unknown,
+    ) => (prior ? add(prior[field], num(value)) : normalizeMoney(num(value)));
     byReturn.set(key, {
       quarter,
       filingAccountId,
@@ -1313,10 +1621,12 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
     });
   }
   // Unassigned first, then by account, then by quarter — the previous order.
-  return [...byReturn.values()].sort((a, b) =>
-    (a.filingAccountId === null ? 0 : 1) - (b.filingAccountId === null ? 0 : 1)
-    || (a.filingAccountId ?? "").localeCompare(b.filingAccountId ?? "")
-    || a.quarter - b.quarter);
+  return [...byReturn.values()].sort(
+    (a, b) =>
+      (a.filingAccountId === null ? 0 : 1) - (b.filingAccountId === null ? 0 : 1) ||
+      (a.filingAccountId ?? "").localeCompare(b.filingAccountId ?? "") ||
+      a.quarter - b.quarter,
+  );
 }
 
 /** One filed Form 941 set: the quarters of a single EIN. */
@@ -1342,7 +1652,8 @@ export async function form941Returns(orgId: string, taxYear: number): Promise<Fo
       quarters: quarters.filter((q) => q.filingAccountId === accountId),
     }))
     .sort((a, b) =>
-      (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""));
+      (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""),
+    );
 }
 
 export interface W2Slip {
@@ -1407,9 +1718,9 @@ export function requireW2LocalWages(
   // IRS W-2 box 18 reports wages for the locality named in box 20.
   // https://www.irs.gov/instructions/iw2w3
   throw new PayrollError(
-    `W-2 box 18 local wages are unknown for ${employee} in ${state} (${locality}); `
-    + "record a sourced locality work allocation and correct the affected committed payroll "
-    + "through controlled reversal and recalculation before filing — refused by name",
+    `W-2 box 18 local wages are unknown for ${employee} in ${state} (${locality}); ` +
+      "record a sourced locality work allocation and correct the affected committed payroll " +
+      "through controlled reversal and recalculation before filing — refused by name",
   );
 }
 
@@ -1474,8 +1785,8 @@ function usFicaSplitRates(taxYear: number): UsFicaSplitRates {
     return { ssRate, ssWageBase };
   } catch (error) {
     throw new PayrollError(
-      `no published US FICA rates for tax year ${taxYear} — W-2 boxes 4 and 6 cannot split `
-      + `the FICA tax withheld carry-in. ${(error as Error).message}`,
+      `no published US FICA rates for tax year ${taxYear} — W-2 boxes 4 and 6 cannot split ` +
+        `the FICA tax withheld carry-in. ${(error as Error).message}`,
     );
   }
 }
@@ -1500,9 +1811,10 @@ export function openingYtdIntoW2Slip(
   opening: OpeningYearEndYtd,
   ficaRates: UsFicaSplitRates | null = null,
 ): W2Slip {
-  const split = ficaRates && cmp(opening.ficaWithheldYtd, "0") !== 0
-    ? splitFicaWithheld(opening.ficaWithheldYtd, opening.pensionableYtd, ficaRates)
-    : null;
+  const split =
+    ficaRates && cmp(opening.ficaWithheldYtd, "0") !== 0
+      ? splitFicaWithheld(opening.ficaWithheldYtd, opening.pensionableYtd, ficaRates)
+      : null;
   return {
     ...slip,
     box1Wages: add(slip.box1Wages, opening.taxableYtd),
@@ -1520,14 +1832,16 @@ export function openingAccountYtdIntoW2Slip(
   ficaRates: UsFicaSplitRates | null = null,
 ): W2Slip {
   const values = opening.accountBasesYtd ?? {};
-  const byAccount = (key: string) => values[key]?.find((base) => base.filingAccountId === slip.filingAccountId)?.insurableYtd ?? "0";
+  const byAccount = (key: string) =>
+    values[key]?.find((base) => base.filingAccountId === slip.filingAccountId)?.insurableYtd ?? "0";
   const taxableYtd = byAccount("us_w2_taxable");
   const taxYtd = byAccount("us_w2_tax");
   const ficaWages = byAccount(US_FICA_WAGES_ACCOUNT_BASE);
   const ficaWithheld = byAccount(US_FICA_WITHHELD_ACCOUNT_BASE);
-  const split = ficaRates && cmp(ficaWithheld, "0") !== 0
-    ? splitFicaWithheld(ficaWithheld, ficaWages, ficaRates)
-    : null;
+  const split =
+    ficaRates && cmp(ficaWithheld, "0") !== 0
+      ? splitFicaWithheld(ficaWithheld, ficaWages, ficaRates)
+      : null;
   return {
     ...slip,
     box1Wages: add(slip.box1Wages, taxableYtd),
@@ -1553,18 +1867,20 @@ export function buildW2StateLines<G extends { province: string; wages: string; s
   localsOf: (group: G) => W2LocalLine[],
   stateIdOf: (group: G) => string | null,
 ): W2StateLine[] {
-  return groups
-    // A group with no work-state code names no revenue department: its wages
-    // stay in the federal boxes and it earns no state entry.
-    .filter((group) => group.province !== "")
-    .filter((group) => cmp(group.stateTax, "0") !== 0 || localsOf(group).length > 0)
-    .map((group) => ({
-      state: group.province,
-      employerStateId: stateIdOf(group),
-      box16StateWages: group.wages,
-      box17StateIncomeTax: group.stateTax,
-      localLines: localsOf(group),
-    }));
+  return (
+    groups
+      // A group with no work-state code names no revenue department: its wages
+      // stay in the federal boxes and it earns no state entry.
+      .filter((group) => group.province !== "")
+      .filter((group) => cmp(group.stateTax, "0") !== 0 || localsOf(group).length > 0)
+      .map((group) => ({
+        state: group.province,
+        employerStateId: stateIdOf(group),
+        box16StateWages: group.wages,
+        box17StateIncomeTax: group.stateTax,
+        localLines: localsOf(group),
+      }))
+  );
 }
 
 export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]> {
@@ -1577,7 +1893,8 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   // state, state account) — the paper W-2's own shape is a repeating state
   // group on the one copy, so a mid-year mover's two states are never
   // smashed into one row.
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select s.employee_party_id, p.display_name,
            d.subsidiary_id as source_subsidiary_id,
            s.pay_date::text as source_date,
@@ -1622,8 +1939,11 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       -- The carry-in lands on the employee's FIRST slip, so an employee filed
       -- under more than one EIN needs a deterministic order, not just name.
      order by p.display_name, min(s.pay_date), s.province
-   `, "objects"));
-  const missingReportCodes = (await db.execute<{ employee_name: string; component_name: string }>(sql`
+   `,
+    "objects",
+  );
+  const missingReportCodes = await db.execute<{ employee_name: string; component_name: string }>(
+    sql`
     select p.display_name as employee_name, pc.name as component_name
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
@@ -1635,20 +1955,30 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
        and l.kind = 'deduction' and pc.tax_treatment = 'pension_f'
        and l.statutory_reporting_code is null
      order by p.display_name, pc.name
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (missingReportCodes.length > 0) {
     const affected = missingReportCodes
-      .map((row) => `${row.employee_name} (${row.component_name})`).join(", ");
+      .map((row) => `${row.employee_name} (${row.component_name})`)
+      .join(", ");
     throw new PayrollError(
-      `W-2 box 12 cannot be prepared for ${affected}: a reportable pension deferral has no `
-      + "effective-dated pack reporting code on its committed pay-stub line. Classify the pay component "
-      + "with the applicable plan category and correct the payroll evidence before generating the W-2.",
+      `W-2 box 12 cannot be prepared for ${affected}: a reportable pension deferral has no ` +
+        "effective-dated pack reporting code on its committed pay-stub line. Classify the pay component " +
+        "with the applicable plan category and correct the payroll evidence before generating the W-2.",
     );
   }
-  const reportingRows = (await db.execute<{
-    employee_party_id: string; filing_account_id: string | null; source_subsidiary_id: string | null; source_date: string;
-    box_code: string; code: string; label: string; amount: string;
-  }>(sql`
+  const reportingRows = await db.execute<{
+    employee_party_id: string;
+    filing_account_id: string | null;
+    source_subsidiary_id: string | null;
+    source_date: string;
+    box_code: string;
+    code: string;
+    label: string;
+    amount: string;
+  }>(
+    sql`
     select s.employee_party_id, s.filing_account_id, d.subsidiary_id as source_subsidiary_id, s.pay_date::text as source_date,
            l.statutory_reporting_code->>'boxCode' as box_code,
            l.statutory_reporting_code->>'code' as code,
@@ -1665,32 +1995,64 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
               l.statutory_reporting_code->>'boxCode', l.statutory_reporting_code->>'code',
               l.statutory_reporting_code->>'label'
      order by l.statutory_reporting_code->>'code'
-  `, "objects"));
+  `,
+    "objects",
+  );
   const usAccounts = await loadUsFilingAccounts(db, orgId);
   const accountNumbers = new Map(usAccounts.map((account) => [account.id, account.accountNumber]));
-  const federalOf = (row: { filing_account_id?: unknown; source_subsidiary_id?: unknown; source_date?: unknown }) => {
+  const federalOf = (row: {
+    filing_account_id?: unknown;
+    source_subsidiary_id?: unknown;
+    source_date?: unknown;
+  }) => {
     const source = usFilingSource(row);
-    return resolveUsFederalFilingAccount(usAccounts, (row.filing_account_id as string | null) ?? null, source.subsidiaryId, source.date);
+    return resolveUsFederalFilingAccount(
+      usAccounts,
+      (row.filing_account_id as string | null) ?? null,
+      source.subsidiaryId,
+      source.date,
+    );
   };
-  const stateAccountOf = (row: { filing_account_id?: unknown; source_subsidiary_id?: unknown; source_date?: unknown }, province: string) => {
+  const stateAccountOf = (
+    row: { filing_account_id?: unknown; source_subsidiary_id?: unknown; source_date?: unknown },
+    province: string,
+  ) => {
     const source = usFilingSource(row);
-    return resolveUsW2StateAccount(usAccounts, (row.filing_account_id as string | null) ?? null, source.subsidiaryId, province, source.date);
+    return resolveUsW2StateAccount(
+      usAccounts,
+      (row.filing_account_id as string | null) ?? null,
+      source.subsidiaryId,
+      province,
+      source.date,
+    );
   };
-  const box12BySlip = new Map<string, { boxCode: string; code: string; label: string; value: string }[]>();
+  const box12BySlip = new Map<
+    string,
+    { boxCode: string; code: string; label: string; value: string }[]
+  >();
   for (const row of reportingRows) {
     const key = `${row.employee_party_id}:${federalOf(row) ?? ""}`;
     const entries = box12BySlip.get(key) ?? [];
     // Two stub accounts of one EIN report one box 12 amount per code.
-    const same = entries.find((entry) =>
-      entry.boxCode === row.box_code && entry.code === row.code && entry.label === row.label);
+    const same = entries.find(
+      (entry) =>
+        entry.boxCode === row.box_code && entry.code === row.code && entry.label === row.label,
+    );
     if (same) same.value = add(same.value, num(row.amount));
-    else entries.push({ boxCode: row.box_code, code: row.code, label: row.label, value: num(row.amount) });
+    else
+      entries.push({
+        boxCode: row.box_code,
+        code: row.code,
+        label: row.label,
+        value: num(row.amount),
+      });
     box12BySlip.set(key, entries);
   }
   // Boxes 18–20, per (employee, EIN, work state, state account, locality):
   // the locality is the withheld line's own description and the wages are the
   // taxable earnings of the stubs in this state carrying that locality's line.
-  const localRows = (await db.execute<Record<string, unknown>>(sql`
+  const localRows = await db.execute<Record<string, unknown>>(
+    sql`
     with stub_wages as (
       select s.id as stub_id, s.employee_party_id, s.filing_account_id, s.province, s.factors,
              d.subsidiary_id as source_subsidiary_id, s.pay_date::text as source_date,
@@ -1725,17 +2087,29 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       ) line_tax on true
      group by w.employee_party_id, w.employee_name, w.filing_account_id, w.province, l.description, w.source_subsidiary_id, w.source_date
      order by l.description
-   `, "objects"));
-  const stateGroupKey = (row: { employee_party_id?: unknown; filing_account_id?: unknown; source_subsidiary_id?: unknown; source_date?: unknown }, province: string) =>
-    `${String(row.employee_party_id)}:${federalOf(row) ?? ""}:${province}:`
-    + (stateAccountOf(row, province) ?? "");
+   `,
+    "objects",
+  );
+  const stateGroupKey = (
+    row: {
+      employee_party_id?: unknown;
+      filing_account_id?: unknown;
+      source_subsidiary_id?: unknown;
+      source_date?: unknown;
+    },
+    province: string,
+  ) =>
+    `${String(row.employee_party_id)}:${federalOf(row) ?? ""}:${province}:` +
+    (stateAccountOf(row, province) ?? "");
   const localByGroup = new Map<string, W2LocalLine[]>();
   for (const row of localRows) {
     const tax = num(row.local_tax);
     if (cmp(tax, "0") === 0) continue;
     const localWages = requireW2LocalWages(
       row.local_wages_unknown === true ? null : num(row.local_wages),
-      String(row.employee_name), String(row.province), String(row.description),
+      String(row.employee_name),
+      String(row.province),
+      String(row.description),
     );
     const key = stateGroupKey(row, String(row.province ?? ""));
     const list = localByGroup.get(key) ?? [];
@@ -1762,21 +2136,38 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   // state attribution, so pre-adoption state wages and withholding stay in the
   // federal boxes (the slip says so).
   const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "US");
-  const ficaRates = [...openings.values()].some((o) =>
-    cmp(o.ficaWithheldYtd, "0") !== 0 || cmp(o.pensionableYtd, "0") !== 0
-    || [US_FICA_WITHHELD_ACCOUNT_BASE, US_FICA_WAGES_ACCOUNT_BASE].some((key) =>
-      (o.accountBasesYtd?.[key] ?? []).some((base) => cmp(base.insurableYtd, "0") !== 0)))
+  const ficaRates = [...openings.values()].some(
+    (o) =>
+      cmp(o.ficaWithheldYtd, "0") !== 0 ||
+      cmp(o.pensionableYtd, "0") !== 0 ||
+      [US_FICA_WITHHELD_ACCOUNT_BASE, US_FICA_WAGES_ACCOUNT_BASE].some((key) =>
+        (o.accountBasesYtd?.[key] ?? []).some((base) => cmp(base.insurableYtd, "0") !== 0),
+      ),
+  )
     ? usFicaSplitRates(taxYear)
     : null;
   type StateGroup = {
-    province: string; stateKey: string; stateAccountId: string | null;
-    wages: string; fit: string; ssWages: string; ssTax: string;
-    medicareWages: string; medicareTax: string; stateTax: string; stubIds: string[];
+    province: string;
+    stateKey: string;
+    stateAccountId: string | null;
+    wages: string;
+    fit: string;
+    ssWages: string;
+    ssTax: string;
+    medicareWages: string;
+    medicareTax: string;
+    stateTax: string;
+    stubIds: string[];
   };
-  const groupsBySlip = new Map<string, {
-    employeePartyId: string; employeeName: string; filingAccountId: string | null;
-    groups: StateGroup[];
-  }>();
+  const groupsBySlip = new Map<
+    string,
+    {
+      employeePartyId: string;
+      employeeName: string;
+      filingAccountId: string | null;
+      groups: StateGroup[];
+    }
+  >();
   for (const row of rows) {
     const employeePartyId = String(row.employee_party_id);
     const province = String(row.province ?? "");
@@ -1799,7 +2190,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       medicareWages: num(row.medicare_wages),
       medicareTax: num(row.medicare_tax),
       stateTax: num(row.state_tax),
-      stubIds: (row.stub_ids as readonly unknown[] | null ?? []).map(String),
+      stubIds: ((row.stub_ids as readonly unknown[] | null) ?? []).map(String),
     });
     groupsBySlip.set(key, slip);
   }
@@ -1819,19 +2210,23 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   // the documented federal-only behavior.
   const unattributed = [...groupsBySlip.values()].flatMap((slip) =>
     slip.groups
-      .filter((group) => group.province === ""
-        && (cmp(group.stateTax, "0") !== 0
-          || (localByGroup.get(group.stateKey) ?? []).length > 0))
+      .filter(
+        (group) =>
+          group.province === "" &&
+          (cmp(group.stateTax, "0") !== 0 || (localByGroup.get(group.stateKey) ?? []).length > 0),
+      )
       .map((group) => ({ slip, group })),
   );
   if (unattributed.length > 0) {
     const names = [...new Set(unattributed.map(({ slip }) => slip.employeeName))].sort().join(", ");
-    const stubs = [...new Set(unattributed.flatMap(({ group }) => group.stubIds))].sort().join(", ");
+    const stubs = [...new Set(unattributed.flatMap(({ group }) => group.stubIds))]
+      .sort()
+      .join(", ");
     throw new PayrollError(
-      `W-2 state wages cannot be built for ${names}: state income tax was withheld on `
-      + `stubs with no work state (${stubs}), and box 17 must name a state. Review the original `
-      + "payroll evidence and correct the run — void and reissue it with the work state — "
-      + "before generating year-end reports.",
+      `W-2 state wages cannot be built for ${names}: state income tax was withheld on ` +
+        `stubs with no work state (${stubs}), and box 17 must name a state. Review the original ` +
+        "payroll evidence and correct the run — void and reissue it with the work state — " +
+        "before generating year-end reports.",
     );
   }
   const total = (groups: StateGroup[], pick: (group: StateGroup) => string) =>
@@ -1843,20 +2238,29 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     const merged = new Map<string, StateGroup>();
     for (const group of groups) {
       const prior = merged.get(group.stateKey);
-      merged.set(group.stateKey, prior
-        ? { ...prior, wages: add(prior.wages, group.wages), stateTax: add(prior.stateTax, group.stateTax) }
-        : group);
+      merged.set(
+        group.stateKey,
+        prior
+          ? {
+              ...prior,
+              wages: add(prior.wages, group.wages),
+              stateTax: add(prior.stateTax, group.stateTax),
+            }
+          : group,
+      );
     }
     return buildW2StateLines(
       [...merged.values()],
       (group) => localByGroup.get(group.stateKey) ?? [],
-      (group) => (group.stateAccountId ? accountNumbers.get(group.stateAccountId) ?? null : null),
+      (group) => (group.stateAccountId ? (accountNumbers.get(group.stateAccountId) ?? null) : null),
     );
   };
   const stubSlips: W2Slip[] = [...groupsBySlip.values()].map((slip) => {
     // Sorted, like the previous `array_agg(distinct s.province order by
     // s.province)` — the display string must not move for multi-state slips.
-    const provinces = [...new Set(slip.groups.map((group) => group.province))].filter(Boolean).sort();
+    const provinces = [...new Set(slip.groups.map((group) => group.province))]
+      .filter(Boolean)
+      .sort();
     return {
       employeePartyId: slip.employeePartyId,
       employeeName: slip.employeeName,
@@ -1876,31 +2280,64 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   const profiles = await openingEmployeeProfiles(orgId, [...openings.keys()], "US");
   const seeded = [...stubSlips];
   for (const [employeePartyId, opening] of openings) {
-    if (seeded.some(slip => slip.employeePartyId === employeePartyId)) continue;
+    if (seeded.some((slip) => slip.employeePartyId === employeePartyId)) continue;
     const original = await readEmployeeOpeningLevySources(db, { orgId, employeePartyId, taxYear });
     requireUsW2OpeningSource(original);
-    const filingIds = [...new Set([
-      ...original.allocations.filter(row => row.programKey === 'us_futa').map(row => row.federalAccountId),
-      ...[US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE]
-        .flatMap(key => (opening.accountBasesYtd?.[key] ?? []).map(base => base.filingAccountId)),
-    ].filter((id): id is string => typeof id === 'string'))].sort();
-    if (!filingIds.length || filingIds.length > 1 && [opening.pensionableYtd, opening.taxableYtd,
-      opening.taxYtd, opening.ficaWithheldYtd].some(amount => cmp(amount, '0') !== 0)) {
-      throw new PayrollError('Original W-2 opening amounts do not identify one EIN, or contain an unallocated aggregate across multiple EINs. Preserve the original report and qualify its EIN-specific carry-ins before preparing slips');
+    const filingIds = [
+      ...new Set(
+        [
+          ...original.allocations
+            .filter((row) => row.programKey === "us_futa")
+            .map((row) => row.federalAccountId),
+          ...[US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE].flatMap((key) =>
+            (opening.accountBasesYtd?.[key] ?? []).map((base) => base.filingAccountId),
+          ),
+        ].filter((id): id is string => typeof id === "string"),
+      ),
+    ].sort();
+    if (
+      !filingIds.length ||
+      (filingIds.length > 1 &&
+        [opening.pensionableYtd, opening.taxableYtd, opening.taxYtd, opening.ficaWithheldYtd].some(
+          (amount) => cmp(amount, "0") !== 0,
+        ))
+    ) {
+      throw new PayrollError(
+        "Original W-2 opening amounts do not identify one EIN, or contain an unallocated aggregate across multiple EINs. Preserve the original report and qualify its EIN-specific carry-ins before preparing slips",
+      );
     }
     for (const filingAccountId of filingIds) {
-      const resolved = resolveUsFederalFilingAccount(usAccounts, filingAccountId, original.authority.subsidiaryId, original.facts.coverageEnd);
-      if (resolved !== filingAccountId) throw new PayrollError('The original W-2 opening names a state account instead of its federal EIN — qualify the original employer registration');
+      const resolved = resolveUsFederalFilingAccount(
+        usAccounts,
+        filingAccountId,
+        original.authority.subsidiaryId,
+        original.facts.coverageEnd,
+      );
+      if (resolved !== filingAccountId)
+        throw new PayrollError(
+          "The original W-2 opening names a state account instead of its federal EIN — qualify the original employer registration",
+        );
       seeded.push({
-        employeePartyId, employeeName: profiles.get(employeePartyId)?.name ?? employeePartyId,
+        employeePartyId,
+        employeeName: profiles.get(employeePartyId)?.name ?? employeePartyId,
         // No state withholding source is retained by generic opening amounts.
-        states: [], state: '', filingAccountId,
-        box1Wages: '0', box2FederalIncomeTax: '0', box3SsWages: '0', box4SsTax: '0',
-        box5MedicareWages: '0', box6MedicareTax: '0', box12Lines: [], stateLines: [],
+        states: [],
+        state: "",
+        filingAccountId,
+        box1Wages: "0",
+        box2FederalIncomeTax: "0",
+        box3SsWages: "0",
+        box4SsTax: "0",
+        box5MedicareWages: "0",
+        box6MedicareTax: "0",
+        box12Lines: [],
+        stateLines: [],
       });
     }
   }
-  const carried = carryOpeningYearEndYtd(seeded, openings, (slip, opening) => openingYtdIntoW2Slip(slip, opening, ficaRates));
+  const carried = carryOpeningYearEndYtd(seeded, openings, (slip, opening) =>
+    openingYtdIntoW2Slip(slip, opening, ficaRates),
+  );
   return carried.map((slip) => {
     const opening = openings.get(slip.employeePartyId);
     return opening ? openingAccountYtdIntoW2Slip(slip, opening, ficaRates) : slip;
@@ -1988,7 +2425,8 @@ async function gbYearStatements(
   assertPayrollTaxYearSupported("GB", taxYear);
   await assertPayrollCountryKnown(db, orgId, taxYear);
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     with committed as (
       select s.*
         from pay_stubs s
@@ -2051,7 +2489,9 @@ async function gbYearStatements(
      group by c.employee_party_id, p.display_name, c.filing_account_id,
               er.employee_number, er.terminated_on
      order by p.display_name, min(c.pay_date)
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => {
     const rawCode = row.tax_code == null ? null : String(row.tax_code).trim() || null;
     const nonCumulative = String(row.non_cumulative ?? "").toLowerCase() === "true";
@@ -2066,9 +2506,11 @@ async function gbYearStatements(
       nicEmployer: num(row.nic_employer),
       studentLoanDeducted: num(row.student_loan),
       postgraduateLoanDeducted: num(row.postgraduate_loan),
-      studentLoanContinues: row.student_loan_plan != null && String(row.student_loan_plan) !== "none",
+      studentLoanContinues:
+        row.student_loan_plan != null && String(row.student_loan_plan) !== "none",
       postgraduateLoanContinues: String(row.postgraduate_loan_active ?? "false") === "true",
-      finalTaxCode: rawCode == null ? null : (nonCumulative ? `${rawCode} (week 1/month 1)` : rawCode),
+      finalTaxCode:
+        rawCode == null ? null : nonCumulative ? `${rawCode} (week 1/month 1)` : rawCode,
       scottishCode: rawCode != null && /^s/i.test(rawCode),
       payrollNumber: row.payroll_number == null ? null : String(row.payroll_number),
       lastPayDate: String(row.last_pay_date),
@@ -2084,17 +2526,20 @@ async function gbYearStatements(
  * year with nothing paid refuses instead of printing one.
  */
 async function assertGbCommittedRuns(orgId: string, taxYear: number, form: string): Promise<void> {
-  const existing = (await db.execute<{ id: string }>(sql`
+  const existing = await db.execute<{ id: string }>(
+    sql`
     select s.id from pay_stubs s
     join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
    where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'GB'
    limit 1
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (existing.length === 0) {
     throw new PayrollError(
-      `no committed GB pay runs for ${taxYear}/${String(taxYear + 1).slice(2)} — a ${form} reports `
-      + "what was actually paid and withheld, so a year with no committed payroll cannot produce one. "
-      + "Commit a GB pay run for the year first.",
+      `no committed GB pay runs for ${taxYear}/${String(taxYear + 1).slice(2)} — a ${form} reports ` +
+        "what was actually paid and withheld, so a year with no committed payroll cannot produce one. " +
+        "Commit a GB pay run for the year first.",
     );
   }
 }
@@ -2135,7 +2580,9 @@ export async function gbP45Leavers(orgId: string, taxYear: number): Promise<GbP4
   const statements = await gbYearStatements(orgId, taxYear);
   const { start, end } = gbTaxYearBounds(taxYear);
   const terminatedIds = new Set(
-    (await db.execute<{ id: string }>(sql`
+    (
+      await db.execute<{ id: string }>(
+        sql`
       select distinct s.employee_party_id as id
         from pay_stubs s
         join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
@@ -2144,7 +2591,10 @@ export async function gbP45Leavers(orgId: string, taxYear: number): Promise<GbP4
               or exists (select 1 from employee_roles er
                          where er.org_id = ${orgId} and er.party_id = s.employee_party_id
                            and er.terminated_on::date between ${start} and ${end}))
-    `, "objects")).map((row) => row.id),
+    `,
+        "objects",
+      )
+    ).map((row) => row.id),
   );
   const leavers = statements.filter((statement) => terminatedIds.has(statement.employeePartyId));
   if (leavers.length === 0) await assertGbCommittedRuns(orgId, taxYear, "P45");
@@ -2204,9 +2654,12 @@ export async function orgYearEndFilings(
   orgId: string,
   taxYear: number,
 ): Promise<YearEndFilingSection[]> {
-  const installedRow = (await db.execute<{ countries: unknown }>(sql`
+  const installedRow = await db.execute<{ countries: unknown }>(
+    sql`
     select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}
-  `, "objects"));
+  `,
+    "objects",
+  );
   const raw = installedRow[0]?.countries;
   const installed = new Set(Array.isArray(raw) ? raw.map(String) : []);
 
@@ -2265,12 +2718,15 @@ export async function orgYearEndFilings(
  * fiscal pack posts to a tax year ahead of the calendar year.
  */
 export async function orgPayrollDataYears(orgId: string): Promise<number[]> {
-  const rows = await db.execute<{ tax_year: number }>(sql`
+  const rows = await db.execute<{ tax_year: number }>(
+    sql`
     select distinct tax_year from pay_stubs where org_id = ${orgId}
     union
     select distinct tax_year from payroll_opening_balances where org_id = ${orgId}
     order by 1 desc
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((row) => row.tax_year);
 }
 
@@ -2282,10 +2738,17 @@ export async function orgPayrollDataYears(orgId: string): Promise<number[]> {
  * and the page can never disagree about which packs are in scope.
  */
 export async function orgFilingYearOptions(orgId: string, today: string): Promise<number[]> {
-  const installedRow = await db.execute<{ countries: unknown }>(sql`
+  const installedRow = await db.execute<{ countries: unknown }>(
+    sql`
     select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}
-  `, "objects");
+  `,
+    "objects",
+  );
   const raw = installedRow[0]?.countries;
   const countries = Array.isArray(raw) ? raw.map(String) : [];
-  return payrollFilingYearOptions({ today, countries, dataYears: await orgPayrollDataYears(orgId) });
+  return payrollFilingYearOptions({
+    today,
+    countries,
+    dataYears: await orgPayrollDataYears(orgId),
+  });
 }

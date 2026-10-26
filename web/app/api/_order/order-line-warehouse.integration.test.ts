@@ -10,17 +10,26 @@ import test from "node:test";
 // assign-warehouse writer sets the single column through the established
 // reopen-restore pattern. A scratch org ships two active warehouses, so a
 // NULL-warehouse line is the legacy trap exactly. Needs a fixture database.
-const routeGate = { authz: null as null | { user: { id: string; orgId: string }; allowedSubsidiaryIds: null } };
-(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.order-line-warehouse-route-gate")] = routeGate;
+const routeGate = {
+  authz: null as null | { user: { id: string; orgId: string }; allowedSubsidiaryIds: null },
+};
+(globalThis as typeof globalThis & Record<symbol, unknown>)[
+  Symbol.for("openbooks.order-line-warehouse-route-gate")
+] = routeGate;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../lib/feature-gates" && context.parentURL?.includes("/api/_order/handlers")) {
+    if (
+      specifier === "../../../lib/feature-gates" &&
+      context.parentURL?.includes("/api/_order/handlers")
+    ) {
       return { url: "mock:order-line-warehouse-feature-gates", shortCircuit: true };
     }
     if (
-      (specifier === "@/lib/feature-gates" && String(context.parentURL ?? "").includes("/lib/api/route")) ||
-      (specifier === "../../../../../lib/feature-gates" && String(context.parentURL ?? "").includes("assign-warehouse/route"))
+      (specifier === "@/lib/feature-gates" &&
+        String(context.parentURL ?? "").includes("/lib/api/route")) ||
+      (specifier === "../../../../../lib/feature-gates" &&
+        String(context.parentURL ?? "").includes("assign-warehouse/route"))
     ) {
       return { url: "mock:order-line-warehouse-feature-gates", shortCircuit: true };
     }
@@ -46,7 +55,8 @@ const hooks = registerHooks({
 
 const { sql } = await import("drizzle-orm");
 const { withBypassContext, db, withOrg } = await import("@openbooks/engine/platform/db");
-const { installTrustedTestDatabaseBypass } = await import("@openbooks/engine/testing/database-bypass");
+const { installTrustedTestDatabaseBypass } =
+  await import("@openbooks/engine/testing/database-bypass");
 const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 const { receiveInventory } = await import("@openbooks/engine/inventory/movements");
 const {
@@ -57,16 +67,16 @@ const {
   ConversionError,
   ORDER_LINE_WAREHOUSE_REQUIRED,
 } = await import("../../../lib/order-cycle.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 
 installTrustedTestDatabaseBypass();
 
-const { POST: assignSalesWarehouse } = await import("../sales-orders/[id]/assign-warehouse/route.ts");
-const { POST: assignPurchaseWarehouse } = await import("../purchase-orders/[id]/assign-warehouse/route.ts");
+const { POST: assignSalesWarehouse } =
+  await import("../sales-orders/[id]/assign-warehouse/route.ts");
+const { POST: assignPurchaseWarehouse } =
+  await import("../purchase-orders/[id]/assign-warehouse/route.ts");
 test.after(() => hooks.deregister());
-
 
 interface Fixture {
   org: Awaited<ReturnType<typeof createScratchOrg>>;
@@ -80,12 +90,17 @@ async function approvedOrder(
   itemId: (org: Fixture["org"]) => string,
   warehouse: ((org: Fixture["org"]) => string) | null,
 ): Promise<Fixture> {
-  const org = await withBypassContext(() => (createScratchOrg()));
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const userId = await withBypassContext(() => (createScratchUser(org.orgId, "Warehouse Clerk", "admin")));
-    const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, kind, randomUUID(), null));
+    const userId = await withBypassContext(() =>
+      createScratchUser(org.orgId, "Warehouse Clerk", "admin"),
+    );
+    const order = await withOrg(org.orgId, () =>
+      createOrderDraft(org.orgId, userId, kind, randomUUID(), null),
+    );
     const lineId = randomUUID();
-    await withBypassContext(() => (db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into document_lines
         (id, org_id, document_id, line_number, item_id, account_id,
          description, quantity, unit, unit_price, amount, tax_amount,
@@ -95,15 +110,18 @@ async function approvedOrder(
          ${kind === "sales_order" ? org.accounts.revenue : org.accounts.invAsset},
          'Widget', '10', 'ea', '10', '100', '0',
          '0', '0', ${warehouse ? warehouse(org) : null}, '{}'::jsonb)
-    `)));
-    await withBypassContext(() => (db.execute(sql`
+    `),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
       update documents
          set status = 'approved',
              party_id = ${kind === "sales_order" ? org.customerId : org.vendorId},
              subsidiary_id = ${org.subsidiaryId}, document_date = ${org.date},
              subtotal = '100', total = '100'
        where id = ${order.id} and org_id = ${org.orgId}
-    `)));
+    `),
+    );
     return { org, userId, orderId: order.id, lineId };
   } catch (error) {
     await dropScratchOrg(org.orgId);
@@ -112,9 +130,14 @@ async function approvedOrder(
 }
 
 async function revisionOf(orgId: string, orderId: string): Promise<string> {
-  const row = (await db.execute<{ updated_at: string }>(sql`
+  const row = (
+    await db.execute<{ updated_at: string }>(
+      sql`
     select ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
-      from documents where id = ${orderId} and org_id = ${orgId}`, "objects"))[0]!;
+      from documents where id = ${orderId} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0]!;
   return row.updated_at;
 }
 
@@ -147,10 +170,15 @@ test("fulfillment names the warehouseless line instead of failing generically", 
       (error: unknown) => refusal(error, 1),
       "the refusal names line 1 with the typed code",
     );
-    const leftovers = (await db.execute<{ fulfillments: number; fulfilled: string }>(sql`
+    const leftovers = (
+      await db.execute<{ fulfillments: number; fulfilled: string }>(
+        sql`
       select (select count(*)::int from documents
                where org_id = ${f.org.orgId} and kind = 'sales_fulfillment') as fulfillments,
-             (select quantity_fulfilled::text from document_lines where id = ${f.lineId}) as fulfilled`, "objects"))[0]!;
+             (select quantity_fulfilled::text from document_lines where id = ${f.lineId}) as fulfilled`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(leftovers.fulfillments, 0, "the refused fulfillment creates nothing");
     assert.equal(Number(leftovers.fulfilled), 0, "no shipment evidence advances");
   } finally {
@@ -191,23 +219,37 @@ test("assignment unblocks fulfillment and routes stock to the assigned warehouse
         lines: [{ sourceLineId: f.lineId, quantity: "10" }],
       }),
     );
-    const facts = (await db.execute<{
-      status: string;
-      line_warehouse: string;
-      movement_warehouse: string | null;
-    }>(sql`
+    const facts = (
+      await db.execute<{
+        status: string;
+        line_warehouse: string;
+        movement_warehouse: string | null;
+      }>(
+        sql`
       select (select status from documents where id = ${f.orderId}) as status,
              (select stock_location_id from document_lines where id = ${f.lineId}) as line_warehouse,
              (select m.stock_location_id from inventory_movements m
                 join document_lines fl on fl.id = m.document_line_id and fl.org_id = m.org_id
                where m.org_id = ${f.org.orgId} and fl.document_id = ${shipped.id}
-                 and m.kind = 'issue' limit 1) as movement_warehouse`, "objects"))[0]!;
+                 and m.kind = 'issue' limit 1) as movement_warehouse`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(facts.status, "approved", "the order stays approved throughout");
     assert.equal(facts.line_warehouse, f.org.stockLocationId2);
-    assert.equal(facts.movement_warehouse, f.org.stockLocationId2, "the issue relieves the assigned warehouse");
-    const audit = (await db.execute<{ n: number }>(sql`
+    assert.equal(
+      facts.movement_warehouse,
+      f.org.stockLocationId2,
+      "the issue relieves the assigned warehouse",
+    );
+    const audit = (
+      await db.execute<{ n: number }>(
+        sql`
       select count(*)::int as n from audit_log
-       where org_id = ${f.org.orgId} and table_name = 'document_lines' and row_id = ${f.lineId}`, "objects"))[0]!;
+       where org_id = ${f.org.orgId} and table_name = 'document_lines' and row_id = ${f.lineId}`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(audit.n, 1, "the assignment is audited");
   } finally {
     await drop(f);
@@ -217,7 +259,11 @@ test("assignment unblocks fulfillment and routes stock to the assigned warehouse
 test("a draft order stays on the normal edit path", async () => {
   const f = await approvedOrder("sales_order", (org) => org.items.fifo, null);
   try {
-    await withBypassContext(() => (db.execute(sql`update documents set status = 'draft' where id = ${f.orderId} and org_id = ${f.org.orgId}`)));
+    await withBypassContext(() =>
+      db.execute(
+        sql`update documents set status = 'draft' where id = ${f.orderId} and org_id = ${f.org.orgId}`,
+      ),
+    );
     await assert.rejects(
       withOrg(f.org.orgId, async () =>
         assignOrderLineWarehouse({
@@ -262,8 +308,10 @@ test("a warehouse does not apply to a non-stocked line", async () => {
 test("an inactive warehouse is refused", async () => {
   const f = await approvedOrder("sales_order", (org) => org.items.fifo, null);
   try {
-    await withBypassContext(() => (db.execute(sql`update stock_locations set is_active = false
-      where id = ${f.org.stockLocationId2} and org_id = ${f.org.orgId}`)));
+    await withBypassContext(() =>
+      db.execute(sql`update stock_locations set is_active = false
+      where id = ${f.org.stockLocationId2} and org_id = ${f.org.orgId}`),
+    );
     await assert.rejects(
       withOrg(f.org.orgId, async () =>
         assignOrderLineWarehouse({
@@ -300,8 +348,13 @@ test("a stale revision is refused before any write", async () => {
       ),
       /changed after you opened it/,
     );
-    const line = (await db.execute<{ stock_location_id: string | null }>(sql`
-      select stock_location_id from document_lines where id = ${f.lineId}`, "objects"))[0]!;
+    const line = (
+      await db.execute<{ stock_location_id: string | null }>(
+        sql`
+      select stock_location_id from document_lines where id = ${f.lineId}`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(line.stock_location_id, null, "the refused assignment writes nothing");
   } finally {
     await drop(f);
@@ -340,26 +393,41 @@ test("both sales and purchase order routes assign the requested line warehouse",
       };
       const expectedUpdatedAt = await revisionOf(f.org.orgId, f.orderId);
       const response = await post(
-        new Request(`http://openbooks.test/api/${kind === "sales_order" ? "sales" : "purchase"}-orders/${f.orderId}/assign-warehouse`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ lineId: f.lineId, stockLocationId: f.org.stockLocationId2, expectedUpdatedAt }),
-        }),
+        new Request(
+          `http://openbooks.test/api/${kind === "sales_order" ? "sales" : "purchase"}-orders/${f.orderId}/assign-warehouse`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              lineId: f.lineId,
+              stockLocationId: f.org.stockLocationId2,
+              expectedUpdatedAt,
+            }),
+          },
+        ),
         { params: Promise.resolve({ id: f.orderId }) },
       );
       assert.equal(response.status, 200, `${kind} route should assign its order line`);
-      const row = (await db.execute<{ kind: string; stock_location_id: string | null }>(sql`
+      const row = (
+        await db.execute<{ kind: string; stock_location_id: string | null }>(
+          sql`
         select d.kind, l.stock_location_id
           from documents d join document_lines l on l.document_id = d.id and l.org_id = d.org_id
-         where d.org_id = ${f.org.orgId} and d.id = ${f.orderId} and l.id = ${f.lineId}`, "objects"))[0]!;
+         where d.org_id = ${f.org.orgId} and d.id = ${f.orderId} and l.id = ${f.lineId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(row.kind, kind);
       assert.equal(row.stock_location_id, f.org.stockLocationId2);
-      const order = await response.json() as {
+      const order = (await response.json()) as {
         doc?: { kind?: string };
         lines?: Array<{ id?: string; stock_location_id?: string | null }>;
       };
       assert.equal(order.doc?.kind, kind);
-      assert.equal(order.lines?.find((line) => line.id === f.lineId)?.stock_location_id, f.org.stockLocationId2);
+      assert.equal(
+        order.lines?.find((line) => line.id === f.lineId)?.stock_location_id,
+        f.org.stockLocationId2,
+      );
     } finally {
       routeGate.authz = null;
       await drop(f);

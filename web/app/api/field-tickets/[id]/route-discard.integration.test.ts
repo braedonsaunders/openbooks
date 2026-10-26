@@ -64,16 +64,19 @@ registerHooks({
 });
 
 const deleteRouteUrl = "./route.ts?fieldticket-discard-test";
-const routeModule = (await import(deleteRouteUrl)) as typeof import("./route.ts") & Record<string, unknown>;
+const routeModule = (await import(deleteRouteUrl)) as typeof import("./route.ts") &
+  Record<string, unknown>;
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { createFieldTicket, loadFieldTicket } = await import("../../../../lib/field-tickets.ts");
 
-
-async function deleteRequest(orgId: string, id: string, body: unknown): Promise<{ status: number; json: unknown }> {
+async function deleteRequest(
+  orgId: string,
+  id: string,
+  body: unknown,
+): Promise<{ status: number; json: unknown }> {
   const handler = routeModule["DELETE"];
   // Next answers 405 when the route exports no DELETE — the reported symptom.
   if (typeof handler !== "function") return { status: 405, json: null };
@@ -91,8 +94,18 @@ async function deleteRequest(orgId: string, id: string, body: unknown): Promise<
 }
 
 async function orgRows(orgId: string, id: string) {
-  const documents = (await db.execute<{ n: string }>(sql`select count(*)::text as n from documents where id = ${id} and org_id = ${orgId}`, "objects"))[0]!.n;
-  const tickets = (await db.execute<{ n: string }>(sql`select count(*)::text as n from field_tickets where document_id = ${id} and org_id = ${orgId}`, "objects"))[0]!.n;
+  const documents = (
+    await db.execute<{ n: string }>(
+      sql`select count(*)::text as n from documents where id = ${id} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0]!.n;
+  const tickets = (
+    await db.execute<{ n: string }>(
+      sql`select count(*)::text as n from field_tickets where document_id = ${id} and org_id = ${orgId}`,
+      "objects",
+    )
+  )[0]!.n;
   return { documents, tickets };
 }
 
@@ -100,7 +113,9 @@ test("DELETE discards an untouched ticket draft", async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg();
     try {
-      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${org.orgId}`);
+      await db.execute(
+        sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${org.orgId}`,
+      );
       const { adminId } = await seedFlowActors(org.orgId);
       routeState.authz = {
         user: { orgId: org.orgId, id: adminId },
@@ -109,10 +124,21 @@ test("DELETE discards an untouched ticket draft", async () => {
       };
       const created = await createFieldTicket(org.orgId, adminId, { allowedSubsidiaryIds: null });
       const loaded = await loadFieldTicket(org.orgId, created.id);
-      const removed = await deleteRequest(org.orgId, created.id, { expectedRevision: loaded.revision });
-      assert.equal(removed.status, 200, `discarding the empty draft must succeed, got ${removed.status}: ${JSON.stringify(removed.json)}`);
+      const removed = await deleteRequest(org.orgId, created.id, {
+        expectedRevision: loaded.revision,
+      });
+      assert.equal(
+        removed.status,
+        200,
+        `discarding the empty draft must succeed, got ${removed.status}: ${JSON.stringify(removed.json)}`,
+      );
       assert.deepEqual(await orgRows(org.orgId, created.id), { documents: "0", tickets: "0" });
-      const audit = (await db.execute<{ action: string }>(sql`select action from audit_log where org_id = ${org.orgId} and row_id = ${created.id} order by at desc limit 1`, "objects"))[0];
+      const audit = (
+        await db.execute<{ action: string }>(
+          sql`select action from audit_log where org_id = ${org.orgId} and row_id = ${created.id} order by at desc limit 1`,
+          "objects",
+        )
+      )[0];
       assert.equal(audit?.action, "delete");
     } finally {
       routeState.authz = null;
@@ -125,7 +151,9 @@ test("DELETE refuses a draft that already carries content", async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg();
     try {
-      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${org.orgId}`);
+      await db.execute(
+        sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${org.orgId}`,
+      );
       const { adminId } = await seedFlowActors(org.orgId);
       routeState.authz = {
         user: { orgId: org.orgId, id: adminId },
@@ -136,7 +164,9 @@ test("DELETE refuses a draft that already carries content", async () => {
       await db.execute(sql`insert into document_lines (org_id, document_id, line_number, account_id, quantity, unit_price, amount)
         values (${org.orgId}, ${created.id}, 1, ${org.accounts.revenue}, 1, 10, 10)`);
       const loaded = await loadFieldTicket(org.orgId, created.id);
-      const refused = await deleteRequest(org.orgId, created.id, { expectedRevision: loaded.revision });
+      const refused = await deleteRequest(org.orgId, created.id, {
+        expectedRevision: loaded.revision,
+      });
       assert.equal(refused.status, 422);
       assert.match(String((refused.json as { error: string }).error), /lines|content|empty/i);
       assert.deepEqual(await orgRows(org.orgId, created.id), { documents: "1", tickets: "1" });
@@ -151,16 +181,22 @@ test("DELETE answers 404 for unknown or malformed ticket ids", async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg();
     try {
-      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${org.orgId}`);
+      await db.execute(
+        sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${org.orgId}`,
+      );
       const { adminId } = await seedFlowActors(org.orgId);
       routeState.authz = {
         user: { orgId: org.orgId, id: adminId },
         permissions: new Set(["time.manage"]),
         allowedSubsidiaryIds: null,
       };
-      const missing = await deleteRequest(org.orgId, randomUUID(), { expectedRevision: "2026-09-01T00:00:00.000001Z" });
+      const missing = await deleteRequest(org.orgId, randomUUID(), {
+        expectedRevision: "2026-09-01T00:00:00.000001Z",
+      });
       assert.equal(missing.status, 404);
-      const malformed = await deleteRequest(org.orgId, "not-a-uuid", { expectedRevision: "2026-09-01T00:00:00.000001Z" });
+      const malformed = await deleteRequest(org.orgId, "not-a-uuid", {
+        expectedRevision: "2026-09-01T00:00:00.000001Z",
+      });
       assert.equal(malformed.status, 404);
     } finally {
       routeState.authz = null;

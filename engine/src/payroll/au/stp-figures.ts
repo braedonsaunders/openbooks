@@ -41,10 +41,16 @@ export interface AuStpFinalisationRow {
  * STP wants separately itemised (ATO STP Phase 2 employer reporting
  * guidelines, "Disaggregation of gross"). Pure money.ts arithmetic.
  */
-export function stpReportableGross(row: Pick<
-  AuStpFinalisationRow, "gross" | "overtime" | "bonusesCommissions" | "paidLeave" | "allowances"
->): string {
-  return add(add(add(add(row.gross, neg(row.overtime)), neg(row.bonusesCommissions)), neg(row.paidLeave)), neg(row.allowances));
+export function stpReportableGross(
+  row: Pick<
+    AuStpFinalisationRow,
+    "gross" | "overtime" | "bonusesCommissions" | "paidLeave" | "allowances"
+  >,
+): string {
+  return add(
+    add(add(add(row.gross, neg(row.overtime)), neg(row.bonusesCommissions)), neg(row.paidLeave)),
+    neg(row.allowances),
+  );
 }
 
 /**
@@ -52,7 +58,9 @@ export function stpReportableGross(row: Pick<
  * construction. Owned HERE, beside the builder — the subsidiary-scope guard
  * parses through the declaration, never its own copy of this shape.
  */
-export function parseStpFinalisationRowId(rowId: string): { employees: string[]; accounts: string[] } | null {
+export function parseStpFinalisationRowId(
+  rowId: string,
+): { employees: string[]; accounts: string[] } | null {
   if (!isUuid(rowId)) return null;
   return { employees: [rowId], accounts: [] };
 }
@@ -81,14 +89,14 @@ export function assertAuFinalisationYear(taxYear: number): void {
   );
   if (draft) {
     throw new PayrollPackError(
-      `AU STP finalisation for ${auFinancialYearLabel(taxYear)} (taxYear ${taxYear}) is refused: `
-      + `the ${taxYear} statutory tables for AU are scaffolded but not filled in. `
-      + `This year is not yet supported by the AU pack; contact support.`,
+      `AU STP finalisation for ${auFinancialYearLabel(taxYear)} (taxYear ${taxYear}) is refused: ` +
+        `the ${taxYear} statutory tables for AU are scaffolded but not filled in. ` +
+        `This year is not yet supported by the AU pack; contact support.`,
     );
   }
   throw new PayrollPackError(
-    `AU STP finalisation for taxYear ${taxYear} is refused: ${taxYear} statutory tables are not loaded for AU — `
-    + (published.length > 0 ? `loaded years: ${published.join(", ")}. ` : "no years are loaded. ")
-    + "This year is not yet supported by the AU pack; contact support.",
+    `AU STP finalisation for taxYear ${taxYear} is refused: ${taxYear} statutory tables are not loaded for AU — ` +
+      (published.length > 0 ? `loaded years: ${published.join(", ")}. ` : "no years are loaded. ") +
+      "This year is not yet supported by the AU pack; contact support.",
   );
 }

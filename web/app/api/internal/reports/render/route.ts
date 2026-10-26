@@ -1,22 +1,35 @@
-import { closePackageReportAuthz, scheduledReportAuthz, withReportAuthz, expenseReadRevoked, EXPENSE_READ_REVOKED_REMEDY, type ReportAuthorization, type ReportRenderEvidence } from '../../../../../lib/report-execution-context'
-import { createHash } from 'node:crypto'
-import { can } from '../../../../../lib/authz'
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db, withOrg } from '@openbooks/engine/platform/db'
-import type { ReportRuleGroup } from '@openbooks/reports'
-import { getTranslations } from 'next-intl/server'
-import { resolveDefinitionToExportData } from '../../../../../lib/report-run'
-import { exportDataToPdf, exportDataToXlsx, orgBranding, resolveLayout, type Translator } from '../../../../../lib/report-pdf'
-import { xlsxMoneyContext } from '../../../../../lib/xlsx-money'
-import { resolvePeriod } from '../../../../../lib/periods'
-import { parseReportQuery } from '../../../../../lib/report-filters'
-import { internalTokenMatches, parseInternalOrgId } from '../../../../../lib/internal-token'
+import {
+  closePackageReportAuthz,
+  scheduledReportAuthz,
+  withReportAuthz,
+  expenseReadRevoked,
+  EXPENSE_READ_REVOKED_REMEDY,
+  type ReportAuthorization,
+  type ReportRenderEvidence,
+} from "../../../../../lib/report-execution-context";
+import { createHash } from "node:crypto";
+import { can } from "../../../../../lib/authz";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db, withOrg } from "@openbooks/engine/platform/db";
+import type { ReportRuleGroup } from "@openbooks/reports";
+import { getTranslations } from "next-intl/server";
+import { resolveDefinitionToExportData } from "../../../../../lib/report-run";
+import {
+  exportDataToPdf,
+  exportDataToXlsx,
+  orgBranding,
+  resolveLayout,
+  type Translator,
+} from "../../../../../lib/report-pdf";
+import { xlsxMoneyContext } from "../../../../../lib/xlsx-money";
+import { resolvePeriod } from "../../../../../lib/periods";
+import { parseReportQuery } from "../../../../../lib/report-filters";
+import { internalTokenMatches, parseInternalOrgId } from "../../../../../lib/internal-token";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * Internal report render endpoint — the background worker calls this to turn a
@@ -31,161 +44,190 @@ export const runtime = 'nodejs'
  *   GET /api/internal/reports/render?orgId=&definitionId=&runId=&<report params>
  */
 export async function GET(req: Request) {
-  if (!internalTokenMatches(req.headers.get('x-internal-token'), process.env.OPENBOOKS_INTERNAL_TOKEN)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (
+    !internalTokenMatches(req.headers.get("x-internal-token"), process.env.OPENBOOKS_INTERNAL_TOKEN)
+  ) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const url = new URL(req.url)
-  const p = url.searchParams
-  const definitionId = p.get('definitionId')
-  if (!p.get('orgId') || !definitionId) {
-    return NextResponse.json({ error: 'orgId and definitionId are required' }, { status: 422 })
+  const url = new URL(req.url);
+  const p = url.searchParams;
+  const definitionId = p.get("definitionId");
+  if (!p.get("orgId") || !definitionId) {
+    return NextResponse.json({ error: "orgId and definitionId are required" }, { status: 422 });
   }
   // The org id opens an RLS scope: an unparsable id is a bad request, never a
   // database cast error surfaced as a server fault.
-  const orgId = parseInternalOrgId(p.get('orgId'))
-  if (!orgId) return NextResponse.json({ error: 'orgId must be a uuid' }, { status: 400 })
+  const orgId = parseInternalOrgId(p.get("orgId"));
+  if (!orgId) return NextResponse.json({ error: "orgId must be a uuid" }, { status: 400 });
 
   // No session on this seam: scope every row-level-secured query to the
   // worker-supplied org explicitly (FORCE RLS otherwise yields zero rows).
   try {
     return await withOrg(orgId, async () => {
-    const t = (await getTranslations('reports')) as unknown as Translator
-    const runId = p.get('runId')
-    if (!runId) return NextResponse.json({ error: 'report runId is required' }, { status: 422 })
-    let authorization_snapshot: ReportAuthorization | null = null
-    let extraFilters: ReportRuleGroup | null = null
-    let closePackage: { packageId: string; runId: string | null } | null = null
-    if (runId) {
-      const run = (await db.execute<{ trigger: string; filters: Record<string, unknown> | null; authorization_snapshot: ReportAuthorization | null }>(sql`
+      const t = (await getTranslations("reports")) as unknown as Translator;
+      const runId = p.get("runId");
+      if (!runId) return NextResponse.json({ error: "report runId is required" }, { status: 422 });
+      let authorization_snapshot: ReportAuthorization | null = null;
+      let extraFilters: ReportRuleGroup | null = null;
+      let closePackage: { packageId: string; runId: string | null } | null = null;
+      if (runId) {
+        const run = await db.execute<{
+          trigger: string;
+          filters: Record<string, unknown> | null;
+          authorization_snapshot: ReportAuthorization | null;
+        }>(
+          sql`
         select trigger, filters, authorization_snapshot from report_runs
          where id=${runId} and org_id=${orgId} and definition_id=${definitionId}
            and trigger in ('scheduled', 'close-package')
-      `, 'objects'))
-      if (!run[0]) return notFound("record")
-      authorization_snapshot = run[0].authorization_snapshot
-      const stored = run[0].filters
-      if (run[0].trigger === 'close-package') {
-        // Close-package runs carry their send context beside the statement
-        // params; without it the run cannot name its authorizing send.
-        const ctx = (stored as { closePackage?: unknown } | null)?.closePackage
-        if (!ctx || typeof ctx !== 'object' || typeof (ctx as { packageId?: unknown }).packageId !== 'string') {
-          return NextResponse.json({ error: 'close package run is missing its send context — re-send the package' }, { status: 403 })
-        }
-        const ctxRunId = (ctx as { runId?: unknown }).runId
-        closePackage = { packageId: (ctx as { packageId: string }).packageId, runId: typeof ctxRunId === 'string' ? ctxRunId : null }
-      }
-      // A schedule's filters carry either a query-report extra rule group
-      // (legacy shape: the group itself) or a statement-params snapshot taken
-      // from the report screen at scheduling time. Close-package runs carry
-      // the statement-params shape only.
-      if (stored && typeof stored === 'object') {
-        const statementParams = (stored as { statementParams?: Record<string, string> }).statementParams
-        if (statementParams && typeof statementParams === 'object') {
-          for (const [key, value] of Object.entries(statementParams)) {
-            if (typeof value === 'string' && !p.has(key)) p.set(key, value)
+      `,
+          "objects",
+        );
+        if (!run[0]) return notFound("record");
+        authorization_snapshot = run[0].authorization_snapshot;
+        const stored = run[0].filters;
+        if (run[0].trigger === "close-package") {
+          // Close-package runs carry their send context beside the statement
+          // params; without it the run cannot name its authorizing send.
+          const ctx = (stored as { closePackage?: unknown } | null)?.closePackage;
+          if (
+            !ctx ||
+            typeof ctx !== "object" ||
+            typeof (ctx as { packageId?: unknown }).packageId !== "string"
+          ) {
+            return NextResponse.json(
+              { error: "close package run is missing its send context — re-send the package" },
+              { status: 403 },
+            );
           }
-        } else if (Array.isArray((stored as ReportRuleGroup).rules)) {
-          extraFilters = stored as unknown as ReportRuleGroup
+          const ctxRunId = (ctx as { runId?: unknown }).runId;
+          closePackage = {
+            packageId: (ctx as { packageId: string }).packageId,
+            runId: typeof ctxRunId === "string" ? ctxRunId : null,
+          };
+        }
+        // A schedule's filters carry either a query-report extra rule group
+        // (legacy shape: the group itself) or a statement-params snapshot taken
+        // from the report screen at scheduling time. Close-package runs carry
+        // the statement-params shape only.
+        if (stored && typeof stored === "object") {
+          const statementParams = (stored as { statementParams?: Record<string, string> })
+            .statementParams;
+          if (statementParams && typeof statementParams === "object") {
+            for (const [key, value] of Object.entries(statementParams)) {
+              if (typeof value === "string" && !p.has(key)) p.set(key, value);
+            }
+          } else if (Array.isArray((stored as ReportRuleGroup).rules)) {
+            extraFilters = stored as unknown as ReportRuleGroup;
+          }
         }
       }
-    }
-    // Re-resolve the period AFTER schedule params landed (they may pin one).
-    const scheduledQ = parseReportQuery(p)
-    const scheduledPeriod = await resolvePeriod(scheduledQ.period, {
-      customFrom: p.get('from') ?? undefined,
-      customTo: p.get('to') ?? undefined,
-      orgId,
-    })
-    if (!authorization_snapshot) return NextResponse.json({ error: 'report schedule requires reauthorization' }, { status: 403 })
-    // The snapshot pins WHO authorized the schedule (principal + subsidiary
-    // allowlist + the definition as it stood, kept as evidence). It is not the
-    // report: the run renders the definition's CURRENT saved columns/filters,
-    // and resolveDefinitionToExportData re-checks that the pinned principal
-    // may still run that current definition — an edit that widens it beyond
-    // the principal's grants fails the run rather than delivering.
-    const authz = closePackage
-      ? await closePackageReportAuthz(orgId, authorization_snapshot, closePackage)
-      : await scheduledReportAuthz(orgId, authorization_snapshot)
-    if (p.get('authorizeOnly') === '1') return new NextResponse(null, { status: 204 })
-    const data = await withReportAuthz(authz, () => resolveDefinitionToExportData(
-      orgId,
-      definitionId,
-      p,
-      { orgId, t, period: scheduledPeriod, query: scheduledQ },
-      { extraFilters },
-    ))
-    // The artifact records the permission set its CONTENT required at render
-    // time (e.g. payroll.read for a journal/GL bearing pay-run lines), so a
-    // download can refuse viewers who lack it without re-rendering per
-    // viewer. A principal whose grants no longer cover the content cannot
-    // mint the artifact: fail the run rather than deliver it.
-    const contentPermissions = data.requiredPermissions ?? []
-    if (!contentPermissions.every((permission) => can(authz, permission))) {
-      throw new Error('Report execution permission was revoked')
-    }
-    // The render reads with the principal's expense authority as it stands
-    // now: narrower access narrows the output, wider access widens it. Losing
-    // expense read entirely on a schedule set up to deliver expense reports
-    // refuses instead of delivering a report stripped of them.
-    if (expenseReadRevoked(authorization_snapshot.expenseRows, data.expenseRows)) {
-      throw new Error(EXPENSE_READ_REVOKED_REMEDY)
-    }
-    // Each render appends its own evidence (0750): the authority it rendered
-    // under and the hash of the bytes it produced, beside the write-once
-    // content permissions. Earlier renders' evidence never changes.
-    const recordRender = async (bytes: Uint8Array) => {
-      const render: ReportRenderEvidence = {
-        renderedAt: new Date().toISOString(),
-        expenseRows: data.expenseRows ?? null,
-        contentHash: createHash('sha256').update(bytes).digest('hex'),
+      // Re-resolve the period AFTER schedule params landed (they may pin one).
+      const scheduledQ = parseReportQuery(p);
+      const scheduledPeriod = await resolvePeriod(scheduledQ.period, {
+        customFrom: p.get("from") ?? undefined,
+        customTo: p.get("to") ?? undefined,
+        orgId,
+      });
+      if (!authorization_snapshot)
+        return NextResponse.json(
+          { error: "report schedule requires reauthorization" },
+          { status: 403 },
+        );
+      // The snapshot pins WHO authorized the schedule (principal + subsidiary
+      // allowlist + the definition as it stood, kept as evidence). It is not the
+      // report: the run renders the definition's CURRENT saved columns/filters,
+      // and resolveDefinitionToExportData re-checks that the pinned principal
+      // may still run that current definition — an edit that widens it beyond
+      // the principal's grants fails the run rather than delivering.
+      const authz = closePackage
+        ? await closePackageReportAuthz(orgId, authorization_snapshot, closePackage)
+        : await scheduledReportAuthz(orgId, authorization_snapshot);
+      if (p.get("authorizeOnly") === "1") return new NextResponse(null, { status: 204 });
+      const data = await withReportAuthz(authz, () =>
+        resolveDefinitionToExportData(
+          orgId,
+          definitionId,
+          p,
+          { orgId, t, period: scheduledPeriod, query: scheduledQ },
+          { extraFilters },
+        ),
+      );
+      // The artifact records the permission set its CONTENT required at render
+      // time (e.g. payroll.read for a journal/GL bearing pay-run lines), so a
+      // download can refuse viewers who lack it without re-rendering per
+      // viewer. A principal whose grants no longer cover the content cannot
+      // mint the artifact: fail the run rather than deliver it.
+      const contentPermissions = data.requiredPermissions ?? [];
+      if (!contentPermissions.every((permission) => can(authz, permission))) {
+        throw new Error("Report execution permission was revoked");
       }
-      const recorded = await db.execute<{ id: string }>(sql`
+      // The render reads with the principal's expense authority as it stands
+      // now: narrower access narrows the output, wider access widens it. Losing
+      // expense read entirely on a schedule set up to deliver expense reports
+      // refuses instead of delivering a report stripped of them.
+      if (expenseReadRevoked(authorization_snapshot.expenseRows, data.expenseRows)) {
+        throw new Error(EXPENSE_READ_REVOKED_REMEDY);
+      }
+      // Each render appends its own evidence (0750): the authority it rendered
+      // under and the hash of the bytes it produced, beside the write-once
+      // content permissions. Earlier renders' evidence never changes.
+      const recordRender = async (bytes: Uint8Array) => {
+        const render: ReportRenderEvidence = {
+          renderedAt: new Date().toISOString(),
+          expenseRows: data.expenseRows ?? null,
+          contentHash: createHash("sha256").update(bytes).digest("hex"),
+        };
+        const recorded = await db.execute<{ id: string }>(
+          sql`
         update report_runs
            set authorization_snapshot = coalesce(authorization_snapshot, '{}'::jsonb)
                  || ${JSON.stringify({ requiredPermissions: contentPermissions })}::jsonb
                  || jsonb_build_object('renders', coalesce(authorization_snapshot->'renders', '[]'::jsonb) || jsonb_build_array(${JSON.stringify(render)}::jsonb))
          where id = ${runId} and org_id = ${orgId}
          returning id
-      `, 'objects')
-      if (recorded.length !== 1) throw new Error('report run render evidence was not recorded')
-    }
-    const stamp = await businessToday(orgId)
-    if (p.get('format') === 'xlsx') {
-      const xlsx = await exportDataToXlsx(data, {
-        reportName: data.title,
-        dateRangeLabel: data.dateRangeLabel,
+      `,
+          "objects",
+        );
+        if (recorded.length !== 1) throw new Error("report run render evidence was not recorded");
+      };
+      const stamp = await businessToday(orgId);
+      if (p.get("format") === "xlsx") {
+        const xlsx = await exportDataToXlsx(data, {
+          reportName: data.title,
+          dateRangeLabel: data.dateRangeLabel,
+          generatedAt: new Date(`${stamp}T00:00:00Z`),
+          money: await xlsxMoneyContext(orgId),
+        });
+        await recordRender(new Uint8Array(xlsx));
+        return new NextResponse(new Uint8Array(xlsx), {
+          status: 200,
+          headers: {
+            "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "cache-control": "no-store",
+          },
+        });
+      }
+      const branding = await orgBranding(orgId);
+      const { page, showSummary } = resolveLayout(null);
+      const pdf = await exportDataToPdf(data, branding, page, {
+        showSummary,
         generatedAt: new Date(`${stamp}T00:00:00Z`),
-        money: await xlsxMoneyContext(orgId),
-      })
-      await recordRender(new Uint8Array(xlsx))
-      return new NextResponse(new Uint8Array(xlsx), {
+      });
+      await recordRender(new Uint8Array(pdf));
+      return new NextResponse(new Uint8Array(pdf), {
         status: 200,
-        headers: {
-          'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'cache-control': 'no-store',
-        },
-      })
-    }
-    const branding = await orgBranding(orgId)
-    const { page, showSummary } = resolveLayout(null)
-    const pdf = await exportDataToPdf(data, branding, page, {
-      showSummary,
-      generatedAt: new Date(`${stamp}T00:00:00Z`),
-    })
-    await recordRender(new Uint8Array(pdf))
-    return new NextResponse(new Uint8Array(pdf), {
-      status: 200,
-      headers: { 'content-type': 'application/pdf', 'cache-control': 'no-store' },
-    })
-    })
+        headers: { "content-type": "application/pdf", "cache-control": "no-store" },
+      });
+    });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'render failed'
+    const message = err instanceof Error ? err.message : "render failed";
     // A stored plan survives a Features toggle; a fresh artifact must not.
     // 404 (not 422) so the scheduler treats this as refuse, not a bad plan.
-    if (message.endsWith('feature is disabled')) {
-      return notFound("record")
+    if (message.endsWith("feature is disabled")) {
+      return notFound("record");
     }
-    return NextResponse.json({ error: message }, { status: 422 })
+    return NextResponse.json({ error: message }, { status: 422 });
   }
 }

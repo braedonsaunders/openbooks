@@ -1,49 +1,59 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
 
 // The customization preference routes bind layoutId/viewId straight into a
 // uuid-column probe, so a malformed value escapes as a raw Postgres uuid
 // throw (HTTP 500) instead of the same 404 an unknown id returns.
-const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __customPrefsIdState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
+const state: { orgId: string; actorId: string } = { orgId: "", actorId: "" };
+Object.assign(globalThis, { __customPrefsIdState: state });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
     // The route factory resolves its session gate through the "@/lib/authz"
     // spelling at request time; it must see the same test session as the
     // route file's relative import. Identical sources share one module
     // instance across both spellings.
-    if (specifier === '../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
+    if (specifier === "../../../../lib/authz" || specifier === "@/lib/authz")
+      return virtual(`
       export async function getAuthz() {
         const s = globalThis.__customPrefsIdState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
-    `)
-    if (specifier === '../../../../lib/customization/gates') return virtual(`
+    `);
+    if (specifier === "../../../../lib/customization/gates")
+      return virtual(`
       export async function refuseDisabledRecordType() { return null }
-    `)
-    return next(specifier, context)
+    `);
+    return next(specifier, context);
   },
-})
-const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
-const { PUT: putForm } = await import('./form-preferences/route.ts')
-const { PUT: putList } = await import('./list-preferences/route.ts')
+});
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sql } = await import("drizzle-orm");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { PUT: putForm } = await import("./form-preferences/route.ts");
+const { PUT: putList } = await import("./list-preferences/route.ts");
 
 async function fixture() {
-  const org = await createScratchOrg()
+  const org = await createScratchOrg();
   // Inactive: an active user requires a role assignment (storage trigger),
   // and the preferences upsert only needs the user row to exist.
-  const actorId = (await db.execute<{ id: string }>(sql`
+  const actorId = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into users (org_id, email, name, password_hash, is_active)
     values (${org.orgId}, 'prefs@test.local', 'Prefs User', 'x', false)
-    returning id`, 'objects'))[0]!.id
-  state.orgId = org.orgId
-  state.actorId = actorId
-  return org
+    returning id`,
+      "objects",
+    )
+  )[0]!.id;
+  state.orgId = org.orgId;
+  state.actorId = actorId;
+  return org;
 }
 
 async function put(
@@ -51,65 +61,78 @@ async function put(
   body: unknown,
 ): Promise<{ status: number; json: unknown }> {
   try {
-    const response = await withOrgContext(state.orgId, () => handler(
-      new Request('http://custom.test/api/customization/prefs', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-      }),
-    ))
-    return { status: response.status, json: await response.json().catch(() => null) }
+    const response = await withOrgContext(state.orgId, () =>
+      handler(
+        new Request("http://custom.test/api/customization/prefs", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      ),
+    );
+    return { status: response.status, json: await response.json().catch(() => null) };
   } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
+    return {
+      status: 500,
+      json: { thrown: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
 
-test('form-preferences rejects a malformed layoutId instead of throwing', async () => {
-  const org = await fixture()
+test("form-preferences rejects a malformed layoutId instead of throwing", async () => {
+  const org = await fixture();
   try {
-    const result = await put(putForm, { recordType: 'vendor_bill', layoutId: 'not-a-uuid' })
+    const result = await put(putForm, { recordType: "vendor_bill", layoutId: "not-a-uuid" });
     // The boundary requires a valid id at the exact field; unknown ids still
     // reach the handler's not-found contract below.
-    assert.equal(result.status, 400, `expected 400, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.match((result.json as { error?: string }).error ?? '', /must be a valid id/)
+    assert.equal(
+      result.status,
+      400,
+      `expected 400, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
+    assert.match((result.json as { error?: string }).error ?? "", /must be a valid id/);
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('list-preferences rejects a malformed viewId instead of throwing', async () => {
-  const org = await fixture()
+test("list-preferences rejects a malformed viewId instead of throwing", async () => {
+  const org = await fixture();
   try {
-    const result = await put(putList, { recordType: 'vendor_bill', viewId: 'not-a-uuid' })
+    const result = await put(putList, { recordType: "vendor_bill", viewId: "not-a-uuid" });
     // The boundary requires a valid id at the exact field; unknown ids still
     // reach the handler's not-found contract below.
-    assert.equal(result.status, 400, `expected 400, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.match((result.json as { error?: string }).error ?? '', /must be a valid id/)
+    assert.equal(
+      result.status,
+      400,
+      `expected 400, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
+    assert.match((result.json as { error?: string }).error ?? "", /must be a valid id/);
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('unknown ids still return the not-found contract', async () => {
-  const org = await fixture()
+test("unknown ids still return the not-found contract", async () => {
+  const org = await fixture();
   try {
-    const form = await put(putForm, { recordType: 'vendor_bill', layoutId: randomUUID() })
-    assert.equal(form.status, 404, JSON.stringify(form.json))
-    const list = await put(putList, { recordType: 'vendor_bill', viewId: randomUUID() })
-    assert.equal(list.status, 404, JSON.stringify(list.json))
+    const form = await put(putForm, { recordType: "vendor_bill", layoutId: randomUUID() });
+    assert.equal(form.status, 404, JSON.stringify(form.json));
+    const list = await put(putList, { recordType: "vendor_bill", viewId: randomUUID() });
+    assert.equal(list.status, 404, JSON.stringify(list.json));
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});
 
-test('null ids still clear the preference', async () => {
-  const org = await fixture()
+test("null ids still clear the preference", async () => {
+  const org = await fixture();
   try {
-    const form = await put(putForm, { recordType: 'vendor_bill', layoutId: null })
-    assert.equal(form.status, 200, JSON.stringify(form.json))
-    const list = await put(putList, { recordType: 'vendor_bill', viewId: null })
-    assert.equal(list.status, 200, JSON.stringify(list.json))
+    const form = await put(putForm, { recordType: "vendor_bill", layoutId: null });
+    assert.equal(form.status, 200, JSON.stringify(form.json));
+    const list = await put(putList, { recordType: "vendor_bill", viewId: null });
+    assert.equal(list.status, 200, JSON.stringify(list.json));
   } finally {
-    await dropScratchOrg(org.orgId)
+    await dropScratchOrg(org.orgId);
   }
-})
+});

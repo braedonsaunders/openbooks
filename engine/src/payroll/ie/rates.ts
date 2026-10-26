@@ -213,8 +213,8 @@ export function ratesForPayDate(payDate: string): IeEditionRates {
   }
   if (payDate < "2026-01-01" || payDate > "2026-12-31") {
     throw new PayrollError(
-      `IE payroll: no tables for pay date ${payDate} — rates for ${payDate.slice(0, 4)} aren't `
-      + "available in this pack version; update the pack",
+      `IE payroll: no tables for pay date ${payDate} — rates for ${payDate.slice(0, 4)} aren't ` +
+        "available in this pack version; update the pack",
     );
   }
   return payDate < "2026-10-01" ? RATES_2026_JAN : RATES_2026_OCT;

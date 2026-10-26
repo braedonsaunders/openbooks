@@ -10,8 +10,11 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
  * the ordinary repository command can still register/skip this committed
  * regression when no PostgreSQL test environment is present.
  */
-test("partial sales fulfillments move inventory, respect cancellations and fence billing exactly once", { skip: !DB }, () => {
-  const source = `
+test(
+  "partial sales fulfillments move inventory, respect cancellations and fence billing exactly once",
+  { skip: !DB },
+  () => {
+    const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -262,26 +265,30 @@ test("partial sales fulfillments move inventory, respect cancellations and fence
     }
   `;
 
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--import",
-      "tsx",
-      "--import",
-      "./engine/src/testing/database-bypass.ts",
-      "--input-type=module",
-      "-e",
-      source,
-    ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /SALES-FULFILLMENT-EXACTLY-ONCE/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /SALES-FULFILLMENT-EXACTLY-ONCE/);
+  },
+);
 
-test("sales fulfillment rejects a non-calendar date without mutating the order", { skip: !DB }, () => {
-  const source = `
+test(
+  "sales fulfillment rejects a non-calendar date without mutating the order",
+  { skip: !DB },
+  () => {
+    const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -352,26 +359,30 @@ test("sales fulfillment rejects a non-calendar date without mutating the order",
     }
   `;
 
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--import",
-      "tsx",
-      "--import",
-      "./engine/src/testing/database-bypass.ts",
-      "--input-type=module",
-      "-e",
-      source,
-    ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /SALES-FULFILLMENT-DATE-FENCE/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /SALES-FULFILLMENT-DATE-FENCE/);
+  },
+);
 
-test("voiding a shipment unwinds stock and restores counters, then the order voids", { skip: !DB }, () => {
-  const source = `
+test(
+  "voiding a shipment unwinds stock and restores counters, then the order voids",
+  { skip: !DB },
+  () => {
+    const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -459,26 +470,30 @@ test("voiding a shipment unwinds stock and restores counters, then the order voi
     }
   `;
 
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--import",
-      "tsx",
-      "--import",
-      "./engine/src/testing/database-bypass.ts",
-      "--input-type=module",
-      "-e",
-      source,
-    ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /SALES-SHIPMENT-VOID-UNWIND/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /SALES-SHIPMENT-VOID-UNWIND/);
+  },
+);
 
-test("voiding a shipment with already-reversed movements is not reversed twice", { skip: !DB }, () => {
-  const source = `
+test(
+  "voiding a shipment with already-reversed movements is not reversed twice",
+  { skip: !DB },
+  () => {
+    const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -555,23 +570,24 @@ import { reverseInventoryMovement } from "./engine/src/inventory/reversal.ts";
     }
   `;
 
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--import",
-      "tsx",
-      "--import",
-      "./engine/src/testing/database-bypass.ts",
-      "--input-type=module",
-      "-e",
-      source,
-    ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /SALES-SHIPMENT-VOID-PREREVERSED/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /SALES-SHIPMENT-VOID-PREREVERSED/);
+  },
+);
 
 test("voiding a shipment of billed quantities is refused without mutation", { skip: !DB }, () => {
   const source = `
@@ -748,8 +764,11 @@ test("voiding a movement-free service shipment restores order counters", { skip:
   assert.match(result.stdout, /SALES-SERVICE-SHIPMENT-VOID-COUNTER/);
 });
 
-test("voiding a shipment with malformed provenance is refused as a controlled error", { skip: !DB }, () => {
-  const source = `
+test(
+  "voiding a shipment with malformed provenance is refused as a controlled error",
+  { skip: !DB },
+  () => {
+    const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -837,26 +856,30 @@ test("voiding a shipment with malformed provenance is refused as a controlled er
     }
   `;
 
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--import",
-      "tsx",
-      "--import",
-      "./engine/src/testing/database-bypass.ts",
-      "--input-type=module",
-      "-e",
-      source,
-    ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /SALES-SHIPMENT-VOID-PROVENANCE-FENCE/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /SALES-SHIPMENT-VOID-PROVENANCE-FENCE/);
+  },
+);
 
-test("voiding a shipment writes per-source-order audit with before and after", { skip: !DB }, () => {
-  const source = `
+test(
+  "voiding a shipment writes per-source-order audit with before and after",
+  { skip: !DB },
+  () => {
+    const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
@@ -931,20 +954,21 @@ test("voiding a shipment writes per-source-order audit with before and after", {
     }
   `;
 
-  const result = spawnSync(
-    process.execPath,
-    [
-      "--conditions=react-server",
-      "--import",
-      "tsx",
-      "--import",
-      "./engine/src/testing/database-bypass.ts",
-      "--input-type=module",
-      "-e",
-      source,
-    ],
-    { cwd: process.cwd(), env: process.env, encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /SALES-SHIPMENT-VOID-SOURCE-AUDIT/);
-});
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--conditions=react-server",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+        "--input-type=module",
+        "-e",
+        source,
+      ],
+      { cwd: process.cwd(), env: process.env, encoding: "utf8" },
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /SALES-SHIPMENT-VOID-SOURCE-AUDIT/);
+  },
+);

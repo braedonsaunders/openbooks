@@ -1,4 +1,4 @@
-import { featureSearchMatcher } from '../features/feature-tree'
+import { featureSearchMatcher } from "../features/feature-tree";
 
 /**
  * Industry picker search. Each preset is found by its localized title and
@@ -16,15 +16,15 @@ export function searchIndustries<T extends { key: string }>(
   copy: (key: string) => { title: string; description: string; keywords: string },
 ): T[] {
   const direct = featureSearchMatcher<T>(query, (industry) => {
-    const text = copy(industry.key)
-    return [text.title, text.description]
-  })
-  if (!direct) return [...industries]
+    const text = copy(industry.key);
+    return [text.title, text.description];
+  });
+  if (!direct) return [...industries];
   const anyText = featureSearchMatcher<T>(query, (industry) => {
-    const text = copy(industry.key)
-    return [text.title, text.description, text.keywords]
-  })!
-  const named = industries.filter(direct)
-  const related = industries.filter((industry) => !direct(industry) && anyText(industry))
-  return [...named, ...related]
+    const text = copy(industry.key);
+    return [text.title, text.description, text.keywords];
+  })!;
+  const named = industries.filter(direct);
+  const related = industries.filter((industry) => !direct(industry) && anyText(industry));
+  return [...named, ...related];
 }

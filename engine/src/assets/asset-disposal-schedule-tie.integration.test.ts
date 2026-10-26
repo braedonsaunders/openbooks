@@ -25,8 +25,13 @@ test(
     const org = await createScratchOrg();
     try {
       const actorId = (await seedFlowActors(org.orgId)).adminId;
-      const calendarId = (await db.execute<{ id: string }>(sql`
-        select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`, "objects"))[0]!.id;
+      const calendarId = (
+        await db.execute<{ id: string }>(
+          sql`
+        select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`,
+          "objects",
+        )
+      )[0]!.id;
       for (let i = 1; i < 10; i++) {
         const start = new Date(Date.UTC(2026, 6 + i, 1));
         const end = new Date(Date.UTC(2026, 7 + i, 0));
@@ -60,11 +65,16 @@ test(
       // period by its fiscal label rather than its stored name.
       await assert.rejects(
         disposeAsset(org.orgId, assetId, {
-          proceeds: "850", proceedsAccountId: org.accounts.bank, date: "2026-08-15", actorId,
+          proceeds: "850",
+          proceedsAccountId: org.accounts.bank,
+          date: "2026-08-15",
+          actorId,
         }),
         (error: unknown) =>
           error instanceof AssetLifecycleError &&
-          /unposted depreciation in period P08 FY2026 covering.*Partial disposal \/ transfer of 100%/i.test(error.message),
+          /unposted depreciation in period P08 FY2026 covering.*Partial disposal \/ transfer of 100%/i.test(
+            error.message,
+          ),
         "disposal with the stub period unposted is refused",
       );
 
@@ -74,17 +84,23 @@ test(
         "100.0000",
       );
       const disposal = await disposeAsset(org.orgId, assetId, {
-        proceeds: "850", proceedsAccountId: org.accounts.bank, date: "2026-08-31", actorId,
+        proceeds: "850",
+        proceedsAccountId: org.accounts.bank,
+        date: "2026-08-31",
+        actorId,
       });
       assert.equal(disposal.nbv, "800.0000");
       assert.equal(disposal.gainLoss, "50.0000");
       assert.equal(disposal.status, "disposed");
-      const gl = (await db.execute<{ accountId: string; amount: string }>(sql`
+      const gl = await db.execute<{ accountId: string; amount: string }>(
+        sql`
         select l.account_id as "accountId", l.amount::text as amount
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
          where l.org_id = ${org.orgId} and e.id = ${disposal.entryId}
-         order by l.line_number`, "objects"));
+         order by l.line_number`,
+        "objects",
+      );
       assert.deepEqual(
         gl.map((r) => [r.accountId, r.amount]),
         [

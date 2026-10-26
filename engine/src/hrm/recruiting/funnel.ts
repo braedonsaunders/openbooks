@@ -4,7 +4,8 @@
  * directly, and the services reuse them so the rules cannot drift.
  */
 
-export type EffectiveOfferStatus = "draft" | "sent" | "accepted" | "declined" | "withdrawn" | "expired";
+export type EffectiveOfferStatus =
+  "draft" | "sent" | "accepted" | "declined" | "withdrawn" | "expired";
 
 /**
  * The offer status the reader reports. Expiry is COMPUTED here and
@@ -29,7 +30,9 @@ export function effectiveOfferStatus(args: {
   ) {
     return status;
   }
-  throw new Error(`unknown offer status ${JSON.stringify(status)} — the stored value set is fixed by migration 0195`);
+  throw new Error(
+    `unknown offer status ${JSON.stringify(status)} — the stored value set is fixed by migration 0195`,
+  );
 }
 
 /** Whole days from requisition opening to hire (both civil dates). */
@@ -37,7 +40,9 @@ export function timeToFillDays(openedOn: string, hiredOn: string): number {
   const openMs = Date.parse(`${openedOn}T00:00:00Z`);
   const hiredMs = Date.parse(`${hiredOn}T00:00:00Z`);
   if (!Number.isFinite(openMs) || !Number.isFinite(hiredMs)) {
-    throw new Error("time-to-fill needs two YYYY-MM-DD dates — the funnel never averages an unreadable date");
+    throw new Error(
+      "time-to-fill needs two YYYY-MM-DD dates — the funnel never averages an unreadable date",
+    );
   }
   return Math.round((hiredMs - openMs) / 86_400_000);
 }

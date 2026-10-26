@@ -11,14 +11,20 @@ import test from "node:test";
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/hrm/leave", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/hrm/leave",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__leaveRouter}export function usePathname(){return '/hrm/leave'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__leaveRouter}export function usePathname(){return '/hrm/leave'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -31,7 +37,10 @@ registerHooks({
         url: "data:text/javascript,export async function promptDialog(){return null}",
       };
     }
-    if (specifier === "./confirm" || (typeof specifier === "string" && specifier.endsWith("/lib/confirm"))) {
+    if (
+      specifier === "./confirm" ||
+      (typeof specifier === "string" && specifier.endsWith("/lib/confirm"))
+    ) {
       return {
         shortCircuit: true,
         url: "data:text/javascript,export async function confirmDialog(){return globalThis.__leaveConfirmVerdict}",
@@ -67,18 +76,40 @@ interface Script {
   posts: Array<{ url: string; body: unknown }>;
 }
 
-function installFetch(script: Script, manageable: boolean, own: "two" | "one" | "none" = "two", requiresAttachment = false): () => void {
+function installFetch(
+  script: Script,
+  manageable: boolean,
+  own: "two" | "one" | "none" = "two",
+  requiresAttachment = false,
+): () => void {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url === `/api/hrm/leave-requests/${REQUEST_ID}` && (init?.method ?? "GET") === "GET") {
       return Response.json({
-        request: { id: REQUEST_ID, employmentId: OWN_A, leaveTypeCode: "PPL-VAC", startsOn: "2026-10-20", endsOn: "2026-10-21", hours: "8", reason: null, status: "submitted", decidedBy: null, decisionReason: null },
-        timeBalance: null, valueBalances: [], asOf: "2026-10-01",
+        request: {
+          id: REQUEST_ID,
+          employmentId: OWN_A,
+          leaveTypeCode: "PPL-VAC",
+          startsOn: "2026-10-20",
+          endsOn: "2026-10-21",
+          hours: "8",
+          reason: null,
+          status: "submitted",
+          decidedBy: null,
+          decisionReason: null,
+        },
+        timeBalance: null,
+        valueBalances: [],
+        asOf: "2026-10-01",
       });
     }
     if (url.includes("/api/hrm/options?source=leave-types")) {
-      return Response.json({ options: [{ id: TYPE_ID, label: "PPL-VAC — Vacation", requiresAttachment }] });
+      return Response.json({
+        options: [{ id: TYPE_ID, label: "PPL-VAC — Vacation", requiresAttachment }],
+      });
     }
     if (url.startsWith("/api/file-cabinet/files?")) {
       return Response.json({ files: [{ id: "file-evidence-1", name: "doctor-note.pdf" }] });
@@ -110,7 +141,9 @@ function installFetch(script: Script, manageable: boolean, own: "two" | "one" | 
     }
     if (url === "/api/hrm/leave-requests/request-1/attachment" && init?.method === "POST") {
       script.posts.push({ url, body: JSON.parse(String(init.body)) });
-      return Response.json({ request: { id: "request-1", status: "draft", attachmentId: "file-evidence-1" } });
+      return Response.json({
+        request: { id: "request-1", status: "draft", attachmentId: "file-evidence-1" },
+      });
     }
     return Response.json({});
   }) as typeof fetch;
@@ -156,7 +189,9 @@ test("leave request details render a localized status name", async (t) => {
 
 function setInput(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
   const proto =
-    el instanceof window.HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+    el instanceof window.HTMLTextAreaElement
+      ? window.HTMLTextAreaElement.prototype
+      : window.HTMLInputElement.prototype;
   const setter = Object.getOwnPropertyDescriptor(proto, "value")!.set!;
   setter.call(el, value);
   el.dispatchEvent(new window.Event("input", { bubbles: true }));
@@ -241,7 +276,10 @@ test("a manager-capable actor sees the on-behalf mode and files with onBehalf", 
     setInput(document.querySelector("input#leave-starts") as HTMLInputElement, "2026-10-20");
     setInput(document.querySelector("input#leave-ends") as HTMLInputElement, "2026-10-21");
     setInput(document.querySelector("input#leave-hours") as HTMLInputElement, "8");
-    setInput(document.querySelector("textarea#leave-reason") as HTMLTextAreaElement, "covering the ward");
+    setInput(
+      document.querySelector("textarea#leave-reason") as HTMLTextAreaElement,
+      "covering the ward",
+    );
     await tick();
   });
   await click(buttonNamed("New request"));
@@ -259,8 +297,22 @@ test("a manager-capable actor sees the on-behalf mode and files with onBehalf", 
 });
 
 for (const mode of [
-  { name: "on-behalf", employments: true, setup: async () => { await click(radios()[1]!); }, subject: "employee", copy: /Pick the employee this request is filed for/ },
-  { name: "self-service", employments: false, setup: async () => {}, subject: "employment", copy: /Pick the employment this request is filed for/ },
+  {
+    name: "on-behalf",
+    employments: true,
+    setup: async () => {
+      await click(radios()[1]!);
+    },
+    subject: "employee",
+    copy: /Pick the employee this request is filed for/,
+  },
+  {
+    name: "self-service",
+    employments: false,
+    setup: async () => {},
+    subject: "employment",
+    copy: /Pick the employment this request is filed for/,
+  },
 ] as const) {
   test(`the ${mode.name} mode refuses to file without naming the ${mode.subject}`, async (t) => {
     (globalThis as Record<string, unknown>).__leaveRouter = { push() {}, refresh() {} };
@@ -296,9 +348,15 @@ test("a leave type requiring evidence attaches a selected File Cabinet file befo
   assert.match(document.body.textContent ?? "", /requires an existing File Cabinet file/);
   assert.match(document.body.textContent ?? "", /Evidence file/);
   await click(buttonNamed("New request"));
-  assert.equal(script.posts.length, 0, "the filing route is not called before required evidence is selected");
+  assert.equal(
+    script.posts.length,
+    0,
+    "the filing route is not called before required evidence is selected",
+  );
   await click(document.getElementById("leave-attachment")!);
-  const search = [...document.querySelectorAll("input")].find((input) => input.getAttribute("aria-label") === "Search…");
+  const search = [...document.querySelectorAll("input")].find(
+    (input) => input.getAttribute("aria-label") === "Search…",
+  );
   assert.ok(search, "the evidence picker exposes remote file search");
   await act(async () => {
     setInput(search as HTMLInputElement, "doctor");
@@ -329,7 +387,11 @@ test("a self-service actor has no mode and posts without onBehalf", async (t) =>
   // employments, never a free-text uuid.
   assert.deepEqual(radios(), [], "a self-service actor never sees the on-behalf mode");
   assert.equal(document.querySelector('[role="alert"]'), null);
-  assert.equal(document.querySelector("input#leave-employment") === null, true, "no uuid text input remains");
+  assert.equal(
+    document.querySelector("input#leave-employment") === null,
+    true,
+    "no uuid text input remains",
+  );
   const employmentPicker = nativeSelectFor("leave-employment");
   assert.deepEqual(
     [...employmentPicker.querySelectorAll("option")].map((o) => o.value),
@@ -384,8 +446,11 @@ test("a rejected filing request shows failure and releases the submit button", a
   t.after(unmount);
   const priorFetch = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-    if (url === "/api/hrm/leave-requests" && init?.method === "POST") throw new Error("network unavailable");
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    if (url === "/api/hrm/leave-requests" && init?.method === "POST")
+      throw new Error("network unavailable");
     return priorFetch(input, init);
   }) as typeof fetch;
 
@@ -398,8 +463,15 @@ test("a rejected filing request shows failure and releases the submit button", a
   });
   await click(buttonNamed("New request"));
 
-  assert.equal(buttonNamed("New request").disabled, false, "the submit button must be available for retry");
-  assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /The request could not be filed/);
+  assert.equal(
+    buttonNamed("New request").disabled,
+    false,
+    "the submit button must be available for retry",
+  );
+  assert.match(
+    document.querySelector('[role="alert"]')?.textContent ?? "",
+    /The request could not be filed/,
+  );
 });
 
 test("filing Cancel keeps edited values until discard is confirmed", async (t) => {
@@ -408,7 +480,9 @@ test("filing Cancel keeps edited values until discard is confirmed", async (t) =
   const restoreFetch = installFetch({ posts: [] }, false, "one");
   t.after(restoreFetch);
   let closes = 0;
-  const { unmount } = await mountFiling(null, () => { closes += 1 });
+  const { unmount } = await mountFiling(null, () => {
+    closes += 1;
+  });
   t.after(unmount);
 
   const reason = document.querySelector("textarea#leave-reason") as HTMLTextAreaElement;
@@ -419,7 +493,10 @@ test("filing Cancel keeps edited values until discard is confirmed", async (t) =
   await click(buttonNamed("Cancel"));
 
   assert.equal(closes, 0, "declining discard keeps the drawer open");
-  assert.equal((document.querySelector("textarea#leave-reason") as HTMLTextAreaElement).value, "Keep this leave request draft");
+  assert.equal(
+    (document.querySelector("textarea#leave-reason") as HTMLTextAreaElement).value,
+    "Keep this leave request draft",
+  );
 
   (globalThis as Record<string, unknown>).__leaveConfirmVerdict = true;
   await click(buttonNamed("Cancel"));

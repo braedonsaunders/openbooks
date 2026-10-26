@@ -1,10 +1,18 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { documentRevisionCounterSql, documentRevisionSql } from '@openbooks/engine/records/revision'
-import type { FieldValueMap, FormField, FormSection } from '@openbooks/forms-core'
-import { pgTextArrayLiteral } from './pg-array'
-import { formatFieldValue, lintRecordFields, type RecordStatus, type RecordTypeStatus } from './record-schema'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  documentRevisionCounterSql,
+  documentRevisionSql,
+} from "@openbooks/engine/records/revision";
+import type { FieldValueMap, FormField, FormSection } from "@openbooks/forms-core";
+import { pgTextArrayLiteral } from "./pg-array";
+import {
+  formatFieldValue,
+  lintRecordFields,
+  type RecordStatus,
+  type RecordTypeStatus,
+} from "./record-schema";
 
 /**
  * Server helpers for the custom-records subsystem: type/record loaders,
@@ -14,71 +22,77 @@ import { formatFieldValue, lintRecordFields, type RecordStatus, type RecordTypeS
  */
 
 export type RecordTypeRow = {
-  id: string
-  key: string
-  name: string
-  plural_name: string
-  icon_key: string
-  description: string | null
+  id: string;
+  key: string;
+  name: string;
+  plural_name: string;
+  icon_key: string;
+  description: string | null;
   /**
    * The stored section-aware form definition. Always validate it through
    * `lintRecordFields` before reading fields.
    */
-  fields: unknown
-  status: RecordTypeStatus
-  show_in_nav: boolean
-  allowed_roles: string[] | null
-  sort_order: number
+  fields: unknown;
+  status: RecordTypeStatus;
+  show_in_nav: boolean;
+  allowed_roles: string[] | null;
+  sort_order: number;
   /**
    * Opaque optimistic-concurrency token: the type's canonical updated_at when
    * read (six-digit UTC wire form). Builder saves must send it back as
    * expectedUpdatedAt; a stale or missing token fails closed with a 409.
    */
-  updated_at: string
-}
+  updated_at: string;
+};
 
 export type RecordRow = {
-  id: string
-  type_id: string
-  type_key: string
-  record_number: string
-  data: FieldValueMap
-  status: RecordStatus
-  created_at: string
-  created_by: string | null
+  id: string;
+  type_id: string;
+  type_key: string;
+  record_number: string;
+  data: FieldValueMap;
+  status: RecordStatus;
+  created_at: string;
+  created_by: string | null;
   /**
    * Opaque optimistic-concurrency token: the record's canonical revision when
    * read (same six-digit UTC wire form as document revisions — never round it
    * through JavaScript Date). Data-bearing saves must send it back as
    * expectedUpdatedAt; a stale token fails closed with a 409.
    */
-  updated_at: string
-}
+  updated_at: string;
+};
 
 const TYPE_COLUMNS = sql`id, key, name, plural_name, icon_key, description, fields,
        status, show_in_nav, allowed_roles, sort_order,
-       ${documentRevisionSql(sql`updated_at`)} as updated_at`
+       ${documentRevisionSql(sql`updated_at`)} as updated_at`;
 
 export async function loadRecordTypeByKey(
   orgId: string,
   key: string,
 ): Promise<RecordTypeRow | undefined> {
-  const r = (await db.execute<RecordTypeRow>(sql`
+  const r = await db.execute<RecordTypeRow>(
+    sql`
     select ${TYPE_COLUMNS} from custom_record_types
      where org_id = ${orgId} and key = ${key}
-  `, 'objects'))
-  return r[0]
+  `,
+    "objects",
+  );
+  return r[0];
 }
 
 export async function loadRecordTypeById(
   orgId: string,
   id: string,
 ): Promise<RecordTypeRow | undefined> {
-  const r = (await db.execute<RecordTypeRow>(sql`
+  const r = await db.execute<RecordTypeRow>(
+    sql`
     select ${TYPE_COLUMNS} from custom_record_types
      where org_id = ${orgId} and id = ${id}
-  `, 'objects'))
-  return r[0]
+  `,
+    "objects",
+  );
+  return r[0];
 }
 
 export async function loadRecord(
@@ -86,18 +100,21 @@ export async function loadRecord(
   typeKey: string,
   id: string,
 ): Promise<RecordRow | undefined> {
-  const r = (await db.execute<RecordRow>(sql`
+  const r = await db.execute<RecordRow>(
+    sql`
     select id, type_id, type_key, record_number, data, status, created_at, created_by,
            ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at
       from custom_records
      where org_id = ${orgId} and type_key = ${typeKey} and id = ${id}
-  `, 'objects'))
-  return r[0]
+  `,
+    "objects",
+  );
+  return r[0];
 }
 
 /** Whether a custom-record definition carries the conventional subsidiary field. */
 export function hasSubsidiaryField(sections: FormSection[]): boolean {
-  return sections.some((section) => section.fields.some((field) => field.id === 'subsidiary_id'))
+  return sections.some((section) => section.fields.some((field) => field.id === "subsidiary_id"));
 }
 
 /**
@@ -109,12 +126,12 @@ export function hasSubsidiaryField(sections: FormSection[]): boolean {
 export function subsidiaryDeclaredTypeIds(
   types: Array<{ id: string; name: string; fields: unknown }>,
 ): string[] {
-  const out: string[] = []
+  const out: string[] = [];
   for (const type of types) {
-    const lint = lintRecordFields(type.fields, type.name)
-    if (lint.success && hasSubsidiaryField(lint.sections)) out.push(type.id)
+    const lint = lintRecordFields(type.fields, type.name);
+    if (lint.success && hasSubsidiaryField(lint.sections)) out.push(type.id);
   }
-  return out
+  return out;
 }
 
 /** Fail-closed visibility check for JSON-backed subsidiary values on custom records. */
@@ -123,9 +140,9 @@ export function recordSubsidiaryScopeAllows(
   data: FieldValueMap,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): boolean {
-  if (!hasSubsidiaryField(sections) || allowedSubsidiaryIds === null) return true
-  const subsidiaryId = data.subsidiary_id
-  return typeof subsidiaryId === 'string' && allowedSubsidiaryIds.has(subsidiaryId)
+  if (!hasSubsidiaryField(sections) || allowedSubsidiaryIds === null) return true;
+  const subsidiaryId = data.subsidiary_id;
+  return typeof subsidiaryId === "string" && allowedSubsidiaryIds.has(subsidiaryId);
 }
 
 /**
@@ -139,14 +156,14 @@ export function recordVisibleInSubsidiaryFence(
   data: FieldValueMap,
   allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
 ): boolean {
-  const fence = allowedSubsidiaryIds ?? null
-  if (fence === null) return true
+  const fence = allowedSubsidiaryIds ?? null;
+  if (fence === null) return true;
   if (hasSubsidiaryField(sections)) {
-    return recordSubsidiaryScopeAllows(sections, data, fence)
+    return recordSubsidiaryScopeAllows(sections, data, fence);
   }
-  const subsidiaryId = data.subsidiary_id
-  if (typeof subsidiaryId !== 'string' || subsidiaryId.length === 0) return true
-  return fence.has(subsidiaryId)
+  const subsidiaryId = data.subsidiary_id;
+  if (typeof subsidiaryId !== "string" || subsidiaryId.length === 0) return true;
+  return fence.has(subsidiaryId);
 }
 
 /**
@@ -160,11 +177,11 @@ export function retainStoredSubsidiaryId(
   stored: FieldValueMap,
   next: FieldValueMap,
 ): FieldValueMap {
-  if (hasSubsidiaryField(sections)) return next
-  const storedId = stored.subsidiary_id
-  if (typeof storedId !== 'string' || storedId.length === 0) return next
-  if (next.subsidiary_id === storedId) return next
-  return { ...next, subsidiary_id: storedId }
+  if (hasSubsidiaryField(sections)) return next;
+  const storedId = stored.subsidiary_id;
+  if (typeof storedId !== "string" || storedId.length === 0) return next;
+  if (next.subsidiary_id === storedId) return next;
+  return { ...next, subsidiary_id: storedId };
 }
 
 /**
@@ -175,17 +192,17 @@ export function recordVisibleInSubsidiaryFenceSql(
   allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
   declaresSubsidiaryField: boolean,
 ): SQL | null {
-  const fence = allowedSubsidiaryIds ?? null
-  if (fence === null) return null
-  const inFence = sql`data ->> ${'subsidiary_id'} = any(${pgTextArrayLiteral([...fence])}::text[])`
+  const fence = allowedSubsidiaryIds ?? null;
+  if (fence === null) return null;
+  const inFence = sql`data ->> ${"subsidiary_id"} = any(${pgTextArrayLiteral([...fence])}::text[])`;
   if (declaresSubsidiaryField) {
-    return fence.size === 0 ? sql`false` : inFence
+    return fence.size === 0 ? sql`false` : inFence;
   }
   return sql`(
     ${inFence}
-    or data ->> ${'subsidiary_id'} is null
-    or data ->> ${'subsidiary_id'} = ${''}
-  )`
+    or data ->> ${"subsidiary_id"} is null
+    or data ->> ${"subsidiary_id"} = ${""}
+  )`;
 }
 
 /**
@@ -197,8 +214,8 @@ export function inTypeAudience(
   roleKeys: readonly string[],
   allowedRoles: string[] | null | undefined,
 ): boolean {
-  if (!allowedRoles || allowedRoles.length === 0) return true
-  return roleKeys.includes('admin') || roleKeys.some((key) => allowedRoles.includes(key))
+  if (!allowedRoles || allowedRoles.length === 0) return true;
+  return roleKeys.includes("admin") || roleKeys.some((key) => allowedRoles.includes(key));
 }
 
 /**
@@ -212,44 +229,50 @@ export async function resolveEntityLabels(
   sections: FormSection[],
   dataRows: FieldValueMap[],
 ): Promise<{ parties: Map<string, string>; accounts: Map<string, string> }> {
-  const partyIds = new Set<string>()
-  const accountIds = new Set<string>()
+  const partyIds = new Set<string>();
+  const accountIds = new Set<string>();
   const collect = (f: FormField, v: unknown) => {
-    if (f.type !== 'party' && f.type !== 'gl_account') return
-    if (typeof v !== 'string' || v.length === 0) return
-    if (f.type === 'party') partyIds.add(v)
-    else accountIds.add(v)
-  }
+    if (f.type !== "party" && f.type !== "gl_account") return;
+    if (typeof v !== "string" || v.length === 0) return;
+    if (f.type === "party") partyIds.add(v);
+    else accountIds.add(v);
+  };
   for (const data of dataRows) {
     for (const section of sections) {
       if (section.repeating) {
-        const rows = Array.isArray(data[section.id]) ? (data[section.id] as FieldValueMap[]) : []
-        for (const row of rows) for (const f of section.fields) collect(f, row?.[f.id])
+        const rows = Array.isArray(data[section.id]) ? (data[section.id] as FieldValueMap[]) : [];
+        for (const row of rows) for (const f of section.fields) collect(f, row?.[f.id]);
       } else {
-        for (const f of section.fields) collect(f, data[f.id])
+        for (const f of section.fields) collect(f, data[f.id]);
       }
     }
   }
   const [parties, accounts] = await Promise.all([
     partyIds.size > 0
-      ? (db.execute<{ id: string; display_name: string }>(sql`
+      ? db.execute<{ id: string; display_name: string }>(
+          sql`
           select id, display_name from parties
            where org_id = ${orgId}
              and id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify([...partyIds])}::jsonb))
-        `, 'objects'))
+        `,
+          "objects",
+        )
       : Promise.resolve([] as { id: string; display_name: string }[]),
     accountIds.size > 0
-      ? (db.execute<{ id: string; number: string | null; name: string }>(sql`
+      ? db.execute<{ id: string; number: string | null; name: string }>(
+          sql`
           select id, number, name from accounts
            where org_id = ${orgId}
              and id in (select value::uuid from jsonb_array_elements_text(${JSON.stringify([...accountIds])}::jsonb))
-        `, 'objects'))
+        `,
+          "objects",
+        )
       : Promise.resolve([] as { id: string; number: string | null; name: string }[]),
-  ])
+  ]);
   return {
     parties: new Map(parties.map((p) => [p.id, p.display_name])),
-    accounts: new Map(accounts.map((a) => [a.id, `${a.number ?? ''} ${a.name}`.trim()])),
-  }
+    accounts: new Map(accounts.map((a) => [a.id, `${a.number ?? ""} ${a.name}`.trim()])),
+  };
 }
 
 /**
@@ -264,23 +287,23 @@ export async function buildSearchText(
   data: FieldValueMap,
   recordNumber: string,
 ): Promise<string> {
-  const labels = await resolveEntityLabels(orgId, sections, [data])
-  const parts: string[] = [recordNumber]
+  const labels = await resolveEntityLabels(orgId, sections, [data]);
+  const parts: string[] = [recordNumber];
   for (const section of sections) {
     if (section.repeating) {
-      const rows = Array.isArray(data[section.id]) ? (data[section.id] as FieldValueMap[]) : []
+      const rows = Array.isArray(data[section.id]) ? (data[section.id] as FieldValueMap[]) : [];
       for (const row of rows) {
         for (const f of section.fields) {
-          const text = formatFieldValue(f, row?.[f.id], labels)
-          if (text) parts.push(text)
+          const text = formatFieldValue(f, row?.[f.id], labels);
+          if (text) parts.push(text);
         }
       }
     } else {
       for (const f of section.fields) {
-        const text = formatFieldValue(f, data[f.id], labels)
-        if (text) parts.push(text)
+        const text = formatFieldValue(f, data[f.id], labels);
+        if (text) parts.push(text);
       }
     }
   }
-  return parts.join(' ').toLowerCase().slice(0, 10_000)
+  return parts.join(" ").toLowerCase().slice(0, 10_000);
 }

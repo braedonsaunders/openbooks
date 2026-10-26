@@ -51,7 +51,8 @@ const inventoryBodySchema = z.discriminatedUnion("action", [
 ]);
 
 function notFoundWhenMissing(error: unknown) {
-  if (error instanceof CommerceError && error.code === "channel_not_found") return notFound("channel");
+  if (error instanceof CommerceError && error.code === "channel_not_found")
+    return notFound("channel");
   throw error;
 }
 
@@ -132,7 +133,12 @@ export const POST = defineRoute({
           (!body.stockLocationId || pair.stockLocationId === body.stockLocationId) &&
           (!body.itemId || pair.itemId === body.itemId),
       );
-      const outcomes: { itemId: string; stockLocationId: string; result: string; quantity?: number }[] = [];
+      const outcomes: {
+        itemId: string;
+        stockLocationId: string;
+        result: string;
+        quantity?: number;
+      }[] = [];
       for (const pair of pairs) {
         const outcome = await pushInventoryPair(gate.user.orgId, gate.user.id, access, pair);
         outcomes.push({

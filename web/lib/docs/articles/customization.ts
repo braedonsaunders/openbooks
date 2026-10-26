@@ -1,28 +1,28 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 // Customization admin tools — the "customize" surfaces under Settings. These sit
 // beside the existing "Record Forms and Views" article (record-customization) in
 // the administration → Customization section.
 
 export const customRecords: DocArticle = {
-  slug: 'custom-records',
-  title: 'Custom Records',
-  category: 'administration',
+  slug: "custom-records",
+  title: "Custom Records",
+  category: "administration",
   order: 2,
   summary:
-    'Define organization-specific master-data record types, including fields, sublists, formulas, and navigation, without a schema change.',
-  updated: '2026-07-21',
+    "Define organization-specific master-data record types, including fields, sublists, formulas, and navigation, without a schema change.",
+  updated: "2026-07-21",
   keywords: [
-    'custom records',
-    'record type',
-    'master data',
-    'field type',
-    'sublist',
-    'formula',
-    'rollup',
-    'record builder',
+    "custom records",
+    "record type",
+    "master data",
+    "field type",
+    "sublist",
+    "formula",
+    "rollup",
+    "record builder",
   ],
-  related: ['record-customization', 'custom-fields', 'app-builder', 'roles-and-permissions'],
+  related: ["record-customization", "custom-fields", "app-builder", "roles-and-permissions"],
   body: `# Custom Records
 
 **Settings → Custom Records** (route **/records/types**, permission **Manage
@@ -81,28 +81,28 @@ To add fields to an existing built-in record without defining a separate record
 type, use **Custom Fields**. For a custom screen with application logic, use the
 **App Builder**.
 `,
-}
+};
 
 export const customFields: DocArticle = {
-  slug: 'custom-fields',
-  title: 'Custom Fields',
-  category: 'administration',
+  slug: "custom-fields",
+  title: "Custom Fields",
+  category: "administration",
   order: 3,
   summary:
-    'Add organization-specific fields to built-in records and transactions, rendered inline with native fields.',
-  updated: '2026-07-21',
+    "Add organization-specific fields to built-in records and transactions, rendered inline with native fields.",
+  updated: "2026-07-21",
   keywords: [
-    'custom fields',
-    'custom field',
-    'extension',
-    'documents',
-    'parties',
-    'projects',
-    'items',
-    'field type',
-    'inline',
+    "custom fields",
+    "custom field",
+    "extension",
+    "documents",
+    "parties",
+    "projects",
+    "items",
+    "field type",
+    "inline",
   ],
-  related: ['record-customization', 'custom-records', 'navigation-customization'],
+  related: ["record-customization", "custom-records", "navigation-customization"],
   body: `# Custom Fields
 
 **Settings → Custom Fields** (route **/admin/custom-fields**, permission **Manage
@@ -142,27 +142,27 @@ so an unknown or malformed value is rejected rather than silently stored.
 Use **Custom Fields** to extend an existing record type. Use **Custom Records**
 to define a separate record type.
 `,
-}
+};
 
 export const pdfTemplates: DocArticle = {
-  slug: 'pdf-templates',
-  title: 'PDF Templates',
-  category: 'administration',
+  slug: "pdf-templates",
+  title: "PDF Templates",
+  category: "administration",
   order: 4,
   summary:
-    'Design your own printable invoices, orders, and other record PDFs in a visual editor, bound to record data.',
-  updated: '2026-07-21',
+    "Design your own printable invoices, orders, and other record PDFs in a visual editor, bound to record data.",
+  updated: "2026-07-21",
   keywords: [
-    'PDF template',
-    'invoice PDF',
-    'document template',
-    'merge field',
-    'print',
-    'letterhead',
-    'GrapesJS',
-    'branding',
+    "PDF template",
+    "invoice PDF",
+    "document template",
+    "merge field",
+    "print",
+    "letterhead",
+    "GrapesJS",
+    "branding",
   ],
-  related: ['record-customization', 'custom-fields', 'sales-workflow'],
+  related: ["record-customization", "custom-fields", "sales-workflow"],
   body: `# PDF Templates
 
 **Settings → PDF Templates** (route **/admin/pdf-templates**, permission **Manage
@@ -209,17 +209,18 @@ selected template, and returns the PDF. A companion action can email it.
 Preview your template against sample data while editing, then print a real record
 to confirm the layout before making it the default.
 `,
-}
+};
 
 export const navigationCustomization: DocArticle = {
-  slug: 'navigation-customization',
-  title: 'Navigation',
-  category: 'administration',
+  slug: "navigation-customization",
+  title: "Navigation",
+  category: "administration",
   order: 5,
-  summary: 'Reorder, rename, hide, and regroup the menu for your organization, and pin items to mobile.',
-  updated: '2026-07-21',
-  keywords: ['navigation', 'menu', 'sidebar', 'reorder', 'rename', 'hide', 'mobile', 'nav config'],
-  related: ['navigation-and-records', 'roles-and-permissions', 'custom-records'],
+  summary:
+    "Reorder, rename, hide, and regroup the menu for your organization, and pin items to mobile.",
+  updated: "2026-07-21",
+  keywords: ["navigation", "menu", "sidebar", "reorder", "rename", "hide", "mobile", "nav config"],
+  related: ["navigation-and-records", "roles-and-permissions", "custom-records"],
   body: `# Navigation
 
 **Settings → Navigation** (route **/admin/navigation**, permission **Manage
@@ -253,11 +254,11 @@ Modules shipped after you saved your layout are added automatically into their
 default group, so customizing the menu never hides new features. Module
 identifiers are stable, so saved layouts remain valid across upgrades.
 `,
-}
+};
 
 export const customizationArticles: DocArticle[] = [
   customRecords,
   customFields,
   pdfTemplates,
   navigationCustomization,
-]
+];

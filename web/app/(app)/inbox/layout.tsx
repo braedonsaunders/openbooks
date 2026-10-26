@@ -1,7 +1,7 @@
-import { redirect } from 'next/navigation'
-import { getAuthz } from '../../../lib/authz'
+import { redirect } from "next/navigation";
+import { getAuthz } from "../../../lib/authz";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * HR-15: the inbox is core — every leader lands here, so the segment no
@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
  * signed-out visitor goes to login, never to an empty inbox.
  */
 export default async function InboxLayout({ children }: { children: React.ReactNode }) {
-  const authz = await getAuthz()
-  if (!authz) redirect('/login')
-  return children
+  const authz = await getAuthz();
+  if (!authz) redirect("/login");
+  return children;
 }

@@ -78,7 +78,7 @@ type PostingDocument = {
   partyId: string | null;
   subsidiaryId: string | null;
   custom: Record<string, unknown> | null;
-}
+};
 
 export interface CrossBorderVerdict {
   outcome: CrossBorderOutcome["outcome"];
@@ -100,9 +100,14 @@ export async function assertCrossBorderSupplyEvidence(
   documentId: string,
   opts?: { persist?: boolean },
 ): Promise<CrossBorderVerdict | null> {
-  const doc = (await tx.execute<PostingDocument>(sql`
+  const doc = (
+    await tx.execute<PostingDocument>(
+      sql`
       select kind, status, party_id as "partyId", subsidiary_id as "subsidiaryId", custom
-        from documents where org_id = ${orgId} and id = ${documentId}`, "objects"))[0];
+        from documents where org_id = ${orgId} and id = ${documentId}`,
+      "objects",
+    )
+  )[0];
   if (!doc) return null;
   const election = parseCrossBorderElection(doc.custom?.crossBorder);
   if (!election) return null;
@@ -118,10 +123,16 @@ export async function assertCrossBorderSupplyEvidence(
   }
 
   const sellerRows = doc.subsidiaryId
-    ? (await tx.execute<{ country: string | null }>(sql`
-          select country from subsidiaries where org_id = ${orgId} and id = ${doc.subsidiaryId}`, "objects"))
-    : (await tx.execute<{ country: string | null }>(sql`
-          select country from orgs where id = ${orgId}`, "objects"));
+    ? await tx.execute<{ country: string | null }>(
+        sql`
+          select country from subsidiaries where org_id = ${orgId} and id = ${doc.subsidiaryId}`,
+        "objects",
+      )
+    : await tx.execute<{ country: string | null }>(
+        sql`
+          select country from orgs where id = ${orgId}`,
+        "objects",
+      );
   const sellerCountry = sellerRows[0]?.country;
   if (!sellerCountry) {
     throw new CrossBorderTaxError(
@@ -129,18 +140,31 @@ export async function assertCrossBorderSupplyEvidence(
     );
   }
 
-  const evidence = (await tx.execute<{ kind: string; countryCode: string }>(sql`
+  const evidence = (
+    await tx.execute<{ kind: string; countryCode: string }>(
+      sql`
       select kind, country_code as "countryCode" from document_supply_evidence
-       where org_id = ${orgId} and document_id = ${documentId}`, "objects")).map((row) => ({ kind: row.kind, country: row.countryCode }));
+       where org_id = ${orgId} and document_id = ${documentId}`,
+      "objects",
+    )
+  ).map((row) => ({ kind: row.kind, country: row.countryCode }));
 
-  let businessVatId: { scheme: "vies" | "hmrc" | "abn" | "gst"; value: string; status: "valid" | "invalid" | "unverified" } | null =
-    null;
+  let businessVatId: {
+    scheme: "vies" | "hmrc" | "abn" | "gst";
+    value: string;
+    status: "valid" | "invalid" | "unverified";
+  } | null = null;
   if (election.customerKind === "business" && doc.partyId) {
-    const idRow = (await tx.execute<{ scheme: string; value: string; status: string }>(sql`
+    const idRow = (
+      await tx.execute<{ scheme: string; value: string; status: string }>(
+        sql`
         select scheme, value, status from party_tax_ids
          where org_id = ${orgId} and party_id = ${doc.partyId} and is_active
          order by status = 'valid' desc, checked_at desc nulls last, created_at desc
-         limit 1`, "objects"))[0];
+         limit 1`,
+        "objects",
+      )
+    )[0];
     if (idRow) {
       businessVatId = {
         scheme: idRow.scheme as "vies" | "hmrc" | "abn" | "gst",
@@ -150,15 +174,26 @@ export async function assertCrossBorderSupplyEvidence(
     }
   }
 
-  const shipTo = (await tx.execute<{ country: string | null }>(sql`
-      select ship_to_country as country from documents where org_id = ${orgId} and id = ${documentId}`, "objects"))[0]?.country;
+  const shipTo = (
+    await tx.execute<{ country: string | null }>(
+      sql`
+      select ship_to_country as country from documents where org_id = ${orgId} and id = ${documentId}`,
+      "objects",
+    )
+  )[0]?.country;
 
   const outcome = determineCrossBorderSupply({
     supplyKind: election.supplyKind,
     customerKind: election.customerKind,
     sellerCountry,
     evidence: evidence.map((row) => ({
-      kind: row.kind as "billing_address" | "ip_country" | "card_bin_country" | "bank_country" | "sim_country" | "ship_to",
+      kind: row.kind as
+        | "billing_address"
+        | "ip_country"
+        | "card_bin_country"
+        | "bank_country"
+        | "sim_country"
+        | "ship_to",
       country: row.country,
     })),
     businessVatId,
@@ -166,12 +201,17 @@ export async function assertCrossBorderSupplyEvidence(
   });
 
   if (outcome.outcome === "reverse_charge") {
-    const offending = (await tx.execute<{ n: string }>(sql`
+    const offending = (
+      await tx.execute<{ n: string }>(
+        sql`
         select count(*)::text as n
           from document_line_tax_components component
           join document_lines line on line.org_id = component.org_id and line.id = component.document_line_id
          where component.org_id = ${orgId} and line.document_id = ${documentId}
-           and component.calculation_type <> 'reverse_charge'`, "objects"))[0]?.n;
+           and component.calculation_type <> 'reverse_charge'`,
+        "objects",
+      )
+    )[0]?.n;
     if (offending !== "0") {
       throw new CrossBorderTaxError(
         `reverse charge applies (${outcome.note}); mark every line with the reverse-charge tax treatment before posting`,
@@ -184,14 +224,21 @@ export async function assertCrossBorderSupplyEvidence(
     // returns read the line taxes under it. A line taxed under another
     // country's code, or reverse charged without a reverse-charge verdict,
     // would report the same supply in two places or none.
-    const lines = await tx.execute<{ calculationType: string; country: string | null; ratePercent: string }>(sql`
+    const lines = await tx.execute<{
+      calculationType: string;
+      country: string | null;
+      ratePercent: string;
+    }>(
+      sql`
         select component.calculation_type as "calculationType", code.country,
                component.rate_percent::text as "ratePercent"
           from document_line_tax_components component
           join document_lines line on line.org_id = component.org_id and line.id = component.document_line_id
           join tax_codes code on code.org_id = component.org_id and code.id = component.tax_code_id
          where component.org_id = ${orgId} and line.document_id = ${documentId}
-           and component.calculation_type <> 'withholding'`, "objects");
+           and component.calculation_type <> 'withholding'`,
+      "objects",
+    );
     if (lines.some((line) => line.calculationType === "reverse_charge")) {
       throw new CrossBorderTaxError(
         `reverse charge does not apply (${outcome.note}); remove the reverse-charge tax treatment from every line before posting`,
@@ -220,12 +267,15 @@ export async function assertCrossBorderSupplyEvidence(
     decidedOn: new Date().toISOString().slice(0, 10),
   };
   if (opts?.persist) {
-    const saved = await tx.execute(sql`
+    const saved = await tx.execute(
+      sql`
       update documents
          set custom = coalesce(custom, '{}'::jsonb) || jsonb_build_object('crossBorderSupply', ${JSON.stringify(verdict)}::jsonb)
        where org_id = ${orgId} and id = ${documentId}
        returning 1
-    `, "objects");
+    `,
+      "objects",
+    );
     // A write that matches zero rows is a failure: the verdict is the OSS
     // return's only record of this supply, so losing it is losing the return.
     if (saved.length !== 1) {

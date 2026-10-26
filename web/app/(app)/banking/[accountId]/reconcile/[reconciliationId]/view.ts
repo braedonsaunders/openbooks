@@ -1,20 +1,41 @@
-import 'server-only'
+import "server-only";
 
-import { getMoneyFormatter } from '@/lib/money-server'
-import { notFound } from 'next/navigation'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { formatCivilDate } from '@/lib/format'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { reconciliationBookId, reconciliationTotals, reconciliationStaleness, priorPeriodLateEffect, openingPosition, reconciliationEvidence, type OpeningPosition } from '@openbooks/engine/banking/banking'
-import { businessTimeZone } from '@openbooks/engine/platform/business-date/module'
-import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission, subsidiaryScopeAllows } from '../../../../../../lib/authz'
-import { openingCarryStartDate } from '../../../../../../lib/banking-accounts'
-import { isUuid, parsePrefixedListParams, pickString } from '../../../../../../lib/list-params'
-import type { ModuleHomeTab } from '../../../../../../components/module-home/tab-types'
-import { formatHistory, formatStatementEvidence, type EvidenceFormatters, type HistoryRow, type StatementEvidenceRow } from './evidence-format'
+import { getMoneyFormatter } from "@/lib/money-server";
+import { notFound } from "next/navigation";
+import { getLocale, getTranslations } from "next-intl/server";
+import { formatCivilDate } from "@/lib/format";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  reconciliationBookId,
+  reconciliationTotals,
+  reconciliationStaleness,
+  priorPeriodLateEffect,
+  openingPosition,
+  reconciliationEvidence,
+  type OpeningPosition,
+} from "@openbooks/engine/banking/banking";
+import { businessTimeZone } from "@openbooks/engine/platform/business-date/module";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission, subsidiaryScopeAllows } from "../../../../../../lib/authz";
+import { openingCarryStartDate } from "../../../../../../lib/banking-accounts";
+import { isUuid, parsePrefixedListParams, pickString } from "../../../../../../lib/list-params";
+import type { ModuleHomeTab } from "../../../../../../components/module-home/tab-types";
+import {
+  formatHistory,
+  formatStatementEvidence,
+  type EvidenceFormatters,
+  type HistoryRow,
+  type StatementEvidenceRow,
+} from "./evidence-format";
 
 /**
  * A single reconciliation session, split into a loader and a spec.
@@ -44,189 +65,199 @@ const STMT_SORTS = {
   date: sql`l.posted_on`,
   amount: sql`l.amount`,
   description: sql`l.description`,
-} as const
+} as const;
 
 const GL_SORTS = {
   date: sql`je.posting_date`,
   amount: sql`jl.txn_amount`,
   entry: sql`je.entry_number`,
-} as const
+} as const;
 
 const M_SORTS = {
   date: sql`sl.posted_on`,
   amount: sql`sl.amount`,
   by: sql`m.matched_by`,
-} as const
+} as const;
 
 // Known reconciliation statuses — unknown values render as the raw code with
 // underscores spaced out.
-const RECON_STATUS_KEYS = ['signed_off', 'balanced', 'in_progress']
-const STATEMENT_SOURCE_KEYS = ['ofx', 'csv', 'camt053', 'bai2', 'mt940', 'feed_api', 'manual'] as const
+const RECON_STATUS_KEYS = ["signed_off", "balanced", "in_progress"];
+const STATEMENT_SOURCE_KEYS = [
+  "ofx",
+  "csv",
+  "camt053",
+  "bai2",
+  "mt940",
+  "feed_api",
+  "manual",
+] as const;
 
 /** The body the page shows: the matching workspace, or one evidence tab. */
-export type ReconcileView = 'working' | 'statements' | 'history'
+export type ReconcileView = "working" | "statements" | "history";
 
 /** Read-only evidence for the statements and history tabs, formatted by the loader. */
 export interface ReconcileEvidenceView {
-  sourceEvidence: boolean
-  windowStart: string | null
-  throughDate: string
-  statements: StatementEvidenceRow[]
-  history: HistoryRow[]
+  sourceEvidence: boolean;
+  windowStart: string | null;
+  throughDate: string;
+  statements: StatementEvidenceRow[];
+  history: HistoryRow[];
 }
 
 // Connector labels resolve from the tenant's own connections table, never
 // from a hardcoded vendor map (shared with the account page).
 
 interface ReconciliationRow extends Record<string, unknown> {
-  id: string
-  account_id: string
-  through_date: string
-  statement_balance: string
-  currency: string
-  status: string
-  signed_off_at: string | null
-  signed_off_by_name: string | null
-  account_number: string | null
-  account_name: string
-  evidence_kind: string
-  evidence_connector: string | null
-  account_subsidiary_id: string | null
+  id: string;
+  account_id: string;
+  through_date: string;
+  statement_balance: string;
+  currency: string;
+  status: string;
+  signed_off_at: string | null;
+  signed_off_by_name: string | null;
+  account_number: string | null;
+  account_name: string;
+  evidence_kind: string;
+  evidence_connector: string | null;
+  account_subsidiary_id: string | null;
 }
 
 export interface ReconcileStmtRow extends Record<string, unknown> {
-  id: string
-  posted_on: string
-  amount: string
-  description: string | null
-  counterparty_ref: string | null
+  id: string;
+  posted_on: string;
+  amount: string;
+  description: string | null;
+  counterparty_ref: string | null;
   /** The earlier line this one may duplicate (flagged), or null. */
-  possible_duplicate_of: string | null
-  dup_posted_on: string | null
-  dup_amount: string | null
+  possible_duplicate_of: string | null;
+  dup_posted_on: string | null;
+  dup_amount: string | null;
 }
 
 export interface ReconcileGlRow extends Record<string, unknown> {
-  id: string
-  posting_date: string
-  entry_number: string
-  amount: string
-  memo: string | null
-  party: string | null
+  id: string;
+  posting_date: string;
+  entry_number: string;
+  amount: string;
+  memo: string | null;
+  party: string | null;
 }
 
 export interface ReconcileMatchedRow extends Record<string, unknown> {
-  id: string
-  statement_line_id: string
-  matched_by: string
-  confidence: string | null
-  stmt_date: string
-  stmt_amount: string
-  stmt_description: string | null
-  entry_number: string
-  gl_date: string
-  gl_amount: string
-  gl_memo: string | null
+  id: string;
+  statement_line_id: string;
+  matched_by: string;
+  confidence: string | null;
+  stmt_date: string;
+  stmt_amount: string;
+  stmt_description: string | null;
+  entry_number: string;
+  gl_date: string;
+  gl_amount: string;
+  gl_memo: string | null;
 }
 
-interface CountRow extends Record<string, unknown> { n: string | number }
+interface CountRow extends Record<string, unknown> {
+  n: string | number;
+}
 
 export interface ReconcilePaneParams {
-  q: string | undefined
-  sort: string
-  dir: 'asc' | 'desc'
-  page: number
-  perPage: number
+  q: string | undefined;
+  sort: string;
+  dir: "asc" | "desc";
+  page: number;
+  perPage: number;
 }
 
 export interface ReconcileGlClearing extends Record<string, unknown> {
-  group_id: string
-  lines: number
-  entries: string | null
-  total: string
+  group_id: string;
+  lines: number;
+  entries: string | null;
+  total: string;
 }
 
 export interface ReconcileStaleLateEntry extends Record<string, unknown> {
-  entryNumber: string
-  postingDate: string
-  amount: string
-  postedBy: string | null
-  postedAt: string | null
+  entryNumber: string;
+  postingDate: string;
+  amount: string;
+  postedBy: string | null;
+  postedAt: string | null;
 }
 
 export interface ReconcileStaleReversedEntry extends Record<string, unknown> {
-  entryNumber: string
-  postingDate: string
-  amount: string
-  reversal: string | null
+  entryNumber: string;
+  postingDate: string;
+  amount: string;
+  reversal: string | null;
 }
 
 export interface ReconcileStaleness extends Record<string, unknown> {
-  reviewed: boolean
-  reviewedHref: string | null
-  reviewedText: string | null
-  badge: string
-  effect: string
-  late: ReconcileStaleLateEntry[]
-  reversed: ReconcileStaleReversedEntry[]
+  reviewed: boolean;
+  reviewedHref: string | null;
+  reviewedText: string | null;
+  badge: string;
+  effect: string;
+  late: ReconcileStaleLateEntry[];
+  reversed: ReconcileStaleReversedEntry[];
 }
 
 export interface ReconciliationData {
-  backHref: string
-  backLabel: string
-  headerTitle: string
-  headerDescription: string
-  badgeLabel: string
-  badgeVariant: 'success' | 'warning' | 'secondary'
-  statementBalanceLabel: string
-  statementBalanceValue: string
-  clearedBalanceLabel: string
-  clearedBalanceValue: string
-  differenceLabel: string
-  difference: string
-  differenceCurrency: string
-  matchedLabel: string
-  matchedValue: string
-  basePath: string
-  accountPath: string
-  currentParams: Record<string, string | string[] | undefined>
-  canReconcile: boolean
-  canReviewSignOff: boolean
+  backHref: string;
+  backLabel: string;
+  headerTitle: string;
+  headerDescription: string;
+  badgeLabel: string;
+  badgeVariant: "success" | "warning" | "secondary";
+  statementBalanceLabel: string;
+  statementBalanceValue: string;
+  clearedBalanceLabel: string;
+  clearedBalanceValue: string;
+  differenceLabel: string;
+  difference: string;
+  differenceCurrency: string;
+  matchedLabel: string;
+  matchedValue: string;
+  basePath: string;
+  accountPath: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  canReconcile: boolean;
+  canReviewSignOff: boolean;
   reconciliation: {
-    id: string
-    status: string
-    throughDate: string
-    statementBalance: string
-    currency: string
-  }
-  stmtRows: ReconcileStmtRow[]
-  stmtTotal: number
-  stmtOutstandingTotal: string
-  stmtParams: ReconcilePaneParams
-  glRows: ReconcileGlRow[]
-  glTotal: number
-  glOutstandingTotal: string
-  glParams: ReconcilePaneParams
-  matchedRows: ReconcileMatchedRow[]
-  matchedTotal: number
-  mParams: ReconcilePaneParams
-  glClearings: ReconcileGlClearing[]
+    id: string;
+    status: string;
+    throughDate: string;
+    statementBalance: string;
+    currency: string;
+  };
+  stmtRows: ReconcileStmtRow[];
+  stmtTotal: number;
+  stmtOutstandingTotal: string;
+  stmtParams: ReconcilePaneParams;
+  glRows: ReconcileGlRow[];
+  glTotal: number;
+  glOutstandingTotal: string;
+  glParams: ReconcilePaneParams;
+  matchedRows: ReconcileMatchedRow[];
+  matchedTotal: number;
+  mParams: ReconcilePaneParams;
+  glClearings: ReconcileGlClearing[];
   /** Read-time staleness once signed off; null while the sign-off stands. */
-  stale: ReconcileStaleness | null
+  stale: ReconcileStaleness | null;
   /** Late effects from earlier signed-off periods, for unsigned sessions. */
-  priorEffects: string[]
+  priorEffects: string[];
   /**
    * Opening position for a first reconciliation from a balance-less
    * statement: whether the operator must confirm the book balance carried
    * in, and the confirmation standing behind the cleared balance.
    */
-  opening: OpeningPosition | null
+  opening: OpeningPosition | null;
   /** The body the page shows; the workspace is the default. */
-  view: ReconcileView
+  view: ReconcileView;
   /** Peer concepts of the session, switched in the page header. */
-  tabs: ModuleHomeTab[]
+  tabs: ModuleHomeTab[];
   /** Supporting statements and history; null while the workspace is shown. */
-  evidence: ReconcileEvidenceView | null
+  evidence: ReconcileEvidenceView | null;
 }
 
 export async function loadReconciliation(
@@ -234,15 +265,16 @@ export async function loadReconciliation(
   reconciliationId: string,
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ReconciliationData> {
-  const authz = await requirePermission('banking.read')
-  const canReconcile = can(authz, 'banking.reconcile')
-  const canReviewSignOff = canReconcile || can(authz, 'banking.review_sign_off')
-  const t = await getTranslations('banking')
-  const locale = await getLocale()
-  if (!isUuid(accountId) || !isUuid(reconciliationId)) notFound()
-  const basePath = `/banking/${accountId}/reconcile/${reconciliationId}`
+  const authz = await requirePermission("banking.read");
+  const canReconcile = can(authz, "banking.reconcile");
+  const canReviewSignOff = canReconcile || can(authz, "banking.review_sign_off");
+  const t = await getTranslations("banking");
+  const locale = await getLocale();
+  if (!isUuid(accountId) || !isUuid(reconciliationId)) notFound();
+  const basePath = `/banking/${accountId}/reconcile/${reconciliationId}`;
 
-  const reconRes = (await db.execute<ReconciliationRow>(sql`
+  const reconRes = await db.execute<ReconciliationRow>(
+    sql`
     select r.id, r.account_id, r.through_date, r.statement_balance, r.currency, r.status,
            r.signed_off_at, u.name as signed_off_by_name,
            a.number as account_number, a.name as account_name,
@@ -253,36 +285,49 @@ export async function loadReconciliation(
       left join users u on u.id = r.signed_off_by
      where r.id = ${reconciliationId} and r.account_id = ${accountId}
        and r.org_id = ${authz.user.orgId}
-  `, 'objects'))
-  const recon = reconRes[0]
+  `,
+    "objects",
+  );
+  const recon = reconRes[0];
   // Sessions on another entity's account (or a shared account, for a
   // restricted reader) do not exist as far as this page is concerned.
-  if (!recon || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, recon.account_subsidiary_id)) notFound()
-  const { money } = await getMoneyFormatter(authz.user.orgId, recon.currency)
+  if (!recon || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, recon.account_subsidiary_id))
+    notFound();
+  const { money } = await getMoneyFormatter(authz.user.orgId, recon.currency);
 
-  const ctx = { orgId: authz.user.orgId, userId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }
-  const totals = await reconciliationTotals(reconciliationId, ctx)
-  const bookId = await reconciliationBookId(db, ctx.orgId)
-  const signedOff = recon.status === 'signed_off'
-  const sourceEvidence = recon.evidence_kind === 'source'
+  const ctx = {
+    orgId: authz.user.orgId,
+    userId: authz.user.id,
+    allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+  };
+  const totals = await reconciliationTotals(reconciliationId, ctx);
+  const bookId = await reconciliationBookId(db, ctx.orgId);
+  const signedOff = recon.status === "signed_off";
+  const sourceEvidence = recon.evidence_kind === "source";
   // The connection's own display name is tenant data, so naming the source
   // system stays vendor-neutral; without a matching connection the generic
   // fallback names it.
   const connectorName = recon.evidence_connector
-    ? (await db.execute<{ display_name: string }>(sql`
+    ? ((
+        await db.execute<{ display_name: string }>(
+          sql`
         select c.display_name from connections c
          where c.org_id = ${ctx.orgId} and c.source = ${recon.evidence_connector}
          order by c.mirror_enabled desc, c.created_at limit 1
-      `, 'objects'))[0]?.display_name ?? t('sourceSystem.other')
-    : t('sourceSystem.other')
+      `,
+          "objects",
+        )
+      )[0]?.display_name ?? t("sourceSystem.other"))
+    : t("sourceSystem.other");
 
   // Source-evidenced sign-offs stand on mirrored cleared stamps, not on
   // imported statement lines: count the covered lines the same way close
   // readiness does (cleared stamp or reconciled vs neither, cutoff-bound).
-  let clearedLines = 0
-  let unclearedLines = 0
+  let clearedLines = 0;
+  let unclearedLines = 0;
   if (sourceEvidence) {
-    const evidenceCounts = await db.execute<Record<string, unknown>>(sql`
+    const evidenceCounts = await db.execute<Record<string, unknown>>(
+      sql`
       select count(*) filter (
                where (jl.source_cleared_date is not null and jl.source_cleared_date <= ${recon.through_date})
                   or jl.reconciled_at is not null
@@ -297,39 +342,41 @@ export async function loadReconciliation(
          and je.book_id = ${bookId} and je.status in ('posted', 'reversed')
          and jl.currency = ${recon.currency} and jl.posting_date <= ${recon.through_date}
          and ${excludePeriodEndJournals(sql`je.origin`)}
-    `, 'objects')
-    clearedLines = Number(evidenceCounts[0]?.cleared ?? 0)
-    unclearedLines = Number(evidenceCounts[0]?.uncleared ?? 0)
+    `,
+      "objects",
+    );
+    clearedLines = Number(evidenceCounts[0]?.cleared ?? 0);
+    unclearedLines = Number(evidenceCounts[0]?.uncleared ?? 0);
   }
   // Resolved eagerly: the description below needs a connector label exactly
   // when this reconciliation stands on source evidence.
-  const sourceConnector = sourceEvidence ? connectorName : ''
+  const sourceConnector = sourceEvidence ? connectorName : "";
 
   // -- left pane: unmatched statement lines (prefix stmt*) -------------------
-  const stmtParams = parsePrefixedListParams(sp, 'stmt', {
-    sort: 'date',
-    dir: 'asc',
+  const stmtParams = parsePrefixedListParams(sp, "stmt", {
+    sort: "date",
+    dir: "asc",
     perPage: 15,
-    allowedSorts: ['date', 'amount', 'description'] as const,
-  })
+    allowedSorts: ["date", "amount", "description"] as const,
+  });
   const stmtWhere = sql`s.account_id = ${accountId} and s.org_id = ${ctx.orgId}
     and l.currency = ${recon.currency} and l.match_status = 'unmatched' and l.posted_on <= ${recon.through_date}
-    ${stmtParams.q ? sql` and (l.description ilike ${'%' + stmtParams.q + '%'} or l.counterparty_ref ilike ${'%' + stmtParams.q + '%'} or l.amount::text ilike ${'%' + stmtParams.q + '%'})` : sql``}`
+    ${stmtParams.q ? sql` and (l.description ilike ${"%" + stmtParams.q + "%"} or l.counterparty_ref ilike ${"%" + stmtParams.q + "%"} or l.amount::text ilike ${"%" + stmtParams.q + "%"})` : sql``}`;
 
   // -- right pane: unreconciled, unclaimed GL lines (prefix gl*) --------------
-  const glParams = parsePrefixedListParams(sp, 'gl', {
-    sort: 'date',
-    dir: 'asc',
+  const glParams = parsePrefixedListParams(sp, "gl", {
+    sort: "date",
+    dir: "asc",
     perPage: 15,
-    allowedSorts: ['date', 'amount', 'entry'] as const,
-  })
+    allowedSorts: ["date", "amount", "entry"] as const,
+  });
   // Lines covered by an opening carry are cleared by that carry, not by
   // matching — hide them here exactly as the engine excludes them. A first
   // session's own confirmed opening applies before anything is signed off,
   // so its pre-carry book lines stop reading as outstanding items.
-  const opening = await openingPosition(reconciliationId, ctx)
-  const signedCarryStart = await openingCarryStartDate(ctx.orgId, accountId)
-  const carryStart = signedCarryStart ?? (opening?.carryApplies ? opening.carryStart : null)
+  const opening = await openingPosition(reconciliationId, ctx);
+  const signedCarryStart = await openingCarryStartDate(ctx.orgId, accountId);
+  const carryStart = signedCarryStart ?? (opening?.carryApplies ? opening.carryStart : null);
   const glWhere = sql`jl.account_id = ${accountId} and jl.org_id = ${ctx.orgId}
     and je.book_id = ${bookId} and jl.currency = ${recon.currency}
     and je.status in ('posted', 'reversed') and je.posting_date <= ${recon.through_date}
@@ -337,24 +384,25 @@ export async function loadReconciliation(
     ${carryStart ? sql`and je.posting_date >= ${carryStart}` : sql``}
     and jl.reconciled_at is null
     and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
-    ${glParams.q ? sql` and (je.entry_number ilike ${'%' + glParams.q + '%'} or je.memo ilike ${'%' + glParams.q + '%'} or jl.memo ilike ${'%' + glParams.q + '%'} or jl.txn_amount::text ilike ${'%' + glParams.q + '%'})` : sql``}`
+    ${glParams.q ? sql` and (je.entry_number ilike ${"%" + glParams.q + "%"} or je.memo ilike ${"%" + glParams.q + "%"} or jl.memo ilike ${"%" + glParams.q + "%"} or jl.txn_amount::text ilike ${"%" + glParams.q + "%"})` : sql``}`;
 
   // -- matched this session (prefix m*) ---------------------------------------
-  const mParams = parsePrefixedListParams(sp, 'm', {
-    sort: 'date',
-    dir: 'asc',
+  const mParams = parsePrefixedListParams(sp, "m", {
+    sort: "date",
+    dir: "asc",
     perPage: 15,
-    allowedSorts: ['date', 'amount', 'by'] as const,
-  })
+    allowedSorts: ["date", "amount", "by"] as const,
+  });
   const mWhere = sql`m.reconciliation_id = ${reconciliationId} and m.org_id = ${ctx.orgId}
-    ${mParams.q ? sql` and (sl.description ilike ${'%' + mParams.q + '%'} or je.entry_number ilike ${'%' + mParams.q + '%'} or jl.memo ilike ${'%' + mParams.q + '%'})` : sql``}`
+    ${mParams.q ? sql` and (sl.description ilike ${"%" + mParams.q + "%"} or je.entry_number ilike ${"%" + mParams.q + "%"} or jl.memo ilike ${"%" + mParams.q + "%"})` : sql``}`;
 
   // Outstanding evidence loads for every status including signed_off: a
   // signed-off session with a posted in-period book entry and no bank line
   // must show it, not report difference zero over an empty pane. The panes
   // stay read-only once signed; only their data flows again.
   // -- GL-only clearing groups this session (no statement side) --------------
-  const glClearings = await db.execute<ReconcileGlClearing>(sql`
+  const glClearings = await db.execute<ReconcileGlClearing>(
+    sql`
     select m.group_id, count(*)::int as lines,
            string_agg(distinct je.entry_number, ', ') as entries,
            coalesce(sum(jl.txn_amount), 0)::text as total
@@ -365,38 +413,53 @@ export async function loadReconciliation(
        and m.statement_line_id is null
      group by m.group_id
      order by min(m.created_at)
-  `, 'objects')
+  `,
+    "objects",
+  );
 
-  const [stmtRows, stmtCount, glRows, glCount, mRows, mCount] = (await Promise.all([
-    db.execute<ReconcileStmtRow>(sql`
+  const [stmtRows, stmtCount, glRows, glCount, mRows, mCount] = await Promise.all([
+    db.execute<ReconcileStmtRow>(
+      sql`
           select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref,
                  l.possible_duplicate_of, dup.posted_on::text as dup_posted_on, dup.amount::text as dup_amount
             from bank_statement_lines l
             join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
             left join bank_statement_lines dup on dup.id = l.possible_duplicate_of and dup.org_id = l.org_id
            where ${stmtWhere}
-           order by ${STMT_SORTS[stmtParams.sort]} ${stmtParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, l.line_number
+           order by ${STMT_SORTS[stmtParams.sort]} ${stmtParams.dir === "asc" ? sql`asc` : sql`desc`} nulls last, l.line_number
            limit ${stmtParams.perPage} offset ${(stmtParams.page - 1) * stmtParams.perPage}
-        `, 'objects'),
-    db.execute<CountRow & { total: string }>(sql`
+        `,
+      "objects",
+    ),
+    db.execute<CountRow & { total: string }>(
+      sql`
           select count(*) as n, coalesce(sum(l.amount), 0) as total from bank_statement_lines l
             join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
-           where ${stmtWhere}`, 'objects'),
-    db.execute<ReconcileGlRow>(sql`
+           where ${stmtWhere}`,
+      "objects",
+    ),
+    db.execute<ReconcileGlRow>(
+      sql`
           select jl.id, je.posting_date, je.entry_number, jl.txn_amount as amount,
                  coalesce(jl.memo, je.memo) as memo, p.display_name as party
             from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
             left join parties p on p.id = jl.party_id and p.org_id = jl.org_id
            where ${glWhere}
-           order by ${GL_SORTS[glParams.sort]} ${glParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, jl.line_number
+           order by ${GL_SORTS[glParams.sort]} ${glParams.dir === "asc" ? sql`asc` : sql`desc`} nulls last, jl.line_number
            limit ${glParams.perPage} offset ${(glParams.page - 1) * glParams.perPage}
-        `, 'objects'),
-    db.execute<CountRow & { total: string }>(sql`
+        `,
+      "objects",
+    ),
+    db.execute<CountRow & { total: string }>(
+      sql`
           select count(*) as n, coalesce(sum(jl.txn_amount), 0) as total from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-           where ${glWhere}`, 'objects'),
-    db.execute<ReconcileMatchedRow>(sql`
+           where ${glWhere}`,
+      "objects",
+    ),
+    db.execute<ReconcileMatchedRow>(
+      sql`
       select m.id, m.statement_line_id, m.matched_by, m.confidence,
              sl.posted_on as stmt_date, sl.amount as stmt_amount, sl.description as stmt_description,
              je.entry_number, je.posting_date as gl_date, jl.txn_amount as gl_amount,
@@ -406,116 +469,149 @@ export async function loadReconciliation(
         join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
        where ${mWhere}
-       order by ${M_SORTS[mParams.sort]} ${mParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last, m.created_at
+       order by ${M_SORTS[mParams.sort]} ${mParams.dir === "asc" ? sql`asc` : sql`desc`} nulls last, m.created_at
        limit ${mParams.perPage} offset ${(mParams.page - 1) * mParams.perPage}
-    `, 'objects'),
-    db.execute<CountRow>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<CountRow>(
+      sql`
       select count(*) as n from reconciliation_matches m
         join bank_statement_lines sl on sl.id = m.statement_line_id and sl.org_id = m.org_id
         join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-       where ${mWhere}`, 'objects'),
-  ]))
+       where ${mWhere}`,
+      "objects",
+    ),
+  ]);
 
   // Read-time staleness: late in-period postings and reversed matches move
   // the ledger under a frozen sign-off. Unsigned sessions instead explain
   // their opening difference from earlier signed-off periods' late effects.
-  const detail = await reconciliationStaleness(reconciliationId, ctx)
-  const stale: ReconcileStaleness | null = detail.stale || detail.revalidation
-    ? {
-        reviewed: !!detail.revalidation,
-        reviewedHref: detail.revalidation ? `/banking/${accountId}/reconcile/${detail.revalidation.reviewedReconciliationId}` : null,
-        reviewedText: detail.revalidation ? t('revalidation.reviewedBasis',{date:detail.revalidation.appliesFromThroughDate}) : null,
-        badge: detail.revalidation ? t('revalidation.reviewedBadge') : t('stale.badge', { date: detail.staleSince ?? recon.through_date }),
-        effect: detail.revalidation?.proof.neutralBasis==='outstanding_movements'
-          ? t('revalidation.reviewedOutstandingEffect',{lateAmount:money(detail.clearedEffect,{maximumFractionDigits:4}),
-            amount:money(detail.revalidation.proof.outstandingEffect,{maximumFractionDigits:4})})
-          : t('stale.effect', { amount: money(detail.clearedEffect, { maximumFractionDigits: 4 }) }),
-        late: detail.lateEntries.map((entry) => ({
-          entryNumber: entry.entryNumber,
-          postingDate: entry.postingDate,
-          amount: entry.amount,
-          postedBy: entry.postedBy,
-          postedAt: entry.postedAt?.slice(0, 10) ?? null,
-        })),
-        reversed: detail.reversedMatches.map((entry) => ({
-          entryNumber: entry.entryNumber,
-          postingDate: entry.postingDate,
-          amount: entry.amount,
-          reversal: entry.reversalNumber
-            ? t('stale.reversal', {
-                number: entry.reversalNumber,
-                date: entry.reversedAt?.slice(0, 10) ?? recon.through_date,
-              })
+  const detail = await reconciliationStaleness(reconciliationId, ctx);
+  const stale: ReconcileStaleness | null =
+    detail.stale || detail.revalidation
+      ? {
+          reviewed: !!detail.revalidation,
+          reviewedHref: detail.revalidation
+            ? `/banking/${accountId}/reconcile/${detail.revalidation.reviewedReconciliationId}`
             : null,
-        })),
-      }
-    : null
+          reviewedText: detail.revalidation
+            ? t("revalidation.reviewedBasis", { date: detail.revalidation.appliesFromThroughDate })
+            : null,
+          badge: detail.revalidation
+            ? t("revalidation.reviewedBadge")
+            : t("stale.badge", { date: detail.staleSince ?? recon.through_date }),
+          effect:
+            detail.revalidation?.proof.neutralBasis === "outstanding_movements"
+              ? t("revalidation.reviewedOutstandingEffect", {
+                  lateAmount: money(detail.clearedEffect, { maximumFractionDigits: 4 }),
+                  amount: money(detail.revalidation.proof.outstandingEffect, {
+                    maximumFractionDigits: 4,
+                  }),
+                })
+              : t("stale.effect", {
+                  amount: money(detail.clearedEffect, { maximumFractionDigits: 4 }),
+                }),
+          late: detail.lateEntries.map((entry) => ({
+            entryNumber: entry.entryNumber,
+            postingDate: entry.postingDate,
+            amount: entry.amount,
+            postedBy: entry.postedBy,
+            postedAt: entry.postedAt?.slice(0, 10) ?? null,
+          })),
+          reversed: detail.reversedMatches.map((entry) => ({
+            entryNumber: entry.entryNumber,
+            postingDate: entry.postingDate,
+            amount: entry.amount,
+            reversal: entry.reversalNumber
+              ? t("stale.reversal", {
+                  number: entry.reversalNumber,
+                  date: entry.reversedAt?.slice(0, 10) ?? recon.through_date,
+                })
+              : null,
+          })),
+        }
+      : null;
   const priorEffects = signedOff
     ? []
     : (await priorPeriodLateEffect(accountId, recon.through_date, ctx)).map((effect) =>
-        t('stale.openingEffect', {
+        t("stale.openingEffect", {
           amount: money(effect.amount, { maximumFractionDigits: 4 }),
           period: effect.throughDate,
         }),
-      )
+      );
 
   // -- evidence tabs (?view=statements|history) ------------------------------
   // The matching workspace stays the default body. The evidence tabs replace
   // it: each reads the session's supporting statements or governed history,
   // formatted here so the components receive display values only.
-  const requestedView = pickString(sp.view)
-  const view: ReconcileView = requestedView === 'statements' || requestedView === 'history'
-    ? requestedView
-    : 'working'
+  const requestedView = pickString(sp.view);
+  const view: ReconcileView =
+    requestedView === "statements" || requestedView === "history" ? requestedView : "working";
   const tabs: ModuleHomeTab[] = [
-    { href: basePath, label: t('reconcileEvidence.tabs.workspace'), active: view === 'working' },
-    { href: `${basePath}?view=statements`, label: t('reconcileEvidence.tabs.statements'), active: view === 'statements' },
-    { href: `${basePath}?view=history`, label: t('reconcileEvidence.tabs.history'), active: view === 'history' },
-  ]
-  let evidence: ReconcileEvidenceView | null = null
-  if (view !== 'working') {
-    const timeZone = await businessTimeZone(ctx.orgId)
-    const timestampFormatter = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone })
-    const countFormatter = new Intl.NumberFormat(locale)
+    { href: basePath, label: t("reconcileEvidence.tabs.workspace"), active: view === "working" },
+    {
+      href: `${basePath}?view=statements`,
+      label: t("reconcileEvidence.tabs.statements"),
+      active: view === "statements",
+    },
+    {
+      href: `${basePath}?view=history`,
+      label: t("reconcileEvidence.tabs.history"),
+      active: view === "history",
+    },
+  ];
+  let evidence: ReconcileEvidenceView | null = null;
+  if (view !== "working") {
+    const timeZone = await businessTimeZone(ctx.orgId);
+    const timestampFormatter = new Intl.DateTimeFormat(locale, {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone,
+    });
+    const countFormatter = new Intl.NumberFormat(locale);
     const formatters: EvidenceFormatters = {
       money: (value) => money(value, { maximumFractionDigits: 4 }),
       count: (value) => countFormatter.format(value),
       civilDate: (value) => formatCivilDate(value, locale),
       timestamp: (value) => {
-        const date = new Date(value)
-        return Number.isNaN(date.getTime()) ? value : timestampFormatter.format(date)
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? value : timestampFormatter.format(date);
       },
       source: (value) => {
-        const key = STATEMENT_SOURCE_KEYS.find((candidate) => candidate === value) ?? 'unknown'
-        return t(`statementSources.${key}`)
+        const key = STATEMENT_SOURCE_KEYS.find((candidate) => candidate === value) ?? "unknown";
+        return t(`statementSources.${key}`);
       },
-      status: (value) => (RECON_STATUS_KEYS.includes(value) ? t(`reconStatus.${value}`) : value.replace(/_/g, ' ')),
-    }
-    const read = await reconciliationEvidence(reconciliationId, ctx)
+      status: (value) =>
+        RECON_STATUS_KEYS.includes(value) ? t(`reconStatus.${value}`) : value.replace(/_/g, " "),
+    };
+    const read = await reconciliationEvidence(reconciliationId, ctx);
     evidence = {
       sourceEvidence,
-      windowStart: read.reconciliation.windowStart ? formatCivilDate(read.reconciliation.windowStart, locale) : null,
+      windowStart: read.reconciliation.windowStart
+        ? formatCivilDate(read.reconciliation.windowStart, locale)
+        : null,
       throughDate: formatCivilDate(read.reconciliation.throughDate, locale),
       statements: formatStatementEvidence(read, formatters),
       history: formatHistory(read.history, formatters),
-    }
+    };
   }
 
   return {
     backHref: `/banking/${accountId}`,
-    backLabel: [recon.account_number, recon.account_name].filter(Boolean).join(' · '),
-    headerTitle: t('reconcile.title', { date: recon.through_date }),
+    backLabel: [recon.account_number, recon.account_name].filter(Boolean).join(" · "),
+    headerTitle: t("reconcile.title", { date: recon.through_date }),
     headerDescription: sourceEvidence
       ? recon.signed_off_by_name
-        ? t('reconcile.sourceSignedOffByDescription', {
+        ? t("reconcile.sourceSignedOffByDescription", {
             connector: sourceConnector,
             date: recon.through_date,
             name: recon.signed_off_by_name,
             cleared: clearedLines,
             uncleared: unclearedLines,
           })
-        : t('reconcile.sourceSignedOffDescription', {
+        : t("reconcile.sourceSignedOffDescription", {
             connector: sourceConnector,
             date: recon.through_date,
             cleared: clearedLines,
@@ -523,27 +619,33 @@ export async function loadReconciliation(
           })
       : signedOff
         ? recon.signed_off_by_name
-          ? t('reconcile.signedOffByDescription', {
-              date: formatCivilDate(String(recon.signed_off_at ?? recon.through_date).slice(0, 10), locale),
+          ? t("reconcile.signedOffByDescription", {
+              date: formatCivilDate(
+                String(recon.signed_off_at ?? recon.through_date).slice(0, 10),
+                locale,
+              ),
               name: recon.signed_off_by_name,
             })
-          : t('reconcile.signedOffDescription', {
-              date: formatCivilDate(String(recon.signed_off_at ?? recon.through_date).slice(0, 10), locale),
+          : t("reconcile.signedOffDescription", {
+              date: formatCivilDate(
+                String(recon.signed_off_at ?? recon.through_date).slice(0, 10),
+                locale,
+              ),
             })
-        : t('reconcile.description'),
+        : t("reconcile.description"),
     badgeLabel: RECON_STATUS_KEYS.includes(recon.status)
       ? t(`reconStatus.${recon.status}`)
-      : String(recon.status).replace(/_/g, ' '),
-    badgeVariant: signedOff ? 'success' : recon.status === 'balanced' ? 'warning' : 'secondary',
-    statementBalanceLabel: t('labels.statementBalance'),
+      : String(recon.status).replace(/_/g, " "),
+    badgeVariant: signedOff ? "success" : recon.status === "balanced" ? "warning" : "secondary",
+    statementBalanceLabel: t("labels.statementBalance"),
     statementBalanceValue: money(totals.statementBalance, { maximumFractionDigits: 4 }),
-    clearedBalanceLabel: t('reconcile.stats.clearedGlBalance'),
+    clearedBalanceLabel: t("reconcile.stats.clearedGlBalance"),
     clearedBalanceValue: money(totals.clearedBalance, { maximumFractionDigits: 4 }),
-    differenceLabel: t('reconcile.stats.difference'),
+    differenceLabel: t("reconcile.stats.difference"),
     difference: totals.difference,
     differenceCurrency: recon.currency,
-    matchedLabel: t('reconcile.stats.matched'),
-    matchedValue: t('reconcile.matchedCounts', {
+    matchedLabel: t("reconcile.stats.matched"),
+    matchedValue: t("reconcile.matchedCounts", {
       bank: totals.matchedStatementLines,
       gl: totals.matchedJournalLines,
     }),
@@ -561,11 +663,11 @@ export async function loadReconciliation(
     },
     stmtRows,
     stmtTotal: Number(stmtCount[0]?.n ?? 0),
-    stmtOutstandingTotal: String(stmtCount[0]?.total ?? '0'),
+    stmtOutstandingTotal: String(stmtCount[0]?.total ?? "0"),
     stmtParams,
     glRows,
     glTotal: Number(glCount[0]?.n ?? 0),
-    glOutstandingTotal: String(glCount[0]?.total ?? '0'),
+    glOutstandingTotal: String(glCount[0]?.total ?? "0"),
     glParams,
     matchedRows: mRows,
     matchedTotal: Number(mCount[0]?.n ?? 0),
@@ -577,27 +679,27 @@ export async function loadReconciliation(
     view,
     tabs,
     evidence,
-  }
+  };
 }
 
-const f = ref<ReconciliationData>()
+const f = ref<ReconciliationData>();
 
 export function reconcileSpec(data: ReconciliationData): PageSpec {
   return page({
-    route: '/banking/[accountId]/reconcile/[reconciliationId]',
-    layout: 'list',
+    route: "/banking/[accountId]/reconcile/[reconciliationId]",
+    layout: "list",
     header: [
       pageHeader({
-        back: { href: f('backHref'), label: f('backLabel') },
-        title: f('headerTitle'),
-        description: f('headerDescription'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        back: { href: f("backHref"), label: f("backLabel") },
+        title: f("headerTitle"),
+        description: f("headerDescription"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
-          widget('reconcile-status-badge', { label: data.badgeLabel, variant: data.badgeVariant }),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("reconcile-status-badge", { label: data.badgeLabel, variant: data.badgeVariant }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
-      widgetBlock('reconcile-stats', {
+      widgetBlock("reconcile-stats", {
         statementBalanceLabel: data.statementBalanceLabel,
         statementBalanceValue: data.statementBalanceValue,
         clearedBalanceLabel: data.clearedBalanceLabel,
@@ -610,7 +712,7 @@ export function reconcileSpec(data: ReconciliationData): PageSpec {
       }),
     ],
     body: reconcileBody(data),
-  })
+  });
 }
 
 /**
@@ -619,23 +721,23 @@ export function reconcileSpec(data: ReconciliationData): PageSpec {
  * across three paginated panes plus every mutation. The spec supplies only
  * loader-resolved data; `canReconcile` is a boolean, never an Authz.
  */
-function reconcileBody(data: ReconciliationData): PageSpec['body'] {
-  if (data.view === 'statements' && data.evidence) {
+function reconcileBody(data: ReconciliationData): PageSpec["body"] {
+  if (data.view === "statements" && data.evidence) {
     return [
-      widgetBlock('reconcile-supporting-statements', {
+      widgetBlock("reconcile-supporting-statements", {
         accountPath: data.accountPath,
         sourceEvidence: data.evidence.sourceEvidence,
         windowStart: data.evidence.windowStart,
         throughDate: data.evidence.throughDate,
         statements: data.evidence.statements,
       }),
-    ]
+    ];
   }
-  if (data.view === 'history' && data.evidence) {
-    return [widgetBlock('reconcile-history', { rows: data.evidence.history })]
+  if (data.view === "history" && data.evidence) {
+    return [widgetBlock("reconcile-history", { rows: data.evidence.history })];
   }
   return [
-    widgetBlock('reconcile-workspace', {
+    widgetBlock("reconcile-workspace", {
       basePath: data.basePath,
       accountPath: data.accountPath,
       currentParams: data.currentParams,
@@ -659,5 +761,5 @@ function reconcileBody(data: ReconciliationData): PageSpec['body'] {
       priorEffects: data.priorEffects,
       opening: data.opening,
     }),
-  ]
+  ];
 }

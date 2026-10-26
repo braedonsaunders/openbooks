@@ -7,7 +7,11 @@ const { searchApplication } = await import("./search-read");
 
 test("search rejects a blank query without contacting the search backend", async () => {
   const context = {
-    authz: { user: { orgId: "search-read-unit-test" }, permissions: new Set(), allowedSubsidiaryIds: null },
+    authz: {
+      user: { orgId: "search-read-unit-test" },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    },
     source: "api",
     requestId: "search-read-unit-request",
     apiKeyId: null,
@@ -15,9 +19,10 @@ test("search rejects a blank query without contacting the search backend", async
 
   await assert.rejects(
     searchApplication(context, { q: "   " }),
-    (error: unknown) => error instanceof ApplicationError
-      && error.code === "invalid_input"
-      && error.status === 422
-      && error.message === "q is required",
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.code === "invalid_input" &&
+      error.status === 422 &&
+      error.message === "q is required",
   );
 });

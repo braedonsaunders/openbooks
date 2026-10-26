@@ -8,8 +8,7 @@ import { isUuid } from "./list-params";
 import { resolveActiveEnv } from "./org-access";
 
 export type WorkspaceSwitchResult =
-  | { ok: true; orgId: string }
-  | { ok: false; reason: "invalid" | "no-access" };
+  { ok: true; orgId: string } | { ok: false; reason: "invalid" | "no-access" };
 
 /**
  * Switch the active workspace: any organization the login identity can reach,
@@ -24,7 +23,10 @@ export type WorkspaceSwitchResult =
  * POST /api/me/workspace endpoint rather than a server action, so a browser tab
  * rendered by an earlier deployment can still switch workspaces.
  */
-export async function switchActiveWorkspace(authz: Authz, orgId: unknown): Promise<WorkspaceSwitchResult> {
+export async function switchActiveWorkspace(
+  authz: Authz,
+  orgId: unknown,
+): Promise<WorkspaceSwitchResult> {
   if (typeof orgId !== "string" || !isUuid(orgId)) return { ok: false, reason: "invalid" };
   const home = {
     id: authz.user.homeUserId,

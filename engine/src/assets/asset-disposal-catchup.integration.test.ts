@@ -5,11 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { disposeAsset } from "./asset-lifecycle.ts";
 import { buildSchedule, runDepreciation } from "./depreciation.ts";
-import {
-  createScratchOrg,
-  dropScratchOrg,
-  seedFlowActors,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -60,19 +56,25 @@ test(
       // July's 100.00 plan line is unposted and the asset was held through
       // July. Booking NBV off posted-to-date (nothing) would derecognize at
       // full cost and overstate the loss by that month's depreciation.
-      const dispose = () => disposeAsset(org.orgId, assetId, {
-        proceeds: "850",
-        proceedsAccountId: bank,
-        date: "2026-07-31",
-        actorId,
-      });
+      const dispose = () =>
+        disposeAsset(org.orgId, assetId, {
+          proceeds: "850",
+          proceedsAccountId: bank,
+          date: "2026-07-31",
+          actorId,
+        });
       await assert.rejects(dispose, (error: Error) => {
         assert.match(error.message, /run depreciation through 2026-07-31 before disposing/);
         return true;
       });
-      const events = (await db.execute<{ n: number }>(sql`
+      const events = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from asset_events where org_id = ${org.orgId} and asset_id = ${assetId}
-           and kind in ('disposed','written_off')`, "objects"))[0]!;
+           and kind in ('disposed','written_off')`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(events.n, 0, "a refused disposal records nothing");
 
       // Following the remedy ties the disposal to the schedule: NBV 900.
@@ -81,11 +83,16 @@ test(
       assert.equal(disposal.nbv, "900.0000");
       assert.equal(disposal.gainLoss, "-50.0000");
       assert.equal(disposal.status, "disposed");
-      const balance = (await db.execute<{ total: string }>(sql`
+      const balance = (
+        await db.execute<{ total: string }>(
+          sql`
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-         where l.org_id = ${org.orgId} and e.id = ${disposal.entryId}`, "objects"))[0]!;
+         where l.org_id = ${org.orgId} and e.id = ${disposal.entryId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(balance.total, "0.0000");
     } finally {
       await dropScratchOrg(org.orgId);

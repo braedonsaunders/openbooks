@@ -1,7 +1,7 @@
-import { strict as assert } from 'node:assert'
-import { describe, it } from 'node:test'
-import { REPORT_ENTITIES, REPORT_ENTITY_MAP } from './entities'
-import { formatMeasureValue } from './run'
+import { strict as assert } from "node:assert";
+import { describe, it } from "node:test";
+import { REPORT_ENTITIES, REPORT_ENTITY_MAP } from "./entities";
+import { formatMeasureValue } from "./run";
 
 // E31: denomination flags must be enforceable, not decorative. A txnCurrency
 // flag without a currencyColumn (or baseMoney without a baseCurrencyColumn)
@@ -12,175 +12,212 @@ import { formatMeasureValue } from './run'
 // e.g. items/fixed_assets store bare numerics) is single-denomination by
 // construction; those columns are named below so the exclusion is explicit,
 // per-lane, and must be edited deliberately — never silent.
-describe('denomination flags are enforceable', () => {
-  it('every money column on a currency-dimensioned entity carries a denomination flag', () => {
-    const violations: string[] = []
+describe("denomination flags are enforceable", () => {
+  it("every money column on a currency-dimensioned entity carries a denomination flag", () => {
+    const violations: string[] = [];
     for (const entity of REPORT_ENTITIES) {
-      if (!entity.currencyColumn && !entity.baseCurrencyColumn) continue
+      if (!entity.currencyColumn && !entity.baseCurrencyColumn) continue;
       for (const column of entity.columns ?? []) {
-        if (column.kind !== 'money') continue
+        if (column.kind !== "money") continue;
         if (column.txnCurrency !== true && column.baseMoney !== true) {
-          violations.push(`${String(entity.key)}.${String(column.key)}`)
+          violations.push(`${String(entity.key)}.${String(column.key)}`);
         }
       }
     }
     assert.deepEqual(
       violations,
       [],
-      `money without a denomination flag blends silently — flag it or move it to the named exclusion: ${violations.join(', ')}`,
-    )
-  })
+      `money without a denomination flag blends silently — flag it or move it to the named exclusion: ${violations.join(", ")}`,
+    );
+  });
 
-  it('no denomination flag without its observation dimension', () => {
-    const violations: string[] = []
+  it("no denomination flag without its observation dimension", () => {
+    const violations: string[] = [];
     for (const entity of REPORT_ENTITIES) {
       for (const column of entity.columns ?? []) {
-        if (column.kind !== 'money') continue
+        if (column.kind !== "money") continue;
         if (column.txnCurrency === true && !entity.currencyColumn) {
-          violations.push(`${String(entity.key)}.${String(column.key)} claims txnCurrency with no currencyColumn`)
+          violations.push(
+            `${String(entity.key)}.${String(column.key)} claims txnCurrency with no currencyColumn`,
+          );
         }
         if (column.baseMoney === true && !entity.baseCurrencyColumn) {
-          violations.push(`${String(entity.key)}.${String(column.key)} claims baseMoney with no baseCurrencyColumn`)
+          violations.push(
+            `${String(entity.key)}.${String(column.key)} claims baseMoney with no baseCurrencyColumn`,
+          );
         }
       }
     }
-    assert.deepEqual(violations, [], `vacuous denomination flags: ${violations.join('; ')}`)
-  })
+    assert.deepEqual(violations, [], `vacuous denomination flags: ${violations.join("; ")}`);
+  });
 
   // Dimension-less by schema (verified: no currency column on the underlying
   // tables), single-denomination by construction. Each entry names the owning
   // lane that must resolve it if a currency dimension ever appears.
   const DIMENSIONLESS_UNFLAGGED: Record<string, readonly string[]> = {
     // reports/inventory lane
-    items: ['default_rate', 'default_cost'],
-    inventory_lot_movements: ['unit_cost', 'total_value'],
+    items: ["default_rate", "default_cost"],
+    inventory_lot_movements: ["unit_cost", "total_value"],
     fixed_assets: [
-      'acquisition_cost',
-      'remaining_cost',
-      'carrying_value',
-      'accumulated_depreciation',
-      'salvage_value',
+      "acquisition_cost",
+      "remaining_cost",
+      "carrying_value",
+      "accumulated_depreciation",
+      "salvage_value",
     ],
     // assets/field lane
-    equipment: ['purchase_price', 'cost_recovery', 'billable_value', 'billed_revenue', 'depreciation'],
+    equipment: [
+      "purchase_price",
+      "cost_recovery",
+      "billable_value",
+      "billed_revenue",
+      "depreciation",
+    ],
     // payroll lane
-    pay_stub_lines: ['rate', 'amount', 'ytd_amount'],
-    payroll_parallel_findings: ['prior_amount', 'our_amount', 'difference', 'tolerance_applied'],
+    pay_stub_lines: ["rate", "amount", "ytd_amount"],
+    payroll_parallel_findings: ["prior_amount", "our_amount", "difference", "tolerance_applied"],
     // entitlements/allocations lanes
-    entitlement_balances: ['balance', 'max_balance', 'notify_balance', 'headroom', 'owed_to_employer'],
-    allocation_runs: ['source_total', 'allocated_total', 'residual'],
-    allocation_lineage: ['amount', 'residual'],
+    entitlement_balances: [
+      "balance",
+      "max_balance",
+      "notify_balance",
+      "headroom",
+      "owed_to_employer",
+    ],
+    allocation_runs: ["source_total", "allocated_total", "residual"],
+    allocation_lineage: ["amount", "residual"],
     // crm lane
-    crm_account_profiles: ['annual_revenue'],
-  }
+    crm_account_profiles: ["annual_revenue"],
+  };
 
-  it('dimension-less unflagged money is named exactly — no silent additions', () => {
-    const observed: Record<string, string[]> = {}
+  it("dimension-less unflagged money is named exactly — no silent additions", () => {
+    const observed: Record<string, string[]> = {};
     for (const entity of REPORT_ENTITIES) {
       const unflagged = (entity.columns ?? [])
-        .filter((c) => c.kind === 'money' && c.txnCurrency !== true && c.baseMoney !== true)
-        .map((c) => String(c.key))
-      if (unflagged.length > 0) observed[String(entity.key)] = unflagged
+        .filter((c) => c.kind === "money" && c.txnCurrency !== true && c.baseMoney !== true)
+        .map((c) => String(c.key));
+      if (unflagged.length > 0) observed[String(entity.key)] = unflagged;
     }
     assert.deepEqual(
       observed,
       DIMENSIONLESS_UNFLAGGED,
-      'unflagged money changed: flag the new column, or name its lane in DIMENSIONLESS_UNFLAGGED',
-    )
-  })
+      "unflagged money changed: flag the new column, or name its lane in DIMENSIONLESS_UNFLAGGED",
+    );
+  });
 
-  it('documents/transaction_lines base coverage is the named sibling ledger_lines', () => {
-    for (const key of ['documents', 'transaction_lines'] as const) {
-      const entity = REPORT_ENTITY_MAP[key]
-      assert.ok(entity, `${key} entity must exist`)
-      assert.ok(!entity.baseCurrencyColumn, `${key} has no base dimension, so it cannot carry baseMoney twins`)
-      const money = (entity.columns ?? []).filter((c) => c.kind === 'money')
-      assert.ok(money.length > 0, `${key} must expose money columns`)
+  it("documents/transaction_lines base coverage is the named sibling ledger_lines", () => {
+    for (const key of ["documents", "transaction_lines"] as const) {
+      const entity = REPORT_ENTITY_MAP[key];
+      assert.ok(entity, `${key} entity must exist`);
+      assert.ok(
+        !entity.baseCurrencyColumn,
+        `${key} has no base dimension, so it cannot carry baseMoney twins`,
+      );
+      const money = (entity.columns ?? []).filter((c) => c.kind === "money");
+      assert.ok(money.length > 0, `${key} must expose money columns`);
       for (const column of money) {
         assert.equal(
           column.txnCurrency,
           true,
           `${key}.${String(column.key)} must be txnCurrency-flagged; base coverage lives in ledger_lines`,
-        )
+        );
       }
     }
-    const ledger = REPORT_ENTITY_MAP.ledger_lines
-    assert.ok(ledger, 'ledger_lines entity must exist')
-    const baseTwins = (ledger.columns ?? []).filter((c) => c.kind === 'money' && c.baseMoney === true)
+    const ledger = REPORT_ENTITY_MAP.ledger_lines;
+    assert.ok(ledger, "ledger_lines entity must exist");
+    const baseTwins = (ledger.columns ?? []).filter(
+      (c) => c.kind === "money" && c.baseMoney === true,
+    );
     assert.ok(
       baseTwins.length > 0,
-      'ledger_lines must carry the baseMoney twins covering documents/transaction_lines',
-    )
-  })
+      "ledger_lines must carry the baseMoney twins covering documents/transaction_lines",
+    );
+  });
 
-  it('dimension-less money renders raw — no 0dp truncation on items default_rate avg', () => {
-    const items = REPORT_ENTITY_MAP.items
-    assert.ok(items, 'items entity must exist')
+  it("dimension-less money renders raw — no 0dp truncation on items default_rate avg", () => {
+    const items = REPORT_ENTITY_MAP.items;
+    assert.ok(items, "items entity must exist");
     assert.equal(
-      formatMeasureValue(items, { fn: 'avg', column: 'default_rate', label: 'Avg rate' }, '12.34'),
-      '12.34',
-    )
-  })
+      formatMeasureValue(items, { fn: "avg", column: "default_rate", label: "Avg rate" }, "12.34"),
+      "12.34",
+    );
+  });
 
-  it('saas metric entities denominate every stored amount in the persisted reporting currency', () => {
-    for (const key of ['saas_metrics_subscriptions', 'saas_metrics_facts', 'saas_metrics_cohorts'] as const) {
-      const entity = REPORT_ENTITY_MAP[key]
-      assert.ok(entity, `${key} entity must exist`)
-      assert.equal(entity.baseCurrencyColumn, 'reporting_currency', `${key} denominates in the persisted reporting currency`)
-      const reporting = (entity.columns ?? []).find((c) => c.key === 'reporting_currency')
-      assert.ok(reporting, `${key} must expose the reporting_currency breakout column`)
-      assert.equal(reporting.kind, 'text')
-      assert.ok(!entity.currencyColumn, `${key} has no transaction-currency dimension`)
+  it("saas metric entities denominate every stored amount in the persisted reporting currency", () => {
+    for (const key of [
+      "saas_metrics_subscriptions",
+      "saas_metrics_facts",
+      "saas_metrics_cohorts",
+    ] as const) {
+      const entity = REPORT_ENTITY_MAP[key];
+      assert.ok(entity, `${key} entity must exist`);
+      assert.equal(
+        entity.baseCurrencyColumn,
+        "reporting_currency",
+        `${key} denominates in the persisted reporting currency`,
+      );
+      const reporting = (entity.columns ?? []).find((c) => c.key === "reporting_currency");
+      assert.ok(reporting, `${key} must expose the reporting_currency breakout column`);
+      assert.equal(reporting.kind, "text");
+      assert.ok(!entity.currencyColumn, `${key} has no transaction-currency dimension`);
       for (const column of entity.columns ?? []) {
-        if (column.kind !== 'money') continue
+        if (column.kind !== "money") continue;
         assert.equal(
           column.baseMoney,
           true,
           `${key}.${String(column.key)} is normalized to the stored reporting currency — flag it baseMoney`,
-        )
+        );
       }
     }
-  })
+  });
 
-  it('row-persisted reporting denomination never certifies from a single subsidiary', () => {
-    for (const key of ['saas_metrics_subscriptions', 'saas_metrics_facts', 'saas_metrics_cohorts'] as const) {
+  it("row-persisted reporting denomination never certifies from a single subsidiary", () => {
+    for (const key of [
+      "saas_metrics_subscriptions",
+      "saas_metrics_facts",
+      "saas_metrics_cohorts",
+    ] as const) {
       assert.equal(
         REPORT_ENTITY_MAP[key]!.singleSubsidiaryCertifiesBase,
         false,
         `${key} must opt out: one subsidiary cannot prove one reporting currency across an org-base change`,
-      )
+      );
     }
     assert.equal(
       REPORT_ENTITY_MAP.ledger_lines!.singleSubsidiaryCertifiesBase ?? true,
       true,
-      'ledger_lines keeps the GL contract: one subsidiary owns one functional currency',
-    )
-  })
+      "ledger_lines keeps the GL contract: one subsidiary owns one functional currency",
+    );
+  });
 
-  it('saas entities author reporting-currency nouns; the GL default is untouched', () => {
-    for (const key of ['saas_metrics_subscriptions', 'saas_metrics_facts', 'saas_metrics_cohorts'] as const) {
+  it("saas entities author reporting-currency nouns; the GL default is untouched", () => {
+    for (const key of [
+      "saas_metrics_subscriptions",
+      "saas_metrics_facts",
+      "saas_metrics_cohorts",
+    ] as const) {
       assert.deepEqual(
         REPORT_ENTITY_MAP[key]!.baseDenominationNouns,
-        { plural: 'reporting currencies', breakout: 'Reporting currency' },
+        { plural: "reporting currencies", breakout: "Reporting currency" },
         `${key} refusals must name reporting currencies`,
-      )
+      );
     }
     assert.equal(
       REPORT_ENTITY_MAP.ledger_lines!.baseDenominationNouns,
       undefined,
-      'ledger_lines keeps the default functional-base wording',
-    )
-  })
+      "ledger_lines keeps the default functional-base wording",
+    );
+  });
 
-  it('fixed_assets carrying_value is in the named exclusion (E31 scope probe)', () => {
-    const assets = REPORT_ENTITY_MAP.fixed_assets
-    assert.ok(assets, 'fixed_assets entity must exist')
-    const carrying = (assets.columns ?? []).find((c) => c.key === 'carrying_value')
-    assert.ok(carrying, 'fixed_assets.carrying_value must exist')
-    assert.equal(carrying.kind, 'money')
+  it("fixed_assets carrying_value is in the named exclusion (E31 scope probe)", () => {
+    const assets = REPORT_ENTITY_MAP.fixed_assets;
+    assert.ok(assets, "fixed_assets entity must exist");
+    const carrying = (assets.columns ?? []).find((c) => c.key === "carrying_value");
+    assert.ok(carrying, "fixed_assets.carrying_value must exist");
+    assert.equal(carrying.kind, "money");
     assert.ok(
-      DIMENSIONLESS_UNFLAGGED.fixed_assets!.includes('carrying_value'),
-      'fixed_assets.carrying_value must stay in the named dimension-less exclusion until a currency dimension exists',
-    )
-  })
-})
+      DIMENSIONLESS_UNFLAGGED.fixed_assets!.includes("carrying_value"),
+      "fixed_assets.carrying_value must stay in the named dimension-less exclusion until a currency dimension exists",
+    );
+  });
+});

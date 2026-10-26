@@ -1,11 +1,14 @@
 import { type HolidayFactsSource, isHolidayFactsSource } from "./holiday-facts-store.ts";
-import { type StatutoryHolidayEmploymentSource } from './holidays.ts';
-import { validateOpeningLevySourceFacts, type OpeningLevySourceFacts } from './opening-levy-source-facts.ts';
-import { type CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
+import { type StatutoryHolidayEmploymentSource } from "./holidays.ts";
+import {
+  validateOpeningLevySourceFacts,
+  type OpeningLevySourceFacts,
+} from "./opening-levy-source-facts.ts";
+import { type CaBonusIncomeReferenceSource } from "./canada/bonus-income-reference.ts";
 import { type HistoricalEmploymentRosterSource } from "./employment-roster.ts";
-import { type EmployerAssignmentSource } from './employer-assignment-history.ts';
-import { type CompensationPackageAssignmentSource } from './compensation-package-source.ts';
-import { type HolidayObligationSource } from './holiday-obligation-source.ts';
+import { type EmployerAssignmentSource } from "./employer-assignment-history.ts";
+import { type CompensationPackageAssignmentSource } from "./compensation-package-source.ts";
+import { type HolidayObligationSource } from "./holiday-obligation-source.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -15,7 +18,10 @@ import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { canonicalDecimal, multiplyDecimal } from "../money/exact-decimal.ts";
 import { cmp, roundMoney } from "../money/money.ts";
 import { bankCashFundingSplit, type BankCashPayDateValuation } from "./run-bank-cash-evidence.ts";
-import { canonicalLevySourceKey, isEmployerLevyProgramKey } from "./run-levy-adjustment-evidence.ts";
+import {
+  canonicalLevySourceKey,
+  isEmployerLevyProgramKey,
+} from "./run-levy-adjustment-evidence.ts";
 import { PAYROLL_COUNTRY_PACKS } from "./pack-registry.ts";
 import { hourlyPayRate, isPayRateBasis } from "../projects/pay-rate-basis.ts";
 import { isDeclaredVacationAccrualInput } from "./run-vacation-accrual-input.ts";
@@ -23,8 +29,15 @@ import { lockLeavePayrollInputSources } from "./leave-payroll-inputs.ts";
 import { lockAllowancePayrollInputSources } from "./allowance-payroll-inputs.ts";
 
 export type OpeningEmployerAuthoritySource = {
-  id: string; openingBalanceId: string; employeePartyId: string; taxYear: number; subsidiaryId: string;
-  sourceFileId: string; sourceVersionId: string; sourceSha256: string; openingSha256: string;
+  id: string;
+  openingBalanceId: string;
+  employeePartyId: string;
+  taxYear: number;
+  subsidiaryId: string;
+  sourceFileId: string;
+  sourceVersionId: string;
+  sourceSha256: string;
+  openingSha256: string;
 };
 
 export type IncomeTaxOverrideSource = {
@@ -83,40 +96,61 @@ export type DeclaredVacationAccrualSource = {
   requestId: string;
 };
 
-export function isEmployerLevyAdjustmentSource(value: unknown): value is EmployerLevyAdjustmentSource {
+export function isEmployerLevyAdjustmentSource(
+  value: unknown,
+): value is EmployerLevyAdjustmentSource {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  return ["adjustmentId", "employeePartyId", "componentId", "requestId"]
-    .every(key => typeof row[key] === "string" && isUuid(row[key] as string))
-    && row.adjustmentId === row.requestId
-    && isEmployerLevyProgramKey(row.programKey)
-    && (row.programKey === "ca_wcb"
+  return (
+    ["adjustmentId", "employeePartyId", "componentId", "requestId"].every(
+      (key) => typeof row[key] === "string" && isUuid(row[key] as string),
+    ) &&
+    row.adjustmentId === row.requestId &&
+    isEmployerLevyProgramKey(row.programKey) &&
+    (row.programKey === "ca_wcb"
       ? typeof row.workerCompGroupId === "string" && isUuid(row.workerCompGroupId)
-      : row.workerCompGroupId === null)
-    && canonicalLevySourceKey(row.sourceKey) === row.sourceKey
-    && typeof row.amount === "string" && canonicalDecimal(canonicalDecimal(row.amount, 4), 2) !== null
-    && cmp(canonicalDecimal(canonicalDecimal(row.amount, 4), 2)!, "0") > 0
-    && typeof row.reason === "string" && row.reason.trim().length > 0 && row.reason.length <= 500
-    && typeof row.sourceReference === "string" && row.sourceReference.trim().length > 0 && row.sourceReference.length <= 300;
+      : row.workerCompGroupId === null) &&
+    canonicalLevySourceKey(row.sourceKey) === row.sourceKey &&
+    typeof row.amount === "string" &&
+    canonicalDecimal(canonicalDecimal(row.amount, 4), 2) !== null &&
+    cmp(canonicalDecimal(canonicalDecimal(row.amount, 4), 2)!, "0") > 0 &&
+    typeof row.reason === "string" &&
+    row.reason.trim().length > 0 &&
+    row.reason.length <= 500 &&
+    typeof row.sourceReference === "string" &&
+    row.sourceReference.trim().length > 0 &&
+    row.sourceReference.length <= 300
+  );
 }
 
 export function isIncomeTaxOverrideSource(value: unknown): value is IncomeTaxOverrideSource {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  return ["adjustmentId", "employeePartyId", "componentId", "requestId"]
-    .every(key => typeof row[key] === "string" && isUuid(row[key] as string))
-    && typeof row.amount === "string" && /^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/.test(row.amount)
-    && canonicalDecimal(canonicalDecimal(row.amount, 4), 2) !== null
-    && typeof row.reason === "string" && row.reason.trim().length > 0 && row.reason.length <= 500
-    && typeof row.sourceReference === "string" && row.sourceReference.trim().length > 0 && row.sourceReference.length <= 300;
+  return (
+    ["adjustmentId", "employeePartyId", "componentId", "requestId"].every(
+      (key) => typeof row[key] === "string" && isUuid(row[key] as string),
+    ) &&
+    typeof row.amount === "string" &&
+    /^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/.test(row.amount) &&
+    canonicalDecimal(canonicalDecimal(row.amount, 4), 2) !== null &&
+    typeof row.reason === "string" &&
+    row.reason.trim().length > 0 &&
+    row.reason.length <= 500 &&
+    typeof row.sourceReference === "string" &&
+    row.sourceReference.trim().length > 0 &&
+    row.sourceReference.length <= 300
+  );
 }
 export type OpeningLevySourceAuthoritySource = OpeningEmployerAuthoritySource & {
   id: string;
   employerAuthorityId: string;
   allocationSha256: string;
   openingChildrenSha256: string;
-  originalCountry: string; originalCurrency: string;
-  coverageStart: string; coverageEnd: string; coverageComplete: true;
+  originalCountry: string;
+  originalCurrency: string;
+  coverageStart: string;
+  coverageEnd: string;
+  coverageComplete: true;
   allocations: {
     programKey: string;
     region: string;
@@ -136,21 +170,45 @@ export function isBankCashPayDateValuation(value: unknown): value is BankCashPay
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
   const basis = row.basis;
-  if (typeof row.rateId !== "string" || !isUuid(row.rateId)
-    || !["employee", "job_title", "trade", "department", "subsidiary", "org"].includes(row.scope as string)
-    || typeof row.currency !== "string" || !/^[A-Z]{3}$/.test(row.currency)
-    || !isPayRateBasis(basis)
-    || typeof row.effectiveFrom !== "string" || !isIsoCalendarDate(row.effectiveFrom)
-    || !(row.effectiveTo === null || typeof row.effectiveTo === "string" && isIsoCalendarDate(row.effectiveTo) && row.effectiveTo >= row.effectiveFrom)
-    || !(row.updatedAt === null || typeof row.updatedAt === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(row.updatedAt))) return false;
-  const hourlyWage = typeof row.hourlyWage === "string" ? canonicalDecimal(row.hourlyWage, 4) : null;
+  if (
+    typeof row.rateId !== "string" ||
+    !isUuid(row.rateId) ||
+    !["employee", "job_title", "trade", "department", "subsidiary", "org"].includes(
+      row.scope as string,
+    ) ||
+    typeof row.currency !== "string" ||
+    !/^[A-Z]{3}$/.test(row.currency) ||
+    !isPayRateBasis(basis) ||
+    typeof row.effectiveFrom !== "string" ||
+    !isIsoCalendarDate(row.effectiveFrom) ||
+    !(
+      row.effectiveTo === null ||
+      (typeof row.effectiveTo === "string" &&
+        isIsoCalendarDate(row.effectiveTo) &&
+        row.effectiveTo >= row.effectiveFrom)
+    ) ||
+    !(
+      row.updatedAt === null ||
+      (typeof row.updatedAt === "string" &&
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(row.updatedAt))
+    )
+  )
+    return false;
+  const hourlyWage =
+    typeof row.hourlyWage === "string" ? canonicalDecimal(row.hourlyWage, 4) : null;
   const rate = typeof row.rate === "string" ? canonicalDecimal(row.rate, 4) : null;
-  if (hourlyWage === null || rate === null || cmp(hourlyWage, "0") <= 0 || cmp(rate, "0") <= 0) return false;
+  if (hourlyWage === null || rate === null || cmp(hourlyWage, "0") <= 0 || cmp(rate, "0") <= 0)
+    return false;
   if (basis === "hour") {
-    return row.annualHoursUsed === null && row.annualHoursSource === null && cmp(hourlyWage, rate) === 0;
+    return (
+      row.annualHoursUsed === null && row.annualHoursSource === null && cmp(hourlyWage, rate) === 0
+    );
   }
-  if (!(row.annualHoursSource === "rate" || row.annualHoursSource === "labor_costing_settings")
-    || typeof row.annualHoursUsed !== "string") return false;
+  if (
+    !(row.annualHoursSource === "rate" || row.annualHoursSource === "labor_costing_settings") ||
+    typeof row.annualHoursUsed !== "string"
+  )
+    return false;
   const annualHours = canonicalDecimal(row.annualHoursUsed, 4);
   if (annualHours === null || cmp(annualHours, "0") <= 0) return false;
   return cmp(hourlyPayRate(rate, basis, annualHours), hourlyWage) === 0;
@@ -159,37 +217,74 @@ export function isBankCashPayDateValuation(value: unknown): value is BankCashPay
 export function isBankCashInputSource(value: unknown): value is BankCashInputSource {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  if (!["adjustmentId", "employeePartyId", "componentId", "requestId", "bankPlanId"].every(key =>
-    typeof row[key] === "string" && isUuid(row[key] as string))
-    || typeof row.amount !== "string" || typeof row.hours !== "string"
-    || !["hours", "money"].includes(row.bankPlanUnit as string) || !["accrue", "owe"].includes(row.bankPlanDirection as string)
-    || typeof row.bankPlanAllowsNegativeBalance !== "boolean"
-    || !(row.bankPlanPayoutComponentId === null || typeof row.bankPlanPayoutComponentId === "string" && isUuid(row.bankPlanPayoutComponentId))
-    || !(row.bankPlanDepositComponentId === null || typeof row.bankPlanDepositComponentId === "string" && isUuid(row.bankPlanDepositComponentId))
-    || typeof row.reason !== "string" || !row.reason.trim() || row.reason.length > 500
-    || typeof row.sourceReference !== "string" || !row.sourceReference.trim() || row.sourceReference.length > 300
-    || !(row.rate === null || typeof row.rate === "string")
-    || !(row.outsideBankAmount === undefined || typeof row.outsideBankAmount === "string")
-    || !(row.bankValuation === undefined || row.bankValuation === null || isBankCashPayDateValuation(row.bankValuation))) return false;
-  if (row.requestId !== row.adjustmentId || row.bankPlanPayoutComponentId === row.bankPlanDepositComponentId) return false;
+  if (
+    !["adjustmentId", "employeePartyId", "componentId", "requestId", "bankPlanId"].every(
+      (key) => typeof row[key] === "string" && isUuid(row[key] as string),
+    ) ||
+    typeof row.amount !== "string" ||
+    typeof row.hours !== "string" ||
+    !["hours", "money"].includes(row.bankPlanUnit as string) ||
+    !["accrue", "owe"].includes(row.bankPlanDirection as string) ||
+    typeof row.bankPlanAllowsNegativeBalance !== "boolean" ||
+    !(
+      row.bankPlanPayoutComponentId === null ||
+      (typeof row.bankPlanPayoutComponentId === "string" && isUuid(row.bankPlanPayoutComponentId))
+    ) ||
+    !(
+      row.bankPlanDepositComponentId === null ||
+      (typeof row.bankPlanDepositComponentId === "string" && isUuid(row.bankPlanDepositComponentId))
+    ) ||
+    typeof row.reason !== "string" ||
+    !row.reason.trim() ||
+    row.reason.length > 500 ||
+    typeof row.sourceReference !== "string" ||
+    !row.sourceReference.trim() ||
+    row.sourceReference.length > 300 ||
+    !(row.rate === null || typeof row.rate === "string") ||
+    !(row.outsideBankAmount === undefined || typeof row.outsideBankAmount === "string") ||
+    !(
+      row.bankValuation === undefined ||
+      row.bankValuation === null ||
+      isBankCashPayDateValuation(row.bankValuation)
+    )
+  )
+    return false;
+  if (
+    row.requestId !== row.adjustmentId ||
+    row.bankPlanPayoutComponentId === row.bankPlanDepositComponentId
+  )
+    return false;
   const amount = canonicalDecimal(row.amount, 4);
   const hours = canonicalDecimal(row.hours, 2);
-  if (amount === null || hours === null || cmp(amount, "0") === 0 || cmp(hours, "0") === 0
-    || (cmp(amount, "0") > 0) !== (cmp(hours, "0") > 0)
-    || amount.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15
-    || hours.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 10
-    || cmp(roundMoney(amount, 2), amount) !== 0
-    || (cmp(hours, "0") > 0 ? row.bankPlanPayoutComponentId !== row.componentId
-      : row.bankPlanDirection !== "accrue" || row.bankPlanDepositComponentId !== row.componentId)) return false;
+  if (
+    amount === null ||
+    hours === null ||
+    cmp(amount, "0") === 0 ||
+    cmp(hours, "0") === 0 ||
+    cmp(amount, "0") > 0 !== cmp(hours, "0") > 0 ||
+    amount.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15 ||
+    hours.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 10 ||
+    cmp(roundMoney(amount, 2), amount) !== 0 ||
+    (cmp(hours, "0") > 0
+      ? row.bankPlanPayoutComponentId !== row.componentId
+      : row.bankPlanDirection !== "accrue" || row.bankPlanDepositComponentId !== row.componentId)
+  )
+    return false;
   if (row.rate !== null) {
     const rate = canonicalDecimal(row.rate, 2);
-    if (rate === null || rate !== row.rate || cmp(rate, "0") <= 0
-      || rate.split(".")[0]!.replace(/^0+/, "").length > 15) return false;
+    if (
+      rate === null ||
+      rate !== row.rate ||
+      cmp(rate, "0") <= 0 ||
+      rate.split(".")[0]!.replace(/^0+/, "").length > 15
+    )
+      return false;
     const priced = multiplyDecimal(rate, hours.replace(/^[+-]/, ""), 2);
     if (cmp(cmp(hours, "0") < 0 ? `-${priced}` : priced, amount) !== 0) return false;
   }
   if ((row.outsideBankAmount === undefined) !== (row.bankValuation === undefined)) return false;
-  if (row.outsideBankAmount !== undefined && !bankCashFundingSplit(amount, row.outsideBankAmount)) return false;
+  if (row.outsideBankAmount !== undefined && !bankCashFundingSplit(amount, row.outsideBankAmount))
+    return false;
   // A retained valuation that no longer prices the split is not corrupt
   // evidence: it is a changed pay-date wage, and the digest comparison
   // reads it stale. The calculation itself refuses the mismatch when the
@@ -198,66 +293,139 @@ export function isBankCashInputSource(value: unknown): value is BankCashInputSou
   return true;
 }
 
-export function isDeclaredVacationAccrualSource(value: unknown): value is DeclaredVacationAccrualSource {
+export function isDeclaredVacationAccrualSource(
+  value: unknown,
+): value is DeclaredVacationAccrualSource {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  return ["adjustmentId", "employeePartyId", "componentId", "planId", "requestId"]
-    .every(key => typeof row[key] === "string" && isUuid(row[key] as string))
-    && row.adjustmentId === row.requestId
-    && typeof row.amount === "string" && typeof row.reason === "string"
-    && typeof row.sourceReference === "string"
-    && isDeclaredVacationAccrualInput({ ...row, kind: "declared_vacation_accrual" });
+  return (
+    ["adjustmentId", "employeePartyId", "componentId", "planId", "requestId"].every(
+      (key) => typeof row[key] === "string" && isUuid(row[key] as string),
+    ) &&
+    row.adjustmentId === row.requestId &&
+    typeof row.amount === "string" &&
+    typeof row.reason === "string" &&
+    typeof row.sourceReference === "string" &&
+    isDeclaredVacationAccrualInput({ ...row, kind: "declared_vacation_accrual" })
+  );
 }
 
-export function isOpeningEmployerAuthoritySource(value: unknown): value is OpeningEmployerAuthoritySource {
+export function isOpeningEmployerAuthoritySource(
+  value: unknown,
+): value is OpeningEmployerAuthoritySource {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  return ["id", "openingBalanceId", "employeePartyId", "subsidiaryId", "sourceFileId", "sourceVersionId"]
-    .every(key => { const value = row[key]; return typeof value === "string" && isUuid(value); })
-    && typeof row.taxYear === "number" && Number.isSafeInteger(row.taxYear)
-    && ["sourceSha256", "openingSha256"].every(key => { const value = row[key]; return typeof value === "string" && /^[a-f0-9]{64}$/.test(value); });
+  return (
+    [
+      "id",
+      "openingBalanceId",
+      "employeePartyId",
+      "subsidiaryId",
+      "sourceFileId",
+      "sourceVersionId",
+    ].every((key) => {
+      const value = row[key];
+      return typeof value === "string" && isUuid(value);
+    }) &&
+    typeof row.taxYear === "number" &&
+    Number.isSafeInteger(row.taxYear) &&
+    ["sourceSha256", "openingSha256"].every((key) => {
+      const value = row[key];
+      return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+    })
+  );
 }
 
-export function isOpeningLevySourceAuthoritySource(value: unknown): value is OpeningLevySourceAuthoritySource {
-  if (!isOpeningEmployerAuthoritySource(value) || !value || typeof value !== 'object') return false;
+export function isOpeningLevySourceAuthoritySource(
+  value: unknown,
+): value is OpeningLevySourceAuthoritySource {
+  if (!isOpeningEmployerAuthoritySource(value) || !value || typeof value !== "object") return false;
   const row = value as Record<string, unknown>;
-  return typeof row.employerAuthorityId === 'string' && isUuid(row.employerAuthorityId)
-    && typeof row.openingChildrenSha256 === 'string' && /^[a-f0-9]{64}$/.test(row.openingChildrenSha256)
-    && typeof row.allocationSha256 === 'string' && /^[a-f0-9]{64}$/.test(row.allocationSha256)
-    && typeof row.originalCountry === 'string' && /^[A-Z]{2}$/.test(row.originalCountry)
-    && typeof row.originalCurrency === 'string' && /^[A-Z]{3}$/.test(row.originalCurrency)
-    && row.coverageComplete === true && typeof row.coverageStart === 'string' && isIsoCalendarDate(row.coverageStart)
-    && typeof row.coverageEnd === 'string' && isIsoCalendarDate(row.coverageEnd)
-    && (() => { try { validateOpeningLevySourceFacts(row as unknown as OpeningLevySourceFacts, row.taxYear as number, PAYROLL_COUNTRY_PACKS[String(row.originalCountry)]); return true; } catch { return false; } })()
-    && Array.isArray(row.allocations) && (!PAYROLL_COUNTRY_PACKS[row.originalCountry]?.openingLevySource || row.allocations.length > 0)
-    && row.allocations.every((value) => {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return (
+    typeof row.employerAuthorityId === "string" &&
+    isUuid(row.employerAuthorityId) &&
+    typeof row.openingChildrenSha256 === "string" &&
+    /^[a-f0-9]{64}$/.test(row.openingChildrenSha256) &&
+    typeof row.allocationSha256 === "string" &&
+    /^[a-f0-9]{64}$/.test(row.allocationSha256) &&
+    typeof row.originalCountry === "string" &&
+    /^[A-Z]{2}$/.test(row.originalCountry) &&
+    typeof row.originalCurrency === "string" &&
+    /^[A-Z]{3}$/.test(row.originalCurrency) &&
+    row.coverageComplete === true &&
+    typeof row.coverageStart === "string" &&
+    isIsoCalendarDate(row.coverageStart) &&
+    typeof row.coverageEnd === "string" &&
+    isIsoCalendarDate(row.coverageEnd) &&
+    (() => {
+      try {
+        validateOpeningLevySourceFacts(
+          row as unknown as OpeningLevySourceFacts,
+          row.taxYear as number,
+          PAYROLL_COUNTRY_PACKS[String(row.originalCountry)],
+        );
+        return true;
+      } catch {
+        return false;
+      }
+    })() &&
+    Array.isArray(row.allocations) &&
+    (!PAYROLL_COUNTRY_PACKS[row.originalCountry]?.openingLevySource ||
+      row.allocations.length > 0) &&
+    row.allocations.every((value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return false;
       const allocation = value as Record<string, unknown>;
-      return typeof allocation.programKey === 'string' && typeof allocation.region === 'string'
-        && typeof allocation.subRegion === 'string'
-        && (allocation.filingAccountId === null || typeof allocation.filingAccountId === 'string' && isUuid(allocation.filingAccountId))
-        && (allocation.federalAccountId === null || typeof allocation.federalAccountId === 'string' && isUuid(allocation.federalAccountId))
-        && typeof allocation.amount === 'string' && /^\d{1,15}(?:\.\d{1,4})?$/.test(allocation.amount);
-    });
+      return (
+        typeof allocation.programKey === "string" &&
+        typeof allocation.region === "string" &&
+        typeof allocation.subRegion === "string" &&
+        (allocation.filingAccountId === null ||
+          (typeof allocation.filingAccountId === "string" && isUuid(allocation.filingAccountId))) &&
+        (allocation.federalAccountId === null ||
+          (typeof allocation.federalAccountId === "string" &&
+            isUuid(allocation.federalAccountId))) &&
+        typeof allocation.amount === "string" &&
+        /^\d{1,15}(?:\.\d{1,4})?$/.test(allocation.amount)
+      );
+    })
+  );
 }
 
 export function isOpeningBalanceSourceState(value: unknown): value is OpeningBalanceSourceState {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  return typeof row.openingBalanceId === 'string' && isUuid(row.openingBalanceId)
-    && typeof row.sourceDigest === 'string' && /^[a-f0-9]{64}$/.test(row.sourceDigest);
+  return (
+    typeof row.openingBalanceId === "string" &&
+    isUuid(row.openingBalanceId) &&
+    typeof row.sourceDigest === "string" &&
+    /^[a-f0-9]{64}$/.test(row.sourceDigest)
+  );
 }
 
-export function isHolidayEmploymentSource(value: unknown): value is StatutoryHolidayEmploymentSource {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const row=value as Record<string,unknown>;
-  return ['orgId','employeePartyId','employmentId','subsidiaryId'].every(key=>typeof row[key]==='string' && isUuid(row[key] as string))
-    && Number.isSafeInteger(row.employmentRevision) && Number(row.employmentRevision)>0
-    && (row.versionId===null || typeof row.versionId==='string' && isUuid(row.versionId))
-    && (row.versionNo===null || Number.isSafeInteger(row.versionNo) && Number(row.versionNo)>0)
-    && (row.status===null || typeof row.status==='string')
-    && ['effectiveFrom','effectiveTo'].every(key=>row[key]===null || typeof row[key]==='string' && isIsoCalendarDate(row[key] as string))
-    && (row.recordedAt===null || typeof row.recordedAt==='string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(row.recordedAt));
+export function isHolidayEmploymentSource(
+  value: unknown,
+): value is StatutoryHolidayEmploymentSource {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return (
+    ["orgId", "employeePartyId", "employmentId", "subsidiaryId"].every(
+      (key) => typeof row[key] === "string" && isUuid(row[key] as string),
+    ) &&
+    Number.isSafeInteger(row.employmentRevision) &&
+    Number(row.employmentRevision) > 0 &&
+    (row.versionId === null || (typeof row.versionId === "string" && isUuid(row.versionId))) &&
+    (row.versionNo === null ||
+      (Number.isSafeInteger(row.versionNo) && Number(row.versionNo) > 0)) &&
+    (row.status === null || typeof row.status === "string") &&
+    ["effectiveFrom", "effectiveTo"].every(
+      (key) =>
+        row[key] === null ||
+        (typeof row[key] === "string" && isIsoCalendarDate(row[key] as string)),
+    ) &&
+    (row.recordedAt === null ||
+      (typeof row.recordedAt === "string" &&
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(row.recordedAt)))
+  );
 }
 
 export interface PayRunCalculationSourceSnapshot {
@@ -323,7 +491,15 @@ export interface PayRunCalculationSourceSnapshot {
   }[];
   compensationPackages: CompensationPackageAssignmentSource[];
   employerAssignments: EmployerAssignmentSource[];
-  assignmentRunPolicies: { id: string; employeePartyId: string; employmentId: string | null; componentId: string; policy: string; from: string; to: string | null }[];
+  assignmentRunPolicies: {
+    id: string;
+    employeePartyId: string;
+    employmentId: string | null;
+    componentId: string;
+    policy: string;
+    from: string;
+    to: string | null;
+  }[];
   /** Exact component assessability versions consumed by earning lines at pay date. */
   payComponentStatutoryTreatments: ComponentStatutoryTreatmentSource[];
   historicalEmploymentRoster: HistoricalEmploymentRosterSource[];
@@ -357,50 +533,91 @@ export interface PayRunCalculationSourceSnapshot {
  * Calculate changes which account the settlement lines post to.
  */
 export type EntitlementSettlementPlanSource = {
-  planId: string; planActive: boolean; liabilityAccountId: string | null;
-  accrualComponentId: string | null; accrualLiabilityAccountId: string | null;
+  planId: string;
+  planActive: boolean;
+  liabilityAccountId: string | null;
+  accrualComponentId: string | null;
+  accrualLiabilityAccountId: string | null;
 };
 
-export function isEntitlementSettlementPlanSource(value: unknown): value is EntitlementSettlementPlanSource {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+export function isEntitlementSettlementPlanSource(
+  value: unknown,
+): value is EntitlementSettlementPlanSource {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  return isUuid(row.planId) && typeof row.planActive === 'boolean'
-    && ['liabilityAccountId', 'accrualComponentId', 'accrualLiabilityAccountId'].every(key => row[key] === null || isUuid(row[key]));
+  return (
+    isUuid(row.planId) &&
+    typeof row.planActive === "boolean" &&
+    ["liabilityAccountId", "accrualComponentId", "accrualLiabilityAccountId"].every(
+      (key) => row[key] === null || isUuid(row[key]),
+    )
+  );
 }
 
 export type UsFilingAccountLineageSource = {
-  id: string; filingAccountId: string; federalAccountId: string; subsidiaryId: string;
-  effectiveFrom: string; effectiveTo: string | null; sourceReference: string; updatedAt: string;
+  id: string;
+  filingAccountId: string;
+  federalAccountId: string;
+  subsidiaryId: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  sourceReference: string;
+  updatedAt: string;
 };
 
-export function isUsFilingAccountLineageSource(value: unknown): value is UsFilingAccountLineageSource {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+export function isUsFilingAccountLineageSource(
+  value: unknown,
+): value is UsFilingAccountLineageSource {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  return ['id', 'filingAccountId', 'federalAccountId', 'subsidiaryId'].every(key => isUuid(row[key]))
-    && isIsoCalendarDate(row.effectiveFrom)
-    && (row.effectiveTo === null || isIsoCalendarDate(row.effectiveTo) && row.effectiveTo >= row.effectiveFrom)
-    && typeof row.sourceReference === 'string' && row.sourceReference.trim().length > 0 && row.sourceReference.length <= 2000
-    && typeof row.updatedAt === 'string' && Number.isFinite(Date.parse(row.updatedAt));
+  return (
+    ["id", "filingAccountId", "federalAccountId", "subsidiaryId"].every((key) =>
+      isUuid(row[key]),
+    ) &&
+    isIsoCalendarDate(row.effectiveFrom) &&
+    (row.effectiveTo === null ||
+      (isIsoCalendarDate(row.effectiveTo) && row.effectiveTo >= row.effectiveFrom)) &&
+    typeof row.sourceReference === "string" &&
+    row.sourceReference.trim().length > 0 &&
+    row.sourceReference.length <= 2000 &&
+    typeof row.updatedAt === "string" &&
+    Number.isFinite(Date.parse(row.updatedAt))
+  );
 }
 
 /** One treatment version as current calculation captures it. */
 export type ComponentStatutoryTreatmentSource = {
-  id: string; componentId: string; workerCompGroupId: string | null; employeeWorkerCompGroupId: string | null;
-  effectiveFrom: string; effectiveTo: string | null; programExclusions: string[]; vacationable: boolean;
+  id: string;
+  componentId: string;
+  workerCompGroupId: string | null;
+  employeeWorkerCompGroupId: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  programExclusions: string[];
+  vacationable: boolean;
 };
 
 /** Validate the complete component treatment consumed by calculation. */
 export function isComponentStatutoryTreatmentSource(value: unknown): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
-  return ['id', 'componentId'].every(key => typeof row[key] === 'string' && isUuid(row[key] as string))
-    && ['workerCompGroupId', 'employeeWorkerCompGroupId'].every(key =>
-      row[key] === null || typeof row[key] === 'string' && isUuid(row[key] as string))
-    && typeof row.effectiveFrom === 'string' && isIsoCalendarDate(row.effectiveFrom)
-    && (row.effectiveTo === null || typeof row.effectiveTo === 'string'
-      && isIsoCalendarDate(row.effectiveTo) && row.effectiveTo >= row.effectiveFrom)
-    && Array.isArray(row.programExclusions) && row.programExclusions.every(key => typeof key === 'string')
-    && typeof row.vacationable === 'boolean';
+  return (
+    ["id", "componentId"].every(
+      (key) => typeof row[key] === "string" && isUuid(row[key] as string),
+    ) &&
+    ["workerCompGroupId", "employeeWorkerCompGroupId"].every(
+      (key) => row[key] === null || (typeof row[key] === "string" && isUuid(row[key] as string)),
+    ) &&
+    typeof row.effectiveFrom === "string" &&
+    isIsoCalendarDate(row.effectiveFrom) &&
+    (row.effectiveTo === null ||
+      (typeof row.effectiveTo === "string" &&
+        isIsoCalendarDate(row.effectiveTo) &&
+        row.effectiveTo >= row.effectiveFrom)) &&
+    Array.isArray(row.programExclusions) &&
+    row.programExclusions.every((key) => typeof key === "string") &&
+    typeof row.vacationable === "boolean"
+  );
 }
 
 /** Lock the dated group authority and policy rows before producing the source snapshot. */
@@ -522,13 +739,13 @@ export function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   const record = value as Record<string, unknown>;
-  return `{${Object.keys(record).sort().map((key) =>
-    `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`;
 }
 
-export function payRunCalculationSourceDigest(
-  snapshot: PayRunCalculationSourceSnapshot,
-): string {
+export function payRunCalculationSourceDigest(snapshot: PayRunCalculationSourceSnapshot): string {
   return createHash("sha256").update(canonicalJson(snapshot)).digest("hex");
 }
 
@@ -537,31 +754,52 @@ export function parsePayRunCalculationSource(
 ): PayRunCalculationSourceSnapshot | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const snapshot = value as Partial<PayRunCalculationSourceSnapshot>;
-  if (snapshot.version !== 2
-      || !isHolidayFactsSource(snapshot.holidayFacts)
-      || !Array.isArray(snapshot.timeEntries)
-      || !Array.isArray(snapshot.timeTypes)
-      || !Array.isArray(snapshot.payRates)
-      || !Array.isArray(snapshot.claimEntryIds)
-      || !Array.isArray(snapshot.itemAccounts)
-      || !Array.isArray(snapshot.compensationPackages)
-      || !Array.isArray(snapshot.assignmentRunPolicies)
-      || !Array.isArray(snapshot.historicalEmploymentRoster)
-      || !Array.isArray(snapshot.employerAssignments)
-      || !Array.isArray(snapshot.holidayObligations)
-      || !Array.isArray(snapshot.bonusIncomeReferences)
-      || (!Array.isArray(snapshot.payComponentStatutoryTreatments) || snapshot.payComponentStatutoryTreatments.some(row => !isComponentStatutoryTreatmentSource(row)))
-      || (!Array.isArray(snapshot.holidayEmployments) || snapshot.holidayEmployments.some(row => !isHolidayEmploymentSource(row)))
-      || (!Array.isArray(snapshot.incomeTaxOverrides) || snapshot.incomeTaxOverrides.some(row => !isIncomeTaxOverrideSource(row)))
-      || (!Array.isArray(snapshot.bankCashInputs) || snapshot.bankCashInputs.some(row => !isBankCashInputSource(row)))
-      || (!Array.isArray(snapshot.employerLevyAdjustments) || snapshot.employerLevyAdjustments.some(row => !isEmployerLevyAdjustmentSource(row)))
-      || (!Array.isArray(snapshot.declaredVacationAccruals) || snapshot.declaredVacationAccruals.some(row => !isDeclaredVacationAccrualSource(row)))
-      || (!Array.isArray(snapshot.openingEmployerAuthorities) || snapshot.openingEmployerAuthorities.some(row => !isOpeningEmployerAuthoritySource(row)))
-      || (!Array.isArray(snapshot.usFilingAccountLineages) || snapshot.usFilingAccountLineages.some(row => !isUsFilingAccountLineageSource(row)))
-      || (!Array.isArray(snapshot.openingLevySourceAuthorities) || snapshot.openingLevySourceAuthorities.some(row => !isOpeningLevySourceAuthoritySource(row)))
-      || (!Array.isArray(snapshot.openingBalanceSources) || snapshot.openingBalanceSources.some(row => !isOpeningBalanceSourceState(row)))
-      || (!Array.isArray(snapshot.entitlementSettlementPlans) || snapshot.entitlementSettlementPlans.some(row => !isEntitlementSettlementPlanSource(row)))
-      || snapshot.payRates.some(row => !row || !Number.isSafeInteger(row.payrollRateScale) || typeof row.payrollAmountRounding !== "string")) return null;
+  if (
+    snapshot.version !== 2 ||
+    !isHolidayFactsSource(snapshot.holidayFacts) ||
+    !Array.isArray(snapshot.timeEntries) ||
+    !Array.isArray(snapshot.timeTypes) ||
+    !Array.isArray(snapshot.payRates) ||
+    !Array.isArray(snapshot.claimEntryIds) ||
+    !Array.isArray(snapshot.itemAccounts) ||
+    !Array.isArray(snapshot.compensationPackages) ||
+    !Array.isArray(snapshot.assignmentRunPolicies) ||
+    !Array.isArray(snapshot.historicalEmploymentRoster) ||
+    !Array.isArray(snapshot.employerAssignments) ||
+    !Array.isArray(snapshot.holidayObligations) ||
+    !Array.isArray(snapshot.bonusIncomeReferences) ||
+    !Array.isArray(snapshot.payComponentStatutoryTreatments) ||
+    snapshot.payComponentStatutoryTreatments.some(
+      (row) => !isComponentStatutoryTreatmentSource(row),
+    ) ||
+    !Array.isArray(snapshot.holidayEmployments) ||
+    snapshot.holidayEmployments.some((row) => !isHolidayEmploymentSource(row)) ||
+    !Array.isArray(snapshot.incomeTaxOverrides) ||
+    snapshot.incomeTaxOverrides.some((row) => !isIncomeTaxOverrideSource(row)) ||
+    !Array.isArray(snapshot.bankCashInputs) ||
+    snapshot.bankCashInputs.some((row) => !isBankCashInputSource(row)) ||
+    !Array.isArray(snapshot.employerLevyAdjustments) ||
+    snapshot.employerLevyAdjustments.some((row) => !isEmployerLevyAdjustmentSource(row)) ||
+    !Array.isArray(snapshot.declaredVacationAccruals) ||
+    snapshot.declaredVacationAccruals.some((row) => !isDeclaredVacationAccrualSource(row)) ||
+    !Array.isArray(snapshot.openingEmployerAuthorities) ||
+    snapshot.openingEmployerAuthorities.some((row) => !isOpeningEmployerAuthoritySource(row)) ||
+    !Array.isArray(snapshot.usFilingAccountLineages) ||
+    snapshot.usFilingAccountLineages.some((row) => !isUsFilingAccountLineageSource(row)) ||
+    !Array.isArray(snapshot.openingLevySourceAuthorities) ||
+    snapshot.openingLevySourceAuthorities.some((row) => !isOpeningLevySourceAuthoritySource(row)) ||
+    !Array.isArray(snapshot.openingBalanceSources) ||
+    snapshot.openingBalanceSources.some((row) => !isOpeningBalanceSourceState(row)) ||
+    !Array.isArray(snapshot.entitlementSettlementPlans) ||
+    snapshot.entitlementSettlementPlans.some((row) => !isEntitlementSettlementPlanSource(row)) ||
+    snapshot.payRates.some(
+      (row) =>
+        !row ||
+        !Number.isSafeInteger(row.payrollRateScale) ||
+        typeof row.payrollAmountRounding !== "string",
+    )
+  )
+    return null;
   return snapshot as PayRunCalculationSourceSnapshot;
 }
 

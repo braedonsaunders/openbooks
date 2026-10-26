@@ -98,14 +98,9 @@ const connectionId = args.get("connection")?.trim() || null;
 if (connectionId && !isUuid(connectionId)) {
   throw new Error("--connection must be a UUID");
 }
-const requestedSourceAccountingBook =
-  args.get("source-accounting-book")?.trim() || null;
-const fieldTicketSourceSystem =
-  args.get("field-ticket-source-system")?.trim() || null;
-if (
-  fieldTicketSourceSystem &&
-  !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(fieldTicketSourceSystem)
-) {
+const requestedSourceAccountingBook = args.get("source-accounting-book")?.trim() || null;
+const fieldTicketSourceSystem = args.get("field-ticket-source-system")?.trim() || null;
+if (fieldTicketSourceSystem && !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(fieldTicketSourceSystem)) {
   throw new Error("--field-ticket-source-system must be a stable connector id");
 }
 const sourceMetadataKey = args.get("source-metadata-key")?.trim() || "source";
@@ -121,16 +116,10 @@ if (financialAsOf && !/^\d{4}-\d{2}-\d{2}$/.test(financialAsOf)) {
   throw new Error("--as-of must be YYYY-MM-DD");
 }
 const projectConcurrency = Number(args.get("project-concurrency") ?? "8");
-if (
-  !Number.isInteger(projectConcurrency) ||
-  projectConcurrency < 1 ||
-  projectConcurrency > 16
-) {
+if (!Number.isInteger(projectConcurrency) || projectConcurrency < 1 || projectConcurrency > 16) {
   throw new Error("--project-concurrency must be an integer from 1 through 16");
 }
-const maxSourceAgeMinutes = Number(
-  args.get("max-source-age-minutes") ?? "1440",
-);
+const maxSourceAgeMinutes = Number(args.get("max-source-age-minutes") ?? "1440");
 if (
   !Number.isFinite(maxSourceAgeMinutes) ||
   maxSourceAgeMinutes < 5 ||
@@ -139,11 +128,7 @@ if (
   throw new Error("--max-source-age-minutes must be from 5 through 1440");
 }
 const maxSyncLagMinutes = Number(args.get("max-sync-lag-minutes") ?? "1440");
-if (
-  !Number.isFinite(maxSyncLagMinutes) ||
-  maxSyncLagMinutes < 5 ||
-  maxSyncLagMinutes > 10_080
-) {
+if (!Number.isFinite(maxSyncLagMinutes) || maxSyncLagMinutes < 5 || maxSyncLagMinutes > 10_080) {
   throw new Error("--max-sync-lag-minutes must be from 5 through 10080");
 }
 const certificateStartedAt = new Date();
@@ -151,24 +136,17 @@ const certificateStartedAt = new Date();
 const paths = {
   sourceProjects: args.get("source-projects") ?? "/tmp/parity-ns-projects.json",
   sourceInvoices: args.get("source-invoices") ?? "/tmp/parity-ns-invoices.json",
-  sourceInvoiceLines:
-    args.get("source-invoice-lines") ?? "/tmp/parity-source-invoice-lines.json",
-  sourceProjectGl:
-    args.get("source-project-gl") ??
-    "/tmp/parity-ns-project-account-totals.json",
-  fieldTicketHeaders:
-    args.get("field-ticket-headers") ?? "/tmp/ft-head.tsv",
+  sourceInvoiceLines: args.get("source-invoice-lines") ?? "/tmp/parity-source-invoice-lines.json",
+  sourceProjectGl: args.get("source-project-gl") ?? "/tmp/parity-ns-project-account-totals.json",
+  fieldTicketHeaders: args.get("field-ticket-headers") ?? "/tmp/ft-head.tsv",
   fieldTicketCrew: args.get("field-ticket-crew") ?? "/tmp/ft-rows.tsv",
-  sourceProjectFinancials:
-    args.get("project-financials") ?? "/tmp/project-financials.json",
+  sourceProjectFinancials: args.get("project-financials") ?? "/tmp/project-financials.json",
   sourceSnapshot:
     args.get("source-snapshot") ??
     `${args.get("source-projects") ?? "/tmp/parity-ns-projects.json"}.snapshot.json`,
   out:
     args.get("out") ??
-    `/tmp/openbooks-project-parity-${orgId}-${new Date()
-      .toISOString()
-      .replace(/[:.]/g, "-")}.json`,
+    `/tmp/openbooks-project-parity-${orgId}-${new Date().toISOString().replace(/[:.]/g, "-")}.json`,
 };
 
 interface SourceSnapshotManifest {
@@ -269,18 +247,11 @@ function normalizeTargetAccountType(value: unknown): string {
   return raw;
 }
 
-function addAmount(
-  map: Map<string, bigint>,
-  key: string,
-  amount: unknown,
-): void {
+function addAmount(map: Map<string, bigint>, key: string, amount: unknown): void {
   map.set(key, (map.get(key) ?? 0n) + toUnits(String(amount ?? "0")));
 }
 
-function duplicateKeys(
-  rows: JsonRow[],
-  key: (row: JsonRow) => string,
-): Set<string> {
+function duplicateKeys(rows: JsonRow[], key: (row: JsonRow) => string): Set<string> {
   const seen = new Set<string>();
   const duplicate = new Set<string>();
   for (const row of rows) {
@@ -307,17 +278,12 @@ async function mapConcurrent<T, R>(
     }
   };
   await Promise.all(
-    Array.from(
-      { length: Math.min(concurrency, Math.max(rows.length, 1)) },
-      () => worker(),
-    ),
+    Array.from({ length: Math.min(concurrency, Math.max(rows.length, 1)) }, () => worker()),
   );
   return results;
 }
 
-async function refreshProjectGlSource(
-  client = sourceClient(),
-): Promise<string> {
+async function refreshProjectGlSource(client = sourceClient()): Promise<string> {
   // transactionline.netamount is not the posted amount for every source
   // special item. For example, a posting Markup line can carry foreignamount
   // while netamount is zero; transactionaccountingline is the authoritative
@@ -335,11 +301,7 @@ async function refreshProjectGlSource(
       group by tal.accountingbook, tl.entity, a.accttype`,
   );
   const books = [
-    ...new Set(
-      projectGlByBook
-        .map((row) => String(row.accountingbook ?? ""))
-        .filter(Boolean),
-    ),
+    ...new Set(projectGlByBook.map((row) => String(row.accountingbook ?? "")).filter(Boolean)),
   ].sort();
   const sourceAccountingBook =
     requestedSourceAccountingBook ?? (books.length === 1 ? books[0]! : null);
@@ -360,9 +322,7 @@ async function refreshProjectGlSource(
   writeFileSync(
     paths.sourceProjectGl,
     JSON.stringify(
-      projectGlByBook.filter(
-        (row) => String(row.accountingbook) === sourceAccountingBook,
-      ),
+      projectGlByBook.filter((row) => String(row.accountingbook) === sourceAccountingBook),
     ),
   );
   return sourceAccountingBook;
@@ -430,14 +390,9 @@ function parseFieldTicketHeaders(path: string): JsonRow[] | null {
     }));
 }
 
-function parseFieldTicketCrew(
-  path: string,
-  tickets: JsonRow[] | null,
-): Map<string, bigint> | null {
+function parseFieldTicketCrew(path: string, tickets: JsonRow[] | null): Map<string, bigint> | null {
   if (!existsSync(path) || !tickets) return null;
-  const ticketBegin = new Map(
-    tickets.map((ticket) => [String(ticket.id), String(ticket.begin)]),
-  );
+  const ticketBegin = new Map(tickets.map((ticket) => [String(ticket.id), String(ticket.begin)]));
   const cells = new Map<string, bigint>();
   for (const line of readFileSync(path, "utf8").split(/\r?\n/)) {
     const columns = line.split("\t");
@@ -479,24 +434,18 @@ const sourceInvoiceLines = readJson(paths.sourceInvoiceLines);
 const sourceProjectGl = readJson(paths.sourceProjectGl);
 const sourceInvoicesWithLedgerImpact = new Set(
   (sourceInvoiceLines ?? [])
-    .filter(
-      (row) => {
-        const sourceAmount =
-          row.foreignamount != null && String(row.foreignamount) !== ""
-            ? row.foreignamount
-            : row.netamount;
-        return toUnits(String(sourceAmount ?? "0")) !== 0n;
-      },
-    )
+    .filter((row) => {
+      const sourceAmount =
+        row.foreignamount != null && String(row.foreignamount) !== ""
+          ? row.foreignamount
+          : row.netamount;
+      return toUnits(String(sourceAmount ?? "0")) !== 0n;
+    })
     .map((row) => String(row.transaction)),
 );
 const sourceAccountingBooks = sourceProjectGl
   ? [
-      ...new Set(
-        sourceProjectGl
-          .map((row) => String(row.accountingbook ?? ""))
-          .filter(Boolean),
-      ),
+      ...new Set(sourceProjectGl.map((row) => String(row.accountingbook ?? "")).filter(Boolean)),
     ].sort()
   : [];
 if (sourceAccountingBooks.length > 1) {
@@ -515,9 +464,7 @@ if ((fieldTicketHeaders || fieldTicketCrew) && !fieldTicketSourceSystem) {
   );
 }
 const sourceSnapshot = existsSync(paths.sourceSnapshot)
-  ? (JSON.parse(
-      readFileSync(paths.sourceSnapshot, "utf8"),
-    ) as SourceSnapshotManifest)
+  ? (JSON.parse(readFileSync(paths.sourceSnapshot, "utf8")) as SourceSnapshotManifest)
   : null;
 
 const target = await withOrgContext(orgId, async () => {
@@ -711,12 +658,8 @@ const target = await withOrgContext(orgId, async () => {
     tickets: (tickets as unknown as { rows: JsonRow[] }).rows,
     projectGl: (projectGl as unknown as { rows: JsonRow[] }).rows,
     ticketCrew: (ticketCrew as unknown as { rows: JsonRow[] }).rows,
-    latestSuccessfulSync: (
-      latestSuccessfulSync as unknown as { rows: JsonRow[] }
-    ).rows[0] ?? null,
-    latestSyncAttempt: (
-      latestSyncAttempt as unknown as { rows: JsonRow[] }
-    ).rows[0] ?? null,
+    latestSuccessfulSync: (latestSuccessfulSync as unknown as { rows: JsonRow[] }).rows[0] ?? null,
+    latestSyncAttempt: (latestSyncAttempt as unknown as { rows: JsonRow[] }).rows[0] ?? null,
   };
 });
 
@@ -728,14 +671,9 @@ const gates: Record<string, GateResult> = {};
 {
   const success = target.latestSuccessfulSync;
   const latest = target.latestSyncAttempt;
-  const completedAt = success
-    ? Date.parse(String(success.finished_at ?? ""))
-    : Number.NaN;
+  const completedAt = success ? Date.parse(String(success.finished_at ?? "")) : Number.NaN;
   const lagMinutes = Number.isFinite(completedAt)
-    ? Math.max(
-        0,
-        (certificateStartedAt.getTime() - completedAt) / 60_000,
-      )
+    ? Math.max(0, (certificateStartedAt.getTime() - completedAt) / 60_000)
     : Number.POSITIVE_INFINITY;
   const stats = (success?.stats ?? null) as JsonRow | null;
   const exactVerificationSection = (key: string): boolean => {
@@ -753,9 +691,7 @@ const gates: Record<string, GateResult> = {};
     exactVerificationSection("periods") &&
     exactVerificationSection("projectPeriods");
   const latestAttemptSucceeded =
-    latest !== null &&
-    String(latest.status) === "ok" &&
-    String(latest.id) === String(success?.id);
+    latest !== null && String(latest.status) === "ok" && String(latest.id) === String(success?.id);
   const problems: string[] = [];
   if (!success) problems.push("no successful accounting-connector watermark");
   if (success && !successfulEvidenceIsExact) {
@@ -767,9 +703,7 @@ const gates: Record<string, GateResult> = {};
     );
   }
   if (latest && !latestAttemptSucceeded) {
-    problems.push(
-      `latest connector attempt ${String(latest.id)} is ${String(latest.status)}`,
-    );
+    problems.push(`latest connector attempt ${String(latest.id)} is ${String(latest.status)}`);
   }
   gates.connectorWatermark = {
     status: problems.length === 0 ? "exact" : "unproven",
@@ -815,9 +749,7 @@ const gates: Record<string, GateResult> = {};
         // A capture entry for a file that has since vanished is tampering,
         // not absence.
         if (artifact) {
-          artifactProblems.push(
-            `${key} was captured at ${artifact.path} but is now missing`,
-          );
+          artifactProblems.push(`${key} was captured at ${artifact.path} but is now missing`);
         }
         continue;
       }
@@ -838,33 +770,19 @@ const gates: Record<string, GateResult> = {};
       snapshotTimes[1]! < snapshotTimes[0]!
     ) {
       artifactProblems.push("invalid source snapshot observation window");
-    } else if (
-      certificateStartedAt.getTime() - snapshotTimes[1]! >
-      maxSourceAgeMinutes * 60_000
-    ) {
-      artifactProblems.push(
-        `source snapshot is older than ${maxSourceAgeMinutes} minutes`,
-      );
+    } else if (certificateStartedAt.getTime() - snapshotTimes[1]! > maxSourceAgeMinutes * 60_000) {
+      artifactProblems.push(`source snapshot is older than ${maxSourceAgeMinutes} minutes`);
     }
   }
 
-  const sourceProjectIds = new Set(
-    sourceProjects?.map((row) => String(row.id)) ?? [],
-  );
+  const sourceProjectIds = new Set(sourceProjects?.map((row) => String(row.id)) ?? []);
   const financialProjectIds = new Set(
     sourceProjectFinancials?.map((row) => String(row.job ?? "")) ?? [],
   );
   const financialFetchedTimes =
-    sourceProjectFinancials?.map((row) =>
-      Date.parse(String(row.fetchedAt ?? "")),
-    ) ?? [];
-  if (
-    sourceProjectFinancials &&
-    financialProjectIds.size !== sourceProjectFinancials.length
-  ) {
-    artifactProblems.push(
-      "project-financial artifact contains duplicate identities",
-    );
+    sourceProjectFinancials?.map((row) => Date.parse(String(row.fetchedAt ?? ""))) ?? [];
+  if (sourceProjectFinancials && financialProjectIds.size !== sourceProjectFinancials.length) {
+    artifactProblems.push("project-financial artifact contains duplicate identities");
   }
   if (
     sourceProjects &&
@@ -881,9 +799,7 @@ const gates: Record<string, GateResult> = {};
     (financialFetchedTimes.length === 0 ||
       financialFetchedTimes.some((value) => !Number.isFinite(value)))
   ) {
-    artifactProblems.push(
-      "project-financial artifact lacks a valid fetchedAt for every project",
-    );
+    artifactProblems.push("project-financial artifact lacks a valid fetchedAt for every project");
   } else if (
     sourceSnapshot &&
     financialFetchedTimes.length > 0 &&
@@ -902,15 +818,12 @@ const gates: Record<string, GateResult> = {};
   }
   // Both counts derive from the same consumed list the comparison reads —
   // never a hand-kept subset — so the claim below cannot drift from it.
-  const consumedCount = consumed.filter(
-    (file) => file.sha256 !== null,
-  ).length;
+  const consumedCount = consumed.filter((file) => file.sha256 !== null).length;
   gates.sourceSnapshotCoherence = {
     status: artifactProblems.length === 0 ? "exact" : "unproven",
     sourceCount: consumedCount,
     targetCount: verifiedArtifacts.length,
-    exactCount:
-      artifactProblems.length === 0 ? verifiedArtifacts.length : null,
+    exactCount: artifactProblems.length === 0 ? verifiedArtifacts.length : null,
     mismatchCount: artifactProblems.length,
     detail:
       artifactProblems.length === 0
@@ -936,18 +849,12 @@ if (!sourceProjects) {
   // unproven, never agreement.
   gates.projectIdentity = emptyPopulationGate(target.projects.length, paths.sourceProjects);
 } else {
-  const sourceById = new Map(
-    sourceProjects.map((row) => [String(row.id), row]),
-  );
+  const sourceById = new Map(sourceProjects.map((row) => [String(row.id), row]));
   const targetBySourceId = new Map(
-    target.projects
-      .filter((row) => row.source_id)
-      .map((row) => [String(row.source_id), row]),
+    target.projects.filter((row) => row.source_id).map((row) => [String(row.source_id), row]),
   );
   const sourceDupes = duplicateKeys(sourceProjects, (row) => String(row.id));
-  const targetDupes = duplicateKeys(target.projects, (row) =>
-    String(row.source_id ?? ""),
-  );
+  const targetDupes = duplicateKeys(target.projects, (row) => String(row.source_id ?? ""));
   const mismatchedSourceRefs = new Set<string>();
   for (const [sourceRef] of sourceById) {
     const found = targetBySourceId.get(sourceRef);
@@ -967,9 +874,7 @@ if (!sourceProjects) {
       ["name", sourceById.get(sourceRef)?.companyname, found.name],
       [
         "is_active",
-        String(sourceById.get(sourceRef)?.isinactive) === "T"
-          ? "false"
-          : "true",
+        String(sourceById.get(sourceRef)?.isinactive) === "T" ? "false" : "true",
         String(found.is_active),
       ],
     ] as const) {
@@ -1023,9 +928,7 @@ if (!sourceInvoices) {
   gates.invoiceHeadersAndTotals = emptyPopulationGate(target.invoices.length, paths.sourceInvoices);
 } else {
   const targetBySourceId = new Map(
-    target.invoices
-      .filter((row) => row.source_id)
-      .map((row) => [String(row.source_id), row]),
+    target.invoices.filter((row) => row.source_id).map((row) => [String(row.source_id), row]),
   );
   let exact = 0;
   for (const source of sourceInvoices) {
@@ -1043,21 +946,9 @@ if (!sourceInvoices) {
     }
     let invoiceExact = true;
     const fields: Array<[string, string, string]> = [
-      [
-        "document_number",
-        String(source.tranid ?? sourceRef),
-        String(found.document_number ?? ""),
-      ],
-      [
-        "document_date",
-        canonicalSourceDate(source.trandate),
-        String(found.document_date ?? ""),
-      ],
-      [
-        "party",
-        String(source.entity ?? ""),
-        String(found.source_party_id ?? ""),
-      ],
+      ["document_number", String(source.tranid ?? sourceRef), String(found.document_number ?? "")],
+      ["document_date", canonicalSourceDate(source.trandate), String(found.document_date ?? "")],
+      ["party", String(source.entity ?? ""), String(found.source_party_id ?? "")],
       [
         "status",
         String(source.voided).toUpperCase() === "T"
@@ -1067,11 +958,7 @@ if (!sourceInvoices) {
             : "approved",
         String(found.status ?? ""),
       ],
-      [
-        "total",
-        canonicalMoney(source.foreigntotal),
-        canonicalMoney(found.total),
-      ],
+      ["total", canonicalMoney(source.foreigntotal), canonicalMoney(found.total)],
       [
         "open_balance",
         canonicalMoney(source.foreignamountunpaid),
@@ -1122,7 +1009,10 @@ if (!sourceProjectGl) {
     detail: `missing ${paths.sourceProjectGl}`,
   };
 } else if (isEmptyPopulation(sourceProjectGl)) {
-  gates.projectGlByAccountCategory = emptyPopulationGate(target.projectGl.length, paths.sourceProjectGl);
+  gates.projectGlByAccountCategory = emptyPopulationGate(
+    target.projectGl.length,
+    paths.sourceProjectGl,
+  );
 } else {
   const sourceAmounts = new Map<string, bigint>();
   for (const row of sourceProjectGl) {
@@ -1166,9 +1056,7 @@ if (!sourceProjectGl) {
       target: fromUnits(targetAmount),
     });
   }
-  const targetOnlyCount = [...targetAmounts.keys()].filter(
-    (key) => !sourceAmounts.has(key),
-  ).length;
+  const targetOnlyCount = [...targetAmounts.keys()].filter((key) => !sourceAmounts.has(key)).length;
   gates.projectGlByAccountCategory = {
     status: exact === keys.size ? "exact" : "different",
     sourceCount: sourceAmounts.size,
@@ -1194,18 +1082,13 @@ if (!fieldTicketHeaders) {
   gates.fieldTicketHeaders = emptyPopulationGate(target.tickets.length, paths.fieldTicketHeaders);
 } else {
   const bySourceId = new Map(
-    target.tickets
-      .filter((row) => row.source_id)
-      .map((row) => [String(row.source_id), row]),
+    target.tickets.filter((row) => row.source_id).map((row) => [String(row.source_id), row]),
   );
-  const byNumber = new Map(
-    target.tickets.map((row) => [String(row.document_number), row]),
-  );
+  const byNumber = new Map(target.tickets.map((row) => [String(row.document_number), row]));
   let exact = 0;
   for (const ticket of fieldTicketHeaders) {
     const sourceRef = String(ticket.id);
-    const targetTicket =
-      bySourceId.get(sourceRef) ?? byNumber.get(String(ticket.number));
+    const targetTicket = bySourceId.get(sourceRef) ?? byNumber.get(String(ticket.number));
     if (!targetTicket) {
       differences.push({
         layer: "field_ticket_header",
@@ -1246,9 +1129,7 @@ const sourceFinancialCount = sourceProjectFinancials?.length ?? null;
 if (sourceProjectFinancials && sourceProjectCount !== null && sourceProjectFinancials.length > 0) {
   const availableFinancialCount = sourceProjectFinancials.length;
   const targetBySourceProject = new Map(
-    target.projects
-      .filter((row) => row.source_id)
-      .map((row) => [String(row.source_id), row]),
+    target.projects.filter((row) => row.source_id).map((row) => [String(row.source_id), row]),
   );
   const comparisonResults = await mapConcurrent(
     sourceProjectFinancials,
@@ -1268,11 +1149,7 @@ if (sourceProjectFinancials && sourceProjectCount !== null && sourceProjectFinan
         return { exact: false, differences: projectDifferences };
       }
       const { projectType, financials } = await retry(async () => {
-        const resolvedProjectType = await loadProjectType(
-          orgId,
-          String(project.id),
-          financialAsOf,
-        );
+        const resolvedProjectType = await loadProjectType(orgId, String(project.id), financialAsOf);
         return {
           projectType: resolvedProjectType,
           financials: await resolveProjectFinancials(
@@ -1301,26 +1178,10 @@ if (sourceProjectFinancials && sourceProjectCount !== null && sourceProjectFinan
       };
       let exact = true;
       const measures: Array<[string, string, string]> = [
-        [
-          "total_cost",
-          sourceCost,
-          canonicalMoney(financials.measures.total_cost),
-        ],
-        [
-          "total_price",
-          sourcePrice,
-          canonicalMoney(financials.measures.total_price),
-        ],
-        [
-          "invoiced_to_date",
-          sourceInvoiced,
-          canonicalMoney(financials.measures.invoiced_to_date),
-        ],
-        [
-          "gross_profit",
-          sourceGrossProfit,
-          canonicalMoney(financials.measures.gross_profit),
-        ],
+        ["total_cost", sourceCost, canonicalMoney(financials.measures.total_cost)],
+        ["total_price", sourcePrice, canonicalMoney(financials.measures.total_price)],
+        ["invoiced_to_date", sourceInvoiced, canonicalMoney(financials.measures.invoiced_to_date)],
+        ["gross_profit", sourceGrossProfit, canonicalMoney(financials.measures.gross_profit)],
       ];
       if (source.couldBeInvoiced != null) {
         measures.push([
@@ -1359,12 +1220,7 @@ if (sourceProjectFinancials && sourceProjectCount !== null && sourceProjectFinan
   const availableMismatches = availableFinancialCount - exactProjects;
   const completePopulation = availableFinancialCount === sourceProjectCount;
   gates.sourceProjectFinancialMeasures = {
-    status:
-      availableMismatches > 0
-        ? "different"
-        : completePopulation
-          ? "exact"
-          : "unproven",
+    status: availableMismatches > 0 ? "different" : completePopulation ? "exact" : "unproven",
     sourceCount: availableFinancialCount,
     targetCount: target.projects.length,
     exactCount: exactProjects,
@@ -1401,8 +1257,7 @@ if (!sourceInvoiceLines) {
 } else {
   const sourceDetail = sourceInvoiceLines.filter(
     (row) =>
-      String(row.mainline).toUpperCase() === "F" &&
-      String(row.taxline).toUpperCase() === "F",
+      String(row.mainline).toUpperCase() === "F" && String(row.taxline).toUpperCase() === "F",
   );
   const sourceByKey = new Map<string, JsonRow>();
   const expectedLineNumber = new Map<string, number>();
@@ -1471,16 +1326,12 @@ if (!sourceInvoiceLines) {
       mismatchedSourceLines.add(key);
       continue;
     }
-    const sourceAmountUnits = -toUnits(
-      String(source.foreignamount ?? source.netamount ?? "0"),
-    );
+    const sourceAmountUnits = -toUnits(String(source.foreignamount ?? source.netamount ?? "0"));
     const rawQuantity =
       source.quantity == null || source.quantity === ""
         ? "1.00000000"
         : canonicalDecimal(source.quantity);
-    const quantityMagnitude = rawQuantity.startsWith("-")
-      ? rawQuantity.slice(1)
-      : rawQuantity;
+    const quantityMagnitude = rawQuantity.startsWith("-") ? rawQuantity.slice(1) : rawQuantity;
     const expectedQuantity = /^0(?:\.0+)?$/.test(quantityMagnitude)
       ? "1.00000000"
       : quantityMagnitude;
@@ -1489,26 +1340,16 @@ if (!sourceInvoiceLines) {
       source.rate == null || source.rate === ""
         ? canonicalDecimal(expectedAmount)
         : canonicalDecimal(source.rate);
-    const expectedAccount = String(
-      source.expenseaccount ?? source.account ?? "",
-    );
+    const expectedAccount = String(source.expenseaccount ?? source.account ?? "");
     for (const [field, sourceValue, targetValue] of [
-      [
-        "line_number",
-        String(expectedLineNumber.get(key)),
-        String(found.line_number),
-      ],
+      ["line_number", String(expectedLineNumber.get(key)), String(found.line_number)],
       ["item", String(source.item ?? ""), String(found.source_item_id ?? "")],
       ["account", expectedAccount, String(found.source_account_id ?? "")],
       ["quantity", expectedQuantity, canonicalDecimal(found.quantity)],
       ["unit", String(source.units ?? ""), String(found.unit ?? "")],
       ["unit_price", expectedRate, canonicalDecimal(found.unit_price)],
       ["amount", expectedAmount, canonicalMoney(found.amount)],
-      [
-        "description",
-        String(source.memo ?? ""),
-        String(found.description ?? ""),
-      ],
+      ["description", String(source.memo ?? ""), String(found.description ?? "")],
     ] as const) {
       if (sourceValue === targetValue) continue;
       differences.push({
@@ -1526,25 +1367,18 @@ if (!sourceInvoiceLines) {
   for (const [key, row] of targetByKey) {
     if (sourceByKey.has(key)) continue;
     const documentRef = key.split("|")[0]!;
-    if (
-      String(row.document_status) === "voided" &&
-      !sourceByDocument.has(documentRef)
-    ) {
+    if (String(row.document_status) === "voided" && !sourceByDocument.has(documentRef)) {
       retainedTargetWithIdentity++;
     } else {
       actionableTargetWithIdentity++;
     }
   }
-  const retainedTargetOnlyCount =
-    retainedTargetWithoutIdentity + retainedTargetWithIdentity;
-  const actionableTargetOnlyCount =
-    actionableTargetWithoutIdentity + actionableTargetWithIdentity;
+  const retainedTargetOnlyCount = retainedTargetWithoutIdentity + retainedTargetWithIdentity;
+  const actionableTargetOnlyCount = actionableTargetWithoutIdentity + actionableTargetWithIdentity;
   const targetOnlyCount = retainedTargetOnlyCount + actionableTargetOnlyCount;
   gates.invoiceLines = {
     status:
-      mismatchedSourceLines.size === 0 && actionableTargetOnlyCount === 0
-        ? "exact"
-        : "different",
+      mismatchedSourceLines.size === 0 && actionableTargetOnlyCount === 0 ? "exact" : "different",
     sourceCount: sourceByKey.size,
     targetCount: target.invoiceLines.length,
     exactCount: sourceByKey.size - mismatchedSourceLines.size,
@@ -1564,7 +1398,10 @@ if (!fieldTicketCrew) {
     detail: `missing ${paths.fieldTicketCrew} or ticket headers`,
   };
 } else if (isEmptyCrewPopulation(fieldTicketCrew)) {
-  gates.fieldTicketCrewAndHours = emptyPopulationGate(target.ticketCrew.length, paths.fieldTicketCrew);
+  gates.fieldTicketCrewAndHours = emptyPopulationGate(
+    target.ticketCrew.length,
+    paths.fieldTicketCrew,
+  );
 } else {
   // The whole target population is compared: rows outside the current source
   // tickets are target-only (counted and mismatched), never dropped.
@@ -1576,9 +1413,7 @@ if (!fieldTicketCrew) {
   gates.fieldTicketCrewAndHours = crewGate;
 }
 
-const strictPassed = Object.values(gates).every(
-  (gate) => gate.status === "exact",
-);
+const strictPassed = Object.values(gates).every((gate) => gate.status === "exact");
 const certificate = {
   schemaVersion: 1,
   runId: randomUUID(),
@@ -1603,16 +1438,13 @@ const certificate = {
       .filter(([key]) => key !== "out")
       .map(([key, path]) => [key, { path, sha256: fileHash(path) }]),
   ),
-  sourceAccountingBook:
-    sourceAccountingBooks[0] ?? requestedSourceAccountingBook,
+  sourceAccountingBook: sourceAccountingBooks[0] ?? requestedSourceAccountingBook,
   gates,
   differences,
 };
 
 writeFileSync(paths.out, JSON.stringify(certificate, null, 2));
-console.log(
-  `organization: ${String(target.org.name)} (${String(target.org.env_kind)})`,
-);
+console.log(`organization: ${String(target.org.name)} (${String(target.org.env_kind)})`);
 for (const [name, gate] of Object.entries(gates)) {
   console.log(
     `${gate.status === "exact" ? "PASS" : gate.status === "different" ? "FAIL" : "UNPROVEN"} ${name}: ` +

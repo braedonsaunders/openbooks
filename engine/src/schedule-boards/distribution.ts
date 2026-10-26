@@ -2,44 +2,48 @@ import {
   schedulePdfLayoutSchema,
   type SchedulePdfLayout,
   automaticScheduleDeliverySchema,
-  richTextDocumentSchema, richTextPlainText, type RichTextDocument,
+  richTextDocumentSchema,
+  richTextPlainText,
+  type RichTextDocument,
 } from "@openbooks/forms-core";
 import { addCalendarDays } from "../platform/civil-date.ts";
 import { roleUsers } from "../organization/role-members.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 /** Reviewed, version-bound schedule reports use native Flows and the durable email outbox. */
-import { createHash, randomUUID } from 'node:crypto';
-import { sql } from 'drizzle-orm';
+import { createHash, randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
 import {
   scheduleDistributionEmail,
   normalizeEmailDeliveryInput,
   isValidEmailAddress,
   emailDeliveryBlockedMessage,
   type ScheduleEmailLine,
-} from '@openbooks/emails';
-import { db, withOrgTransaction } from '../platform/db.ts';
-import { canonicalJson } from '../platform/canonical-json.ts';
-import { isUuid } from '../platform/uuid.ts';
-import { lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts';
-import { subsidiaryVisibleFilter } from '../organization/subsidiary-scope.ts';
+} from "@openbooks/emails";
+import { db, withOrgTransaction } from "../platform/db.ts";
+import { canonicalJson } from "../platform/canonical-json.ts";
+import { isUuid } from "../platform/uuid.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import {
   resolveOrgEmailTransportDetailed,
   readOrgEmailConfigView,
-} from '../delivery/email-config.ts';
-import { enqueueFlowEmail } from '../delivery/outbox-enqueue.ts';
-import { getBoard, boardAuthority, scheduleReportWeekendDays, type ScheduleActor } from './boards.ts';
-import { loadBoardWindow, type BoardWindow } from './window.ts';
-import { ScheduleError, scheduleDatabaseRefusal } from './errors.ts';
+} from "../delivery/email-config.ts";
+import { enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
 import {
-  resolvePeopleAudience,
-  type ScheduleCohort,
-} from "./distribution-audience.ts";
+  getBoard,
+  boardAuthority,
+  scheduleReportWeekendDays,
+  type ScheduleActor,
+} from "./boards.ts";
+import { loadBoardWindow, type BoardWindow } from "./window.ts";
+import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
+import { resolvePeopleAudience, type ScheduleCohort } from "./distribution-audience.ts";
 import { renderSchedulePdf } from "./distribution-report.ts";
 import { dispatchScheduleDistribution } from "./distribution-hooks.ts";
 
 export interface ScheduleAudience {
-  visibility: 'personal' | 'board';
+  visibility: "personal" | "board";
   recipientMode?: "automatic" | "selected" | "combined";
   everyone: boolean;
   subjectIds: readonly string[];
@@ -59,7 +63,7 @@ export interface ScheduleRecipient {
   contacts: readonly { id: string; name: string }[];
   subjects: readonly {
     id: string;
-    kind: 'person' | 'equipment' | 'location';
+    kind: "person" | "equipment" | "location";
     name: string;
     recipientPartyId?: string;
   }[];
@@ -88,10 +92,9 @@ export interface ScheduleDistributionPreview {
   /** Shared whole-board evidence is serialized once, not once per mailbox. */
   sharedLines?: readonly ScheduleEmailLine[];
 }
-const digest = (value: unknown) =>
-  createHash('sha256').update(canonicalJson(value)).digest('hex');
+const digest = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 const refused = (message: string, remedy: string) =>
-  new ScheduleError(message, { code: 'schedule_distribution_refused', remedy });
+  new ScheduleError(message, { code: "schedule_distribution_refused", remedy });
 
 /** Published/native observations retain their own semantics; private notes are excluded and audience selection controls peer rows. */
 export function scheduleRecipientLines(
@@ -99,32 +102,27 @@ export function scheduleRecipientLines(
   subjects: ReadonlySet<string>,
 ): ScheduleEmailLine[] {
   const linked = new Set(
-    (window.sourceRecords ?? []).flatMap((r) =>
-      r.linkedEntryId ? [r.linkedEntryId] : [],
-    ),
+    (window.sourceRecords ?? []).flatMap((r) => (r.linkedEntryId ? [r.linkedEntryId] : [])),
   );
   const names = new Map(window.rows.map((r) => [r.subjectId, r.name]));
   const lines: ScheduleEmailLine[] = [];
   for (const entry of window.entries)
     if (
       subjects.has(entry.subjectId) &&
-      entry.status === 'published' &&
+      entry.status === "published" &&
       entry.boardId === window.board.id &&
       !linked.has(entry.id)
     ) {
       const minutes = entry.workedMinutes;
       lines.push({
         date: entry.startsOn,
-        subject: names.get(entry.subjectId) ?? '—',
+        subject: names.get(entry.subjectId) ?? "—",
         subjectId: entry.subjectId,
-        assignment: [
-          entry.target?.code ?? entry.target?.label ?? 'Unassigned',
-          entry.detail,
-        ]
+        assignment: [entry.target?.code ?? entry.target?.label ?? "Unassigned", entry.detail]
           .filter(Boolean)
-          .join(' / '),
+          .join(" / "),
         hours: `${Math.floor(minutes / 60)}h ${minutes % 60}m booked`,
-        status: `Published booking · ${entry.startClock}–${entry.endClock}${entry.endsOn !== entry.startsOn ? ` (${entry.endsOn})` : ''}`,
+        status: `Published booking · ${entry.startClock}–${entry.endClock}${entry.endsOn !== entry.startsOn ? ` (${entry.endsOn})` : ""}`,
         color: entry.target?.color ?? null,
       });
     }
@@ -132,11 +130,11 @@ export function scheduleRecipientLines(
     if (subjects.has(record.workerPartyId))
       lines.push({
         date: record.onDate,
-        subject: names.get(record.workerPartyId) ?? '—',
+        subject: names.get(record.workerPartyId) ?? "—",
         subjectId: record.workerPartyId,
-        assignment: record.label ?? '—',
-        hours: 'Hours unknown',
-        status: 'Source date observation',
+        assignment: record.label ?? "—",
+        hours: "Hours unknown",
+        status: "Source date observation",
         color: record.color ?? null,
       });
   return lines.sort(
@@ -155,20 +153,36 @@ export function scheduleReportLines(
   reportRows: readonly { subjectId: string; name: string }[],
 ): ScheduleEmailLine[] {
   const lines = scheduleRecipientLines(window, subjectIds);
-  const observed = new Set(lines.map(line => `${line.subjectId}:${line.date}`));
+  const observed = new Set(lines.map((line) => `${line.subjectId}:${line.date}`));
   for (const row of reportRows)
     for (const day of window.days)
       if (!observed.has(`${row.subjectId}:${day.date}`))
-        lines.push({ date: day.date, subjectId: row.subjectId, subject: row.name, assignment: "—", hours: "No booking recorded", status: "No schedule evidence" });
-  return lines.sort((a, b) => a.date.localeCompare(b.date) || a.subject.localeCompare(b.subject) || (a.subjectId ?? "").localeCompare(b.subjectId ?? ""));
+        lines.push({
+          date: day.date,
+          subjectId: row.subjectId,
+          subject: row.name,
+          assignment: "—",
+          hours: "No booking recorded",
+          status: "No schedule evidence",
+        });
+  return lines.sort(
+    (a, b) =>
+      a.date.localeCompare(b.date) ||
+      a.subject.localeCompare(b.subject) ||
+      (a.subjectId ?? "").localeCompare(b.subjectId ?? ""),
+  );
 }
 
 /** Rich messages are explicit; legacy strings remain literal plain text. */
 function normalizedAudience(audience: ScheduleAudience): ScheduleAudience {
-  if (audience.messageContent === undefined) return audience
-  const parsed = richTextDocumentSchema.safeParse(audience.messageContent)
-  if (!parsed.success) throw refused('The formatted message is invalid.', 'Use the message editor with at most 4000 characters and explicit safe links.')
-  return {...audience, messageContent: parsed.data, message: richTextPlainText(parsed.data)}
+  if (audience.messageContent === undefined) return audience;
+  const parsed = richTextDocumentSchema.safeParse(audience.messageContent);
+  if (!parsed.success)
+    throw refused(
+      "The formatted message is invalid.",
+      "Use the message editor with at most 4000 characters and explicit safe links.",
+    );
+  return { ...audience, messageContent: parsed.data, message: richTextPlainText(parsed.data) };
 }
 
 async function preview(
@@ -180,17 +194,17 @@ async function preview(
 ): Promise<ScheduleDistributionPreview> {
   audience = normalizedAudience(audience);
   const board = await getBoard(actor, boardId);
-  await boardAuthority(actor, board, 'read');
+  await boardAuthority(actor, board, "read");
   // Recipient addresses and issuance belong to schedulers, never self-service readers.
-  const allowed = await boardAuthority(actor, board, 'manage');
-  if (!(await lockAndCheckOrgFeature(db, actor.orgId, 'flows')))
+  const allowed = await boardAuthority(actor, board, "manage");
+  if (!(await lockAndCheckOrgFeature(db, actor.orgId, "flows")))
     throw refused(
-      'Flows is switched off.',
-      'Enable Flows in Company Settings → Features and configure an enabled Schedule distribution flow.',
+      "Flows is switched off.",
+      "Enable Flows in Company Settings → Features and configure an enabled Schedule distribution flow.",
     );
   if (
-    !['personal', 'board'].includes(audience.visibility) ||
-    typeof audience.everyone !== 'boolean' ||
+    !["personal", "board"].includes(audience.visibility) ||
+    typeof audience.everyone !== "boolean" ||
     !Array.isArray(audience.subjectIds) ||
     audience.subjectIds.length > 500 ||
     audience.subjectIds.some((id) => !isUuid(id)) ||
@@ -198,16 +212,16 @@ async function preview(
     (audience.everyone && audience.subjectIds.length)
   )
     throw refused(
-      'Choose everyone relevant or a distinct list of people/resources.',
-      'Reload the recipient selector.',
+      "Choose everyone relevant or a distinct list of people/resources.",
+      "Reload the recipient selector.",
     );
   if (
-    audience.visibility === 'board' &&
-    (board.distributionVisibility !== 'board' || board.subsidiaryId === null)
+    audience.visibility === "board" &&
+    (board.distributionVisibility !== "board" || board.subsidiaryId === null)
   )
     throw refused(
-      'Whole-board report sharing is not configured for this board.',
-      'In Board Settings choose a legal entity and allow whole-board reports before previewing this audience.',
+      "Whole-board report sharing is not configured for this board.",
+      "In Board Settings choose a legal entity and allow whole-board reports before previewing this audience.",
     );
   const window = await loadBoardWindow({ ...actor, boardId, from, through });
   const relevant = new Set([
@@ -217,10 +231,7 @@ async function preview(
     ...(window.sourceRecords ?? []).map((r) => r.workerPartyId),
     ...window.rows.filter((r) => r.inScope).map((r) => r.subjectId),
   ]);
-  if (
-    audience.pdfLayout != null &&
-    !schedulePdfLayoutSchema.safeParse(audience.pdfLayout).success
-  )
+  if (audience.pdfLayout != null && !schedulePdfLayoutSchema.safeParse(audience.pdfLayout).success)
     throw refused(
       "Choose a valid native PDF page layout.",
       "Review paper size, orientation, spacing and report detail.",
@@ -234,9 +245,7 @@ async function preview(
   const roleKeys = audience.additionalRoleKeys ?? [];
   if (
     roleKeys.length > 20 ||
-    roleKeys.some(
-      (key) => typeof key !== "string" || !key.trim() || key.length > 80,
-    ) ||
+    roleKeys.some((key) => typeof key !== "string" || !key.trim() || key.length > 80) ||
     new Set(roleKeys).size !== roleKeys.length ||
     (roleKeys.length && audience.visibility !== "board")
   )
@@ -261,9 +270,10 @@ async function preview(
           "Review the native role assignments or remove this additional recipient rule.",
         );
       const contacts = await db.execute<{ id: string; userId: string }>(
-          sql`select p.id,u.id as "userId" from users u join parties p on p.org_id=u.org_id and p.id=u.party_id join role_assignments ra on ra.org_id=u.org_id and ra.user_id=u.id join app_roles ar on ar.org_id=ra.org_id and ar.id=ra.role_id where u.org_id=${actor.orgId} and ar.key=${role} and u.id in(select jsonb_array_elements_text(${JSON.stringify(users.map((user) => user.id))}::jsonb)::uuid) and u.is_active and p.is_active and p.kind='person' ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed)} order by u.id,p.id for share of u,p,ra,ar`, 'objects',
-        );
-      if (new Set(contacts.map(contact => contact.userId)).size !== users.length)
+        sql`select p.id,u.id as "userId" from users u join parties p on p.org_id=u.org_id and p.id=u.party_id join role_assignments ra on ra.org_id=u.org_id and ra.user_id=u.id join app_roles ar on ar.org_id=ra.org_id and ar.id=ra.role_id where u.org_id=${actor.orgId} and ar.key=${role} and u.id in(select jsonb_array_elements_text(${JSON.stringify(users.map((user) => user.id))}::jsonb)::uuid) and u.is_active and p.is_active and p.kind='person' ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowed)} order by u.id,p.id for share of u,p,ra,ar`,
+        "objects",
+      );
+      if (new Set(contacts.map((contact) => contact.userId)).size !== users.length)
         throw refused(
           `Native role ${role} contains a user without a visible active People contact.`,
           "Link the native user to a visible People contact in the board legal entity, or choose explicit contacts instead.",
@@ -272,23 +282,25 @@ async function preview(
     }
   }
   const explicitContacts = audience.additionalPartyIds ?? [];
-  if (explicitContacts.length > 500 || explicitContacts.some(id => !isUuid(id)) || new Set(explicitContacts).size !== explicitContacts.length)
-    throw refused("Choose distinct native additional contacts.", "Review the selected contact identities before previewing.");
-  const extras = [
-    ...new Set([...explicitContacts, ...rolePartyIds]),
-  ];
+  if (
+    explicitContacts.length > 500 ||
+    explicitContacts.some((id) => !isUuid(id)) ||
+    new Set(explicitContacts).size !== explicitContacts.length
+  )
+    throw refused(
+      "Choose distinct native additional contacts.",
+      "Review the selected contact identities before previewing.",
+    );
+  const extras = [...new Set([...explicitContacts, ...rolePartyIds])];
   if (
     extras.length > 500 ||
     extras.some((id) => !isUuid(id)) ||
     new Set(extras).size !== extras.length ||
     (extras.length && audience.visibility !== "board") ||
     (audience.message !== undefined &&
-      (typeof audience.message !== "string" ||
-        audience.message.length > 4000)) ||
-    (audience.includePdf !== undefined &&
-      typeof audience.includePdf !== "boolean") ||
-    (audience.cohort &&
-      !["scope", "scheduled", "supervisors", "self"].includes(audience.cohort))
+      (typeof audience.message !== "string" || audience.message.length > 4000)) ||
+    (audience.includePdf !== undefined && typeof audience.includePdf !== "boolean") ||
+    (audience.cohort && !["scope", "scheduled", "supervisors", "self"].includes(audience.cohort))
   )
     throw refused(
       "The report audience or additional contacts are invalid.",
@@ -300,7 +312,10 @@ async function preview(
       "Choose combined delivery or selected recipients.",
     );
   if (board.rowKind === "resources" && audience.cohort)
-    throw refused("Employee cohorts apply only to people boards.", "Choose native resource-associated recipients or explicit contacts for this resource board.");
+    throw refused(
+      "Employee cohorts apply only to people boards.",
+      "Choose native resource-associated recipients or explicit contacts for this resource board.",
+    );
   const resolved =
     mode !== "selected" && board.rowKind === "people"
       ? await resolvePeopleAudience(
@@ -316,9 +331,7 @@ async function preview(
     mode === "selected"
       ? [...audience.subjectIds].sort()
       : (resolved?.ids ??
-        (audience.everyone
-    ? [...relevant].sort()
-          : [...audience.subjectIds].sort()));
+        (audience.everyone ? [...relevant].sort() : [...audience.subjectIds].sort()));
   if (ids.length + extras.length === 0 || ids.length + extras.length > 500)
     throw refused(
       "Choose between 1 and 500 current native recipients.",
@@ -328,8 +341,9 @@ async function preview(
   const missing = ids.filter((id) => !rows.some((row) => row.subjectId === id));
   if (board.rowKind === "people" && missing.length && mode !== "selected") {
     const contacts = await db.execute<{ id: string; name: string }>(
-        sql`select id,display_name as name from parties where org_id=${actor.orgId} and is_active and kind='person' and id in(select jsonb_array_elements_text(${JSON.stringify(missing)}::jsonb)::uuid) ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}`, 'objects',
-      );
+      sql`select id,display_name as name from parties where org_id=${actor.orgId} and is_active and kind='person' and id in(select jsonb_array_elements_text(${JSON.stringify(missing)}::jsonb)::uuid) ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}`,
+      "objects",
+    );
     rows.push(
       ...contacts.map((person) => ({
         subjectId: person.id,
@@ -350,23 +364,23 @@ async function preview(
       "Choose visible native people/resources, or explicitly shared contacts-only delivery.",
     );
   const bindings =
-    board.rowKind === 'people'
+    board.rowKind === "people"
       ? rows.map((r) => ({ subjectId: r.subjectId, partyId: r.subjectId }))
-      : (await db.execute<{ subjectId: string; partyId: string }>(
-            sql`select coalesce(equipment_unit_id,resource_location_id)::text as "subjectId",party_id as "partyId" from schedule_resource_recipients where org_id=${actor.orgId} and board_id=${board.id} and is_active and coalesce(equipment_unit_id,resource_location_id) in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)`, 'objects',
-          ));
-  const partyIds = [
-    ...new Set([...bindings.map((binding) => binding.partyId), ...extras]),
-  ];
+      : await db.execute<{ subjectId: string; partyId: string }>(
+          sql`select coalesce(equipment_unit_id,resource_location_id)::text as "subjectId",party_id as "partyId" from schedule_resource_recipients where org_id=${actor.orgId} and board_id=${board.id} and is_active and coalesce(equipment_unit_id,resource_location_id) in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)`,
+          "objects",
+        );
+  const partyIds = [...new Set([...bindings.map((binding) => binding.partyId), ...extras])];
   const parties = partyIds.length
-    ? (await db.execute<{
-          id: string;
-          name: string;
-          email: string | null;
-          subsidiaryId: string | null;
-        }>(
-          sql`select id,display_name as name,email,subsidiary_id as "subsidiaryId" from parties where org_id=${actor.orgId} and is_active and id in (select jsonb_array_elements_text(${JSON.stringify(partyIds)}::jsonb)::uuid) ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)} order by id for share`, 'objects',
-        ))
+    ? await db.execute<{
+        id: string;
+        name: string;
+        email: string | null;
+        subsidiaryId: string | null;
+      }>(
+        sql`select id,display_name as name,email,subsidiary_id as "subsidiaryId" from parties where org_id=${actor.orgId} and is_active and id in (select jsonb_array_elements_text(${JSON.stringify(partyIds)}::jsonb)::uuid) ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)} order by id for share`,
+        "objects",
+      )
     : [];
   const recipients: ScheduleRecipientDraft[] = [];
   const refusals: string[] = [];
@@ -384,9 +398,7 @@ async function preview(
     const email = party.email?.trim() ?? null;
     const validEmail = email !== null && isValidEmailAddress(email);
     if (!validEmail)
-      refusals.push(
-        `${party.name}: enter a valid email on the native person/contact record.`,
-      );
+      refusals.push(`${party.name}: enter a valid email on the native person/contact record.`);
     let recipient = recipients.find((p) => p.partyId === party.id);
     if (!recipient) {
       recipient = {
@@ -409,9 +421,7 @@ async function preview(
         "Choose an active native People contact in the board legal entity.",
       );
     if (!isValidEmailAddress(party.email?.trim() ?? ""))
-      refusals.push(
-        `${party.name}: enter a valid email on the native People contact.`,
-      );
+      refusals.push(`${party.name}: enter a valid email on the native People contact.`);
     if (!recipients.some((recipient) => recipient.partyId === id))
       recipients.push({
         partyId: id,
@@ -422,51 +432,63 @@ async function preview(
         lines: [],
       });
   }
-  if (audience.visibility === 'board') {
+  if (audience.visibility === "board") {
     const subjectEntities = await db.execute<{ id: string; subsidiaryId: string | null }>(
-        board.rowKind === 'people'
-          ? sql`select id,subsidiary_id as "subsidiaryId" from parties where org_id=${actor.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify([...relevant])}::jsonb)::uuid)`
-          : board.resourceKind === 'equipment'
-            ? sql`select id,subsidiary_id as "subsidiaryId" from equipment_units where org_id=${actor.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify([...relevant])}::jsonb)::uuid)`
-            : sql`select id,subsidiary_id as "subsidiaryId" from locations where org_id=${actor.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify([...relevant])}::jsonb)::uuid)`, 'objects',
-      );
+      board.rowKind === "people"
+        ? sql`select id,subsidiary_id as "subsidiaryId" from parties where org_id=${actor.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify([...relevant])}::jsonb)::uuid)`
+        : board.resourceKind === "equipment"
+          ? sql`select id,subsidiary_id as "subsidiaryId" from equipment_units where org_id=${actor.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify([...relevant])}::jsonb)::uuid)`
+          : sql`select id,subsidiary_id as "subsidiaryId" from locations where org_id=${actor.orgId} and id in (select jsonb_array_elements_text(${JSON.stringify([...relevant])}::jsonb)::uuid)`,
+      "objects",
+    );
     if (
       subjectEntities.length !== relevant.size ||
       subjectEntities.some((s) => s.subsidiaryId !== board.subsidiaryId) ||
       parties.some((p) => p.subsidiaryId !== board.subsidiaryId)
     )
       throw refused(
-        'The whole-board audience crosses the configured legal entity.',
-        'Use personal reports, or a board and recipients scoped to one legal entity.',
+        "The whole-board audience crosses the configured legal entity.",
+        "Use personal reports, or a board and recipients scoped to one legal entity.",
       );
   }
-  const sharedReport = audience.visibility === "board"
-    ? scheduleReportLines(window, relevant, window.rows.filter(row => relevant.has(row.subjectId)))
-    : null;
+  const sharedReport =
+    audience.visibility === "board"
+      ? scheduleReportLines(
+          window,
+          relevant,
+          window.rows.filter((row) => relevant.has(row.subjectId)),
+        )
+      : null;
   for (const recipient of recipients)
-    recipient.lines = sharedReport ?? scheduleReportLines(window, new Set(recipient.subjects.map(subject => subject.id)), recipient.subjects.map(subject => ({ subjectId: subject.id, name: subject.name })));
+    recipient.lines =
+      sharedReport ??
+      scheduleReportLines(
+        window,
+        new Set(recipient.subjects.map((subject) => subject.id)),
+        recipient.subjects.map((subject) => ({ subjectId: subject.id, name: subject.name })),
+      );
   // One native mailbox owns one delivery; the preview retains all associated identities.
   for (let i = 0; i < recipients.length; i++)
     for (let j = recipients.length - 1; j > i; j--)
       if (
         recipients[i]!.email &&
-        recipients[i]!.email!.trim().toLowerCase() ===
-          recipients[j]!.email?.trim().toLowerCase()
+        recipients[i]!.email!.trim().toLowerCase() === recipients[j]!.email?.trim().toLowerCase()
       ) {
         const keep = recipients[i]!,
           other = recipients[j]!;
-        keep.contacts.push(
-          ...other.contacts,
-        );
+        keep.contacts.push(...other.contacts);
         keep.subjects.push(
           ...other.subjects.map((subject) => ({
             ...subject,
             recipientPartyId: other.partyId,
           })),
         );
-        if (!sharedReport) keep.lines = [
-          ...new Map([...keep.lines, ...other.lines].map(line => [canonicalJson(line), line])).values(),
-        ];
+        if (!sharedReport)
+          keep.lines = [
+            ...new Map(
+              [...keep.lines, ...other.lines].map((line) => [canonicalJson(line), line]),
+            ).values(),
+          ];
         recipients.splice(j, 1);
       }
   if (
@@ -488,8 +510,8 @@ async function preview(
       16 * 1024 * 1024
   )
     throw refused(
-      'This reviewed report exceeds the bounded distribution size.',
-      'Choose a shorter date window or fewer recipients; no report rows are silently omitted.',
+      "This reviewed report exceeds the bounded distribution size.",
+      "Choose a shorter date window or fewer recipients; no report rows are silently omitted.",
     );
   for (const recipient of recipients)
     if (recipient.email) {
@@ -501,24 +523,27 @@ async function preview(
         from,
         through,
         timeZone: board.timeZone,
-        version: 'preview',
+        version: "preview",
         lines: recipient.lines,
       });
       try {
         normalizeEmailDeliveryInput({ to: recipient.email, ...report });
       } catch (error) {
         refusals.push(
-          `${recipient.name}: ${error instanceof Error ? error.message : 'The report exceeds the native email limits.'}`,
+          `${recipient.name}: ${error instanceof Error ? error.message : "The report exceeds the native email limits."}`,
         );
       }
     }
   recipients.sort((a, b) => a.partyId.localeCompare(b.partyId));
   const provider = await readOrgEmailConfigView(actor.orgId);
   const transport = await resolveOrgEmailTransportDetailed(actor.orgId);
-  if (transport.state !== 'ready') refusals.push(emailDeliveryBlockedMessage(transport));
-  const organizationName = (await db.execute<{ name: string }>(
-      sql`select name from orgs where id=${actor.orgId}`, 'objects',
-    ))[0]!.name;
+  if (transport.state !== "ready") refusals.push(emailDeliveryBlockedMessage(transport));
+  const organizationName = (
+    await db.execute<{ name: string }>(
+      sql`select name from orgs where id=${actor.orgId}`,
+      "objects",
+    )
+  )[0]!.name;
   const version = digest({
     organizationName,
     board: {
@@ -542,8 +567,7 @@ async function preview(
       audience.visibility === "board"
         ? recipients.map((recipient) => ({ ...recipient, lines: [] }))
         : recipients,
-    sharedLines:
-      audience.visibility === "board" ? recipients[0]?.lines : undefined,
+    sharedLines: audience.visibility === "board" ? recipients[0]?.lines : undefined,
     entries: window.entries
       .filter((entry) => entry.boardId === board.id)
       .map((e) => ({ id: e.id, revision: e.revision, status: e.status }))
@@ -569,8 +593,7 @@ async function preview(
       subjectIds: audience.everyone ? [] : [...audience.subjectIds].sort(),
     },
     recipients,
-    sharedLines:
-      audience.visibility === "board" ? recipients[0]?.lines : undefined,
+    sharedLines: audience.visibility === "board" ? recipients[0]?.lines : undefined,
     refusals,
     excludedHistoricalSubjects: resolved?.excluded ?? [],
   };
@@ -582,11 +605,9 @@ export function previewScheduleDistribution(
   through: string,
   audience: ScheduleAudience,
 ) {
-  return withOrgTransaction(
-    actor.orgId,
-    () => preview(actor, boardId, from, through, audience),
-    { isolationLevel: 'REPEATABLE READ' },
-  );
+  return withOrgTransaction(actor.orgId, () => preview(actor, boardId, from, through, audience), {
+    isolationLevel: "REPEATABLE READ",
+  });
 }
 type RequestRow = {
   id: string;
@@ -597,7 +618,7 @@ type RequestRow = {
   audience: ScheduleAudience;
   reason: string;
   createdBy: string;
-  status: 'previewed' | 'queued';
+  status: "previewed" | "queued";
 };
 async function persist(
   actor: ScheduleActor,
@@ -607,15 +628,18 @@ async function persist(
 ): Promise<RequestRow> {
   if (!reason.trim() || reason.length > 2000 || !key.trim() || key.length > 200)
     throw refused(
-      'A reason and bounded replay key are required.',
-      'Enter why this schedule is being distributed and preview again.',
+      "A reason and bounded replay key are required.",
+      "Enter why this schedule is being distributed and preview again.",
     );
   await db.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-distribution:${actor.orgId}:${p.boardId}:${p.version}`},0))`,
   );
-  const existing = (await db.execute<RequestRow>(
-      sql`select id,board_id as "boardId",from_date::text as "from",through_date::text as "through",version,audience,reason,created_by as "createdBy",status from schedule_distributions where org_id=${actor.orgId} and (replay_key=${key} or (board_id=${p.boardId} and version=${p.version} and status='queued' and replay_key not like 'automatic:%' and ${key} not like 'automatic:%')) for update`, 'objects',
-    ))[0];
+  const existing = (
+    await db.execute<RequestRow>(
+      sql`select id,board_id as "boardId",from_date::text as "from",through_date::text as "through",version,audience,reason,created_by as "createdBy",status from schedule_distributions where org_id=${actor.orgId} and (replay_key=${key} or (board_id=${p.boardId} and version=${p.version} and status='queued' and replay_key not like 'automatic:%' and ${key} not like 'automatic:%')) for update`,
+      "objects",
+    )
+  )[0];
   if (existing) {
     if (
       existing.version !== p.version ||
@@ -623,20 +647,18 @@ async function persist(
       existing.reason !== reason
     )
       throw refused(
-        'This send key already belongs to a different review.',
-        'Start a new preview/send intent.',
+        "This send key already belongs to a different review.",
+        "Start a new preview/send intent.",
       );
     return existing;
   }
   const id = randomUUID();
   const inserted = await db.execute(
-      sql`insert into schedule_distributions(id,org_id,board_id,subsidiary_id,from_date,through_date,version,audience,reason,replay_key,created_by) select ${id},${actor.orgId},b.id,b.subsidiary_id,${p.from}::date,${p.through}::date,${p.version},${JSON.stringify(p.audience)}::jsonb,${reason},${key},${actor.actorId} from schedule_boards b where b.org_id=${actor.orgId} and b.id=${p.boardId} returning id`, 'objects',
-    );
+    sql`insert into schedule_distributions(id,org_id,board_id,subsidiary_id,from_date,through_date,version,audience,reason,replay_key,created_by) select ${id},${actor.orgId},b.id,b.subsidiary_id,${p.from}::date,${p.through}::date,${p.version},${JSON.stringify(p.audience)}::jsonb,${reason},${key},${actor.actorId} from schedule_boards b where b.org_id=${actor.orgId} and b.id=${p.boardId} returning id`,
+    "objects",
+  );
   if (inserted.length !== 1)
-    throw refused(
-      'The board changed while creating the report.',
-      'Reload the board.',
-    );
+    throw refused("The board changed while creating the report.", "Reload the board.");
   const sharedPdf =
     p.audience.includePdf && p.audience.visibility === "board"
       ? await renderSchedulePdf(p, p.recipients[0]!)
@@ -645,26 +667,23 @@ async function persist(
     const pdf = p.audience.includePdf
       ? (sharedPdf ?? (await renderSchedulePdf(p, recipient)))
       : null;
-    const snapshots: [ScheduleRecipient["subjects"][number] | null, string][] =
-      [
-        ...recipient.subjects.map(
-          (subject) =>
-            [subject, subject.recipientPartyId ?? recipient.partyId] as [
-              ScheduleRecipient["subjects"][number],
-              string,
-            ],
-        ),
-        ...recipient.contacts
-          .filter(
-            (contact) =>
-              !recipient.subjects.some(
-                (subject) =>
-                  (subject.recipientPartyId ?? recipient.partyId) ===
-                  contact.id,
-              ),
-          )
-          .map((contact) => [null, contact.id] as [null, string]),
-      ];
+    const snapshots: [ScheduleRecipient["subjects"][number] | null, string][] = [
+      ...recipient.subjects.map(
+        (subject) =>
+          [subject, subject.recipientPartyId ?? recipient.partyId] as [
+            ScheduleRecipient["subjects"][number],
+            string,
+          ],
+      ),
+      ...recipient.contacts
+        .filter(
+          (contact) =>
+            !recipient.subjects.some(
+              (subject) => (subject.recipientPartyId ?? recipient.partyId) === contact.id,
+            ),
+        )
+        .map((contact) => [null, contact.id] as [null, string]),
+    ];
     for (const [subject, contactId] of snapshots) {
       const mail = scheduleDistributionEmail({
         message: p.audience.message,
@@ -696,12 +715,13 @@ async function persist(
         ...report,
       });
       const written = await db.execute(
-          sql`insert into schedule_distribution_recipients(org_id,distribution_id,party_id,worker_party_id,equipment_unit_id,resource_location_id,email,report) values(${actor.orgId},${id},${contactId},${subject?.kind === "person" ? subject.id : null},${subject?.kind === "equipment" ? subject.id : null},${subject?.kind === "location" ? subject.id : null},${recipient.email},${JSON.stringify(report)}::jsonb) returning id`, 'objects',
-        );
+        sql`insert into schedule_distribution_recipients(org_id,distribution_id,party_id,worker_party_id,equipment_unit_id,resource_location_id,email,report) values(${actor.orgId},${id},${contactId},${subject?.kind === "person" ? subject.id : null},${subject?.kind === "equipment" ? subject.id : null},${subject?.kind === "location" ? subject.id : null},${recipient.email},${JSON.stringify(report)}::jsonb) returning id`,
+        "objects",
+      );
       if (written.length !== 1)
-        throw new Error('The schedule recipient snapshot was not recorded.');
+        throw new Error("The schedule recipient snapshot was not recorded.");
     }
-    }
+  }
   await db.execute(
     sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${actor.orgId},'schedule_distributions',${id},'insert',${JSON.stringify({ after: { generatedAt: p.generatedAt, version: p.version, boardId: p.boardId, from: p.from, through: p.through, recipients: p.recipients.map((r) => ({ partyId: r.partyId, contacts: r.contacts, subjects: r.subjects.map((s) => s.id) })) }, reason })}::jsonb,${actor.actorId})`,
   );
@@ -714,15 +734,18 @@ async function persist(
     audience: p.audience,
     reason,
     createdBy: actor.actorId,
-    status: 'previewed',
+    status: "previewed",
   };
 }
 async function deliveryReceipt(orgId: string, id: string, replayed: boolean) {
-  const row = (await db.execute<{ runId: string; flowId: string }>(
-      sql`select d.flow_run_id as "runId",r.flow_id as "flowId" from schedule_distributions d join flow_runs r on r.org_id=d.org_id and r.id=d.flow_run_id where d.org_id=${orgId} and d.id=${id} and d.status='queued'`, 'objects',
-    ))[0];
-  if (!row) throw new Error('The queued schedule has no native delivery run.');
-  return { id, status: 'queued' as const, replayed, ...row };
+  const row = (
+    await db.execute<{ runId: string; flowId: string }>(
+      sql`select d.flow_run_id as "runId",r.flow_id as "flowId" from schedule_distributions d join flow_runs r on r.org_id=d.org_id and r.id=d.flow_run_id where d.org_id=${orgId} and d.id=${id} and d.status='queued'`,
+      "objects",
+    )
+  )[0];
+  if (!row) throw new Error("The queued schedule has no native delivery run.");
+  return { id, status: "queued" as const, replayed, ...row };
 }
 export async function sendScheduleDistribution(
   actor: ScheduleActor,
@@ -736,7 +759,7 @@ export async function sendScheduleDistribution(
     key: string;
   },
 ) {
-  input = {...input, audience: normalizedAudience(input.audience)};
+  input = { ...input, audience: normalizedAudience(input.audience) };
   return withOrgTransaction(
     actor.orgId,
     async () => {
@@ -746,13 +769,16 @@ export async function sendScheduleDistribution(
           "Use a new manual send key.",
         );
       const board = await getBoard(actor, input.boardId);
-      await boardAuthority(actor, board, 'manage');
+      await boardAuthority(actor, board, "manage");
       await db.execute(
         sql`select id from schedule_boards where org_id=${actor.orgId} and id=${board.id} for update`,
       );
-      const prior = (await db.execute<RequestRow>(
-          sql`select id,board_id as "boardId",from_date::text as "from",through_date::text as "through",version,audience,reason,created_by as "createdBy",status from schedule_distributions where org_id=${actor.orgId} and replay_key=${input.key} for update`, 'objects',
-        ))[0];
+      const prior = (
+        await db.execute<RequestRow>(
+          sql`select id,board_id as "boardId",from_date::text as "from",through_date::text as "through",version,audience,reason,created_by as "createdBy",status from schedule_distributions where org_id=${actor.orgId} and replay_key=${input.key} for update`,
+          "objects",
+        )
+      )[0];
       if (prior) {
         if (
           prior.createdBy !== actor.actorId ||
@@ -770,49 +796,43 @@ export async function sendScheduleDistribution(
             })
         )
           throw refused(
-            'This send key belongs to a different reviewed intent.',
-            'Start a new preview/send intent.',
+            "This send key belongs to a different reviewed intent.",
+            "Start a new preview/send intent.",
           );
-        if (prior.status === 'queued')
-          return deliveryReceipt(actor.orgId, prior.id, true);
+        if (prior.status === "queued") return deliveryReceipt(actor.orgId, prior.id, true);
       }
-      const p = await preview(
-        actor,
-        input.boardId,
-        input.from,
-        input.through,
-        input.audience,
-      );
+      const p = await preview(actor, input.boardId, input.from, input.through, input.audience);
       if (p.version !== input.version)
         throw refused(
-          'The schedule or recipient configuration changed after preview.',
-          'Preview the current version before sending.',
+          "The schedule or recipient configuration changed after preview.",
+          "Preview the current version before sending.",
         );
       if (p.refusals.length)
         throw refused(
-          p.refusals.join(' '),
-          'Resolve the listed contact/provider configuration, then preview again.',
+          p.refusals.join(" "),
+          "Resolve the listed contact/provider configuration, then preview again.",
         );
       const request = await persist(actor, p, input.reason, input.key);
-      if (request.status === 'queued')
-        return deliveryReceipt(actor.orgId, request.id, true);
+      if (request.status === "queued") return deliveryReceipt(actor.orgId, request.id, true);
       const result = await dispatchScheduleDistribution({
-        event: 'on_submit',
+        event: "on_submit",
         requestId: request.id,
         actor,
       });
-      const stored = (await db.execute<{ status: string }>(
-          sql`select status from schedule_distributions where org_id=${actor.orgId} and id=${request.id}`, 'objects',
-        ))[0];
-      if (result.failed || !result.runs || stored?.status !== 'queued')
+      const stored = (
+        await db.execute<{ status: string }>(
+          sql`select status from schedule_distributions where org_id=${actor.orgId} and id=${request.id}`,
+          "objects",
+        )
+      )[0];
+      if (result.failed || !result.runs || stored?.status !== "queued")
         throw refused(
-          result.error ??
-            'No enabled Schedule distribution flow queued this reviewed report.',
-          'In Flows configure Schedule distribution → On submit → Email reviewed schedule. No emails were queued by this attempt.',
+          result.error ?? "No enabled Schedule distribution flow queued this reviewed report.",
+          "In Flows configure Schedule distribution → On submit → Email reviewed schedule. No emails were queued by this attempt.",
         );
       return deliveryReceipt(actor.orgId, request.id, false);
     },
-    { isolationLevel: 'SERIALIZABLE' },
+    { isolationLevel: "SERIALIZABLE" },
   ).catch((error) => {
     throw scheduleDatabaseRefusal(error);
   });
@@ -825,58 +845,54 @@ export async function enqueueReviewedSchedule(input: {
   requestId: string;
   runId: string;
 }): Promise<number> {
-  const row = (await db.execute<RequestRow>(
-      sql`select id,board_id as "boardId",from_date::text as "from",through_date::text as "through",version,audience,reason,created_by as "createdBy",status from schedule_distributions where org_id=${input.orgId} and id=${input.requestId} for update`, 'objects',
-    ))[0];
+  const row = (
+    await db.execute<RequestRow>(
+      sql`select id,board_id as "boardId",from_date::text as "from",through_date::text as "through",version,audience,reason,created_by as "createdBy",status from schedule_distributions where org_id=${input.orgId} and id=${input.requestId} for update`,
+      "objects",
+    )
+  )[0];
   if (!row || row.createdBy !== input.actorId)
     throw refused(
-      'The reviewed schedule does not belong to this actor.',
-      'Open a new schedule preview with your own authorized identity.',
+      "The reviewed schedule does not belong to this actor.",
+      "Open a new schedule preview with your own authorized identity.",
     );
   const actor = { orgId: input.orgId, actorId: input.actorId };
-  const current = await preview(
-    actor,
-    row.boardId,
-    row.from,
-    row.through,
-    row.audience,
-  );
+  const current = await preview(actor, row.boardId, row.from, row.through, row.audience);
   if (current.version !== row.version || current.refusals.length)
     throw refused(
-      'The reviewed schedule or contacts changed before delivery.',
-      'Preview and explicitly send the current version.',
+      "The reviewed schedule or contacts changed before delivery.",
+      "Preview and explicitly send the current version.",
     );
-  if (row.status === 'queued') return 0;
+  if (row.status === "queued") return 0;
   const lineage = await db.execute(
-      sql`select id from flow_runs where org_id=${input.orgId} and id=${input.runId} and ((subject_kind='schedule_distribution' and subject_id=${row.id}) or (subject_kind='schedule_board' and subject_id=${row.boardId} and trigger='scheduled' and occurrence_key=${row.reason.startsWith("Automatic schedule occurrence ") ? row.reason.slice("Automatic schedule occurrence ".length) : ""})) and created_by=${input.actorId} for share`, 'objects',
-    );
+    sql`select id from flow_runs where org_id=${input.orgId} and id=${input.runId} and ((subject_kind='schedule_distribution' and subject_id=${row.id}) or (subject_kind='schedule_board' and subject_id=${row.boardId} and trigger='scheduled' and occurrence_key=${row.reason.startsWith("Automatic schedule occurrence ") ? row.reason.slice("Automatic schedule occurrence ".length) : ""})) and created_by=${input.actorId} for share`,
+    "objects",
+  );
   if (lineage.length !== 1)
     throw refused(
-      'The delivery run does not own this schedule review.',
-      'Send through its native Schedule distribution flow.',
+      "The delivery run does not own this schedule review.",
+      "Send through its native Schedule distribution flow.",
     );
   const recipients = await db.execute<{
-      id: string;
-      email: string;
-      partyId: string;
-      report: {
-        subject: string;
-        html: string;
-        text: string;
-        attachments?: {
-          filename: string;
-          content: string;
-          contentType: string;
-        }[];
-      };
-    }>(
-      sql`select id,email,party_id as "partyId",report from schedule_distribution_recipients where org_id=${input.orgId} and distribution_id=${row.id} order by id`, 'objects',
-    );
-  if (!recipients.length)
-    throw new Error('The reviewed report has no recipients.');
-  const distinct = new Map(
-    recipients.map((r) => [r.email.trim().toLowerCase(), r]),
+    id: string;
+    email: string;
+    partyId: string;
+    report: {
+      subject: string;
+      html: string;
+      text: string;
+      attachments?: {
+        filename: string;
+        content: string;
+        contentType: string;
+      }[];
+    };
+  }>(
+    sql`select id,email,party_id as "partyId",report from schedule_distribution_recipients where org_id=${input.orgId} and distribution_id=${row.id} order by id`,
+    "objects",
   );
+  if (!recipients.length) throw new Error("The reviewed report has no recipients.");
+  const distinct = new Map(recipients.map((r) => [r.email.trim().toLowerCase(), r]));
   for (const recipient of distinct.values())
     await enqueueFlowEmail({
       orgId: input.orgId,
@@ -886,19 +902,19 @@ export async function enqueueReviewedSchedule(input: {
         to: [recipient.email],
         ...recipient.report,
         meta: {
-          category: 'schedule_distribution',
+          category: "schedule_distribution",
           distributionId: row.id,
           version: row.version,
         },
       },
     });
   const updated = await db.execute(
-      sql`update schedule_distributions set status='queued',queued_at=now(),flow_run_id=${input.runId} where org_id=${input.orgId} and id=${row.id} and status='previewed' returning id`, 'objects',
-    );
-  if (updated.length !== 1)
-    throw new Error('The reviewed schedule was not marked queued.');
+    sql`update schedule_distributions set status='queued',queued_at=now(),flow_run_id=${input.runId} where org_id=${input.orgId} and id=${row.id} and status='previewed' returning id`,
+    "objects",
+  );
+  if (updated.length !== 1) throw new Error("The reviewed schedule was not marked queued.");
   await db.execute(
-    sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${input.orgId},'schedule_distributions',${row.id},'update',${JSON.stringify({ before: { status: 'previewed' }, after: { status: 'queued', flowRunId: input.runId, recipientReports: recipients.length, version: row.version }, reason: row.reason })}::jsonb,${input.actorId})`,
+    sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${input.orgId},'schedule_distributions',${row.id},'update',${JSON.stringify({ before: { status: "previewed" }, after: { status: "queued", flowRunId: input.runId, recipientReports: recipients.length, version: row.version }, reason: row.reason })}::jsonb,${input.actorId})`,
   );
   return distinct.size;
 }
@@ -908,7 +924,7 @@ export async function prepareScheduleLifecycle(
   boardId: string,
   from: string,
   through: string,
-  event: 'on_update' | 'after_post',
+  event: "on_update" | "after_post",
   occurrence: string,
   subjectIds: readonly string[],
 ) {
@@ -917,21 +933,19 @@ export async function prepareScheduleLifecycle(
   const relevant = [
     ...new Set([
       ...subjectIds,
-      ...window.entries
-        .filter((e) => e.status === 'published')
-        .map((e) => e.subjectId),
+      ...window.entries.filter((e) => e.status === "published").map((e) => e.subjectId),
       ...(window.sourceRecords ?? []).map((r) => r.workerPartyId),
     ]),
   ].sort();
   const p = await preview(actor, boardId, from, through, {
-    visibility: board.distributionVisibility === 'board' ? 'board' : 'personal',
+    visibility: board.distributionVisibility === "board" ? "board" : "personal",
     everyone: false,
     subjectIds: relevant,
   });
   const row = await persist(
     actor,
     p,
-    `Schedule ${event === 'after_post' ? 'publication' : 'update'}`,
+    `Schedule ${event === "after_post" ? "publication" : "update"}`,
     `event:${digest(occurrence)}`,
   );
   return dispatchScheduleDistribution({ event, requestId: row.id, actor });
@@ -953,16 +967,24 @@ export async function deliverAutomaticSchedule(input: {
   return withOrgTransaction(input.orgId, async () => {
     const actor = { orgId: input.orgId, actorId: input.operatorId };
     const active = await db.execute(
-        sql`select id from users where org_id=${input.orgId} and id=${input.operatorId} and is_active for share`, 'objects',
-      );
+      sql`select id from users where org_id=${input.orgId} and id=${input.operatorId} and is_active for share`,
+      "objects",
+    );
     if (active.length !== 1)
       throw refused(
         "The automatic delivery operator is inactive or unavailable.",
         "Configure an active authorized operator in Board Settings.",
       );
     // Serialize issuance with board policy changes before resolving current recipients.
-    const lockedBoard = await db.execute(sql`select id from schedule_boards where org_id=${input.orgId} and id=${input.boardId} for update`, 'objects');
-    if (lockedBoard.length !== 1) throw refused("The schedule board is unavailable.", "Choose an active board in your organization.");
+    const lockedBoard = await db.execute(
+      sql`select id from schedule_boards where org_id=${input.orgId} and id=${input.boardId} for update`,
+      "objects",
+    );
+    if (lockedBoard.length !== 1)
+      throw refused(
+        "The schedule board is unavailable.",
+        "Choose an active board in your organization.",
+      );
     const board = await getBoard(actor, input.boardId);
     if (!board.isActive)
       throw refused(
@@ -977,25 +999,21 @@ export async function deliverAutomaticSchedule(input: {
       board.subsidiaryId,
       "flows.manage",
     );
-    const policy = automaticScheduleDeliverySchema.parse(
-      board.automaticDeliveryPolicy,
-    );
+    const policy = automaticScheduleDeliverySchema.parse(board.automaticDeliveryPolicy);
     if (policy.operatorId !== input.operatorId)
       throw refused(
         "The configured delivery operator changed.",
         "Review the Flow occurrence and current board policy.",
       );
-    if (
-      input.occurrence.timeZone !== policy.timeZone ||
-      policy.timeZone !== board.timeZone
-    )
+    if (input.occurrence.timeZone !== policy.timeZone || policy.timeZone !== board.timeZone)
       throw refused(
         "The Flow timer and report use different time zones.",
         "Set the Flow trigger timezone to the board delivery policy timezone.",
       );
     const lineage = await db.execute(
-        sql`select r.id from flow_runs r join flows f on f.org_id=r.org_id and f.id=r.flow_id where r.org_id=${input.orgId} and r.id=${input.runId} and r.subject_kind='schedule_board' and r.subject_id=${board.id} and r.trigger='scheduled' and r.occurrence_key=${input.occurrence.key} and r.created_by=${input.operatorId} and r.context->>'deliveryPolicyVersion'=${digest(board.automaticDeliveryPolicy)} and r.context->'scheduledOccurrence'=${JSON.stringify(input.occurrence)}::jsonb and f.enabled for share of r,f`, 'objects',
-      );
+      sql`select r.id from flow_runs r join flows f on f.org_id=r.org_id and f.id=r.flow_id where r.org_id=${input.orgId} and r.id=${input.runId} and r.subject_kind='schedule_board' and r.subject_id=${board.id} and r.trigger='scheduled' and r.occurrence_key=${input.occurrence.key} and r.created_by=${input.operatorId} and r.context->>'deliveryPolicyVersion'=${digest(board.automaticDeliveryPolicy)} and r.context->'scheduledOccurrence'=${JSON.stringify(input.occurrence)}::jsonb and f.enabled for share of r,f`,
+      "objects",
+    );
     if (lineage.length !== 1)
       throw refused(
         "This report does not belong to the native timer run.",
@@ -1018,18 +1036,16 @@ export async function deliverAutomaticSchedule(input: {
     if (policy.anchor === "week")
       from = addCalendarDays(
         from,
-        -(
-          (new Date(`${from}T00:00:00Z`).getUTCDay() -
-            policy.weekStartsOn +
-            7) %
-          7
-        ),
+        -((new Date(`${from}T00:00:00Z`).getUTCDay() - policy.weekStartsOn + 7) % 7),
       );
     const through = addCalendarDays(from, policy.days - 1);
     const key = `automatic:${digest(input.occurrence.key)}`;
-    const prior = (await db.execute<{ id: string; status: string }>(
-        sql`select id,status from schedule_distributions where org_id=${input.orgId} and replay_key=${key} for update`, 'objects',
-      ))[0];
+    const prior = (
+      await db.execute<{ id: string; status: string }>(
+        sql`select id,status from schedule_distributions where org_id=${input.orgId} and replay_key=${key} for update`,
+        "objects",
+      )
+    )[0];
     if (prior?.status === "queued") return 0;
     const p = await preview(actor, board.id, from, through, {
       visibility: policy.visibility,
@@ -1063,26 +1079,19 @@ export async function deliverAutomaticSchedule(input: {
   });
 }
 
-export async function searchScheduleContacts(
-  actor: ScheduleActor,
-  boardId: string,
-  query: string,
-) {
+export async function searchScheduleContacts(actor: ScheduleActor, boardId: string, query: string) {
   return withOrgTransaction(actor.orgId, async () => {
     const board = await getBoard(actor, boardId);
     const allowed = await boardAuthority(actor, board, "manage");
     const contacts = await db.execute<{ id: string; name: string; email: string | null }>(
-        sql`select id,display_name as name,email from parties where org_id=${actor.orgId} and kind='person' and is_active and display_name ilike ${`%${query.replace(/[\\%_]/g, "\\$&")}%`} ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)} ${board.subsidiaryId ? sql`and subsidiary_id=${board.subsidiaryId}` : sql``} order by display_name,id limit 101`, 'objects',
-      );
-    const roles = (await actorHasPermission(
-      db,
-      actor.orgId,
-      actor.actorId,
-      "flows.manage",
-    ))
-      ? (await db.execute<{ key: string; name: string }>(
-            sql`select key,name from app_roles where org_id=${actor.orgId} order by name,key`, 'objects',
-          ))
+      sql`select id,display_name as name,email from parties where org_id=${actor.orgId} and kind='person' and is_active and display_name ilike ${`%${query.replace(/[\\%_]/g, "\\$&")}%`} ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)} ${board.subsidiaryId ? sql`and subsidiary_id=${board.subsidiaryId}` : sql``} order by display_name,id limit 101`,
+      "objects",
+    );
+    const roles = (await actorHasPermission(db, actor.orgId, actor.actorId, "flows.manage"))
+      ? await db.execute<{ key: string; name: string }>(
+          sql`select key,name from app_roles where org_id=${actor.orgId} order by name,key`,
+          "objects",
+        )
       : [];
     return {
       contacts: contacts.slice(0, 100),
@@ -1105,13 +1114,7 @@ export async function previewSchedulePdf(
   return withOrgTransaction(
     actor.orgId,
     async () => {
-      const p = await preview(
-        actor,
-        input.boardId,
-        input.from,
-        input.through,
-        input.audience,
-      );
+      const p = await preview(actor, input.boardId, input.from, input.through, input.audience);
       if (p.version !== input.version)
         throw refused(
           "The report changed after preview.",

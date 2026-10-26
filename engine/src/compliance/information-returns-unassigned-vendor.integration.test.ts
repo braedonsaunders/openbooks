@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import {
-  buildNecPreparationRows,
-  computeFiling,
-} from "./information-returns.ts";
+import { buildNecPreparationRows, computeFiling } from "./information-returns.ts";
 import { db, withBypassContext } from "../platform/db.ts";
 import {
   createScratchOrg,
@@ -41,8 +38,13 @@ async function seedFlaggedVendorPaidOnUnmappedAccount(
     insert into party_subsidiaries (id, org_id, party_id, subsidiary_id)
     values (${randomUUID()}, ${org.orgId}, ${vendorId}, ${org.subsidiaryId})`);
 
-  const calendarId = (await db.execute<{ id: string }>(sql`
-    select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
+  const calendarId = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id from fiscal_calendars where org_id = ${org.orgId} limit 1`,
+      "objects",
+    )
+  )[0]!.id;
   const period2025 = randomUUID();
   await db.execute(sql`
     insert into accounting_periods
@@ -121,30 +123,44 @@ async function seedFlaggedVendorPaidOnUnmappedAccount(
   return { vendorId };
 }
 
-test("a flagged vendor with no form assignment lands in NEC Box 1 from unmapped bills", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const actorId = await withBypassContext(async () => createScratchUser(org.orgId, "Accountant", "admin"));
-    const { vendorId } = await withBypassContext(async () =>
-      seedFlaggedVendorPaidOnUnmappedAccount(org, actorId));
-    const filing = await withBypassContext(async () =>
-      computeFiling({ orgId: org.orgId, taxYear: 2025, formType: "1099-NEC", currency: "CAD" }));
-    assert.equal(filing.recipients.length, 1);
-    const recipient = filing.recipients[0]!;
-    assert.equal(recipient.profile.partyId, vendorId);
-    assert.equal(recipient.amounts.boxAmounts["nec1"], "8620.0000");
-    assert.equal(recipient.amounts.reportableTotal, "8620.0000");
-    assert.equal(recipient.amounts.paymentCount, 1);
-    assert.equal(filing.tracedCash, "8620.0000");
-    // The unmapped spend is named, and the missing form assignment still
-    // surfaces — the vendor is included, not silently dropped.
-    const kinds = filing.exceptions.map((exception) => exception.kind);
-    assert.ok(kinds.includes("missing_form_assignment"), `expected a form-assignment note, got ${kinds}`);
-    const rows = buildNecPreparationRows(filing, new Map());
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0]!.box1, "8620.0000");
-    assert.ok(rows[0]!.exclusionDetails.length > 0, "the worksheet row must carry the assignment note");
-  } finally {
-    await withBypassContext(async () => dropScratchOrg(org.orgId));
-  }
-});
+test(
+  "a flagged vendor with no form assignment lands in NEC Box 1 from unmapped bills",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await withBypassContext(async () =>
+        createScratchUser(org.orgId, "Accountant", "admin"),
+      );
+      const { vendorId } = await withBypassContext(async () =>
+        seedFlaggedVendorPaidOnUnmappedAccount(org, actorId),
+      );
+      const filing = await withBypassContext(async () =>
+        computeFiling({ orgId: org.orgId, taxYear: 2025, formType: "1099-NEC", currency: "CAD" }),
+      );
+      assert.equal(filing.recipients.length, 1);
+      const recipient = filing.recipients[0]!;
+      assert.equal(recipient.profile.partyId, vendorId);
+      assert.equal(recipient.amounts.boxAmounts["nec1"], "8620.0000");
+      assert.equal(recipient.amounts.reportableTotal, "8620.0000");
+      assert.equal(recipient.amounts.paymentCount, 1);
+      assert.equal(filing.tracedCash, "8620.0000");
+      // The unmapped spend is named, and the missing form assignment still
+      // surfaces — the vendor is included, not silently dropped.
+      const kinds = filing.exceptions.map((exception) => exception.kind);
+      assert.ok(
+        kinds.includes("missing_form_assignment"),
+        `expected a form-assignment note, got ${kinds}`,
+      );
+      const rows = buildNecPreparationRows(filing, new Map());
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0]!.box1, "8620.0000");
+      assert.ok(
+        rows[0]!.exclusionDetails.length > 0,
+        "the worksheet row must carry the assignment note",
+      );
+    } finally {
+      await withBypassContext(async () => dropScratchOrg(org.orgId));
+    }
+  },
+);

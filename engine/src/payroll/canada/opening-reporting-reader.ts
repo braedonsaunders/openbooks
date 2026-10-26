@@ -1,44 +1,84 @@
-import { sql } from 'drizzle-orm';
-import type { SqlExecutor } from '../../platform/db.ts';
-import { PayrollError } from '../error.ts';
-import { takeOpeningSourceYearFence } from '../../organization/payroll-source-fence.ts';
-import { readEmployeeOpeningLevySources, type OriginalOpeningSourceChildren } from '../opening-levy-source-reader.ts';
-import { canonicalCanadianOpeningReportingAllocations, type CanadianOpeningReportingAllocation } from './opening-reporting-source.ts';
-import { readCanadianOpeningReportingCatalogue } from './opening-reporting-catalogue.ts';
+import { sql } from "drizzle-orm";
+import type { SqlExecutor } from "../../platform/db.ts";
+import { PayrollError } from "../error.ts";
+import { takeOpeningSourceYearFence } from "../../organization/payroll-source-fence.ts";
+import {
+  readEmployeeOpeningLevySources,
+  type OriginalOpeningSourceChildren,
+} from "../opening-levy-source-reader.ts";
+import {
+  canonicalCanadianOpeningReportingAllocations,
+  type CanadianOpeningReportingAllocation,
+} from "./opening-reporting-source.ts";
+import { readCanadianOpeningReportingCatalogue } from "./opening-reporting-catalogue.ts";
 
 export type CanadianOpeningReportingAuthority = {
-  id: string; openingBalanceId: string; levyAuthorityId: string; levyAllocationSha256: string;
-  employerAuthorityId: string; employeePartyId: string; taxYear: number; subsidiaryId: string;
-  originalCountry: 'CA'; originalCurrency: 'CAD'; coverageStart: string; coverageEnd: string;
-  openingSha256: string; openingChildrenSha256: string; allocationSha256: string;
-  sourceFileId: string; sourceVersionId: string; sourceSha256: string; sourceReference: string;
+  id: string;
+  openingBalanceId: string;
+  levyAuthorityId: string;
+  levyAllocationSha256: string;
+  employerAuthorityId: string;
+  employeePartyId: string;
+  taxYear: number;
+  subsidiaryId: string;
+  originalCountry: "CA";
+  originalCurrency: "CAD";
+  coverageStart: string;
+  coverageEnd: string;
+  openingSha256: string;
+  openingChildrenSha256: string;
+  allocationSha256: string;
+  sourceFileId: string;
+  sourceVersionId: string;
+  sourceSha256: string;
+  sourceReference: string;
 };
 
 export type CanadianOpeningReportingSource = {
-  hasOpening: boolean; hasMaterialHistory: boolean;
+  hasOpening: boolean;
+  hasMaterialHistory: boolean;
   authority: CanadianOpeningReportingAuthority | null;
-  annualAmounts: Record<string, string> | null; children: OriginalOpeningSourceChildren | null;
+  annualAmounts: Record<string, string> | null;
+  children: OriginalOpeningSourceChildren | null;
   allocations: CanadianOpeningReportingAllocation[];
 };
 
-const REFUSAL = 'Qualify every original Canadian RP/province reporting allocation, source ordinal and first covered pay date in Payroll → Opening balances → Reporting source';
-const RETAINED_REFUSAL = 'The retained reporting certificate is immutable. Review the original evidence in Payroll → Opening balances → Levy source and use its governed original source certificate correction where permitted, then qualify fresh reporting allocations in Payroll → Opening balances → Reporting source. Issued-year restrictions and governed payroll void requirements still apply';
+const REFUSAL =
+  "Qualify every original Canadian RP/province reporting allocation, source ordinal and first covered pay date in Payroll → Opening balances → Reporting source";
+const RETAINED_REFUSAL =
+  "The retained reporting certificate is immutable. Review the original evidence in Payroll → Opening balances → Levy source and use its governed original source certificate correction where permitted, then qualify fresh reporting allocations in Payroll → Opening balances → Reporting source. Issued-year restrictions and governed payroll void requirements still apply";
 
 /** Resolve the reporting source only through the exact current levy certificate. */
-export async function readEmployeeCanadianOpeningReportingSource(tx: SqlExecutor, input: {
-  orgId: string; employeePartyId: string; taxYear: number; subsidiaryId?: string;
-}): Promise<CanadianOpeningReportingSource> {
+export async function readEmployeeCanadianOpeningReportingSource(
+  tx: SqlExecutor,
+  input: {
+    orgId: string;
+    employeePartyId: string;
+    taxYear: number;
+    subsidiaryId?: string;
+  },
+): Promise<CanadianOpeningReportingSource> {
   await takeOpeningSourceYearFence(tx, input.orgId, input.taxYear);
   const original = await readEmployeeOpeningLevySources(tx, input);
   const empty: CanadianOpeningReportingSource = {
-    hasOpening: original.hasOpening, hasMaterialHistory: original.hasMaterialHistory,
-    authority: null, annualAmounts: null, children: null, allocations: [],
+    hasOpening: original.hasOpening,
+    hasMaterialHistory: original.hasMaterialHistory,
+    authority: null,
+    annualAmounts: null,
+    children: null,
+    allocations: [],
   };
-  if (!original.authority || !original.facts || original.facts.originalCountry !== 'CA') return empty;
-  const rows = await tx.execute<CanadianOpeningReportingAuthority & {
-    matches: boolean; annualAmounts: Record<string, string>; children: OriginalOpeningSourceChildren;
-    allocationSnapshot: CanadianOpeningReportingAllocation[];
-  }>(sql`
+  if (!original.authority || !original.facts || original.facts.originalCountry !== "CA")
+    return empty;
+  const rows = await tx.execute<
+    CanadianOpeningReportingAuthority & {
+      matches: boolean;
+      annualAmounts: Record<string, string>;
+      children: OriginalOpeningSourceChildren;
+      allocationSnapshot: CanadianOpeningReportingAllocation[];
+    }
+  >(
+    sql`
     select r.id,r.opening_balance_id as "openingBalanceId",r.levy_authority_id as "levyAuthorityId",
       r.levy_allocation_sha256 as "levyAllocationSha256",r.employer_authority_id as "employerAuthorityId",
       r.employee_party_id as "employeePartyId",r.tax_year as "taxYear",r.subsidiary_id as "subsidiaryId",
@@ -68,23 +108,50 @@ export async function readEmployeeCanadianOpeningReportingSource(tx: SqlExecutor
       join payroll_opening_balances b on b.org_id=r.org_id and b.id=r.opening_balance_id
      where r.org_id=${input.orgId} and r.levy_authority_id=${original.authority.authorityId}
      for share of r,h,b
-  `, 'objects');
+  `,
+    "objects",
+  );
   if (!rows.length && !original.hasMaterialHistory) return empty;
-  if (rows.length !== 1 || !rows[0]!.matches) throw new PayrollError(`The current Canadian original reporting source is missing or no longer matches retained history. ${rows.length ? RETAINED_REFUSAL : REFUSAL}`);
+  if (rows.length !== 1 || !rows[0]!.matches)
+    throw new PayrollError(
+      `The current Canadian original reporting source is missing or no longer matches retained history. ${rows.length ? RETAINED_REFUSAL : REFUSAL}`,
+    );
   const row = rows[0]!;
   const catalogue = await readCanadianOpeningReportingCatalogue(tx, input.orgId);
   let allocations: CanadianOpeningReportingAllocation[];
   try {
-    allocations = canonicalCanadianOpeningReportingAllocations({
-      orgId: input.orgId, subsidiaryId: row.subsidiaryId, originalCountry: row.originalCountry,
-      originalCurrency: row.originalCurrency, coverageStart: row.coverageStart, coverageEnd: row.coverageEnd,
-      annualAmounts: row.annualAmounts, children: row.children,
-    }, row.allocationSnapshot, catalogue);
+    allocations = canonicalCanadianOpeningReportingAllocations(
+      {
+        orgId: input.orgId,
+        subsidiaryId: row.subsidiaryId,
+        originalCountry: row.originalCountry,
+        originalCurrency: row.originalCurrency,
+        coverageStart: row.coverageStart,
+        coverageEnd: row.coverageEnd,
+        annualAmounts: row.annualAmounts,
+        children: row.children,
+      },
+      row.allocationSnapshot,
+      catalogue,
+    );
   } catch (error) {
-    if (error instanceof PayrollError) throw new PayrollError(`${error.message}. ${RETAINED_REFUSAL}`, { cause: error });
+    if (error instanceof PayrollError)
+      throw new PayrollError(`${error.message}. ${RETAINED_REFUSAL}`, { cause: error });
     throw error;
   }
-  const { matches: _matches, annualAmounts, children, allocationSnapshot: _snapshot, ...authority } = row;
-  return { hasOpening: original.hasOpening, hasMaterialHistory: original.hasMaterialHistory,
-    authority, annualAmounts, children, allocations };
+  const {
+    matches: _matches,
+    annualAmounts,
+    children,
+    allocationSnapshot: _snapshot,
+    ...authority
+  } = row;
+  return {
+    hasOpening: original.hasOpening,
+    hasMaterialHistory: original.hasMaterialHistory,
+    authority,
+    annualAmounts,
+    children,
+    allocations,
+  };
 }

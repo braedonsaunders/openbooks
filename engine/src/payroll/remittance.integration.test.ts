@@ -1,10 +1,18 @@
 import { payrollSettings } from "./run-setup.ts";
-import { seedPayrollAccountingConfiguration } from '../testing/fixtures.ts';
-import { seedPayrollLine, seedPayrollParty, seedPayrollVendorRole } from '../testing/fixtures.ts';
-import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
+import { seedPayrollAccountingConfiguration } from "../testing/fixtures.ts";
+import { seedPayrollLine, seedPayrollParty, seedPayrollVendorRole } from "../testing/fixtures.ts";
+import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from "../testing/fixtures.ts";
 import {
-  seedPayrollSchedule, seedPayrollPerson, seedPostingAccount, seedPayrollProfile, seedPayrollWage, createScratchOrg,
-  dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions,
+  seedPayrollSchedule,
+  seedPayrollPerson,
+  seedPostingAccount,
+  seedPayrollProfile,
+  seedPayrollWage,
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+  grantScratchPermissions,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -29,7 +37,10 @@ import { attributePayRunEntity } from "./run-lifecycle.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { qualifyCanadianOpeningForTest, seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
+import {
+  qualifyCanadianOpeningForTest,
+  seedCanadianPayrollComponentsForTest as seedPayrollComponents,
+} from "./filing-test-fixtures.ts";
 import { t4Slips, t4Summary } from "./yearend.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 
@@ -54,13 +65,20 @@ async function createRemittanceFixture(): Promise<RemittanceFixture> {
   const componentId = randomUUID();
   const scheduleId = randomUUID();
   const filingAccountId = randomUUID();
-  const filingAccount = await db.execute<{ id: string }>(sql`
+  const filingAccount = await db.execute<{ id: string }>(
+    sql`
     insert into payroll_filing_accounts
       (id, org_id, country, program_type, account_number, name, remitter_type, is_default)
     values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0088',
       'Remittance fixture account', 'regular', true)
-    returning id`, "objects");
-  assert.equal(filingAccount.length, 1, "remittance fixture must establish its historical filing account");
+    returning id`,
+    "objects",
+  );
+  assert.equal(
+    filingAccount.length,
+    1,
+    "remittance fixture must establish its historical filing account",
+  );
   await db.execute(sql`
     insert into accounts
       (id, org_id, number, name, type, is_summary, is_active, eliminate,
@@ -69,26 +87,46 @@ async function createRemittanceFixture(): Promise<RemittanceFixture> {
       (${liabilityAccountId}, ${org.orgId}, ${`23${componentId.slice(0, 2)}`},
        'Remittance liability', 'liability_current', false, true, false, false,
        '[]'::jsonb, '{}'::jsonb, true)`);
-  const vendorRole = await db.execute<{ party_id: string }>(sql`
+  const vendorRole = await db.execute<{ party_id: string }>(
+    sql`
     insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
     values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
-    returning party_id`, "objects");
+    returning party_id`,
+    "objects",
+  );
   assert.equal(vendorRole.length, 1, "remittance fixture must establish its payee role");
-  const destination = await db.execute<{ id: string }>(sql`
+  const destination = await db.execute<{ id: string }>(
+    sql`
     update orgs
        set settings = jsonb_set(
          jsonb_set(coalesce(settings, '{}'::jsonb), '{payroll}',
            coalesce(settings->'payroll', '{}'::jsonb)),
          '{payroll,craRemittancePartyId}', to_jsonb(${org.vendorId}::text))
-     where id = ${org.orgId} returning id`, "objects");
-  assert.equal(destination.length, 1, "remittance fixture must assign its CRA destination before billing");
+     where id = ${org.orgId} returning id`,
+    "objects",
+  );
+  assert.equal(
+    destination.length,
+    1,
+    "remittance fixture must assign its CRA destination before billing",
+  );
   await seedPayrollComponent(org.orgId, componentId, {
-    code: `TESTTAX-${componentId.slice(0, 6)}`, name: 'Test withholding', kind: 'deduction',
-    systemKey: 'income_tax', liabilityAccountId: liabilityAccountId, remittancePartyId: org.vendorId, sequence: 10,
-    country: 'CA', createdBy: actorId, updatedBy: actorId,
+    code: `TESTTAX-${componentId.slice(0, 6)}`,
+    name: "Test withholding",
+    kind: "deduction",
+    systemKey: "income_tax",
+    liabilityAccountId: liabilityAccountId,
+    remittancePartyId: org.vendorId,
+    sequence: 10,
+    country: "CA",
+    createdBy: actorId,
+    updatedBy: actorId,
   });
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-    name: 'Remittance race schedule', frequency: 'monthly', periodsPerYear: 12, anchorPeriodEnd: '2026-01-31',
+    name: "Remittance race schedule",
+    frequency: "monthly",
+    periodsPerYear: 12,
+    anchorPeriodEnd: "2026-01-31",
     payDateOffsetDays: 0,
   });
   return { org, actorId, componentId, liabilityAccountId, scheduleId, filingAccountId };
@@ -106,7 +144,13 @@ function createFixtureRemittanceBill(
 
 async function addCommittedRemittanceAccrual(
   fixture: RemittanceFixture,
-  input: { payDate: string; amount: string; employeeId?: string; snapshotPartyId?: string; subsidiaryId?: string | null },
+  input: {
+    payDate: string;
+    amount: string;
+    employeeId?: string;
+    snapshotPartyId?: string;
+    subsidiaryId?: string | null;
+  },
 ): Promise<{ runDocumentId: string }> {
   const { org, actorId, componentId, liabilityAccountId, scheduleId, filingAccountId } = fixture;
   const employeeId = input.employeeId ?? randomUUID();
@@ -118,12 +162,22 @@ async function addCommittedRemittanceAccrual(
   const stubId = randomUUID();
   const lineId = randomUUID();
   await seedPayrollPerson(org.orgId, employeeId, `Accrual ${employeeId.slice(0, 6)}`, {
-    subsidiaryId: org.subsidiaryId, createdBy: actorId, updatedBy: actorId,
+    subsidiaryId: org.subsidiaryId,
+    createdBy: actorId,
+    updatedBy: actorId,
   });
   await seedPayrollDocument(org.orgId, documentId, {
-    kind: 'pay_run', documentNumber: `REM-${documentId.slice(0, 8)}`, subsidiaryId: runSubsidiaryId,
-    documentDate: input.payDate, postingDate: input.payDate, postingPeriodId: org.periodId, currency: 'CAD',
-    status: 'draft', memo: 'Remittance race source', createdBy: actorId, updatedBy: actorId,
+    kind: "pay_run",
+    documentNumber: `REM-${documentId.slice(0, 8)}`,
+    subsidiaryId: runSubsidiaryId,
+    documentDate: input.payDate,
+    postingDate: input.payDate,
+    postingPeriodId: org.periodId,
+    currency: "CAD",
+    status: "draft",
+    memo: "Remittance race source",
+    createdBy: actorId,
+    updatedBy: actorId,
   });
   await db.execute(sql`
     insert into pay_runs
@@ -135,23 +189,47 @@ async function addCommittedRemittanceAccrual(
   // pay_stubs.employment_id is NOT NULL: the stub carries the employee's own
   // HRM employment.
   const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, { country: 'CA', countrySource: 'calculation',
-    id: stubId, province: 'ON', periodsPerYear: 12, payDate: input.payDate, taxYear: 2026, currency: 'CAD',
-    gross: input.amount, pensionableEarnings: input.amount, insurableEarnings: input.amount, netPay: input.amount,
-    employerCost: input.amount, vacationAccrued: '0', factors: {}, filingAccountId: filingAccountId,
-    filingAccountSource: 'calculation', createdBy: actorId, updatedBy: actorId,
+  await seedPayrollStub(org.orgId, documentId, employeeId, employmentId, {
+    country: "CA",
+    countrySource: "calculation",
+    id: stubId,
+    province: "ON",
+    periodsPerYear: 12,
+    payDate: input.payDate,
+    taxYear: 2026,
+    currency: "CAD",
+    gross: input.amount,
+    pensionableEarnings: input.amount,
+    insurableEarnings: input.amount,
+    netPay: input.amount,
+    employerCost: input.amount,
+    vacationAccrued: "0",
+    factors: {},
+    filingAccountId: filingAccountId,
+    filingAccountSource: "calculation",
+    createdBy: actorId,
+    updatedBy: actorId,
   });
   await seedPayrollLine(org.orgId, stubId, componentId, {
-    id: lineId, kind: 'deduction', description: 'Test withholding', amount: input.amount, sequence: 10,
-    liabilityAccountId: liabilityAccountId, liabilityAccountSource: 'commit',
-    remittancePartyId: input.snapshotPartyId ?? org.vendorId, createdBy: actorId, updatedBy: actorId,
+    id: lineId,
+    kind: "deduction",
+    description: "Test withholding",
+    amount: input.amount,
+    sequence: 10,
+    liabilityAccountId: liabilityAccountId,
+    liabilityAccountSource: "commit",
+    remittancePartyId: input.snapshotPartyId ?? org.vendorId,
+    createdBy: actorId,
+    updatedBy: actorId,
   });
   return { runDocumentId: documentId };
 }
 
 async function waitForRemittanceFenceWaiter(key: string): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const waiting = (await db.execute<{ waiting: boolean }>(sql`
+    const waiting = (
+      await db.execute<{ waiting: boolean }>(
+        sql`
       select exists (
         select 1
           from pg_locks
@@ -159,7 +237,10 @@ async function waitForRemittanceFenceWaiter(key: string): Promise<void> {
            and classid = ((hashtextextended(${key}, 0) >> 32) & 4294967295)
            and objid = (hashtextextended(${key}, 0) & 4294967295)
       ) as waiting
-    `, "objects"))[0]?.waiting;
+    `,
+        "objects",
+      )
+    )[0]?.waiting;
     if (waiting) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
@@ -173,7 +254,8 @@ test(
     const fixture = await createRemittanceFixture();
     try {
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-07-15", amount: "100.00",
+        payDate: "2026-07-15",
+        amount: "100.00",
       });
       const bill = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId,
@@ -199,8 +281,13 @@ test(
         /payroll remittance.*(?:voided|no longer)|no longer.*matches committed payroll/i,
       );
       assert.equal(
-        (await db.execute<{ status: string }>(sql`
-          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!.status,
+        (
+          await db.execute<{ status: string }>(
+            sql`
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`,
+            "objects",
+          )
+        )[0]!.status,
         "approved",
         "a stale remittance bill remains unposted for review/voiding",
       );
@@ -217,7 +304,8 @@ test(
     const fixture = await createRemittanceFixture();
     try {
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-07-15", amount: "100.00",
+        payDate: "2026-07-15",
+        amount: "100.00",
       });
       const bill = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId,
@@ -228,7 +316,8 @@ test(
       // exactly its own lines, and the fresh accrual waits for the next
       // incremental bill rather than blocking this one's posting.
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-07-20", amount: "50.00",
+        payDate: "2026-07-20",
+        amount: "50.00",
       });
       await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
       await postDocument(bill.documentId, {
@@ -239,8 +328,13 @@ test(
         },
       });
       assert.equal(
-        (await db.execute<{ status: string }>(sql`
-          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!.status,
+        (
+          await db.execute<{ status: string }>(
+            sql`
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`,
+            "objects",
+          )
+        )[0]!.status,
         "posted",
       );
     } finally {
@@ -256,31 +350,58 @@ test(
     const fixture = await createRemittanceFixture();
     try {
       const source = await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-07-15", amount: "100.00",
+        payDate: "2026-07-15",
+        amount: "100.00",
       });
-      const stub = (await db.execute<{ id: string }>(sql`
+      const stub = (
+        await db.execute<{ id: string }>(
+          sql`
         select id::text as id from pay_stubs
          where org_id = ${fixture.org.orgId} and pay_run_document_id = ${source.runDocumentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       const creditComponentId = randomUUID();
       await seedPayrollComponent(fixture.org.orgId, creditComponentId, {
-        code: "REFUND-CREDIT", name: "Refundable payroll credit", kind: "credit",
-        systemKey: null, liabilityAccountId: fixture.liabilityAccountId, remittancePartyId: fixture.org.vendorId,
-        country: "CA", sequence: 20, isActive: true, createdBy: fixture.actorId, updatedBy: fixture.actorId,
+        code: "REFUND-CREDIT",
+        name: "Refundable payroll credit",
+        kind: "credit",
+        systemKey: null,
+        liabilityAccountId: fixture.liabilityAccountId,
+        remittancePartyId: fixture.org.vendorId,
+        country: "CA",
+        sequence: 20,
+        isActive: true,
+        createdBy: fixture.actorId,
+        updatedBy: fixture.actorId,
       });
       await seedPayrollLine(fixture.org.orgId, stub.id, creditComponentId, {
-        id: randomUUID(), kind: "credit", description: "Refundable payroll credit", amount: "25.00",
-        sequence: 20, liabilityAccountId: fixture.liabilityAccountId, liabilityAccountSource: "commit",
+        id: randomUUID(),
+        kind: "credit",
+        description: "Refundable payroll credit",
+        amount: "25.00",
+        sequence: 20,
+        liabilityAccountId: fixture.liabilityAccountId,
+        liabilityAccountSource: "commit",
         remittancePartyId: fixture.org.vendorId,
-        createdBy: fixture.actorId, updatedBy: fixture.actorId,
+        createdBy: fixture.actorId,
+        updatedBy: fixture.actorId,
       });
 
       const bill = await createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId, from: "2026-07-01", to: "2026-07-31",
+        partyId: fixture.org.vendorId,
+        from: "2026-07-01",
+        to: "2026-07-31",
       });
-      const total = (await db.execute<{ total: string }>(sql`
+      const total = (
+        await db.execute<{ total: string }>(
+          sql`
         select total::text as total from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}
-      `, "objects"))[0]!.total;
+      `,
+          "objects",
+        )
+      )[0]!.total;
       assert.equal(cmp(total, "75.00"), 0);
 
       await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
@@ -291,225 +412,254 @@ test(
           bank: fixture.org.accounts.bank,
         },
       });
-      assert.equal((await db.execute<{ status: string }>(sql`
+      assert.equal(
+        (
+          await db.execute<{ status: string }>(
+            sql`
         select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}
-      `, "objects"))[0]!.status, "posted");
+      `,
+            "objects",
+          )
+        )[0]!.status,
+        "posted",
+      );
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
     }
   },
 );
 
-test(
-  "a remittance bill whose total was hand-edited cannot post",
-  { skip: !DB },
-  async () => {
-    const fixture = await createRemittanceFixture();
-    try {
-      await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-07-15", amount: "100.00",
-      });
-      const bill = await createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId,
-        from: "2026-07-01",
-        to: "2026-07-31",
-      });
-      // The source never moved, but the bill no longer states what it
-      // consumed: the header and its lines still tie out (so the storage
-      // tie-out trigger passes), yet the total is not what the coverage
-      // accounts for. The posting receipt must fail closed.
-      await db.execute(sql`
+test("a remittance bill whose total was hand-edited cannot post", { skip: !DB }, async () => {
+  const fixture = await createRemittanceFixture();
+  try {
+    await addCommittedRemittanceAccrual(fixture, {
+      payDate: "2026-07-15",
+      amount: "100.00",
+    });
+    const bill = await createFixtureRemittanceBill(fixture, {
+      partyId: fixture.org.vendorId,
+      from: "2026-07-01",
+      to: "2026-07-31",
+    });
+    // The source never moved, but the bill no longer states what it
+    // consumed: the header and its lines still tie out (so the storage
+    // tie-out trigger passes), yet the total is not what the coverage
+    // accounts for. The posting receipt must fail closed.
+    await db.execute(sql`
         update document_lines set amount = '90.00', unit_price = '90.00'
          where org_id = ${fixture.org.orgId} and document_id = ${bill.documentId}`);
-      await db.execute(sql`
+    await db.execute(sql`
         update documents set total = '90.00', subtotal = '90.00'
          where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`);
-      await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
-      await assert.rejects(
-        postDocument(bill.documentId, {
-          control: {
-            ar: fixture.org.accounts.ar,
-            ap: fixture.org.accounts.ap,
-            bank: fixture.org.accounts.bank,
-          },
-        }),
-        /payroll remittance bill .* no longer matches its committed source/,
-      );
-      assert.equal(
-        (await db.execute<{ status: string }>(sql`
-          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!.status,
-        "approved",
-        "a tampered remittance bill remains unposted for review/voiding",
-      );
-    } finally {
-      await dropScratchOrgReporting(fixture.org.orgId);
-    }
-  },
-);
+    await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
+    await assert.rejects(
+      postDocument(bill.documentId, {
+        control: {
+          ar: fixture.org.accounts.ar,
+          ap: fixture.org.accounts.ap,
+          bank: fixture.org.accounts.bank,
+        },
+      }),
+      /payroll remittance bill .* no longer matches its committed source/,
+    );
+    assert.equal(
+      (
+        await db.execute<{ status: string }>(
+          sql`
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`,
+          "objects",
+        )
+      )[0]!.status,
+      "approved",
+      "a tampered remittance bill remains unposted for review/voiding",
+    );
+  } finally {
+    await dropScratchOrgReporting(fixture.org.orgId);
+  }
+});
 
-test(
-  "a remittance bill moved to another currency cannot post",
-  { skip: !DB },
-  async () => {
-    const fixture = await createRemittanceFixture();
-    try {
-      await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-07-15", amount: "100.00",
-      });
-      const bill = await createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId,
-        from: "2026-07-01",
-        to: "2026-07-31",
-      });
-      // The coverage is untouched and the total still ties out: only the
-      // header currency drifted, behind the same lines.
-      const stored = (await db.execute<{ currency: string }>(sql`
+test("a remittance bill moved to another currency cannot post", { skip: !DB }, async () => {
+  const fixture = await createRemittanceFixture();
+  try {
+    await addCommittedRemittanceAccrual(fixture, {
+      payDate: "2026-07-15",
+      amount: "100.00",
+    });
+    const bill = await createFixtureRemittanceBill(fixture, {
+      partyId: fixture.org.vendorId,
+      from: "2026-07-01",
+      to: "2026-07-31",
+    });
+    // The coverage is untouched and the total still ties out: only the
+    // header currency drifted, behind the same lines.
+    const stored = (
+      await db.execute<{ currency: string }>(
+        sql`
         select currency from documents
-         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
-      await db.execute(sql`
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`,
+        "objects",
+      )
+    )[0]!;
+    await db.execute(sql`
         update documents set currency = ${stored.currency === "USD" ? "CAD" : "USD"}
          where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`);
-      await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
-      await assert.rejects(
-        postDocument(bill.documentId, {
-          control: {
-            ar: fixture.org.accounts.ar,
-            ap: fixture.org.accounts.ap,
-            bank: fixture.org.accounts.bank,
-          },
-        }),
-        /payroll remittance bill .* its currency .* differs from its entity's/,
-      );
-      assert.equal(
-        (await db.execute<{ status: string }>(sql`
-          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!.status,
-        "approved",
-        "a currency-moved remittance bill remains unposted for review/voiding",
-      );
-    } finally {
-      await dropScratchOrgReporting(fixture.org.orgId);
-    }
-  },
-);
+    await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
+    await assert.rejects(
+      postDocument(bill.documentId, {
+        control: {
+          ar: fixture.org.accounts.ar,
+          ap: fixture.org.accounts.ap,
+          bank: fixture.org.accounts.bank,
+        },
+      }),
+      /payroll remittance bill .* its currency .* differs from its entity's/,
+    );
+    assert.equal(
+      (
+        await db.execute<{ status: string }>(
+          sql`
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`,
+          "objects",
+        )
+      )[0]!.status,
+      "approved",
+      "a currency-moved remittance bill remains unposted for review/voiding",
+    );
+  } finally {
+    await dropScratchOrgReporting(fixture.org.orgId);
+  }
+});
 
-test(
-  "a remittance bill moved to another entity cannot post",
-  { skip: !DB },
-  async () => {
-    const fixture = await createRemittanceFixture();
-    try {
-      await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-07-15", amount: "100.00",
-      });
-      const bill = await createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId,
-        from: "2026-07-01",
-        to: "2026-07-31",
-      });
-      // A second entity with the same base currency isolates the subsidiary
-      // drift from the currency drift: only the books move.
-      const stored = (await db.execute<{ currency: string; subsidiary_id: string }>(sql`
+test("a remittance bill moved to another entity cannot post", { skip: !DB }, async () => {
+  const fixture = await createRemittanceFixture();
+  try {
+    await addCommittedRemittanceAccrual(fixture, {
+      payDate: "2026-07-15",
+      amount: "100.00",
+    });
+    const bill = await createFixtureRemittanceBill(fixture, {
+      partyId: fixture.org.vendorId,
+      from: "2026-07-01",
+      to: "2026-07-31",
+    });
+    // A second entity with the same base currency isolates the subsidiary
+    // drift from the currency drift: only the books move.
+    const stored = (
+      await db.execute<{ currency: string; subsidiary_id: string }>(
+        sql`
         select currency, subsidiary_id::text as subsidiary_id from documents
-         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
-      const second = (await db.execute<{ id: string }>(sql`
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`,
+        "objects",
+      )
+    )[0]!;
+    const second = (
+      await db.execute<{ id: string }>(
+        sql`
         insert into subsidiaries (org_id, parent_id, name, base_currency, country)
         select org_id, id, 'Second entity', ${stored.currency}, country
           from subsidiaries where org_id = ${fixture.org.orgId} limit 1
-        returning id::text as id`, "objects"))[0]!;
-      await db.execute(sql`
+        returning id::text as id`,
+        "objects",
+      )
+    )[0]!;
+    await db.execute(sql`
         update documents set subsidiary_id = ${second.id}
          where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`);
-      await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
-      await assert.rejects(
-        postDocument(bill.documentId, {
-          control: {
-            ar: fixture.org.accounts.ar,
-            ap: fixture.org.accounts.ap,
-            bank: fixture.org.accounts.bank,
-          },
-        }),
-        /payroll remittance bill .* its subsidiary changed/,
-      );
-      assert.equal(
-        (await db.execute<{ status: string }>(sql`
-          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!.status,
-        "approved",
-        "an entity-moved remittance bill remains unposted for review/voiding",
-      );
-    } finally {
-      await dropScratchOrgReporting(fixture.org.orgId);
-    }
-  },
-);
+    await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
+    await assert.rejects(
+      postDocument(bill.documentId, {
+        control: {
+          ar: fixture.org.accounts.ar,
+          ap: fixture.org.accounts.ap,
+          bank: fixture.org.accounts.bank,
+        },
+      }),
+      /payroll remittance bill .* its subsidiary changed/,
+    );
+    assert.equal(
+      (
+        await db.execute<{ status: string }>(
+          sql`
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`,
+          "objects",
+        )
+      )[0]!.status,
+      "approved",
+      "an entity-moved remittance bill remains unposted for review/voiding",
+    );
+  } finally {
+    await dropScratchOrgReporting(fixture.org.orgId);
+  }
+});
 
-test(
-  "remittance bill lines refuse edits while header saves pass",
-  { skip: !DB },
-  async () => {
-    const fixture = await createRemittanceFixture();
-    try {
-      await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-07-15", amount: "100.00",
-      });
-      const bill = await createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId,
-        from: "2026-07-01",
-        to: "2026-07-31",
-      });
-      // Replacing the generated lines would break the receipt the posting
-      // check reconciles: refuse by name with the regenerate remedy.
-      await assert.rejects(
-        assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, [{}]),
-        (error: unknown) =>
-          error instanceof RemittanceSourceIntegrityError
-          && /its lines cannot be edited/.test(error.message)
-          && /raise a fresh bill/.test(error.message),
-      );
-      // A header-only save keeps the stored lines and proceeds.
-      assert.equal(
-        await assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null),
-        true,
-      );
-      // Currency and subsidiary are stamped at creation: a header-only save
-      // that moves either refuses by name, even with the lines untouched.
-      const stored = (await db.execute<{ currency: string; subsidiary_id: string }>(sql`
+test("remittance bill lines refuse edits while header saves pass", { skip: !DB }, async () => {
+  const fixture = await createRemittanceFixture();
+  try {
+    await addCommittedRemittanceAccrual(fixture, {
+      payDate: "2026-07-15",
+      amount: "100.00",
+    });
+    const bill = await createFixtureRemittanceBill(fixture, {
+      partyId: fixture.org.vendorId,
+      from: "2026-07-01",
+      to: "2026-07-31",
+    });
+    // Replacing the generated lines would break the receipt the posting
+    // check reconciles: refuse by name with the regenerate remedy.
+    await assert.rejects(
+      assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, [{}]),
+      (error: unknown) =>
+        error instanceof RemittanceSourceIntegrityError &&
+        /its lines cannot be edited/.test(error.message) &&
+        /raise a fresh bill/.test(error.message),
+    );
+    // A header-only save keeps the stored lines and proceeds.
+    assert.equal(
+      await assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null),
+      true,
+    );
+    // Currency and subsidiary are stamped at creation: a header-only save
+    // that moves either refuses by name, even with the lines untouched.
+    const stored = (
+      await db.execute<{ currency: string; subsidiary_id: string }>(
+        sql`
         select currency, subsidiary_id::text as subsidiary_id
-          from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
-      await assert.rejects(
-        assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null, {
-          currency: stored.currency === "USD" ? "CAD" : "USD",
-        }),
-        (error: unknown) =>
-          error instanceof RemittanceSourceIntegrityError
-          && /its currency cannot be changed/.test(error.message)
-          && /raise a fresh bill/.test(error.message),
-      );
-      await assert.rejects(
-        assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null, {
-          subsidiaryId: randomUUID(),
-        }),
-        (error: unknown) =>
-          error instanceof RemittanceSourceIntegrityError
-          && /its subsidiary cannot be changed/.test(error.message)
-          && /raise a fresh bill/.test(error.message),
-      );
-      // Restating the stamped values is not a change and passes.
-      assert.equal(
-        await assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null, {
-          currency: stored.currency, subsidiaryId: stored.subsidiary_id,
-        }),
-        true,
-      );
-      // Ordinary bills are untouched by this guard.
-      assert.equal(
-        await assertRemittanceBillEdit(db, fixture.org.orgId, randomUUID(), null),
-        false,
-      );
-    } finally {
-      await dropScratchOrgReporting(fixture.org.orgId);
-    }
-  },
-);
+          from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`,
+        "objects",
+      )
+    )[0]!;
+    await assert.rejects(
+      assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null, {
+        currency: stored.currency === "USD" ? "CAD" : "USD",
+      }),
+      (error: unknown) =>
+        error instanceof RemittanceSourceIntegrityError &&
+        /its currency cannot be changed/.test(error.message) &&
+        /raise a fresh bill/.test(error.message),
+    );
+    await assert.rejects(
+      assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null, {
+        subsidiaryId: randomUUID(),
+      }),
+      (error: unknown) =>
+        error instanceof RemittanceSourceIntegrityError &&
+        /its subsidiary cannot be changed/.test(error.message) &&
+        /raise a fresh bill/.test(error.message),
+    );
+    // Restating the stamped values is not a change and passes.
+    assert.equal(
+      await assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null, {
+        currency: stored.currency,
+        subsidiaryId: stored.subsidiary_id,
+      }),
+      true,
+    );
+    // Ordinary bills are untouched by this guard.
+    assert.equal(await assertRemittanceBillEdit(db, fixture.org.orgId, randomUUID(), null), false);
+  } finally {
+    await dropScratchOrgReporting(fixture.org.orgId);
+  }
+});
 
 test(
   "voiding payroll is blocked while a posted remittance bill covers it",
@@ -518,7 +668,8 @@ test(
     const fixture = await createRemittanceFixture();
     try {
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-07-15", amount: "100.00",
+        payDate: "2026-07-15",
+        amount: "100.00",
       });
       const bill = await createFixtureRemittanceBill(fixture, {
         partyId: fixture.org.vendorId,
@@ -534,8 +685,13 @@ test(
         values
           (${expenseAccount}, ${fixture.org.orgId}, '6100', 'Payroll expense', 'expense',
            false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-      const source = (await db.execute<{ document_id: string }>(sql`
-        select document_id from pay_runs where org_id = ${fixture.org.orgId} limit 1`, "objects"))[0]!;
+      const source = (
+        await db.execute<{ document_id: string }>(
+          sql`
+        select document_id from pay_runs where org_id = ${fixture.org.orgId} limit 1`,
+          "objects",
+        )
+      )[0]!;
       await db.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, amount, created_by)
         values
@@ -572,8 +728,13 @@ test(
         /posted payroll remittance bill.*void|void.*remittance bill/i,
       );
       assert.equal(
-        (await db.execute<{ status: string }>(sql`
-          select status from documents where org_id = ${fixture.org.orgId} and id = ${source.document_id}`, "objects"))[0]!.status,
+        (
+          await db.execute<{ status: string }>(
+            sql`
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${source.document_id}`,
+            "objects",
+          )
+        )[0]!.status,
         "posted",
         "the source payroll remains posted when the void is refused",
       );
@@ -592,137 +753,249 @@ test(
     await grantScratchPermissions(org.orgId, actorId, ["payroll.run", "payroll.read"]);
     try {
       const filingAccountId = randomUUID();
-      const filingAccount = await db.execute<{ id: string }>(sql`
+      const filingAccount = await db.execute<{ id: string }>(
+        sql`
         insert into payroll_filing_accounts
           (id, org_id, country, program_type, account_number, name, remitter_type, is_default, subsidiary_id)
         values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0089',
           'CRA remittance account', 'regular', true, ${org.subsidiaryId})
-        returning id`, "objects");
-      assert.equal(filingAccount.length, 1, "CRA remittance must have a filing account before payroll calculation");
-      await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId,
-        country: "CA", factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01",
-        value: "1.4", changeReason: "Standard employer EI multiple for the fixture's CRA account" });
+        returning id`,
+        "objects",
+      );
+      assert.equal(
+        filingAccount.length,
+        1,
+        "CRA remittance must have a filing account before payroll calculation",
+      );
+      await upsertPayrollEmployerFact({
+        orgId: org.orgId,
+        actorId,
+        filingAccountId,
+        country: "CA",
+        factKey: "ei_employer_multiplier",
+        effectiveFrom: "2026-01-01",
+        value: "1.4",
+        changeReason: "Standard employer EI multiple for the fixture's CRA account",
+      });
       const account = seedPostingAccount.bind(null, org.orgId);
       const wageExpense = await account("6000", "Wages expense", "expense");
       const netPayable = await account("2300", "Wages payable", "liability_current");
       const craPayable = await account("2310", "CRA payable", "liability_current");
       const vacationPayable = await account("2320", "Vacation payable", "liability_current");
       // org.vendorId (Acme Vendor) doubles as the CRA remittance vendor.
-      const vendorRole = await db.execute<{ party_id: string }>(sql`
+      const vendorRole = await db.execute<{ party_id: string }>(
+        sql`
         insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
-        returning party_id`, "objects");
+        returning party_id`,
+        "objects",
+      );
       assert.equal(vendorRole.length, 1, "end-to-end CRA fixture must establish its payee role");
       await seedPayrollAccountingConfiguration(org.orgId, {
-    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
-            wageExpenseAccountId: wageExpense, burdenExpenseAccountId: wageExpense,
-            netPayAccountId: netPayable,
-             wagesTo: "expense",
-            craRemittancePartyId: org.vendorId,
-          });
+        slotAccounts: {
+          CA: {
+            cpp: craPayable,
+            ei: craPayable,
+            qpip: craPayable,
+            income_tax: craPayable,
+            vacation: vacationPayable,
+          },
+        },
+        wageExpenseAccountId: wageExpense,
+        burdenExpenseAccountId: wageExpense,
+        netPayAccountId: netPayable,
+        wagesTo: "expense",
+        craRemittancePartyId: org.vendorId,
+      });
       await seedPayrollComponents(org.orgId, actorId);
 
       const employeeId = randomUUID();
-      await seedPayrollPerson(org.orgId, employeeId, 'Remi Trent');
+      await seedPayrollPerson(org.orgId, employeeId, "Remi Trent");
       // Stub calculation refuses employees without an HRM employment, so the
       // hire carries one and the profile points at it.
       const remiEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
       await seedPayrollWage(org.orgId, employeeId, actorId, {
-        currency: 'CAD', rate: '104000', basis: 'year', annualHours: '2080', effectiveFrom: '2026-01-01',
+        currency: "CAD",
+        rate: "104000",
+        basis: "year",
+        annualHours: "2080",
+        effectiveFrom: "2026-01-01",
       });
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        name: "Biweekly",
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-07-18",
         payDateOffsetDays: 3,
       });
-      await seedPayrollProfile(org.orgId, employeeId, remiEmploymentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1,
-        filingAccountId: filingAccountId,
-        wcbExempt: true, wcbExemptReason: 'remittance fixture: workers-compensation coverage out of scope',
-      }, { percentFloor: '4', method: 'accrue' });
+      await seedPayrollProfile(
+        org.orgId,
+        employeeId,
+        remiEmploymentId,
+        scheduleId,
+        actorId,
+        {
+          country: "CA",
+          province: "ON",
+          payBasis: "salary",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+          filingAccountId: filingAccountId,
+          wcbExempt: true,
+          wcbExemptReason: "remittance fixture: workers-compensation coverage out of scope",
+        },
+        { percentFloor: "4", method: "accrue" },
+      );
 
       // Cross the first CPP ceiling in this payment so the employee and
       // employer CPP2 rows are both exercised by GL and CRA remittance paths.
       const openingAmounts = { pensionableYtd: "74000.00", insurableYtd: "0.00" };
-      assert.deepEqual((await saveOpeningBalances({
-        orgId: org.orgId, actorId, taxYear: 2026,
-        rows: [{ employeePartyId: employeeId, amounts: openingAmounts }],
-      })).errors, []);
-      await qualifyCanadianOpeningForTest({ orgId: org.orgId, actorId, subsidiaryId: org.subsidiaryId,
-        employeePartyId: employeeId, taxYear: 2026, filingAccountId, province: "ON",
-        coverageStart: "2026-01-01", coverageEnd: "2026-06-30", amounts: openingAmounts,
+      assert.deepEqual(
+        (
+          await saveOpeningBalances({
+            orgId: org.orgId,
+            actorId,
+            taxYear: 2026,
+            rows: [{ employeePartyId: employeeId, amounts: openingAmounts }],
+          })
+        ).errors,
+        [],
+      );
+      await qualifyCanadianOpeningForTest({
+        orgId: org.orgId,
+        actorId,
+        subsidiaryId: org.subsidiaryId,
+        employeePartyId: employeeId,
+        taxYear: 2026,
+        filingAccountId,
+        province: "ON",
+        coverageStart: "2026-01-01",
+        coverageEnd: "2026-06-30",
+        amounts: openingAmounts,
         reportableBases: { cpp: "74000", ei: "0", qpip: "0" },
         levyAllocations: [
-          ...["AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT"].map(region =>
-            ({ programKey: "ca_wcb", region, federalAccountId: null, amount: "0" })),
-          ...["BC","MB","NL","ON"].map(region =>
-            ({ programKey: "ca_eht", region, federalAccountId: null, amount: "0" })),
+          ...["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT"].map(
+            (region) => ({ programKey: "ca_wcb", region, federalAccountId: null, amount: "0" }),
+          ),
+          ...["BC", "MB", "NL", "ON"].map((region) => ({
+            programKey: "ca_eht",
+            region,
+            federalAccountId: null,
+            amount: "0",
+          })),
           { programKey: "ca_cnt", region: "QC", federalAccountId: null, amount: "0" },
         ],
       });
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
+      assert.deepEqual(
+        (await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors,
+        [],
+      );
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
 
-      const stub = (await db.execute<{ gross: string; factors: Record<string, string> }>(sql`
+      const stub = (
+        await db.execute<{ gross: string; factors: Record<string, string> }>(
+          sql`
         select gross, factors from pay_stubs where pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
 
       // Summary: one CRA group; vacation accrual excluded; totals reconcile.
-      const groups = await payrollRemittanceSummary(org.orgId, { from: "2026-07-01", to: "2026-07-31" });
+      const groups = await payrollRemittanceSummary(org.orgId, {
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
       assert.equal(groups.length, 1);
       const cra = groups[0]!;
       assert.equal(cra.partyId, org.vendorId);
-      assert.equal(cra.filingAccount.id, filingAccountId, "the remittance uses the payroll calculation's filing account");
+      assert.equal(
+        cra.filingAccount.id,
+        filingAccountId,
+        "the remittance uses the payroll calculation's filing account",
+      );
       assert.ok(!cra.components.some((c) => c.systemKey === "vacation_accrual"));
       const expectedTotal = sum([
-        add(stub.factors.T!, stub.factors.TB ?? "0"),     // income tax
-        stub.factors.C!,                                   // employee CPP
-        stub.factors.C2 ?? "0",                           // employee CPP2
-        stub.factors.EI!,                                  // employee EI
-        add(stub.factors.C!, stub.factors.C2 ?? "0"),      // employer CPP match
-        stub.factors.EI_ER!,                               // employer EI
+        add(stub.factors.T!, stub.factors.TB ?? "0"), // income tax
+        stub.factors.C!, // employee CPP
+        stub.factors.C2 ?? "0", // employee CPP2
+        stub.factors.EI!, // employee EI
+        add(stub.factors.C!, stub.factors.C2 ?? "0"), // employer CPP match
+        stub.factors.EI_ER!, // employer EI
       ]);
       assert.equal(cmp(cra.total, expectedTotal), 0);
       assert.equal(cra.employeeCount, 1);
-      const cpp2EmployerComponent = cra.components.find((component) =>
-        component.systemKey === "cpp2" && component.kind === "employer_contribution");
-      assert.ok(cpp2EmployerComponent, "CPP2 employer contribution is included in the CRA remittance");
+      const cpp2EmployerComponent = cra.components.find(
+        (component) => component.systemKey === "cpp2" && component.kind === "employer_contribution",
+      );
+      assert.ok(
+        cpp2EmployerComponent,
+        "CPP2 employer contribution is included in the CRA remittance",
+      );
       assert.equal(cpp2EmployerComponent!.amount, stub.factors.C2);
       const [t4Slip] = await t4Slips(org.orgId, 2026);
       assert.ok(t4Slip, "the committed payment produces its T4 slip");
       assert.equal(t4Slip!.box16aCpp2, stub.factors.C2);
       assert.equal(t4Slip!.employerCpp2, stub.factors.C2);
 
-      const cpp2Liability = await db.execute<{ liability_account_id: string; amount: string }>(sql`
+      const cpp2Liability = await db.execute<{ liability_account_id: string; amount: string }>(
+        sql`
         select line.liability_account_id,line.amount::text
           from pay_stub_lines line join pay_stubs stub on stub.org_id=line.org_id and stub.id=line.stub_id
           join pay_components component on component.org_id=line.org_id and component.id=line.component_id
          where stub.org_id=${org.orgId} and stub.pay_run_document_id=${run.documentId}
-           and component.system_key='cpp2' and component.kind='employer_contribution'`, "objects");
-      assert.deepEqual(cpp2Liability, [{ liability_account_id: cpp2EmployerComponent!.liabilityAccountId!, amount: stub.factors.C2! }]);
-      const projectedLiability = (await db.execute<{ amount: string }>(sql`
+           and component.system_key='cpp2' and component.kind='employer_contribution'`,
+        "objects",
+      );
+      assert.deepEqual(cpp2Liability, [
+        {
+          liability_account_id: cpp2EmployerComponent!.liabilityAccountId!,
+          amount: stub.factors.C2!,
+        },
+      ]);
+      const projectedLiability = (
+        await db.execute<{ amount: string }>(
+          sql`
         select coalesce(sum(amount),0)::text as amount from document_lines
-         where org_id=${org.orgId} and document_id=${run.documentId} and account_id=${craPayable}`, "objects"))[0]!;
-      assert.equal(cmp(projectedLiability.amount, neg(cra.total)), 0,
-        "the consolidated liability credit includes employee and employer CPP2 exactly once");
+         where org_id=${org.orgId} and document_id=${run.documentId} and account_id=${craPayable}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(
+        cmp(projectedLiability.amount, neg(cra.total)),
+        0,
+        "the consolidated liability credit includes employee and employer CPP2 exactly once",
+      );
 
       // Bill: draft vendor_bill debiting the liability account, marked for the period.
       const bill = await createRemittanceBill(org.orgId, actorId, {
-        partyId: org.vendorId, from: "2026-07-01", to: "2026-07-31", filingAccountId,
+        partyId: org.vendorId,
+        from: "2026-07-01",
+        to: "2026-07-31",
+        filingAccountId,
       });
-      const billDoc = (await db.execute<{
-        status: string;
-        total: string;
-        due_date: string;
-        custom: Record<string, unknown> | null;
-      }>(sql`
+      const billDoc = (
+        await db.execute<{
+          status: string;
+          total: string;
+          due_date: string;
+          custom: Record<string, unknown> | null;
+        }>(
+          sql`
         select status, total, due_date, custom from documents where id = ${bill.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(billDoc.status, "draft");
       assert.equal(cmp(billDoc.total, cra.total), 0);
       // The 15th of the following month, moved off the weekend: August 15 2026
@@ -730,14 +1003,20 @@ test(
       // time if it is received on the next business day. Before the statutory
       // holiday calendar existed this stamped the Saturday.
       assert.equal(billDoc.due_date, "2026-08-17");
-      const billLines = await db.execute<{ account_id: string; amount: string }>(sql`
+      const billLines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
         select account_id, amount from document_lines where document_id = ${bill.documentId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.ok(billLines.every((l) => l.account_id === craPayable));
       assert.equal(cmp(sum(billLines.map((l) => l.amount)), cra.total), 0);
 
       // The raised bill shows on the next summary for the same period.
-      const after = await payrollRemittanceSummary(org.orgId, { from: "2026-07-01", to: "2026-07-31" });
+      const after = await payrollRemittanceSummary(org.orgId, {
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
       assert.equal(after[0]!.existingBills.length, 1);
       assert.equal(after[0]!.existingBills[0]!.documentNumber, bill.documentNumber);
 
@@ -755,33 +1034,61 @@ test(
         where org_id=${org.orgId} and id=${employeeId}`);
       await db.execute(sql`update accounts set subsidiary_id=${transferredTo},subsidiary_include_children=false
         where org_id=${org.orgId} and id=${org.accounts.bank}`);
-      await assert.rejects(recordPayRunPayment({
-        orgId: org.orgId, actorId, documentId: run.documentId, bankAccountId: org.accounts.bank,
-        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
-      }), /restricted to another subsidiary/, "payroll cannot credit a bank account owned by another legal entity");
+      await assert.rejects(
+        recordPayRunPayment({
+          orgId: org.orgId,
+          actorId,
+          documentId: run.documentId,
+          bankAccountId: org.accounts.bank,
+          allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+        }),
+        /restricted to another subsidiary/,
+        "payroll cannot credit a bank account owned by another legal entity",
+      );
       await db.execute(sql`update accounts set subsidiary_id=null
         where org_id=${org.orgId} and id=${org.accounts.bank}`);
       const payment = await recordPayRunPayment({
-        orgId: org.orgId, actorId, documentId: run.documentId, bankAccountId: org.accounts.bank,
+        orgId: org.orgId,
+        actorId,
+        documentId: run.documentId,
+        bankAccountId: org.accounts.bank,
         allowedSubsidiaryIds: new Set([org.subsidiaryId]),
       });
-      const stubNet = (await db.execute<{ net_pay: string }>(sql`
+      const stubNet = (
+        await db.execute<{ net_pay: string }>(
+          sql`
         select net_pay from pay_stubs where pay_run_document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(cmp(payment.total, stubNet.net_pay), 0);
-      const paidRun = (await db.execute<{ paid_at: string | null; paid_entry_id: string | null }>(sql`
+      const paidRun = (
+        await db.execute<{ paid_at: string | null; paid_entry_id: string | null }>(
+          sql`
         select paid_at, paid_entry_id from pay_runs where document_id = ${run.documentId}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.ok(paidRun.paid_at && paidRun.paid_entry_id);
-      const settlement = (await db.execute<{ n: number }>(sql`
+      const settlement = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from applications a
           join journal_lines jl on jl.id = a.from_line_id
          where jl.entry_id = ${paidRun.paid_entry_id}
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(settlement.n, 1); // one employee, one applied open item
       await assert.rejects(
         recordPayRunPayment({
-          orgId: org.orgId, actorId, documentId: run.documentId, bankAccountId: org.accounts.bank,
+          orgId: org.orgId,
+          actorId,
+          documentId: run.documentId,
+          bankAccountId: org.accounts.bank,
         }),
         /already recorded as paid/,
       );
@@ -803,32 +1110,29 @@ test(
   },
 );
 
-test(
-  "mixed-subsidiary pay run payment balances each legal entity",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await grantScratchPermissions(org.orgId, actorId, ["payroll.run", "payroll.read"]);
-    try {
-      const childSubsidiaryId = randomUUID();
-      const netPayableId = randomUUID();
-      const dueFromId = randomUUID();
-      const dueToId = randomUUID();
-      const scheduleId = randomUUID();
-      const documentId = randomUUID();
-      const postedEntryId = randomUUID();
-      const rootEmployeeId = randomUUID();
-      const childEmployeeId = randomUUID();
+test("mixed-subsidiary pay run payment balances each legal entity", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  await grantScratchPermissions(org.orgId, actorId, ["payroll.run", "payroll.read"]);
+  try {
+    const childSubsidiaryId = randomUUID();
+    const netPayableId = randomUUID();
+    const dueFromId = randomUUID();
+    const dueToId = randomUUID();
+    const scheduleId = randomUUID();
+    const documentId = randomUUID();
+    const postedEntryId = randomUUID();
+    const rootEmployeeId = randomUUID();
+    const childEmployeeId = randomUUID();
 
-      await db.execute(sql`
+    await db.execute(sql`
         insert into subsidiaries
           (id, org_id, parent_id, name, base_currency, country, tax_ids,
            is_elimination, is_active, custom)
         values
           (${childSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Child Co',
            'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
-      await db.execute(sql`
+    await db.execute(sql`
         insert into accounts
           (id, org_id, number, name, type, is_summary, is_active, eliminate,
            reconcilable, required_dimensions, custom, subsidiary_include_children)
@@ -842,20 +1146,20 @@ test(
           (${dueToId}, ${org.orgId}, '2410', 'Due to Main Co',
            'liability_current_other', false, true, true, false, '[]'::jsonb,
            '{}'::jsonb, true)`);
-      await db.execute(sql`
+    await db.execute(sql`
         insert into intercompany_pairs
           (id, org_id, from_subsidiary_id, to_subsidiary_id,
            due_from_account_id, due_to_account_id, is_active, created_by, updated_by)
         values
           (${randomUUID()}, ${org.orgId}, ${org.subsidiaryId}, ${childSubsidiaryId},
            ${dueFromId}, ${dueToId}, true, ${actorId}, ${actorId})`);
-      await db.execute(sql`
+    await db.execute(sql`
         update orgs
            set settings = settings || ${JSON.stringify({
              payroll: { netPayAccountId: netPayableId },
            })}::jsonb
          where id = ${org.orgId}`);
-      await db.execute(sql`
+    await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, subsidiary_id,
                              is_active, custom, created_by, updated_by)
         values
@@ -863,16 +1167,27 @@ test(
            ${org.subsidiaryId}, true, '{}'::jsonb, ${actorId}, ${actorId}),
           (${childEmployeeId}, ${org.orgId}, 'person', 'Child Employee',
            ${childSubsidiaryId}, true, '{}'::jsonb, ${actorId}, ${actorId})`);
-      await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Mixed Co Schedule', frequency: 'monthly', periodsPerYear: 12, anchorPeriodEnd: '2026-07-31',
-        payDateOffsetDays: 0,
-      });
-      await seedPayrollDocument(org.orgId, documentId, {
-        kind: 'pay_run', documentNumber: 'PAY-MIXED-001', subsidiaryId: org.subsidiaryId, documentDate: '2026-07-15',
-        postingDate: '2026-07-15', postingPeriodId: org.periodId, currency: 'CAD', status: 'draft',
-        memo: 'Mixed subsidiary payment fixture', createdBy: actorId, updatedBy: actorId,
-      });
-      await db.execute(sql`
+    await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+      name: "Mixed Co Schedule",
+      frequency: "monthly",
+      periodsPerYear: 12,
+      anchorPeriodEnd: "2026-07-31",
+      payDateOffsetDays: 0,
+    });
+    await seedPayrollDocument(org.orgId, documentId, {
+      kind: "pay_run",
+      documentNumber: "PAY-MIXED-001",
+      subsidiaryId: org.subsidiaryId,
+      documentDate: "2026-07-15",
+      postingDate: "2026-07-15",
+      postingPeriodId: org.periodId,
+      currency: "CAD",
+      status: "draft",
+      memo: "Mixed subsidiary payment fixture",
+      createdBy: actorId,
+      updatedBy: actorId,
+    });
+    await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
            period_id, memo, status, origin, source_document_id, created_by,
@@ -882,7 +1197,7 @@ test(
            'PAY-MIXED-SOURCE', '2026-07-15', ${org.periodId},
            'Mixed subsidiary payroll accrual', 'draft', 'payroll', ${documentId},
            ${actorId}, ${actorId})`);
-      await db.execute(sql`
+    await db.execute(sql`
         insert into journal_lines
           (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
            currency, txn_amount, fx_rate, party_id, is_open_item, memo)
@@ -899,16 +1214,16 @@ test(
           (${org.orgId}, ${postedEntryId}, 4, ${netPayableId},
            ${childSubsidiaryId}, '-150.0000', 'CAD', '-150.0000', 1,
            ${childEmployeeId}, true, 'Child net pay')`);
-      await db.execute(sql`
+    await db.execute(sql`
         update journal_entries
            set status = 'posted', posted_at = now(), posted_by = ${actorId}
          where id = ${postedEntryId} and org_id = ${org.orgId}`);
-      await db.execute(sql`
+    await db.execute(sql`
         update documents
            set status = 'posted', posted_entry_id = ${postedEntryId},
                updated_at = now(), updated_by = ${actorId}
          where id = ${documentId} and org_id = ${org.orgId}`);
-      await db.execute(sql`
+    await db.execute(sql`
         insert into pay_runs
           (document_id, org_id, pay_schedule_id, period_start, period_end,
            pay_date, tax_year, run_status, run_type, created_by, updated_by)
@@ -916,90 +1231,141 @@ test(
           (${documentId}, ${org.orgId}, ${scheduleId}, '2026-07-01', '2026-07-15',
            '2026-07-15', 2026, 'committed', 'regular', ${actorId}, ${actorId})`);
 
-      const rootOnlyPayment = () => recordPayRunPayment({
-        orgId: org.orgId, actorId, documentId, bankAccountId: org.accounts.bank,
+    const rootOnlyPayment = () =>
+      recordPayRunPayment({
+        orgId: org.orgId,
+        actorId,
+        documentId,
+        bankAccountId: org.accounts.bank,
         allowedSubsidiaryIds: new Set([org.subsidiaryId]),
       });
-      await assert.rejects(rootOnlyPayment, /pay run not found/);
-      // Current employment does not transfer an already-posted liability.
-      await db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId}
+    await assert.rejects(rootOnlyPayment, /pay run not found/);
+    // Current employment does not transfer an already-posted liability.
+    await db.execute(sql`update parties set subsidiary_id=${org.subsidiaryId}
         where org_id=${org.orgId} and id=${childEmployeeId}`);
-      await assert.rejects(rootOnlyPayment, /pay run not found/,
-        "moving the employee cannot authorize settlement of the hidden originating entity");
+    await assert.rejects(
+      rootOnlyPayment,
+      /pay run not found/,
+      "moving the employee cannot authorize settlement of the hidden originating entity",
+    );
 
-      const payAll = () => recordPayRunPayment({
-        orgId: org.orgId, actorId, documentId, bankAccountId: org.accounts.bank,
-      });
-      await db.execute(sql`update accounts set subsidiary_id=${childSubsidiaryId},subsidiary_include_children=false
-        where org_id=${org.orgId} and id=${dueFromId}`);
-      await assert.rejects(payAll, /restricted to another subsidiary/,
-        "new intercompany balancing legs obey their own account ownership");
-      await db.execute(sql`update accounts set subsidiary_id=null where org_id=${org.orgId} and id=${dueFromId}`);
-      await db.execute(sql`update subsidiaries set is_active=false where org_id=${org.orgId} and id=${childSubsidiaryId}`);
-      await assert.rejects(payAll, /inactive/, "every settled entity must be active");
-      await db.execute(sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${childSubsidiaryId}`);
-      const beforePayment = (await db.execute<{ paid_at: string | null; entries: number }>(sql`
-        select r.paid_at,(select count(*)::int from journal_entries e where e.org_id=r.org_id) as entries
-          from pay_runs r where r.org_id=${org.orgId} and r.document_id=${documentId}`, "objects"))[0]!;
-      assert.deepEqual(beforePayment, { paid_at: null, entries: 1 }, "all refusals leave only the source journal");
-
-      const payment = await recordPayRunPayment({
+    const payAll = () =>
+      recordPayRunPayment({
         orgId: org.orgId,
         actorId,
         documentId,
         bankAccountId: org.accounts.bank,
       });
-      assert.equal(cmp(payment.total, "250"), 0);
+    await db.execute(sql`update accounts set subsidiary_id=${childSubsidiaryId},subsidiary_include_children=false
+        where org_id=${org.orgId} and id=${dueFromId}`);
+    await assert.rejects(
+      payAll,
+      /restricted to another subsidiary/,
+      "new intercompany balancing legs obey their own account ownership",
+    );
+    await db.execute(
+      sql`update accounts set subsidiary_id=null where org_id=${org.orgId} and id=${dueFromId}`,
+    );
+    await db.execute(
+      sql`update subsidiaries set is_active=false where org_id=${org.orgId} and id=${childSubsidiaryId}`,
+    );
+    await assert.rejects(payAll, /inactive/, "every settled entity must be active");
+    await db.execute(
+      sql`update subsidiaries set is_active=true where org_id=${org.orgId} and id=${childSubsidiaryId}`,
+    );
+    const beforePayment = (
+      await db.execute<{ paid_at: string | null; entries: number }>(
+        sql`
+        select r.paid_at,(select count(*)::int from journal_entries e where e.org_id=r.org_id) as entries
+          from pay_runs r where r.org_id=${org.orgId} and r.document_id=${documentId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.deepEqual(
+      beforePayment,
+      { paid_at: null, entries: 1 },
+      "all refusals leave only the source journal",
+    );
 
-      const paymentEntry = (await db.execute<{
+    const payment = await recordPayRunPayment({
+      orgId: org.orgId,
+      actorId,
+      documentId,
+      bankAccountId: org.accounts.bank,
+    });
+    assert.equal(cmp(payment.total, "250"), 0);
+
+    const paymentEntry = (
+      await db.execute<{
         origin: string;
-      }>(sql`
+      }>(
+        sql`
         select origin from journal_entries
          where org_id = ${org.orgId} and id = ${payment.entryId}
-      `, "objects"))[0]!;
-      assert.equal(paymentEntry.origin, "intercompany");
+      `,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(paymentEntry.origin, "intercompany");
 
-      const subsidiaryBalances = await db.execute<{
-        subsidiary_id: string; total: string;
-      }>(sql`
+    const subsidiaryBalances = await db.execute<{
+      subsidiary_id: string;
+      total: string;
+    }>(
+      sql`
         select subsidiary_id, sum(amount)::text as total
           from journal_lines
          where org_id = ${org.orgId} and entry_id = ${payment.entryId}
          group by subsidiary_id
          order by subsidiary_id
-      `, "objects");
-      assert.equal(subsidiaryBalances.length, 2);
-      assert.ok(subsidiaryBalances.every((row) => cmp(row.total, "0") === 0));
+      `,
+      "objects",
+    );
+    assert.equal(subsidiaryBalances.length, 2);
+    assert.ok(subsidiaryBalances.every((row) => cmp(row.total, "0") === 0));
 
-      const dueLegs = await db.execute<{
-        account_id: string; subsidiary_id: string; amount: string;
-      }>(sql`
+    const dueLegs = await db.execute<{
+      account_id: string;
+      subsidiary_id: string;
+      amount: string;
+    }>(
+      sql`
         select account_id, subsidiary_id, amount::text as amount
           from journal_lines
          where org_id = ${org.orgId} and entry_id = ${payment.entryId}
            and account_id in (${dueFromId}, ${dueToId})
          order by subsidiary_id
-      `, "objects");
-      const dueByAccount = new Map(dueLegs.map((row) => [row.account_id, row]));
-      assert.deepEqual(dueByAccount.get(dueFromId), {
-        account_id: dueFromId, subsidiary_id: org.subsidiaryId, amount: "150.0000",
-      });
-      assert.deepEqual(dueByAccount.get(dueToId), {
-        account_id: dueToId, subsidiary_id: childSubsidiaryId, amount: "-150.0000",
-      });
+      `,
+      "objects",
+    );
+    const dueByAccount = new Map(dueLegs.map((row) => [row.account_id, row]));
+    assert.deepEqual(dueByAccount.get(dueFromId), {
+      account_id: dueFromId,
+      subsidiary_id: org.subsidiaryId,
+      amount: "150.0000",
+    });
+    assert.deepEqual(dueByAccount.get(dueToId), {
+      account_id: dueToId,
+      subsidiary_id: childSubsidiaryId,
+      amount: "-150.0000",
+    });
 
-      const applications = (await db.execute<{ n: number }>(sql`
+    const applications = (
+      await db.execute<{ n: number }>(
+        sql`
         select count(*)::int as n
           from applications a
           join journal_lines jl on jl.id = a.from_line_id
          where a.org_id = ${org.orgId} and jl.entry_id = ${payment.entryId}
-      `, "objects"))[0]!;
-      assert.equal(applications.n, 2);
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+      `,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(applications.n, 2);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
 
 test(
   "remittance bills reject overlapping live periods for one destination",
@@ -1008,28 +1374,39 @@ test(
     const fixture = await createRemittanceFixture();
     try {
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-15", amount: "10.00",
+        payDate: "2026-01-15",
+        amount: "10.00",
       });
       await createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+        partyId: fixture.org.vendorId,
+        from: "2026-01-01",
+        to: "2026-01-31",
       });
 
       await assert.rejects(
         createFixtureRemittanceBill(fixture, {
-          partyId: fixture.org.vendorId, from: "2026-01-15", to: "2026-02-15",
+          partyId: fixture.org.vendorId,
+          from: "2026-01-15",
+          to: "2026-02-15",
         }),
         /overlaps 2026-01-01 – 2026-01-31/,
       );
-      const bills = (await db.execute<{ n: number }>(sql`
+      const bills = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n
           from documents
          where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
            and custom->'payrollRemittance'->>'partyId' = ${fixture.org.vendorId}
            and status <> 'voided'
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(bills.n, 1);
       const overlappingSummary = await payrollRemittanceSummary(fixture.org.orgId, {
-        from: "2026-01-15", to: "2026-02-15",
+        from: "2026-01-15",
+        to: "2026-02-15",
       });
       assert.equal(overlappingSummary[0]!.existingBills.length, 1);
     } finally {
@@ -1045,34 +1422,44 @@ test(
     const fixture = await createRemittanceFixture();
     try {
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-15", amount: "10.00",
+        payDate: "2026-01-15",
+        amount: "10.00",
       });
       const first = await createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+        partyId: fixture.org.vendorId,
+        from: "2026-01-01",
+        to: "2026-01-31",
       });
       // A second accrual lands after the first bill: the same window now
       // holds $10 of consumed lines and $5 of fresh ones.
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-20", amount: "5.00",
+        payDate: "2026-01-20",
+        amount: "5.00",
       });
       const second = await createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+        partyId: fixture.org.vendorId,
+        from: "2026-01-01",
+        to: "2026-01-31",
       });
       assert.notEqual(second.documentId, first.documentId);
-      const totals = await db.execute<{ id: string; total: string }>(sql`
+      const totals = await db.execute<{ id: string; total: string }>(
+        sql`
         select id::text as id, total::text as total
           from documents
          where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
            and custom->'payrollRemittance'->>'partyId' = ${fixture.org.vendorId}
            and status <> 'voided'
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(totals.length, 2);
       const byId = new Map(totals.map((row) => [row.id, row.total]));
       assert.equal(cmp(byId.get(first.documentId)!, "10.00"), 0);
       assert.equal(cmp(byId.get(second.documentId)!, "5.00"), 0);
       // No double bill: every consumed line is covered exactly once, by the
       // bill that billed it, and the two bills' coverage never shares a line.
-      const coverage = await db.execute<{ line: string; bills: number; amount: string }>(sql`
+      const coverage = await db.execute<{ line: string; bills: number; amount: string }>(
+        sql`
         select cov.stub_line_id::text as line, count(*)::int as bills,
                sum(cov.amount)::text as amount
           from payroll_remittance_coverage cov
@@ -1080,7 +1467,9 @@ test(
             on bill.id = cov.bill_document_id and bill.org_id = cov.org_id
          where cov.org_id = ${fixture.org.orgId} and bill.status <> 'voided'
          group by cov.stub_line_id
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(coverage.length, 2);
       for (const row of coverage) assert.equal(row.bills, 1);
       assert.equal(
@@ -1091,7 +1480,9 @@ test(
       // Nothing left unbilled: an exact re-run keeps the duplicate refusal.
       await assert.rejects(
         createFixtureRemittanceBill(fixture, {
-          partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+          partyId: fixture.org.vendorId,
+          from: "2026-01-01",
+          to: "2026-01-31",
         }),
         /already exists/,
       );
@@ -1108,15 +1499,19 @@ test(
     const fixture = await createRemittanceFixture();
     try {
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-15", amount: "10.00",
+        payDate: "2026-01-15",
+        amount: "10.00",
       });
       // A run document with no subsidiary: its accrual stays in the
       // consolidated group only, alongside the attributed slice above.
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-20", amount: "5.00", subsidiaryId: null,
+        payDate: "2026-01-20",
+        amount: "5.00",
+        subsidiaryId: null,
       });
       const groups = await payrollRemittanceSummary(fixture.org.orgId, {
-        from: "2026-01-01", to: "2026-01-31",
+        from: "2026-01-01",
+        to: "2026-01-31",
       });
       const group = groups.find((candidate) => candidate.partyId === fixture.org.vendorId)!;
       assert.equal(group.hasEntitylessAccruals, true);
@@ -1125,24 +1520,33 @@ test(
       // partial period as if it were whole.
       await assert.rejects(
         createFixtureRemittanceBill(fixture, {
-          partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+          partyId: fixture.org.vendorId,
+          from: "2026-01-01",
+          to: "2026-01-31",
         }),
         /no legal entity/,
       );
       await assert.rejects(
         createFixtureRemittanceBill(fixture, {
-          partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+          partyId: fixture.org.vendorId,
+          from: "2026-01-01",
+          to: "2026-01-31",
           subsidiaryId: fixture.org.subsidiaryId,
         }),
         /no legal entity/,
       );
-      const bills = (await db.execute<{ n: number }>(sql`
+      const bills = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n
           from documents
          where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
            and custom->'payrollRemittance'->>'partyId' = ${fixture.org.vendorId}
            and status <> 'voided'
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(bills.n, 0, "a refused billing creates no bill");
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
@@ -1150,181 +1554,224 @@ test(
   },
 );
 
-test(
-  "an entityless committed run remits after legacy attribution",
-  { skip: !DB },
-  async () => {
-    const fixture = await createRemittanceFixture();
-    try {
-      await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-15", amount: "10.00",
-      });
-      const entityless = await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-20", amount: "5.00", subsidiaryId: null,
-      });
-      await assert.rejects(
-        createFixtureRemittanceBill(fixture, {
-          partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
-        }),
-        /no legal entity/,
-      );
-      // The run is unposted, so no journal follows it yet — only the
-      // document's subsidiary moves, with an audited trail.
-      const attributed = await attributePayRunEntity({
-        orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
-        actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
-      });
-      assert.equal(attributed.reclassedLines, 0);
-      const audit = (await db.execute<{ action: string; changes: string }>(sql`
+test("an entityless committed run remits after legacy attribution", { skip: !DB }, async () => {
+  const fixture = await createRemittanceFixture();
+  try {
+    await addCommittedRemittanceAccrual(fixture, {
+      payDate: "2026-01-15",
+      amount: "10.00",
+    });
+    const entityless = await addCommittedRemittanceAccrual(fixture, {
+      payDate: "2026-01-20",
+      amount: "5.00",
+      subsidiaryId: null,
+    });
+    await assert.rejects(
+      createFixtureRemittanceBill(fixture, {
+        partyId: fixture.org.vendorId,
+        from: "2026-01-01",
+        to: "2026-01-31",
+      }),
+      /no legal entity/,
+    );
+    // The run is unposted, so no journal follows it yet — only the
+    // document's subsidiary moves, with an audited trail.
+    const attributed = await attributePayRunEntity({
+      orgId: fixture.org.orgId,
+      documentId: entityless.runDocumentId,
+      actorId: fixture.actorId,
+      subsidiaryId: fixture.org.subsidiaryId,
+    });
+    assert.equal(attributed.reclassedLines, 0);
+    const audit = (
+      await db.execute<{ action: string; changes: string }>(
+        sql`
         select action, changes::text as changes from audit_log
          where org_id = ${fixture.org.orgId} and row_id = ${entityless.runDocumentId}
-         order by id desc limit 1`, "objects"))[0]!;
-      assert.equal(audit.action, "update");
-      assert.match(audit.changes, /legacy attribution/);
-      assert.match(audit.changes, new RegExp(fixture.actorId));
-      // Attributed, the same window remits whole: both accruals, one bill.
-      const groups = await payrollRemittanceSummary(fixture.org.orgId, {
-        from: "2026-01-01", to: "2026-01-31",
-      });
-      const group = groups.find((candidate) => candidate.partyId === fixture.org.vendorId)!;
-      assert.equal(group.hasEntitylessAccruals, false);
-      const bill = await createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
-      });
-      const total = (await db.execute<{ total: string }>(sql`
+         order by id desc limit 1`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(audit.action, "update");
+    assert.match(audit.changes, /legacy attribution/);
+    assert.match(audit.changes, new RegExp(fixture.actorId));
+    // Attributed, the same window remits whole: both accruals, one bill.
+    const groups = await payrollRemittanceSummary(fixture.org.orgId, {
+      from: "2026-01-01",
+      to: "2026-01-31",
+    });
+    const group = groups.find((candidate) => candidate.partyId === fixture.org.vendorId)!;
+    assert.equal(group.hasEntitylessAccruals, false);
+    const bill = await createFixtureRemittanceBill(fixture, {
+      partyId: fixture.org.vendorId,
+      from: "2026-01-01",
+      to: "2026-01-31",
+    });
+    const total = (
+      await db.execute<{ total: string }>(
+        sql`
         select total::text as total from documents
-         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
-      assert.equal(cmp(total.total, "15.00"), 0);
-    } finally {
-      await dropScratchOrgReporting(fixture.org.orgId);
-    }
-  },
-);
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(cmp(total.total, "15.00"), 0);
+  } finally {
+    await dropScratchOrgReporting(fixture.org.orgId);
+  }
+});
 
-test(
-  "attribution refuses what it must not rewrite",
-  { skip: !DB },
-  async () => {
-    const fixture = await createRemittanceFixture();
-    try {
-      const entityless = await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-20", amount: "5.00", subsidiaryId: null,
-      });
-      // A malformed target, an out-of-scope target, and an inactive target
-      // all refuse before any row moves.
-      await assert.rejects(
-        attributePayRunEntity({
-          orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
-          actorId: fixture.actorId, subsidiaryId: "not-a-subsidiary",
-        }),
-        /choose a subsidiary/,
-      );
-      await assert.rejects(
-        attributePayRunEntity({
-          orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
-          actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
-          allowedSubsidiaryIds: new Set([randomUUID()]),
-        }),
-        /pay run not found/,
-      );
-      // The root can never go inactive (the tree guard refuses), so the
-      // inactive target is a retired child entity.
-      const retired = (await db.execute<{ id: string }>(sql`
+test("attribution refuses what it must not rewrite", { skip: !DB }, async () => {
+  const fixture = await createRemittanceFixture();
+  try {
+    const entityless = await addCommittedRemittanceAccrual(fixture, {
+      payDate: "2026-01-20",
+      amount: "5.00",
+      subsidiaryId: null,
+    });
+    // A malformed target, an out-of-scope target, and an inactive target
+    // all refuse before any row moves.
+    await assert.rejects(
+      attributePayRunEntity({
+        orgId: fixture.org.orgId,
+        documentId: entityless.runDocumentId,
+        actorId: fixture.actorId,
+        subsidiaryId: "not-a-subsidiary",
+      }),
+      /choose a subsidiary/,
+    );
+    await assert.rejects(
+      attributePayRunEntity({
+        orgId: fixture.org.orgId,
+        documentId: entityless.runDocumentId,
+        actorId: fixture.actorId,
+        subsidiaryId: fixture.org.subsidiaryId,
+        allowedSubsidiaryIds: new Set([randomUUID()]),
+      }),
+      /pay run not found/,
+    );
+    // The root can never go inactive (the tree guard refuses), so the
+    // inactive target is a retired child entity.
+    const retired = (
+      await db.execute<{ id: string }>(
+        sql`
         insert into subsidiaries (org_id, parent_id, name, base_currency, country)
         select org_id, id, 'Retired entity', base_currency, country
           from subsidiaries where org_id = ${fixture.org.orgId} limit 1
-        returning id::text as id`, "objects"))[0]!;
-      await db.execute(sql`
+        returning id::text as id`,
+        "objects",
+      )
+    )[0]!;
+    await db.execute(sql`
         update subsidiaries set is_active = false
          where org_id = ${fixture.org.orgId} and id = ${retired.id}`);
-      await assert.rejects(
-        attributePayRunEntity({
-          orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
-          actorId: fixture.actorId, subsidiaryId: retired.id,
-        }),
-        /missing or inactive/,
-      );
-      await attributePayRunEntity({
-        orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
-        actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
-      });
-      // Re-attribution would move live books between entities.
-      await assert.rejects(
-        attributePayRunEntity({
-          orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
-          actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
-        }),
-        /already attributed and cannot be re-attributed/,
-      );
-      // A voided run is gone: attribution cannot resurrect it.
-      await db.execute(sql`
+    await assert.rejects(
+      attributePayRunEntity({
+        orgId: fixture.org.orgId,
+        documentId: entityless.runDocumentId,
+        actorId: fixture.actorId,
+        subsidiaryId: retired.id,
+      }),
+      /missing or inactive/,
+    );
+    await attributePayRunEntity({
+      orgId: fixture.org.orgId,
+      documentId: entityless.runDocumentId,
+      actorId: fixture.actorId,
+      subsidiaryId: fixture.org.subsidiaryId,
+    });
+    // Re-attribution would move live books between entities.
+    await assert.rejects(
+      attributePayRunEntity({
+        orgId: fixture.org.orgId,
+        documentId: entityless.runDocumentId,
+        actorId: fixture.actorId,
+        subsidiaryId: fixture.org.subsidiaryId,
+      }),
+      /already attributed and cannot be re-attributed/,
+    );
+    // A voided run is gone: attribution cannot resurrect it.
+    await db.execute(sql`
         update pay_runs set run_status = 'voided'
          where org_id = ${fixture.org.orgId} and document_id = ${entityless.runDocumentId}`);
-      await assert.rejects(
-        attributePayRunEntity({
-          orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
-          actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
-        }),
-        /is voided and cannot be attributed/,
-      );
-    } finally {
-      await dropScratchOrgReporting(fixture.org.orgId);
-    }
-  },
-);
+    await assert.rejects(
+      attributePayRunEntity({
+        orgId: fixture.org.orgId,
+        documentId: entityless.runDocumentId,
+        actorId: fixture.actorId,
+        subsidiaryId: fixture.org.subsidiaryId,
+      }),
+      /is voided and cannot be attributed/,
+    );
+  } finally {
+    await dropScratchOrgReporting(fixture.org.orgId);
+  }
+});
 
-test(
-  "a posted run attributes to the entity its books already name",
-  { skip: !DB },
-  async () => {
-    const fixture = await createRemittanceFixture();
-    try {
-      // Posting needs a date inside the scratch org's open period.
-      const entityless = await addCommittedRemittanceAccrual(fixture, {
-        payDate: fixture.org.date, amount: "5.00", subsidiaryId: null,
-      });
-      // The committed GL projection commitPayRun would have materialized
-      // (DR wages, CR withholding) — the fixture seeds runs pre-commit, so
-      // the test writes the balanced line set itself while still draft.
-      await db.execute(sql`
+test("a posted run attributes to the entity its books already name", { skip: !DB }, async () => {
+  const fixture = await createRemittanceFixture();
+  try {
+    // Posting needs a date inside the scratch org's open period.
+    const entityless = await addCommittedRemittanceAccrual(fixture, {
+      payDate: fixture.org.date,
+      amount: "5.00",
+      subsidiaryId: null,
+    });
+    // The committed GL projection commitPayRun would have materialized
+    // (DR wages, CR withholding) — the fixture seeds runs pre-commit, so
+    // the test writes the balanced line set itself while still draft.
+    await db.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description, amount)
         values (${fixture.org.orgId}, ${entityless.runDocumentId}, 1, ${fixture.org.accounts.cogs}, 'Wages', '5.00'),
                (${fixture.org.orgId}, ${entityless.runDocumentId}, 2, ${fixture.liabilityAccountId}, 'Withholding', '-5.00')`);
-      // Posting an entityless document stamps its lines with the root
-      // entity — journal lines cannot carry a null tag (not-null since
-      // baseline), so attributing to the root aligns the header without
-      // rewriting any posted row.
-      await submitAndReleaseIfUngated("pay_run", entityless.runDocumentId, fixture.actorId);
-      await postDocument(entityless.runDocumentId, {
-        control: {
-          ar: fixture.org.accounts.ar,
-          ap: fixture.org.accounts.ap,
-          bank: fixture.org.accounts.bank,
-        },
-      });
-      const attributed = await attributePayRunEntity({
-        orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
-        actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
-      });
-      assert.equal(attributed.reclassedLines, 0, "no posted row is rewritten");
-      const doc = (await db.execute<{ subsidiary_id: string | null }>(sql`
+    // Posting an entityless document stamps its lines with the root
+    // entity — journal lines cannot carry a null tag (not-null since
+    // baseline), so attributing to the root aligns the header without
+    // rewriting any posted row.
+    await submitAndReleaseIfUngated("pay_run", entityless.runDocumentId, fixture.actorId);
+    await postDocument(entityless.runDocumentId, {
+      control: {
+        ar: fixture.org.accounts.ar,
+        ap: fixture.org.accounts.ap,
+        bank: fixture.org.accounts.bank,
+      },
+    });
+    const attributed = await attributePayRunEntity({
+      orgId: fixture.org.orgId,
+      documentId: entityless.runDocumentId,
+      actorId: fixture.actorId,
+      subsidiaryId: fixture.org.subsidiaryId,
+    });
+    assert.equal(attributed.reclassedLines, 0, "no posted row is rewritten");
+    const doc = (
+      await db.execute<{ subsidiary_id: string | null }>(
+        sql`
         select subsidiary_id::text as subsidiary_id from documents
-         where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`, "objects"))[0]!;
-      assert.equal(doc.subsidiary_id, fixture.org.subsidiaryId);
-      // Aligned, the posted run remits: its accruals now sit in the root's
-      // slice instead of the entityless consolidated group.
-      const bill = await createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId, from: fixture.org.date, to: fixture.org.date,
-      });
-      const total = (await db.execute<{ total: string }>(sql`
+         where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(doc.subsidiary_id, fixture.org.subsidiaryId);
+    // Aligned, the posted run remits: its accruals now sit in the root's
+    // slice instead of the entityless consolidated group.
+    const bill = await createFixtureRemittanceBill(fixture, {
+      partyId: fixture.org.vendorId,
+      from: fixture.org.date,
+      to: fixture.org.date,
+    });
+    const total = (
+      await db.execute<{ total: string }>(
+        sql`
         select total::text as total from documents
-         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`, "objects"))[0]!;
-      assert.equal(cmp(total.total, "5.00"), 0);
-    } finally {
-      await dropScratchOrgReporting(fixture.org.orgId);
-    }
-  },
-);
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(cmp(total.total, "5.00"), 0);
+  } finally {
+    await dropScratchOrgReporting(fixture.org.orgId);
+  }
+});
 
 test(
   "attribution refuses posted lines that already name another entity",
@@ -1334,7 +1781,9 @@ test(
     try {
       // Posting needs a date inside the scratch org's open period.
       const entityless = await addCommittedRemittanceAccrual(fixture, {
-        payDate: fixture.org.date, amount: "5.00", subsidiaryId: null,
+        payDate: fixture.org.date,
+        amount: "5.00",
+        subsidiaryId: null,
       });
       // Same committed projection as the reclass test: the run posts whole
       // before one line is tampered into a second entity.
@@ -1346,11 +1795,16 @@ test(
       // scoped there BEFORE posting, so the posted lines name it through the
       // governed path — never by rewriting posted history. Moving the run
       // would silently rewrite live books elsewhere.
-      const second = (await db.execute<{ id: string }>(sql`
+      const second = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into subsidiaries (org_id, parent_id, name, base_currency, country)
         select org_id, id, 'Second entity', base_currency, country
           from subsidiaries where org_id = ${fixture.org.orgId} limit 1
-        returning id::text as id`, "objects"))[0]!;
+        returning id::text as id`,
+          "objects",
+        )
+      )[0]!;
       await db.execute(sql`
         update documents set subsidiary_id = ${second.id}
          where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`);
@@ -1370,14 +1824,21 @@ test(
          where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`);
       await assert.rejects(
         attributePayRunEntity({
-          orgId: fixture.org.orgId, documentId: entityless.runDocumentId,
-          actorId: fixture.actorId, subsidiaryId: fixture.org.subsidiaryId,
+          orgId: fixture.org.orgId,
+          documentId: entityless.runDocumentId,
+          actorId: fixture.actorId,
+          subsidiaryId: fixture.org.subsidiaryId,
         }),
         /already posts into another entity/,
       );
-      const doc = (await db.execute<{ subsidiary_id: string | null }>(sql`
+      const doc = (
+        await db.execute<{ subsidiary_id: string | null }>(
+          sql`
         select subsidiary_id::text as subsidiary_id from documents
-         where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`, "objects"))[0]!;
+         where org_id = ${fixture.org.orgId} and id = ${entityless.runDocumentId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(doc.subsidiary_id, null, "a refused attribution moves nothing");
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
@@ -1396,23 +1857,29 @@ test(
       // Postgres cast failure.
       await assert.rejects(
         payrollRemittanceSummary(fixture.org.orgId, {
-          from: "2026-02-30", to: "2026-03-31",
+          from: "2026-02-30",
+          to: "2026-03-31",
         }),
-        (error: unknown) =>
-          error instanceof PayrollError && /invalid from/.test(error.message),
+        (error: unknown) => error instanceof PayrollError && /invalid from/.test(error.message),
       );
       await assert.rejects(
         createFixtureRemittanceBill(fixture, {
-          partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-13-01",
+          partyId: fixture.org.vendorId,
+          from: "2026-01-01",
+          to: "2026-13-01",
         }),
-        (error: unknown) =>
-          error instanceof PayrollError && /invalid to/.test(error.message),
+        (error: unknown) => error instanceof PayrollError && /invalid to/.test(error.message),
       );
-      const bills = (await db.execute<{ n: number }>(sql`
+      const bills = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n
           from documents
          where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
-      `, "objects"))[0]!;
+      `,
+          "objects",
+        )
+      )[0]!;
       assert.equal(bills.n, 0, "a refused billing creates no bill");
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
@@ -1428,7 +1895,8 @@ test(
     // The fence is per (destination, filing account, entity): the fixture's
     // accruals post on the root subsidiary, so the holder takes the root's key.
     const key = remittanceFenceLockKey(fixture.org.orgId, {
-      partyId: fixture.org.vendorId, filingAccountId: fixture.filingAccountId,
+      partyId: fixture.org.vendorId,
+      filingAccountId: fixture.filingAccountId,
       subsidiaryId: fixture.org.subsidiaryId,
     });
     let release!: () => void;
@@ -1448,11 +1916,14 @@ test(
     });
     try {
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-15", amount: "10.00",
+        payDate: "2026-01-15",
+        amount: "10.00",
       });
       await lockReady;
       const creating = createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+        partyId: fixture.org.vendorId,
+        from: "2026-01-01",
+        to: "2026-01-31",
       });
       await waitForRemittanceFenceWaiter(key);
 
@@ -1460,15 +1931,21 @@ test(
       // old preflight summary had already captured only the first accrual;
       // the fenced implementation must read both before inserting its bill.
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-01-20", amount: "20.00",
+        payDate: "2026-01-20",
+        amount: "20.00",
       });
       release();
       const bill = await creating;
       await holder;
-      const total = (await db.execute<{ total: string }>(sql`
+      const total = (
+        await db.execute<{ total: string }>(
+          sql`
         select total::text as total from documents
          where org_id = ${fixture.org.orgId} and id = ${bill.documentId}
-      `, "objects"))[0]!.total;
+      `,
+          "objects",
+        )
+      )[0]!.total;
       assert.equal(cmp(total, "30"), 0);
     } finally {
       release();
@@ -1485,14 +1962,20 @@ test(
     const fixture = await createRemittanceFixture();
     try {
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-07-15", amount: "100.00",
+        payDate: "2026-07-15",
+        amount: "100.00",
       });
       // The component's vendor changes in August: July's accrual must keep
       // payee A, while runs committed after the change remit to B.
       const vendorB = randomUUID();
       await seedPayrollParty(fixture.org.orgId, vendorB, {
-        kind: 'company', displayName: 'Local B', subsidiaryId: fixture.org.subsidiaryId, isActive: true, custom: {},
-        createdBy: fixture.actorId, updatedBy: fixture.actorId,
+        kind: "company",
+        displayName: "Local B",
+        subsidiaryId: fixture.org.subsidiaryId,
+        isActive: true,
+        custom: {},
+        createdBy: fixture.actorId,
+        updatedBy: fixture.actorId,
       });
       await seedPayrollVendorRole(fixture.org.orgId, vendorB, fixture.actorId);
       await db.execute(sql`
@@ -1500,7 +1983,8 @@ test(
          where org_id = ${fixture.org.orgId} and id = ${fixture.componentId}`);
 
       const july = await payrollRemittanceSummary(fixture.org.orgId, {
-        from: "2026-07-01", to: "2026-07-31",
+        from: "2026-07-01",
+        to: "2026-07-31",
       });
       assert.equal(july.length, 1);
       assert.equal(july[0]!.partyId, fixture.org.vendorId);
@@ -1508,25 +1992,40 @@ test(
       // The unbilled July accrual still bills to A after the vendor change,
       // and coverage records exactly the July line.
       const billA = await createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId, from: "2026-07-01", to: "2026-07-31",
+        partyId: fixture.org.vendorId,
+        from: "2026-07-01",
+        to: "2026-07-31",
       });
-      const billTotal = (await db.execute<{ total: string }>(sql`
+      const billTotal = (
+        await db.execute<{ total: string }>(
+          sql`
         select total::text as total from documents
-         where org_id = ${fixture.org.orgId} and id = ${billA.documentId}`, "objects"))[0]!.total;
+         where org_id = ${fixture.org.orgId} and id = ${billA.documentId}`,
+          "objects",
+        )
+      )[0]!.total;
       assert.equal(cmp(billTotal, "100"), 0);
-      const coverage = (await db.execute<{ lines: number; covered: string }>(sql`
+      const coverage = (
+        await db.execute<{ lines: number; covered: string }>(
+          sql`
         select count(*)::int as lines, coalesce(sum(amount), 0)::text as covered
           from payroll_remittance_coverage
-         where org_id = ${fixture.org.orgId} and bill_document_id = ${billA.documentId}`, "objects"))[0]!;
+         where org_id = ${fixture.org.orgId} and bill_document_id = ${billA.documentId}`,
+          "objects",
+        )
+      )[0]!;
       assert.equal(coverage.lines, 1);
       assert.equal(cmp(coverage.covered, "100"), 0);
 
       // A run committed after the change carries snapshot B and remits to B.
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-08-15", amount: "50.00", snapshotPartyId: vendorB,
+        payDate: "2026-08-15",
+        amount: "50.00",
+        snapshotPartyId: vendorB,
       });
       const august = await payrollRemittanceSummary(fixture.org.orgId, {
-        from: "2026-08-01", to: "2026-08-31",
+        from: "2026-08-01",
+        to: "2026-08-31",
       });
       assert.equal(august.length, 1);
       assert.equal(august[0]!.partyId, vendorB);
@@ -1544,10 +2043,13 @@ test(
     const fixture = await createRemittanceFixture();
     try {
       await addCommittedRemittanceAccrual(fixture, {
-        payDate: "2026-07-15", amount: "100.00",
+        payDate: "2026-07-15",
+        amount: "100.00",
       });
       const first = await createFixtureRemittanceBill(fixture, {
-        partyId: fixture.org.vendorId, from: "2026-07-01", to: "2026-07-31",
+        partyId: fixture.org.vendorId,
+        from: "2026-07-01",
+        to: "2026-07-31",
       });
       await submitAndReleaseIfUngated("vendor_bill", first.documentId, fixture.actorId);
       await postDocument(first.documentId, {
@@ -1560,8 +2062,13 @@ test(
 
       const vendorB = randomUUID();
       await seedPayrollParty(fixture.org.orgId, vendorB, {
-        kind: 'company', displayName: 'Local B', subsidiaryId: fixture.org.subsidiaryId, isActive: true, custom: {},
-        createdBy: fixture.actorId, updatedBy: fixture.actorId,
+        kind: "company",
+        displayName: "Local B",
+        subsidiaryId: fixture.org.subsidiaryId,
+        isActive: true,
+        custom: {},
+        createdBy: fixture.actorId,
+        updatedBy: fixture.actorId,
       });
       await seedPayrollVendorRole(fixture.org.orgId, vendorB, fixture.actorId);
       await db.execute(sql`
@@ -1572,13 +2079,20 @@ test(
       // so no second document is minted and no number is consumed.
       await assert.rejects(
         createFixtureRemittanceBill(fixture, {
-          partyId: vendorB, from: "2026-07-01", to: "2026-07-31",
+          partyId: vendorB,
+          from: "2026-07-01",
+          to: "2026-07-31",
         }),
         /nothing to remit to this vendor for the period/,
       );
-      const bills = (await db.execute<{ n: number }>(sql`
+      const bills = (
+        await db.execute<{ n: number }>(
+          sql`
         select count(*)::int as n from documents
-         where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'`, "objects"))[0]!.n;
+         where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'`,
+          "objects",
+        )
+      )[0]!.n;
       assert.equal(bills, 1);
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
@@ -1586,97 +2100,139 @@ test(
   },
 );
 
-test(
-  "commit snapshots the component vendor onto each accrual line",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    try {
-      const account = seedPostingAccount.bind(null, org.orgId);
-      const wageExpense = await account("6000", "Wages expense", "expense");
-      const netPayable = await account("2300", "Wages payable", "liability_current");
-      const craPayable = await account("2310", "CRA payable", "liability_current");
-      const vacationPayable = await account("2320", "Vacation payable", "liability_current");
-      const vendorRole = await db.execute<{ party_id: string }>(sql`
+test("commit snapshots the component vendor onto each accrual line", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  try {
+    const account = seedPostingAccount.bind(null, org.orgId);
+    const wageExpense = await account("6000", "Wages expense", "expense");
+    const netPayable = await account("2300", "Wages payable", "liability_current");
+    const craPayable = await account("2310", "CRA payable", "liability_current");
+    const vacationPayable = await account("2320", "Vacation payable", "liability_current");
+    const vendorRole = await db.execute<{ party_id: string }>(
+      sql`
         insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
-        returning party_id`, "objects");
-      assert.equal(vendorRole.length, 1, "snapshot-payee fixture must establish its vendor role");
-      await seedPayrollAccountingConfiguration(org.orgId, {
-    slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable, vacation: vacationPayable } },
-            wageExpenseAccountId: wageExpense, burdenExpenseAccountId: wageExpense,
-            netPayAccountId: netPayable,
-             wagesTo: "expense",
-          });
-      await seedPayrollComponents(org.orgId, actorId);
-      // The vendor assigned BEFORE commit is the one history must keep.
-      await db.execute(sql`
+        returning party_id`,
+      "objects",
+    );
+    assert.equal(vendorRole.length, 1, "snapshot-payee fixture must establish its vendor role");
+    await seedPayrollAccountingConfiguration(org.orgId, {
+      slotAccounts: {
+        CA: {
+          cpp: craPayable,
+          ei: craPayable,
+          qpip: craPayable,
+          income_tax: craPayable,
+          vacation: vacationPayable,
+        },
+      },
+      wageExpenseAccountId: wageExpense,
+      burdenExpenseAccountId: wageExpense,
+      netPayAccountId: netPayable,
+      wagesTo: "expense",
+    });
+    await seedPayrollComponents(org.orgId, actorId);
+    // The vendor assigned BEFORE commit is the one history must keep.
+    await db.execute(sql`
         update pay_components set remittance_party_id = ${org.vendorId}
          where org_id = ${org.orgId} and country = 'CA'
            and kind in ('deduction', 'employer_contribution')`);
 
-      const employeeId = randomUUID();
-      await seedPayrollPerson(org.orgId, employeeId, 'Dues Dora');
-      // Stub calculation refuses employees without an HRM employment, so the
-      // hire carries one and the profile points at it.
-      const duesEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-      await seedPayrollWage(org.orgId, employeeId, actorId, {
-        currency: 'CAD', rate: '104000', basis: 'year', annualHours: '2080', effectiveFrom: '2026-01-01',
-      });
-      const scheduleId = randomUUID();
-      await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
-        payDateOffsetDays: 3,
-      });
-      await seedPayrollProfile(org.orgId, employeeId, duesEmploymentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1,
-        wcbExempt: true, wcbExemptReason: 'remittance fixture: workers-compensation coverage out of scope',
-      }, { percentFloor: '4', method: 'accrue' });
+    const employeeId = randomUUID();
+    await seedPayrollPerson(org.orgId, employeeId, "Dues Dora");
+    // Stub calculation refuses employees without an HRM employment, so the
+    // hire carries one and the profile points at it.
+    const duesEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
+    await seedPayrollWage(org.orgId, employeeId, actorId, {
+      currency: "CAD",
+      rate: "104000",
+      basis: "year",
+      annualHours: "2080",
+      effectiveFrom: "2026-01-01",
+    });
+    const scheduleId = randomUUID();
+    await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+      name: "Biweekly",
+      frequency: "biweekly",
+      periodsPerYear: 26,
+      anchorPeriodEnd: "2026-07-18",
+      payDateOffsetDays: 3,
+    });
+    await seedPayrollProfile(
+      org.orgId,
+      employeeId,
+      duesEmploymentId,
+      scheduleId,
+      actorId,
+      {
+        country: "CA",
+        province: "ON",
+        payBasis: "salary",
+        federalClaimCode: 1,
+        provincialClaimCode: 1,
+        wcbExempt: true,
+        wcbExemptReason: "remittance fixture: workers-compensation coverage out of scope",
+      },
+      { percentFloor: "4", method: "accrue" },
+    );
 
-      const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
-      });
-      await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+    const run = await createPayRun({
+      orgId: org.orgId,
+      actorId,
+      payScheduleId: scheduleId,
+      periodStart: "2026-07-05",
+      periodEnd: "2026-07-18",
+    });
+    await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+    await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
 
-      const stamped = (await db.execute<{ stamped: number; total: number }>(sql`
+    const stamped = (
+      await db.execute<{ stamped: number; total: number }>(
+        sql`
         select count(*) filter (where remittance_party_id = ${org.vendorId})::int as stamped,
                count(*)::int as total
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
-           and l.kind in ('deduction', 'employer_contribution', 'credit')`, "objects"))[0]!;
-      assert.ok(stamped.total > 0);
-      assert.equal(stamped.stamped, stamped.total);
+           and l.kind in ('deduction', 'employer_contribution', 'credit')`,
+        "objects",
+      )
+    )[0]!;
+    assert.ok(stamped.total > 0);
+    assert.equal(stamped.stamped, stamped.total);
 
-      // A vendor edit after commit cannot move the frozen snapshot, and the
-      // summary keeps routing the accrual to the commit-time payee.
-      const vendorB = randomUUID();
-      await db.execute(sql`
+    // A vendor edit after commit cannot move the frozen snapshot, and the
+    // summary keeps routing the accrual to the commit-time payee.
+    const vendorB = randomUUID();
+    await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${vendorB}, ${org.orgId}, 'company', 'Local B', true, '{}'::jsonb)`);
-      await db.execute(sql`
+    await db.execute(sql`
         update pay_components set remittance_party_id = ${vendorB}
          where org_id = ${org.orgId} and country = 'CA'`);
-      const frozen = (await db.execute<{ moved: number }>(sql`
+    const frozen = (
+      await db.execute<{ moved: number }>(
+        sql`
         select count(*)::int as moved from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
          where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
            and l.kind in ('deduction', 'employer_contribution', 'credit')
-           and l.remittance_party_id is distinct from ${org.vendorId}`, "objects"))[0]!.moved;
-      assert.equal(frozen, 0);
-      const groups = await payrollRemittanceSummary(org.orgId, {
-        from: "2026-07-01", to: "2026-07-31",
-      });
-      assert.equal(groups.length, 1);
-      assert.equal(groups[0]!.partyId, org.vendorId);
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+           and l.remittance_party_id is distinct from ${org.vendorId}`,
+        "objects",
+      )
+    )[0]!.moved;
+    assert.equal(frozen, 0);
+    const groups = await payrollRemittanceSummary(org.orgId, {
+      from: "2026-07-01",
+      to: "2026-07-31",
+    });
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0]!.partyId, org.vendorId);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
 
 test(
   "a liability account change across runs bills each historical account separately",
@@ -1692,33 +2248,71 @@ test(
       const liabilityB = await account("2311", "CRA payable (new)", "liability_current");
       const vacationPayable = await account("2320", "Vacation payable", "liability_current");
       const filingAccountId = randomUUID();
-      const filingAccount = await db.execute<{ id: string }>(sql`
+      const filingAccount = await db.execute<{ id: string }>(
+        sql`
         insert into payroll_filing_accounts
           (id, org_id, country, program_type, account_number, name, remitter_type, is_default)
         values (${filingAccountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0090',
           'Historical liability account fixture', 'regular', true)
-        returning id`, "objects");
-      assert.equal(filingAccount.length, 1, "historical-liability fixture must establish its filing account");
-      await upsertPayrollEmployerFact({ orgId: org.orgId, actorId, filingAccountId,
-        country: "CA", factKey: "ei_employer_multiplier", effectiveFrom: "2026-01-01",
-        value: "1.4", changeReason: "Standard employer EI multiple for the fixture's CRA account" });
-      const vendorRole = await db.execute<{ party_id: string }>(sql`
+        returning id`,
+        "objects",
+      );
+      assert.equal(
+        filingAccount.length,
+        1,
+        "historical-liability fixture must establish its filing account",
+      );
+      await upsertPayrollEmployerFact({
+        orgId: org.orgId,
+        actorId,
+        filingAccountId,
+        country: "CA",
+        factKey: "ei_employer_multiplier",
+        effectiveFrom: "2026-01-01",
+        value: "1.4",
+        changeReason: "Standard employer EI multiple for the fixture's CRA account",
+      });
+      const vendorRole = await db.execute<{ party_id: string }>(
+        sql`
         insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
         values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
-        returning party_id`, "objects");
-      assert.equal(vendorRole.length, 1, "historical-liability fixture must establish its payee role");
+        returning party_id`,
+        "objects",
+      );
+      assert.equal(
+        vendorRole.length,
+        1,
+        "historical-liability fixture must establish its payee role",
+      );
       await seedPayrollAccountingConfiguration(org.orgId, {
         wageExpenseAccountId: wageExpense,
         burdenExpenseAccountId: wageExpense,
         netPayAccountId: netPayable,
         wagesTo: "expense",
         craRemittancePartyId: org.vendorId,
-        slotAccounts: { CA: { cpp: liabilityA, ei: liabilityA, qpip: liabilityA, income_tax: liabilityA, vacation: vacationPayable } }
+        slotAccounts: {
+          CA: {
+            cpp: liabilityA,
+            ei: liabilityA,
+            qpip: liabilityA,
+            income_tax: liabilityA,
+            vacation: vacationPayable,
+          },
+        },
       });
-      assert.equal((await payrollSettings(org.orgId)).craRemittancePartyId, org.vendorId, "the native settings reader resolves the retained CRA destination");
+      assert.equal(
+        (await payrollSettings(org.orgId)).craRemittancePartyId,
+        org.vendorId,
+        "the native settings reader resolves the retained CRA destination",
+      );
       // Scratch orgs open July only; the second run pays in August.
-      const calendar = (await db.execute<{ id: string }>(sql`
-        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
+      const calendar = (
+        await db.execute<{ id: string }>(
+          sql`
+        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`,
+          "objects",
+        )
+      )[0]!.id;
       await db.execute(sql`
         insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
                                         is_adjustment, fiscal_calendar_id)
@@ -1734,31 +2328,64 @@ test(
       await stampSetup(liabilityA);
 
       const employeeId = randomUUID();
-      await seedPayrollPerson(org.orgId, employeeId, 'Liability Larry');
+      await seedPayrollPerson(org.orgId, employeeId, "Liability Larry");
       // Stub calculation refuses employees without an HRM employment, so the
       // hire carries one and the profile points at it.
-      const liabilityEmploymentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
+      const liabilityEmploymentId = await seedWorkerEmployment(
+        org.orgId,
+        employeeId,
+        org.subsidiaryId,
+      );
       await seedPayrollWage(org.orgId, employeeId, actorId, {
-        currency: 'CAD', rate: '104000', basis: 'year', annualHours: '2080', effectiveFrom: '2026-01-01',
+        currency: "CAD",
+        rate: "104000",
+        basis: "year",
+        annualHours: "2080",
+        effectiveFrom: "2026-01-01",
       });
       const scheduleId = randomUUID();
       await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
-        name: 'Biweekly', frequency: 'biweekly', periodsPerYear: 26, anchorPeriodEnd: '2026-07-18',
+        name: "Biweekly",
+        frequency: "biweekly",
+        periodsPerYear: 26,
+        anchorPeriodEnd: "2026-07-18",
         payDateOffsetDays: 3,
       });
-      await seedPayrollProfile(org.orgId, employeeId, liabilityEmploymentId, scheduleId, actorId, {
-        country: 'CA', province: 'ON', payBasis: 'salary', federalClaimCode: 1, provincialClaimCode: 1,
-        filingAccountId: filingAccountId,
-        wcbExempt: true, wcbExemptReason: 'remittance fixture: workers-compensation coverage out of scope',
-      }, { percentFloor: '4', method: 'accrue' });
+      await seedPayrollProfile(
+        org.orgId,
+        employeeId,
+        liabilityEmploymentId,
+        scheduleId,
+        actorId,
+        {
+          country: "CA",
+          province: "ON",
+          payBasis: "salary",
+          federalClaimCode: 1,
+          provincialClaimCode: 1,
+          filingAccountId: filingAccountId,
+          wcbExempt: true,
+          wcbExemptReason: "remittance fixture: workers-compensation coverage out of scope",
+        },
+        { percentFloor: "4", method: "accrue" },
+      );
 
       const postRun = async (periodStart: string, periodEnd: string) => {
         const run = await createPayRun({
-          orgId: org.orgId, actorId, payScheduleId: scheduleId, periodStart, periodEnd,
+          orgId: org.orgId,
+          actorId,
+          payScheduleId: scheduleId,
+          periodStart,
+          periodEnd,
         });
-        assert.deepEqual((await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors, []);
+        assert.deepEqual(
+          (await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId })).errors,
+          [],
+        );
         await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-        await db.execute(sql`update documents set status = 'approved' where id = ${run.documentId}`);
+        await db.execute(
+          sql`update documents set status = 'approved' where id = ${run.documentId}`,
+        );
         await postDocument(run.documentId, {
           control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
         });
@@ -1769,10 +2396,12 @@ test(
       await postRun("2026-08-02", "2026-08-15");
 
       const july = await payrollRemittanceSummary(org.orgId, {
-        from: "2026-07-01", to: "2026-07-31",
+        from: "2026-07-01",
+        to: "2026-07-31",
       });
       const august = await payrollRemittanceSummary(org.orgId, {
-        from: "2026-08-01", to: "2026-08-31",
+        from: "2026-08-01",
+        to: "2026-08-31",
       });
       assert.equal(july.length, 1);
       assert.equal(august.length, 1);
@@ -1780,7 +2409,8 @@ test(
       // The combined window keeps one line per historical account — never
       // one $150 line debiting the first account.
       const combined = await payrollRemittanceSummary(org.orgId, {
-        from: "2026-07-01", to: "2026-08-31",
+        from: "2026-07-01",
+        to: "2026-08-31",
       });
       assert.equal(combined.length, 1);
       const group = combined[0]!;
@@ -1791,7 +2421,8 @@ test(
       const sumByAccount = new Map<string, string>();
       for (const component of group.components) {
         assert.ok(
-          component.liabilityAccountId === liabilityA || component.liabilityAccountId === liabilityB,
+          component.liabilityAccountId === liabilityA ||
+            component.liabilityAccountId === liabilityB,
           `component ${component.code} carries an unexpected liability account`,
         );
         sumByAccount.set(
@@ -1804,11 +2435,17 @@ test(
       assert.equal(cmp(sumByAccount.get(liabilityB)!, august[0]!.total), 0);
 
       const bill = await createRemittanceBill(org.orgId, actorId, {
-        partyId: org.vendorId, from: "2026-07-01", to: "2026-08-31", filingAccountId,
+        partyId: org.vendorId,
+        from: "2026-07-01",
+        to: "2026-08-31",
+        filingAccountId,
       });
-      const billLines = await db.execute<{ account_id: string; amount: string }>(sql`
+      const billLines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
         select account_id::text as account_id, amount::text as amount from document_lines
-         where org_id = ${org.orgId} and document_id = ${bill.documentId}`, "objects");
+         where org_id = ${org.orgId} and document_id = ${bill.documentId}`,
+        "objects",
+      );
       const billedByAccount = new Map<string, string>();
       for (const line of billLines) {
         billedByAccount.set(
@@ -1826,27 +2463,33 @@ test(
       await postDocument(bill.documentId, {
         control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
       });
-      const balances = await db.execute<{ account_id: string; balance: string }>(sql`
+      const balances = await db.execute<{ account_id: string; balance: string }>(
+        sql`
         select jl.account_id::text as account_id, sum(jl.amount)::text as balance
           from journal_lines jl
           join journal_entries je on je.id = jl.entry_id
          where jl.org_id = ${org.orgId} and je.status = 'posted'
            and jl.account_id in (${liabilityA}, ${liabilityB})
-         group by jl.account_id`, "objects");
+         group by jl.account_id`,
+        "objects",
+      );
       // After posting, each historical account is cleared of exactly what the
       // bill remitted: actual GL balances, not bill-line echoes. The vacation
       // accrual is an internal accrual — never remitted, but posted to the
       // same liability account — so it legitimately remains payable: the
       // balance must equal precisely that remainder, which the query below
       // pins independently from the committed stub lines.
-      const vacationOwed = await db.execute<{ account_id: string; owed: string }>(sql`
+      const vacationOwed = await db.execute<{ account_id: string; owed: string }>(
+        sql`
         select l.liability_account_id::text as account_id, sum(l.amount)::text as owed
           from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
           join pay_components c on c.id = l.component_id and c.org_id = l.org_id
          where l.org_id = ${org.orgId} and c.system_key = 'vacation_accrual'
            and l.liability_account_id in (${liabilityA}, ${liabilityB})
-         group by l.liability_account_id`, "objects");
+         group by l.liability_account_id`,
+        "objects",
+      );
       assert.equal(balances.length, 2);
       assert.equal(vacationOwed.length, 2);
       for (const row of balances) {

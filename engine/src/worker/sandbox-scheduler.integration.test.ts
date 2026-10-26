@@ -5,7 +5,11 @@ import { sql } from "drizzle-orm";
 import { deleteSandbox } from "../sandbox/lifecycle.ts";
 import { db, withBypass } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
-import { releaseStaleSandboxClaims, sandboxRefreshQueueLiveness, tick } from "./sandbox-scheduler.ts";
+import {
+  releaseStaleSandboxClaims,
+  sandboxRefreshQueueLiveness,
+  tick,
+} from "./sandbox-scheduler.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -23,26 +27,43 @@ test("sandbox refresh liveness ignores retained terminal jobs and preserves live
       `${state} jobs must protect a live refresh claim`,
     );
   }
-  assert.equal(await sandboxRefreshQueueLiveness("sandbox-unknown", 60_000, async () => { throw new Error("Redis unavailable"); }), "unknown");
+  assert.equal(
+    await sandboxRefreshQueueLiveness("sandbox-unknown", 60_000, async () => {
+      throw new Error("Redis unavailable");
+    }),
+    "unknown",
+  );
 });
 
-async function seedDueSandbox(productionOrgId: string): Promise<{ sandboxId: string; sandboxOrgId: string }> {
+async function seedDueSandbox(
+  productionOrgId: string,
+): Promise<{ sandboxId: string; sandboxOrgId: string }> {
   const sandboxOrgId = randomUUID();
   await db.execute(sql`
     insert into orgs (id, name, legal_name, base_currency, country, tax_ids, settings, env_kind, sandbox_of, sandbox_seed)
     values (${sandboxOrgId}, 'sched-test', 'sched-test', 'CAD', 'CA',
             '{}'::jsonb, '{}'::jsonb, 'sandbox', ${productionOrgId}, ${randomUUID()})`);
-  const row = (await db.execute<{ id: string }>(sql`
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`
     insert into sandboxes (org_id, production_org_id, name, tier, masked, status, refresh_schedule, last_refresh_at)
     values (${sandboxOrgId}, ${productionOrgId}, 'sched-test', 'masked', true,
             'ready', 'hourly', now() - interval '2 hours')
-    returning id`, "objects"))[0]!;
+    returning id`,
+      "objects",
+    )
+  )[0]!;
   return { sandboxId: row.id, sandboxOrgId };
 }
 
-async function sandboxState(sandboxId: string): Promise<{ status: string; last_error: string | null }> {
-  const res = (await db.execute<{ status: string; last_error: string | null }>(sql`
-    select status, last_error from sandboxes where id = ${sandboxId}`, "objects"));
+async function sandboxState(
+  sandboxId: string,
+): Promise<{ status: string; last_error: string | null }> {
+  const res = await db.execute<{ status: string; last_error: string | null }>(
+    sql`
+    select status, last_error from sandboxes where id = ${sandboxId}`,
+    "objects",
+  );
   return res[0]!;
 }
 
@@ -79,9 +100,12 @@ test("a stale unproven refreshing claim returns to ready for re-queue", { skip: 
     const fresh = await seedShell(org.orgId, { updatedAgoSec: 60 });
     shells.push(stale.sandboxId, proven.sandboxId, fresh.sandboxId);
 
-    assert.equal(await releaseStaleSandboxClaims(async (jobId) =>
-      jobId.includes(stale.sandboxId) ? "failed" : null,
-    ), 2);
+    assert.equal(
+      await releaseStaleSandboxClaims(async (jobId) =>
+        jobId.includes(stale.sandboxId) ? "failed" : null,
+      ),
+      2,
+    );
     assert.deepEqual(await sandboxState(stale.sandboxId), {
       status: "ready",
       last_error: "refresh worker never started: stale scheduler claim released for re-queue",
@@ -91,7 +115,8 @@ test("a stale unproven refreshing claim returns to ready for re-queue", { skip: 
     // it refreshing forever. Only the fresh claim is preserved.
     assert.deepEqual(await sandboxState(proven.sandboxId), {
       status: "failed",
-      last_error: "refresh lease expired: worker stopped during clone verification; rerun refresh or delete this sandbox",
+      last_error:
+        "refresh lease expired: worker stopped during clone verification; rerun refresh or delete this sandbox",
     });
     assert.equal((await sandboxState(fresh.sandboxId)).status, "refreshing");
   } finally {
@@ -104,42 +129,50 @@ test("a stale unproven refreshing claim returns to ready for re-queue", { skip: 
   }
 });
 
-test("a failed refresh enqueue releases the scheduler claim instead of wedging the sandbox", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const { sandboxId } = await seedDueSandbox(org.orgId);
-  try {
-    const failingEnqueue = async (): Promise<never> => {
-      throw new Error("redis unavailable");
-    };
-    await tick(failingEnqueue as unknown as Parameters<typeof tick>[0]);
-    const state = await sandboxState(sandboxId);
-    assert.equal(state.status, "ready");
-    assert.match(state.last_error ?? "", /redis unavailable/);
-  } finally {
-    await db.execute(sql`update sandboxes set status='ready' where id=${sandboxId}`);
-    await deleteSandbox(sandboxId);
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a failed refresh enqueue releases the scheduler claim instead of wedging the sandbox",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const { sandboxId } = await seedDueSandbox(org.orgId);
+    try {
+      const failingEnqueue = async (): Promise<never> => {
+        throw new Error("redis unavailable");
+      };
+      await tick(failingEnqueue as unknown as Parameters<typeof tick>[0]);
+      const state = await sandboxState(sandboxId);
+      assert.equal(state.status, "ready");
+      assert.match(state.last_error ?? "", /redis unavailable/);
+    } finally {
+      await db.execute(sql`update sandboxes set status='ready' where id=${sandboxId}`);
+      await deleteSandbox(sandboxId);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a successful tick still claims the sandbox and enqueues its refresh", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const { sandboxId } = await seedDueSandbox(org.orgId);
-  try {
-    const calls: unknown[] = [];
-    const recordingEnqueue = (async (data: unknown) => {
-      calls.push(data);
-      return undefined;
-    }) as unknown as Parameters<typeof tick>[0];
-    await tick(recordingEnqueue);
-    assert.equal(calls.length, 1);
-    assert.equal((calls[0] as { op: string }).op, "refresh");
-    assert.equal((calls[0] as { sandboxId: string }).sandboxId, sandboxId);
-    const state = await sandboxState(sandboxId);
-    assert.equal(state.status, "refreshing");
-  } finally {
-    await db.execute(sql`update sandboxes set status='ready' where id=${sandboxId}`);
-    await deleteSandbox(sandboxId);
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "a successful tick still claims the sandbox and enqueues its refresh",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const { sandboxId } = await seedDueSandbox(org.orgId);
+    try {
+      const calls: unknown[] = [];
+      const recordingEnqueue = (async (data: unknown) => {
+        calls.push(data);
+        return undefined;
+      }) as unknown as Parameters<typeof tick>[0];
+      await tick(recordingEnqueue);
+      assert.equal(calls.length, 1);
+      assert.equal((calls[0] as { op: string }).op, "refresh");
+      assert.equal((calls[0] as { sandboxId: string }).sandboxId, sandboxId);
+      const state = await sandboxState(sandboxId);
+      assert.equal(state.status, "refreshing");
+    } finally {
+      await db.execute(sql`update sandboxes set status='ready' where id=${sandboxId}`);
+      await deleteSandbox(sandboxId);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

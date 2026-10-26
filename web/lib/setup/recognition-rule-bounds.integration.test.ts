@@ -15,11 +15,8 @@ import test from "node:test";
 // route-level tests do (same seam as subsidiary-scope.test.ts).
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/platform/db");
-const {
-  createScratchOrg,
-  dropScratchOrgReporting,
-  seedFlowActors,
-} = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { createSetupRecord, updateSetupRecord } = await import("./write.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -42,26 +39,23 @@ const ruleBody = (extra: Record<string, unknown> = {}) => ({
 
 async function ruleCount(orgId: string, code: string) {
   const rows = await db.execute<{ id: string }>(
-      sql`select id from recognition_rules where org_id = ${orgId} and code = ${code}`, "objects",
-    );
+    sql`select id from recognition_rules where org_id = ${orgId} and code = ${code}`,
+    "objects",
+  );
   return rows.length;
 }
 
-test(
-  "a rule with valid bounds saves",
-  { skip: !DB },
-  async () => {
-    const { org, actor } = await seed();
-    try {
-      const body = ruleBody();
-      const created = await createSetupRecord(actor, "recognition-rules", body);
-      assert.equal(created.status, 200);
-      assert.equal(await ruleCount(org.orgId, String(body.code)), 1);
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+test("a rule with valid bounds saves", { skip: !DB }, async () => {
+  const { org, actor } = await seed();
+  try {
+    const body = ruleBody();
+    const created = await createSetupRecord(actor, "recognition-rules", body);
+    assert.equal(created.status, 200);
+    assert.equal(await ruleCount(org.orgId, String(body.code)), 1);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
 
 for (const [field, value] of [
   ["recognitionPeriods", -1],
@@ -87,40 +81,36 @@ for (const [field, value] of [
   );
 }
 
-test(
-  "editing a rule out of bounds is refused with no row changed",
-  { skip: !DB },
-  async () => {
-    const { org, actor } = await seed();
-    try {
-      const body = ruleBody();
-      const created = await createSetupRecord(actor, "recognition-rules", body);
-      assert.equal(created.status, 200);
-      const id = String((created.body as { id: string }).id);
-      const refused = await updateSetupRecord(actor, "recognition-rules", {
-        id,
-        name: "Bounds probe",
-        method: "straight_line_even",
-        recognitionPeriods: -1,
-      });
-      assert.equal(refused.status, 400);
-      assert.match(
-        String((refused.body as { error?: string }).error ?? ""),
-        /recognitionPeriods/,
-      );
-      const row = (await db.execute<{ recognition_periods: number }>(
-          sql`select recognition_periods from recognition_rules where org_id = ${org.orgId} and id = ${id}`, "objects",
-        ))[0]!;
-      assert.equal(row.recognition_periods, 12);
-      const saved = await updateSetupRecord(actor, "recognition-rules", {
-        id,
-        name: "Bounds probe",
-        method: "straight_line_even",
-        recognitionPeriods: 6,
-      });
-      assert.equal(saved.status, 200);
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
-  },
-);
+test("editing a rule out of bounds is refused with no row changed", { skip: !DB }, async () => {
+  const { org, actor } = await seed();
+  try {
+    const body = ruleBody();
+    const created = await createSetupRecord(actor, "recognition-rules", body);
+    assert.equal(created.status, 200);
+    const id = String((created.body as { id: string }).id);
+    const refused = await updateSetupRecord(actor, "recognition-rules", {
+      id,
+      name: "Bounds probe",
+      method: "straight_line_even",
+      recognitionPeriods: -1,
+    });
+    assert.equal(refused.status, 400);
+    assert.match(String((refused.body as { error?: string }).error ?? ""), /recognitionPeriods/);
+    const row = (
+      await db.execute<{ recognition_periods: number }>(
+        sql`select recognition_periods from recognition_rules where org_id = ${org.orgId} and id = ${id}`,
+        "objects",
+      )
+    )[0]!;
+    assert.equal(row.recognition_periods, 12);
+    const saved = await updateSetupRecord(actor, "recognition-rules", {
+      id,
+      name: "Bounds probe",
+      method: "straight_line_even",
+      recognitionPeriods: 6,
+    });
+    assert.equal(saved.status, 200);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});

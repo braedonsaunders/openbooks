@@ -93,10 +93,8 @@ const SEED = `
 
 `;
 
-test(
-  "resubmitting a week owned by pending gates is refused",
-  () => {
-    runIntegrationSource(`
+test("resubmitting a week owned by pending gates is refused", () => {
+  runIntegrationSource(`
       ${SEED}
       const fixture = await seedSubmittedWeek();
       try {
@@ -111,13 +109,10 @@ test(
         await cleanup(fixture);
       }
     `);
-  },
-);
+});
 
-test(
-  "submitting a week with no draft or rejected entries is refused",
-  () => {
-    runIntegrationSource(`
+test("submitting a week with no draft or rejected entries is refused", () => {
+  runIntegrationSource(`
       ${SEED}
       const fixture = await seedSubmittedWeek();
       try {
@@ -131,13 +126,10 @@ test(
         await cleanup(fixture);
       }
     `);
-  },
-);
+});
 
-test(
-  "a first submission with movable entries and no open gates passes",
-  () => {
-    runIntegrationSource(`
+test("a first submission with movable entries and no open gates passes", () => {
+  runIntegrationSource(`
       ${SEED}
       const fixture = await seedSubmittedWeek();
       try {
@@ -148,5 +140,4 @@ test(
         await cleanup(fixture);
       }
     `);
-  },
-);
+});

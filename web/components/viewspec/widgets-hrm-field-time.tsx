@@ -1,10 +1,6 @@
-import type { ComponentProps } from 'react'
-import {
-  ClockControls,
-  CrewWorkspace,
-  FieldTimeSetup,
-} from './native-widgets.client'
-import { str, type WidgetRenderer } from './widget-props';
+import type { ComponentProps } from "react";
+import { ClockControls, CrewWorkspace, FieldTimeSetup } from "./native-widgets.client";
+import { str, type WidgetRenderer } from "./widget-props";
 
 /**
  * Field-time widget family: the clock island, the foreman crew
@@ -15,47 +11,53 @@ import { str, type WidgetRenderer } from './widget-props';
  */
 export const HRM_FIELD_TIME_WIDGETS = {
   /** The clock island: state card, primary action, picker sheet, offline queue. */
-  'hrm-clock-controls': (props) => (
+  "hrm-clock-controls": (props) => (
     <ClockControls
       key={str(props, "ownerKey")}
       ownerKey={str(props, "ownerKey") ?? ""}
-      initial={(props.initial as ComponentProps<typeof ClockControls>['initial'])!}
-      projects={(props.projects as ComponentProps<typeof ClockControls>['projects']) ?? []}
-      tasks={(props.tasks as ComponentProps<typeof ClockControls>['tasks']) ?? []}
+      initial={(props.initial as ComponentProps<typeof ClockControls>["initial"])!}
+      projects={(props.projects as ComponentProps<typeof ClockControls>["projects"]) ?? []}
+      tasks={(props.tasks as ComponentProps<typeof ClockControls>["tasks"]) ?? []}
       photoRequired={props.photoRequired === true}
-      photoFolderId={str(props, 'photoFolderId') ?? null}
-      geoHint={str(props, 'geoHint') ?? ''}
-      clockOutLabel={str(props, 'clockOutLabel') ?? ''}
+      photoFolderId={str(props, "photoFolderId") ?? null}
+      geoHint={str(props, "geoHint") ?? ""}
+      clockOutLabel={str(props, "clockOutLabel") ?? ""}
     />
   ),
   /** The foreman workspace: crew rows, sign-and-submit, stage actions — or the
    * unsaved-create form when the loader passes `create` with no batch. */
-  'hrm-crew-workspace': (props) => (
+  "hrm-crew-workspace": (props) => (
     <CrewWorkspace
-      batchId={str(props, 'batchId') ?? ''}
-      create={(props.create as ComponentProps<typeof CrewWorkspace>['create']) ?? null}
-      status={str(props, 'status') ?? ''}
+      batchId={str(props, "batchId") ?? ""}
+      create={(props.create as ComponentProps<typeof CrewWorkspace>["create"]) ?? null}
+      status={str(props, "status") ?? ""}
       locked={props.locked === true}
-      initialLines={(props.initialLines as ComponentProps<typeof CrewWorkspace>['initialLines']) ?? []}
-      workers={(props.workers as ComponentProps<typeof CrewWorkspace>['workers']) ?? []}
-      timeTypes={(props.timeTypes as ComponentProps<typeof CrewWorkspace>['timeTypes']) ?? []}
-      tasks={(props.tasks as ComponentProps<typeof CrewWorkspace>['tasks']) ?? []}
-      equipment={(props.equipment as ComponentProps<typeof CrewWorkspace>['equipment']) ?? []}
+      initialLines={
+        (props.initialLines as ComponentProps<typeof CrewWorkspace>["initialLines"]) ?? []
+      }
+      workers={(props.workers as ComponentProps<typeof CrewWorkspace>["workers"]) ?? []}
+      timeTypes={(props.timeTypes as ComponentProps<typeof CrewWorkspace>["timeTypes"]) ?? []}
+      tasks={(props.tasks as ComponentProps<typeof CrewWorkspace>["tasks"]) ?? []}
+      equipment={(props.equipment as ComponentProps<typeof CrewWorkspace>["equipment"]) ?? []}
       equipmentOn={props.equipmentOn === true}
       signatureRequired={props.signatureRequired !== false}
-      signLabel={str(props, 'signLabel') ?? ''}
-      scheduledCrew={(props.scheduledCrew as ComponentProps<typeof CrewWorkspace>['scheduledCrew']) ?? []}
+      signLabel={str(props, "signLabel") ?? ""}
+      scheduledCrew={
+        (props.scheduledCrew as ComponentProps<typeof CrewWorkspace>["scheduledCrew"]) ?? []
+      }
     />
   ),
   /** The field-time setup surface: rules, kiosks, approval routing pointer. */
-  'hrm-field-time-setup': (props) => (
+  "hrm-field-time-setup": (props) => (
     <FieldTimeSetup
-      initialSettings={(props.initialSettings as ComponentProps<typeof FieldTimeSetup>['initialSettings'])!}
-      kiosks={(props.kiosks as ComponentProps<typeof FieldTimeSetup>['kiosks']) ?? []}
-      employees={(props.employees as ComponentProps<typeof FieldTimeSetup>['employees']) ?? []}
-      kioskLinkBase={str(props, 'kioskLinkBase') ?? ''}
+      initialSettings={
+        (props.initialSettings as ComponentProps<typeof FieldTimeSetup>["initialSettings"])!
+      }
+      kiosks={(props.kiosks as ComponentProps<typeof FieldTimeSetup>["kiosks"]) ?? []}
+      employees={(props.employees as ComponentProps<typeof FieldTimeSetup>["employees"]) ?? []}
+      kioskLinkBase={str(props, "kioskLinkBase") ?? ""}
       canManageKiosks={props.canManageKiosks === true}
       canEditPolicy={props.canEditPolicy === true}
     />
   ),
-} satisfies Record<string, WidgetRenderer>
+} satisfies Record<string, WidgetRenderer>;

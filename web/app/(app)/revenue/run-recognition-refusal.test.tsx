@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { stubModules } from '../../../testing/stub-modules.ts'
-import { bootJsdomEnvironment } from '../../../testing/jsdom-env.ts'
+import { stubModules } from "../../../testing/stub-modules.ts";
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env.ts";
 
 // jsdom first: the drawer reads browser globals at render.
 await bootJsdomEnvironment({ url: "http://localhost:4800/revenue", matchMediaMatches: false });
@@ -13,13 +13,13 @@ declare global {
 stubModules({
   navigation: {
     source:
-      'export function useRouter(){return{push(){},replace(){},refresh(){}}}' +
-      'export function useSearchParams(){return new URLSearchParams()}' +
+      "export function useRouter(){return{push(){},replace(){},refresh(){}}}" +
+      "export function useSearchParams(){return new URLSearchParams()}" +
       "export function usePathname(){return'/revenue'}",
   },
   intl: true,
   extra: {
-    'next/link':
+    "next/link":
       "export default function Link(p){return globalThis.React.createElement('a',{href:p.href,className:p.className},p.children)}",
     sonner:
       "export const toast={success(m){(globalThis.__recognitionToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__recognitionToasts??=[]).push({kind:'error',message:String(m)})}}",
@@ -230,7 +230,10 @@ test("a stale confirm names its remedy and a refresh clears it", async (t) => {
       "the stale refusal names its remedy",
     );
     await click(clickButton("Refresh preview"));
-    assert.ok(!errorBox().includes("The reviewed set changed"), "a fresh preview clears the refusal");
+    assert.ok(
+      !errorBox().includes("The reviewed set changed"),
+      "a fresh preview clears the refusal",
+    );
     assert.ok(clickButton("Confirm and post"), "confirm is offered again after retry");
   } finally {
     await unmount(host, root);
@@ -271,11 +274,17 @@ test("a confirmed run reads back its posted entries", async (t) => {
     const text = document.body.textContent ?? "";
     assert.ok(text.includes("1 entry"), "the posted count reads back");
     assert.ok(text.includes("C-1042"), "the posted contract reads back");
-    assert.ok(text.includes("P09 FY2026 · Sep 2026"), "the posted period reads back as the route labelled it");
+    assert.ok(
+      text.includes("P09 FY2026 · Sep 2026"),
+      "the posted period reads back as the route labelled it",
+    );
     const entryLink = document.querySelector("a[href*='entryid12345678']");
     assert.ok(entryLink, "the posted entry links to its journal record");
     const labels = [...document.querySelectorAll("button")].map((b) => b.textContent ?? "");
-    assert.ok(!labels.some((label) => label.includes("Confirm and post")), "the preview confirm leaves with the result");
+    assert.ok(
+      !labels.some((label) => label.includes("Confirm and post")),
+      "the preview confirm leaves with the result",
+    );
   } finally {
     await unmount(host, root);
   }

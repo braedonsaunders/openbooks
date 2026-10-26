@@ -21,7 +21,9 @@ import { installEngineSeams } from "../composition/install.ts";
 
 const [mode, orgId, arg] = process.argv.slice(2);
 if (!mode || !orgId || !arg) {
-  console.error("usage: concurrent-office.child.mts <recurring|dunning|report|sandbox-refresh> <orgId> <asOf|runId|sandboxId>");
+  console.error(
+    "usage: concurrent-office.child.mts <recurring|dunning|report|sandbox-refresh> <orgId> <asOf|runId|sandboxId>",
+  );
   process.exit(2);
 }
 // Each replica boots like a worker process: posting resolves the installed domain hooks.
@@ -35,9 +37,8 @@ try {
     const result = await runDunningForOrg(orgId, arg);
     console.log(JSON.stringify({ ok: true, result }));
   } else if (mode === "report") {
-    const result = await processScheduledReportRun(
-      arg,
-      async () => Buffer.from("%PDF-1.7\nconcurrent office stub"),
+    const result = await processScheduledReportRun(arg, async () =>
+      Buffer.from("%PDF-1.7\nconcurrent office stub"),
     );
     console.log(JSON.stringify({ ok: true, result }));
   } else if (mode === "sandbox-refresh") {
@@ -47,7 +48,9 @@ try {
     throw new Error(`unknown mode: ${mode}`);
   }
 } catch (error) {
-  console.log(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+  console.log(
+    JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+  );
   process.exitCode = 1;
 }
 process.exit();

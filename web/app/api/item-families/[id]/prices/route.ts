@@ -1,28 +1,28 @@
-import { NextResponse } from 'next/server'
-import { z } from 'zod'
-import { defineRoute } from '@/lib/api/route'
-import { notFound } from '@/lib/api/responses'
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { notFound } from "@/lib/api/responses";
 import {
   deleteSchedule,
   getSchedules,
   patchSchedule,
   postSchedule,
   priceScheduleBody,
-} from '../../../_pricing/schedule-store'
+} from "../../../_pricing/schedule-store";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
-const familyParams = z.object({ id: z.string() })
+const familyParams = z.object({ id: z.string() });
 
 function actorOf(gate: {
-  user: { orgId: string; id: string }
-  allowedSubsidiaryIds: ReadonlySet<string> | null
+  user: { orgId: string; id: string };
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }) {
   return {
     orgId: gate.user.orgId,
     actorId: gate.user.id,
     allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-  }
+  };
 }
 
 /**
@@ -33,43 +33,43 @@ function actorOf(gate: {
  * the authoritative feature inside every write transaction.
  */
 export const GET = defineRoute({
-  permission: 'items.read',
-  feature: 'itemVariants',
+  permission: "items.read",
+  feature: "itemVariants",
   params: familyParams,
   handler: async ({ authz: gate, params: { id } }) => {
-    const data = await getSchedules(actorOf(gate), { kind: 'family', id })
-    if (!data) return notFound('record')
-    return NextResponse.json(data)
+    const data = await getSchedules(actorOf(gate), { kind: "family", id });
+    if (!data) return notFound("record");
+    return NextResponse.json(data);
   },
-})
+});
 
 export const POST = defineRoute({
-  permission: 'items.manage',
-  feature: 'itemVariants',
-  scope: 'unrestricted',
+  permission: "items.manage",
+  feature: "itemVariants",
+  scope: "unrestricted",
   params: familyParams,
   body: priceScheduleBody,
   handler: async ({ request, authz: gate, params: { id }, body }) => {
-    return postSchedule(request, actorOf(gate), { kind: 'family', id }, body)
+    return postSchedule(request, actorOf(gate), { kind: "family", id }, body);
   },
-})
+});
 
 export const PATCH = defineRoute({
-  permission: 'items.manage',
-  feature: 'itemVariants',
-  scope: 'unrestricted',
+  permission: "items.manage",
+  feature: "itemVariants",
+  scope: "unrestricted",
   params: familyParams,
   handler: async ({ request, authz: gate, params: { id } }) => {
-    return patchSchedule(request, actorOf(gate), { kind: 'family', id })
+    return patchSchedule(request, actorOf(gate), { kind: "family", id });
   },
-})
+});
 
 export const DELETE = defineRoute({
-  permission: 'items.manage',
-  feature: 'itemVariants',
-  scope: 'unrestricted',
+  permission: "items.manage",
+  feature: "itemVariants",
+  scope: "unrestricted",
   params: familyParams,
   handler: async ({ request, authz: gate, params: { id } }) => {
-    return deleteSchedule(request, actorOf(gate), { kind: 'family', id })
+    return deleteSchedule(request, actorOf(gate), { kind: "family", id });
   },
-})
+});

@@ -33,8 +33,7 @@ stubModules({
     "next/link": "export default function Link(p){return p.children}",
     sonner:
       "export const toast={success(){},error(){},warning(){},info(){}};export function Toaster(){return null}",
-    "../../../lib/confirm":
-      "export async function confirmDialog(){return false}",
+    "../../../lib/confirm": "export async function confirmDialog(){return false}",
     "../../../lib/prompt": "export async function promptDialog(){return null}",
   },
 });
@@ -51,7 +50,15 @@ const { WeeklyGrid } = await import("./WeeklyGrid");
 
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
 
-const DAYS = ["2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"];
+const DAYS = [
+  "2026-07-12",
+  "2026-07-13",
+  "2026-07-14",
+  "2026-07-15",
+  "2026-07-16",
+  "2026-07-17",
+  "2026-07-18",
+];
 
 const PICKERS = {
   employees: [{ value: "emp-8", label: "Billable Worker" }],
@@ -62,8 +69,22 @@ const PICKERS = {
   internalProjectIds: ["proj-shop"],
   items: [],
   timeTypes: [
-    { value: "tt-travel", label: "Travel", classification: "other", costMultiplier: "0.5", isBillableDefault: false, isDefault: false },
-    { value: "tt-regular", label: "Regular", classification: "regular", costMultiplier: "1", isBillableDefault: true, isDefault: true },
+    {
+      value: "tt-travel",
+      label: "Travel",
+      classification: "other",
+      costMultiplier: "0.5",
+      isBillableDefault: false,
+      isDefault: false,
+    },
+    {
+      value: "tt-regular",
+      label: "Regular",
+      classification: "regular",
+      costMultiplier: "1",
+      isBillableDefault: true,
+      isDefault: true,
+    },
   ],
   departments: [],
 };
@@ -83,13 +104,17 @@ const PAYLOAD = {
 } as never;
 
 function billableBox(): HTMLInputElement {
-  const box = document.querySelector('input[aria-label="Line 1 billable"]') as HTMLInputElement | null;
+  const box = document.querySelector(
+    'input[aria-label="Line 1 billable"]',
+  ) as HTMLInputElement | null;
   assert.ok(box, "the line offers its billable checkbox");
   return box;
 }
 
 async function chooseOption(triggerAria: string, optionText: string): Promise<void> {
-  const trigger = document.querySelector(`button[aria-label="${triggerAria}"]`) as HTMLButtonElement | null;
+  const trigger = document.querySelector(
+    `button[aria-label="${triggerAria}"]`,
+  ) as HTMLButtonElement | null;
   assert.ok(trigger, `the ${triggerAria} picker must render`);
   await act(async () => {
     trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -144,12 +169,20 @@ test("billable follows the project and time-type policy, never pre-checked", asy
   assert.equal(billableBox().checked, false, "a fresh line starts unchecked: no project yet");
 
   await chooseOption("Line 1 project", "Day job");
-  assert.equal(billableBox().checked, true, "choosing a project checks billable for a billable time type");
+  assert.equal(
+    billableBox().checked,
+    true,
+    "choosing a project checks billable for a billable time type",
+  );
 
   await chooseOption("Line 1 time type", "Travel");
   assert.equal(billableBox().checked, false, "a non-billable time type unchecks the line");
 
   await chooseOption("Line 1 project", "Shop");
   await chooseOption("Line 1 time type", "Regular");
-  assert.equal(billableBox().checked, false, "an internal shop project never bills, even with a billable type");
+  assert.equal(
+    billableBox().checked,
+    false,
+    "an internal shop project never bills, even with a billable type",
+  );
 });

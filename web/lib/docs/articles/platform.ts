@@ -1,28 +1,28 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 // Automation & integration admin tools, in the Apps & Extensions category:
 // Flows, the Query Console, API keys + REST API, and Sandboxes.
 
 export const flows: DocArticle = {
-  slug: 'flows',
-  title: 'Flows and Approvals',
-  category: 'apps',
+  slug: "flows",
+  title: "Flows and Approvals",
+  category: "apps",
   order: 5,
   summary:
-    'Build visual workflows that validate, route for approval, notify, and act on records when they are created, submitted, posted, or voided.',
-  updated: '2026-07-21',
+    "Build visual workflows that validate, route for approval, notify, and act on records when they are created, submitted, posted, or voided.",
+  updated: "2026-07-21",
   keywords: [
-    'flows',
-    'workflow',
-    'approval',
-    'gate',
-    'trigger',
-    'automation',
-    'notification',
-    'segregation of duties',
-    'escalation',
+    "flows",
+    "workflow",
+    "approval",
+    "gate",
+    "trigger",
+    "automation",
+    "notification",
+    "segregation of duties",
+    "escalation",
   ],
-  related: ['scripting-engine', 'roles-and-permissions', 'purchasing-workflow'],
+  related: ["scripting-engine", "roles-and-permissions", "purchasing-workflow"],
   body: `# Flows and Approvals
 
 **Settings → Automate → Flows** (route **/admin/flows**, permission **Manage
@@ -79,17 +79,27 @@ Flows and the **Scripting Engine** support overlapping trigger points. Use a flo
 for a visual, approval-oriented process and a script for custom server-side
 logic.
 `,
-}
+};
 
 export const queryConsole: DocArticle = {
-  slug: 'query-console',
-  title: 'Query Console',
-  category: 'apps',
+  slug: "query-console",
+  title: "Query Console",
+  category: "apps",
   order: 6,
-  summary: 'Run read-only SQL against your organization data safely, with a schema browser and CSV export.',
-  updated: '2026-07-21',
-  keywords: ['query console', 'SQL', 'read-only', 'select', 'schema browser', 'CSV export', 'reporting', 'ad hoc'],
-  related: ['financial-reports', 'analytics-and-saved-views', 'scripting-api-reference'],
+  summary:
+    "Run read-only SQL against your organization data safely, with a schema browser and CSV export.",
+  updated: "2026-07-21",
+  keywords: [
+    "query console",
+    "SQL",
+    "read-only",
+    "select",
+    "schema browser",
+    "CSV export",
+    "reporting",
+    "ad hoc",
+  ],
+  related: ["financial-reports", "analytics-and-saved-views", "scripting-api-reference"],
   body: `# Query Console
 
 **Settings → Extend → Query Console** (route **/query**, permission **Run SQL**)
@@ -120,17 +130,27 @@ The Query Console is for reading. To write data safely from automation, use the
 **Scripting Engine** or a **Flow**, both of which post through the governed
 transaction path.
 `,
-}
+};
 
 export const restApi: DocArticle = {
-  slug: 'rest-api',
-  title: 'API Keys and the REST API',
-  category: 'apps',
+  slug: "rest-api",
+  title: "API Keys and the REST API",
+  category: "apps",
   order: 7,
-  summary: 'Create scoped API keys and integrate with the REST API, with each key bounded by its owner’s permissions.',
-  updated: '2026-07-21',
-  keywords: ['API key', 'REST API', 'integration', 'scope', 'bearer token', 'OpenAPI', 'api docs', 'authentication'],
-  related: ['app-builder', 'roles-and-permissions', 'audit-log'],
+  summary:
+    "Create scoped API keys and integrate with the REST API, with each key bounded by its owner’s permissions.",
+  updated: "2026-07-21",
+  keywords: [
+    "API key",
+    "REST API",
+    "integration",
+    "scope",
+    "bearer token",
+    "OpenAPI",
+    "api docs",
+    "authentication",
+  ],
+  related: ["app-builder", "roles-and-permissions", "audit-log"],
   body: `# API Keys and the REST API
 
 **Settings → Extend → API Keys** (route **/admin/api-keys**, permission **Manage
@@ -182,17 +202,28 @@ limit the API responds with **429 Too Many Requests** and a **Retry-After**
 header telling the caller how many seconds until the window resets. The counter
 is per key and rolls over every minute.
 `,
-}
+};
 
 export const sandboxes: DocArticle = {
-  slug: 'sandboxes',
-  title: 'Sandboxes',
-  category: 'apps',
+  slug: "sandboxes",
+  title: "Sandboxes",
+  category: "apps",
   order: 8,
-  summary: 'Create isolated copies of your organization to test configuration and train safely, with PII masking and no outbound side effects.',
-  updated: '2026-07-21',
-  keywords: ['sandbox', 'test environment', 'clone', 'masking', 'PII', 'refresh', 'promote', 'UAT', 'training'],
-  related: ['roles-and-permissions', 'company-settings', 'migrate-with-a-connector'],
+  summary:
+    "Create isolated copies of your organization to test configuration and train safely, with PII masking and no outbound side effects.",
+  updated: "2026-07-21",
+  keywords: [
+    "sandbox",
+    "test environment",
+    "clone",
+    "masking",
+    "PII",
+    "refresh",
+    "promote",
+    "UAT",
+    "training",
+  ],
+  related: ["roles-and-permissions", "company-settings", "migrate-with-a-connector"],
   body: `# Sandboxes
 
 **Settings → Administration → Sandboxes** (route **/admin/sandboxes**, permission
@@ -247,6 +278,6 @@ views, saved reports, account groups, roles, and similar) into a change set to
 apply to production. Only configuration flows upward — business and ledger data
 never promote from a sandbox to production.
 `,
-}
+};
 
-export const platformArticles: DocArticle[] = [flows, queryConsole, restApi, sandboxes]
+export const platformArticles: DocArticle[] = [flows, queryConsole, restApi, sandboxes];

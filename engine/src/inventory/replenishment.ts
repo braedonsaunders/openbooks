@@ -71,7 +71,8 @@ export async function lastReceiptVendors(
   itemIds: readonly string[],
 ): Promise<Map<string, { id: string; name: string }>> {
   if (itemIds.length === 0) return new Map();
-  const rows = await runner.execute<{ item_id: string; vendor_id: string; vendor_name: string }>(sql`
+  const rows = await runner.execute<{ item_id: string; vendor_id: string; vendor_name: string }>(
+    sql`
     select distinct on (m.item_id) m.item_id, d.party_id as vendor_id, p.display_name as vendor_name
       from inventory_movements m
       join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
@@ -86,8 +87,13 @@ export async function lastReceiptVendors(
          select 1 from inventory_movements reversal
           where reversal.org_id = m.org_id and reversal.reverses_movement_id = m.id)
        and d.kind in ('purchase_receipt', 'vendor_bill')
-       and m.item_id in (${sql.join(itemIds.map((id) => sql`${id}::uuid`), sql`, `)})
-     order by m.item_id, m.moved_at desc, m.id desc`, "objects");
+       and m.item_id in (${sql.join(
+         itemIds.map((id) => sql`${id}::uuid`),
+         sql`, `,
+       )})
+     order by m.item_id, m.moved_at desc, m.id desc`,
+    "objects",
+  );
   return new Map(rows.map((row) => [row.item_id, { id: row.vendor_id, name: row.vendor_name }]));
 }
 
@@ -96,8 +102,10 @@ function proposalFor(
   reorderPoint: string | null,
   preferredStockLevel: string | null,
 ): { status: ReplenishmentStatus; proposed: string } {
-  if (reorderPoint === null || preferredStockLevel === null) return { status: "no_reorder_point", proposed: ZERO };
-  if (cmp(preferredStockLevel, reorderPoint) < 0) return { status: "points_inverted", proposed: ZERO };
+  if (reorderPoint === null || preferredStockLevel === null)
+    return { status: "no_reorder_point", proposed: ZERO };
+  if (cmp(preferredStockLevel, reorderPoint) < 0)
+    return { status: "points_inverted", proposed: ZERO };
   if (cmp(projected, reorderPoint) > 0 || cmp(preferredStockLevel, projected) <= 0) {
     return { status: "covered", proposed: ZERO };
   }
@@ -112,15 +120,24 @@ export async function replenishmentProposals(
 ): Promise<ReplenishmentLine[]> {
   await assertWarehousingForScope(runner, orgId, { subsidiaryId: query.subsidiaryId });
   const entity = await availabilityEntity(runner, orgId, query.subsidiaryId);
-  const items = new Map([...(await stockedItems(runner, orgId, null))].filter(([, item]) => item.isActive));
+  const items = new Map(
+    [...(await stockedItems(runner, orgId, null))].filter(([, item]) => item.isActive),
+  );
   if (items.size === 0) return [];
   const terms = await demandTermsByItem(runner, orgId, { ...entity, items, locations: null });
 
   const onOrder = new Map<string, string>();
-  for (const line of await purchaseOrderLineRemainders(runner as SqlExecutor, orgId, { openOnly: true })) {
+  for (const line of await purchaseOrderLineRemainders(runner as SqlExecutor, orgId, {
+    openOnly: true,
+  })) {
     const item = items.get(line.itemId);
     if (!item || (line.subsidiaryId ?? entity.rootId) !== entity.subsidiaryId) continue;
-    const quantity = openBaseQuantity(line.open, line.unit, item, `${line.documentNumber} line ${line.lineNumber}`);
+    const quantity = openBaseQuantity(
+      line.open,
+      line.unit,
+      item,
+      `${line.documentNumber} line ${line.lineNumber}`,
+    );
     onOrder.set(line.itemId, add(onOrder.get(line.itemId) ?? ZERO, quantity));
   }
   const vendors = await lastReceiptVendors(runner, orgId, entity.subsidiaryId, [...items.keys()]);
@@ -128,7 +145,10 @@ export async function replenishmentProposals(
   return [...items.values()].map((item) => {
     const entry = terms.get(item.itemId)!;
     const ordered = onOrder.get(item.itemId) ?? ZERO;
-    const projected = add(add(entry.onHand, neg(entry.committed)), add(ordered, neg(entry.unallocated)));
+    const projected = add(
+      add(entry.onHand, neg(entry.committed)),
+      add(ordered, neg(entry.unallocated)),
+    );
     const vendor = vendors.get(item.itemId) ?? null;
     return {
       itemId: item.itemId,

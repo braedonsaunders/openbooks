@@ -19,9 +19,13 @@ import { resolveRangeArgs, type RangeArgs } from "./period-range";
 
 export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-export const dateInput = z.string().regex(ISO_DATE, "YYYY-MM-DD")
+export const dateInput = z
+  .string()
+  .regex(ISO_DATE, "YYYY-MM-DD")
   .describe("Calendar date (YYYY-MM-DD)");
-export const uuidInput = z.string().regex(UUID_RE, "uuid")
+export const uuidInput = z
+  .string()
+  .regex(UUID_RE, "uuid")
   .describe("UUID copied from a find_, list_, or get_ tool; never invent one");
 
 /** Named fiscal-aware period, resolved server-side by the same resolver the
@@ -39,9 +43,15 @@ export const rangeInputFields = {
   period: periodPresetInput.optional(),
   fromDate: dateInput.optional().describe("Custom range start; only when no `period` preset fits"),
   toDate: dateInput.optional().describe("Custom range end; only when no `period` preset fits"),
-  priorYears: z.number().int().min(0).max(10).optional().describe(
-    "Repeat the window N fiscal years earlier for a comparative; never hand-compute prior-year dates.",
-  ),
+  priorYears: z
+    .number()
+    .int()
+    .min(0)
+    .max(10)
+    .optional()
+    .describe(
+      "Repeat the window N fiscal years earlier for a comparative; never hand-compute prior-year dates.",
+    ),
 };
 
 export type { RangeArgs };
@@ -61,21 +71,29 @@ export async function orgToday(orgId: string): Promise<string> {
 
 export type AssistantNumberResult =
   | { ok: true; value: number }
-  | { ok: false; error: { code: "unreadable_numeric_result" | "numeric_result_out_of_range"; message: string } };
+  | {
+      ok: false;
+      error: { code: "unreadable_numeric_result" | "numeric_result_out_of_range"; message: string };
+    };
 
 /** Parse an assistant numeric result without replacing missing or unreadable values with zero. */
 export function num(v: unknown): AssistantNumberResult {
-  const raw = typeof v === "string" ? v.trim()
-    : typeof v === "number" && Number.isFinite(v) ? String(v)
-      : typeof v === "bigint" ? String(v)
-        : null;
+  const raw =
+    typeof v === "string"
+      ? v.trim()
+      : typeof v === "number" && Number.isFinite(v)
+        ? String(v)
+        : typeof v === "bigint"
+          ? String(v)
+          : null;
   const exact = raw === null || raw === "" ? null : canonicalDecimal(raw, 8);
   if (exact === null) {
     return {
       ok: false,
       error: {
         code: "unreadable_numeric_result",
-        message: "An assistant numeric result is missing or unreadable. Review the source record and correct its numeric value before retrying.",
+        message:
+          "An assistant numeric result is missing or unreadable. Review the source record and correct its numeric value before retrying.",
       },
     };
   }
@@ -86,7 +104,8 @@ export function num(v: unknown): AssistantNumberResult {
       ok: false,
       error: {
         code: "numeric_result_out_of_range",
-        message: "An assistant numeric result exceeds the safe display range. Review the source record and use its exact decimal amount.",
+        message:
+          "An assistant numeric result exceeds the safe display range. Review the source record and use its exact decimal amount.",
       },
     };
   }
@@ -121,11 +140,8 @@ export function money(v: unknown): string {
  * number has already lost its original decimal spelling, so fail closed. */
 export function decimalText(v: unknown): string | null {
   if (v === null || v === undefined) return null;
-  const raw = typeof v === "string"
-    ? v
-    : typeof v === "number" && Number.isSafeInteger(v)
-      ? String(v)
-      : null;
+  const raw =
+    typeof v === "string" ? v : typeof v === "number" && Number.isSafeInteger(v) ? String(v) : null;
   const exact = raw === null ? null : canonicalDecimal(raw, 8);
   if (exact === null) throw new Error("assistant financial results must be exact decimal strings");
   return exact;
@@ -146,7 +162,13 @@ export function assistantListPage<T>(
 ): { items: T[]; total: number; returned: number; truncated: boolean; dropped: number } {
   const items = fetched.slice(0, limit);
   const dropped = Math.max(0, total - items.length);
-  return { items, total, returned: items.length, truncated: dropped > 0 || fetched.length > items.length, dropped };
+  return {
+    items,
+    total,
+    returned: items.length,
+    truncated: dropped > 0 || fetched.length > items.length,
+    dropped,
+  };
 }
 
 /** Default per-string ceiling inside compacted rows (see compactRows). */
@@ -160,9 +182,16 @@ function truncateLeaves(value: unknown, max: number): unknown {
     return value.length > max ? `${value.slice(0, max)}…[truncated]` : value;
   }
   if (Array.isArray(value)) return value.map((entry) => truncateLeaves(entry, max));
-  if (typeof value === "object" && value !== null && Object.getPrototypeOf(value) === Object.prototype) {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
     return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, truncateLeaves(entry, max)]),
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+        key,
+        truncateLeaves(entry, max),
+      ]),
     );
   }
   return value;

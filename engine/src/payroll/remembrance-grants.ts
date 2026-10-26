@@ -28,11 +28,7 @@ import {
 } from "./holidays.ts";
 import type { EntitlementMovement } from "./entitlements-movement-kernel.ts";
 import type { EntitlementPlan } from "./entitlements-types.ts";
-import {
-  adjacentScheduledDay,
-  resolveWorkSchedule,
-  scheduledHoursOn,
-} from "./work-schedules.ts";
+import { adjacentScheduledDay, resolveWorkSchedule, scheduledHoursOn } from "./work-schedules.ts";
 import { addCalendarDays } from "../platform/business-date.ts";
 
 export interface RemembranceGrantArgs {
@@ -54,8 +50,7 @@ export interface RemembranceGrantArgs {
 }
 
 export type RemembranceGrantDecision =
-  | { status: "grant"; hours: string; takeOn: string }
-  | { status: "deny"; reason: string };
+  { status: "grant"; hours: string; takeOn: string } | { status: "deny"; reason: string };
 
 /**
  * The statute as a decision. Denials return (not worked, not qualified,
@@ -66,9 +61,15 @@ export type RemembranceGrantDecision =
  */
 function decideRemembranceGrant(args: RemembranceGrantArgs): RemembranceGrantDecision {
   const {
-    employeeName, workedHours, qualifyingDays, qualifyingRequired,
-    businessClass, exemptBusinessClasses, businessClassRemedy,
-    scheduledHours, defaultTakeOn,
+    employeeName,
+    workedHours,
+    qualifyingDays,
+    qualifyingRequired,
+    businessClass,
+    exemptBusinessClasses,
+    businessClassRemedy,
+    scheduledHours,
+    defaultTakeOn,
   } = args;
   if (cmp(workedHours, "0") <= 0) {
     return { status: "deny", reason: "did not work the statutory date" };
@@ -76,15 +77,14 @@ function decideRemembranceGrant(args: RemembranceGrantArgs): RemembranceGrantDec
   if (qualifyingDays < qualifyingRequired) {
     return {
       status: "deny",
-      reason:
-        `entitled to wages on ${qualifyingDays} of the qualifying days; ${qualifyingRequired} are required`,
+      reason: `entitled to wages on ${qualifyingDays} of the qualifying days; ${qualifyingRequired} are required`,
     };
   }
   if (businessClass == null) {
     throw new PayrollHolidayError(
-      `${employeeName} worked the statutory date and qualifies, but the employer's business class `
-      + `is not recorded — an exempt business owes no alternate day and a covered one owes it, and `
-      + `the run will not guess which this employer is. ${businessClassRemedy}`,
+      `${employeeName} worked the statutory date and qualifies, but the employer's business class ` +
+        `is not recorded — an exempt business owes no alternate day and a covered one owes it, and ` +
+        `the run will not guess which this employer is. ${businessClassRemedy}`,
     );
   }
   if (exemptBusinessClasses.includes(businessClass)) {
@@ -92,24 +92,24 @@ function decideRemembranceGrant(args: RemembranceGrantArgs): RemembranceGrantDec
   }
   if (scheduledHours == null) {
     throw new PayrollHolidayError(
-      `${employeeName} earned the alternate paid day, but no work schedule is in force on the `
-      + "statutory date — the grant is denominated in the employee's scheduled hours for that day, "
-      + "and this calculation will not assume a day length it has not been told about. Record the "
-      + "hours and days they are normally scheduled to work, or record that their hours vary with "
-      + "an agreed paid-day length",
+      `${employeeName} earned the alternate paid day, but no work schedule is in force on the ` +
+        "statutory date — the grant is denominated in the employee's scheduled hours for that day, " +
+        "and this calculation will not assume a day length it has not been told about. Record the " +
+        "hours and days they are normally scheduled to work, or record that their hours vary with " +
+        "an agreed paid-day length",
     );
   }
   if (cmp(scheduledHours, "0") <= 0) {
     throw new PayrollHolidayError(
-      `${employeeName} earned the alternate paid day by working a day they were not scheduled to `
-      + "work, so there are no scheduled hours to denominate it in — granting zero hours would "
-      + "erase the benefit. Record the paid-day length the employer agreed for the alternate day",
+      `${employeeName} earned the alternate paid day by working a day they were not scheduled to ` +
+        "work, so there are no scheduled hours to denominate it in — granting zero hours would " +
+        "erase the benefit. Record the paid-day length the employer agreed for the alternate day",
     );
   }
   if (defaultTakeOn == null) {
     throw new PayrollHolidayError(
-      `${employeeName} earned the alternate paid day, but no scheduled workday follows the statutory `
-      + "date to take it on — agree the take-on date with the employee and record it against the grant",
+      `${employeeName} earned the alternate paid day, but no scheduled workday follows the statutory ` +
+        "date to take it on — agree the take-on date with the employee and record it against the grant",
     );
   }
   return { status: "grant", hours: scheduledHours, takeOn: defaultTakeOn };
@@ -147,16 +147,27 @@ export async function grantRemembranceAlternateDay(
   },
 ): Promise<EntitlementMovement | null> {
   const {
-    orgId, runDocumentId, employeePartyId, employeeName,
-    jurisdiction, subsidiaryId, periodStart, periodEnd, plan,
+    orgId,
+    runDocumentId,
+    employeePartyId,
+    employeeName,
+    jurisdiction,
+    subsidiaryId,
+    periodStart,
+    periodEnd,
+    plan,
   } = args;
   // The pack declares the grant and the jurisdictions its statute binds;
   // the generic layer names no province.
   const rule = PAYROLL_COUNTRY_PACKS[countryOfJurisdiction(jurisdiction)]?.alternateDayGrant;
   if (!rule || !rule.jurisdictions.includes(jurisdiction)) return null;
-  const statutoryDate = [periodStart.slice(0, 4), periodEnd.slice(0, 4)]
-    .map((year) => `${year}-${String(rule.month).padStart(2, "0")}-${String(rule.day).padStart(2, "0")}`)
-    .find((date) => date >= periodStart && date <= periodEnd) ?? null;
+  const statutoryDate =
+    [periodStart.slice(0, 4), periodEnd.slice(0, 4)]
+      .map(
+        (year) =>
+          `${year}-${String(rule.month).padStart(2, "0")}-${String(rule.day).padStart(2, "0")}`,
+      )
+      .find((date) => date >= periodStart && date <= periodEnd) ?? null;
   if (!statutoryDate) return null;
 
   const workedHours = await hoursOn(tx, { orgId, employeePartyId }, statutoryDate);
@@ -168,17 +179,28 @@ export async function grantRemembranceAlternateDay(
   };
   const schedule = await resolveWorkSchedule(tx, orgId, employeePartyId, statutoryDate);
   const evidence = await loadHolidayDayEvidence(
-    tx, { orgId, employeePartyId, excludeDocumentId: runDocumentId },
-    qualifyingWindow, [], true,
+    tx,
+    { orgId, employeePartyId, excludeDocumentId: runDocumentId },
+    qualifyingWindow,
+    [],
+    true,
   );
   const qualifyingDays = countHolidayQualifyingDays({
-    employee: employeeName, window: qualifyingWindow, counting: rule.counting, evidence, schedule,
+    employee: employeeName,
+    window: qualifyingWindow,
+    counting: rule.counting,
+    evidence,
+    schedule,
   });
   if (qualifyingDays < rule.qualifyingDays) return null;
 
   const businessClass = await resolveStoredEmployerFact({
-    tx, orgId, subsidiaryId, country: "CA",
-    factKey: rule.businessClassFactKey, asOf: statutoryDate,
+    tx,
+    orgId,
+    subsidiaryId,
+    country: "CA",
+    factKey: rule.businessClassFactKey,
+    asOf: statutoryDate,
   });
 
   const decision = decideRemembranceGrant({
@@ -197,18 +219,23 @@ export async function grantRemembranceAlternateDay(
 
   if (!plan) {
     throw new PayrollError(
-      `${employeeName} earned the statutory alternate paid day, but this organization has no `
-      + "alternate-day entitlement plan to grant it into — create one in Payroll setup → "
-      + "Entitlement plans (hours, manual), then recalculate",
+      `${employeeName} earned the statutory alternate paid day, but this organization has no ` +
+        "alternate-day entitlement plan to grant it into — create one in Payroll setup → " +
+        "Entitlement plans (hours, manual), then recalculate",
     );
   }
-  const prior = (await tx.execute<{ id: string }>(sql`
+  const prior = (
+    await tx.execute<{ id: string }>(
+      sql`
     select id from entitlement_ledger
      where org_id = ${orgId} and plan_id = ${plan.id} and employee_party_id = ${employeePartyId}
        and kind = 'bank_in'
        and source_holiday_key = ${rule.holidayKey} and source_holiday_date = ${statutoryDate}
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (prior) return null;
 
   return {
@@ -222,11 +249,10 @@ export async function grantRemembranceAlternateDay(
     // no stub line. The payout component prices it when the day is taken.
     componentId: null,
     note:
-      `Statutory alternate paid day (${rule.citation}): worked ${statutoryDate}, `
-      + `take on ${decision.takeOn}`,
+      `Statutory alternate paid day (${rule.citation}): worked ${statutoryDate}, ` +
+      `take on ${decision.takeOn}`,
     sourceHolidayKey: rule.holidayKey,
     sourceHolidayDate: statutoryDate,
     takeOn: decision.takeOn,
   };
 }
-

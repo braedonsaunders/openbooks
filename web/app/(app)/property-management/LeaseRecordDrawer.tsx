@@ -7,8 +7,17 @@ import { useBusinessToday } from "@/components/business-date-provider";
 import { confirmDialog } from "@/lib/confirm";
 import { Field, RecordTabs, Status } from "./workspace-ui";
 import { LeaseDetail } from "./LeaseDetail";
-import type { LeaseForm, LeaseRow, Money, PropertyAction, PropertyPermissions, PropertyWorkspace, SaveAction, WorkspaceOptions } from "./types";
-import { DateField } from '@/components/date-field'
+import type {
+  LeaseForm,
+  LeaseRow,
+  Money,
+  PropertyAction,
+  PropertyPermissions,
+  PropertyWorkspace,
+  SaveAction,
+  WorkspaceOptions,
+} from "./types";
+import { DateField } from "@/components/date-field";
 
 type LeaseTab = "overview" | "charges" | "escalations" | "deposits";
 
@@ -51,11 +60,10 @@ export function LeaseRecordDrawer({
   const [prevLease, setPrevLease] = useState(lease);
   if (prevLease !== lease) {
     setPrevLease(lease);
-    if (mode === 'view') setForm(leaseForm(lease ?? {}));
+    if (mode === "view") setForm(leaseForm(lease ?? {}));
   }
   if (!lease) return null;
-  const canEdit =
-    permissions.manage && ["draft", "active", "notice"].includes(lease.status);
+  const canEdit = permissions.manage && ["draft", "active", "notice"].includes(lease.status);
   const reset = () => {
     setForm(leaseForm(lease));
     setMode("view");
@@ -138,8 +146,13 @@ export function LeaseRecordDrawer({
                 align="end"
                 className="w-56 p-1.5"
                 trigger={
-                  <Button size="sm" variant="outline" onClick={() => setActionsOpen((open) => !open)}>
-                    Actions <ChevronDown className={cn("h-3.5 w-3.5", actionsOpen && "rotate-180")} />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setActionsOpen((open) => !open)}
+                  >
+                    Actions{" "}
+                    <ChevronDown className={cn("h-3.5 w-3.5", actionsOpen && "rotate-180")} />
                   </Button>
                 }
               >
@@ -149,7 +162,12 @@ export function LeaseRecordDrawer({
                     className="h-8 w-full justify-start rounded px-2 text-xs text-red-600 hover:text-red-700"
                     disabled={busy}
                     onClick={async () => {
-                      if (!(await confirmDialog(`Cancel lease ${lease.leaseNumber}? The record will remain in history.`))) return
+                      if (
+                        !(await confirmDialog(
+                          `Cancel lease ${lease.leaseNumber}? The record will remain in history.`,
+                        ))
+                      )
+                        return;
                       void act({ action: "cancelLease", leaseId: lease.id }, "Lease cancelled");
                       setActionsOpen(false);
                     }}
@@ -183,18 +201,28 @@ export function LeaseRecordDrawer({
           <CardContent className="space-y-4 p-4">
             <div>
               <h3 className="font-medium text-red-700 dark:text-red-300">Terminate lease</h3>
-              <p className="mt-1 text-xs text-slate-500">Future scheduled rent will be cancelled and the unit returned to vacant.</p>
+              <p className="mt-1 text-xs text-slate-500">
+                Future scheduled rent will be cancelled and the unit returned to vacant.
+              </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Termination date">
-                <DateField value={termination.terminatedOn} onChange={(value) => setTermination({ ...termination, terminatedOn: value })} />
+                <DateField
+                  value={termination.terminatedOn}
+                  onChange={(value) => setTermination({ ...termination, terminatedOn: value })}
+                />
               </Field>
               <Field label="Reason">
-                <Input value={termination.reason} onChange={(e) => setTermination({ ...termination, reason: e.target.value })} />
+                <Input
+                  value={termination.reason}
+                  onChange={(e) => setTermination({ ...termination, reason: e.target.value })}
+                />
               </Field>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" disabled={busy} onClick={() => setTerminationOpen(false)}>Cancel</Button>
+              <Button variant="outline" disabled={busy} onClick={() => setTerminationOpen(false)}>
+                Cancel
+              </Button>
               <Button
                 disabled={busy || !termination.terminatedOn || !termination.reason.trim()}
                 onClick={async () => {

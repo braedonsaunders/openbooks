@@ -1,4 +1,4 @@
-'use client'
+"use client";
 
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
@@ -30,7 +30,10 @@ import { promptDialog } from "@/lib/prompt";
 import { channelCards, channelMarginPercentValue, type Channel } from "./channel-cards";
 import type { ChannelsHomeData } from "./view";
 
-const STATUS_VARIANT: Record<string, "success" | "secondary" | "outline" | "destructive" | "warning"> = {
+const STATUS_VARIANT: Record<
+  string,
+  "success" | "secondary" | "outline" | "destructive" | "warning"
+> = {
   active: "success",
   paused: "outline",
   error: "destructive",
@@ -67,7 +70,11 @@ export function ChannelsConsole({ initialData }: { initialData: ChannelsHomeData
       confirmLabel: t(`home.${action}Confirm`),
     });
     if (!reason) return;
-    if (action === "disconnect" && !(await confirmDialog(t("home.disconnectVerify", { name: channel.name })))) return;
+    if (
+      action === "disconnect" &&
+      !(await confirmDialog(t("home.disconnectVerify", { name: channel.name })))
+    )
+      return;
     setBusy(`${channel.id}:${action}`);
     try {
       const res = await fetch(`/api/channels/${channel.id}/lifecycle`, {
@@ -76,7 +83,9 @@ export function ChannelsConsole({ initialData }: { initialData: ChannelsHomeData
         body: JSON.stringify({ action, reason }),
       });
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t("home.toast.actionFailed", { status: res.status })));
+        toast.error(
+          await readApiErrorMessage(res, t("home.toast.actionFailed", { status: res.status })),
+        );
         return;
       }
       toast.success(t(`home.toast.${action}d`));
@@ -95,11 +104,12 @@ export function ChannelsConsole({ initialData }: { initialData: ChannelsHomeData
   // One parent collection: every channel once, attention and margins inline.
   const cards = channelCards(channels, margin);
   const attentionCount = cards.reduce((sum, card) => sum + card.outstanding, 0);
-  const lastDelivery = channels
-    .map((c) => c.attention.lastReceivedAt)
-    .filter((ts): ts is string => ts != null)
-    .sort()
-    .at(-1) ?? null;
+  const lastDelivery =
+    channels
+      .map((c) => c.attention.lastReceivedAt)
+      .filter((ts): ts is string => ts != null)
+      .sort()
+      .at(-1) ?? null;
   const statusLabel = (s: string) => (t.has(`status.${s}`) ? t(`status.${s}`) : s);
   const kindLabel = (kind: string) => (t.has(`kinds.${kind}`) ? t(`kinds.${kind}`) : kind);
 
@@ -152,7 +162,9 @@ export function ChannelsConsole({ initialData }: { initialData: ChannelsHomeData
             <StatTile
               label={t("home.tiles.attention")}
               value={String(attentionCount)}
-              sub={attentionCount > 0 ? t("home.tiles.attentionSub") : t("home.tiles.attentionClear")}
+              sub={
+                attentionCount > 0 ? t("home.tiles.attentionSub") : t("home.tiles.attentionClear")
+              }
               icon={Layers}
               tone={attentionCount > 0 ? "warning" : "positive"}
             />
@@ -162,7 +174,11 @@ export function ChannelsConsole({ initialData }: { initialData: ChannelsHomeData
               sub={t("home.tiles.ordersTodaySub")}
               icon={Layers}
             />
-            <StatTile label={t("home.tiles.lastDelivery")} value={fmt(lastDelivery)} icon={Layers} />
+            <StatTile
+              label={t("home.tiles.lastDelivery")}
+              value={fmt(lastDelivery)}
+              icon={Layers}
+            />
           </div>
           <CommerceCloseTile />
           <CockpitPanel
@@ -234,10 +250,14 @@ export function ChannelsConsole({ initialData }: { initialData: ChannelsHomeData
                           : null;
                       if (!amounts) {
                         const unreadable = [row.revenueMinor, row.cm2Minor, row.adSpendMinor].some(
-                          (minor) => minorDisplayRefusal(minor, row.minorUnits) === 'unreadable-amount',
+                          (minor) =>
+                            minorDisplayRefusal(minor, row.minorUnits) === "unreadable-amount",
                         );
                         return (
-                          <div key={`${row.channelId}|${row.currency}`} className="mt-1 text-sm text-amber-800 dark:text-amber-200">
+                          <div
+                            key={`${row.channelId}|${row.currency}`}
+                            className="mt-1 text-sm text-amber-800 dark:text-amber-200"
+                          >
                             {unreadable
                               ? t("home.marginUnreadable", { currency: row.currency })
                               : t("home.marginPrecisionUnknown", { currency: row.currency })}
@@ -247,7 +267,10 @@ export function ChannelsConsole({ initialData }: { initialData: ChannelsHomeData
                       const shown = amounts;
                       const pct = channelMarginPercentValue(row.cm2Minor, row.revenueMinor);
                       return (
-                        <div key={`${row.channelId}|${row.currency}`} className="mt-1 text-sm text-slate-500">
+                        <div
+                          key={`${row.channelId}|${row.currency}`}
+                          className="mt-1 text-sm text-slate-500"
+                        >
                           {t("home.marginMeta", {
                             orders: row.orders,
                             revenue: shown.revenue,
@@ -313,13 +336,21 @@ export function ChannelsConsole({ initialData }: { initialData: ChannelsHomeData
         </div>
       )}
       {connectKind ? (
-        <ConnectDrawer kind={connectKind} onClose={() => setConnectKind(null)} onConnected={() => router.refresh()} />
+        <ConnectDrawer
+          kind={connectKind}
+          onClose={() => setConnectKind(null)}
+          onConnected={() => router.refresh()}
+        />
       ) : null}
     </ListPageLayout>
   );
 }
 
-function ConnectDrawer({ kind, onClose, onConnected }: {
+function ConnectDrawer({
+  kind,
+  onClose,
+  onConnected,
+}: {
   kind: string;
   onClose: () => void;
   onConnected: () => void;
@@ -344,7 +375,9 @@ function ConnectDrawer({ kind, onClose, onConnected }: {
         body: JSON.stringify({ kind, name, externalAccount, currency, settings: {} }),
       });
       if (!res.ok) {
-        setError(await readApiErrorMessage(res, t("home.toast.createFailed", { status: res.status })));
+        setError(
+          await readApiErrorMessage(res, t("home.toast.createFailed", { status: res.status })),
+        );
         return;
       }
       const payload = (await res.json()) as { webhookSecret: string | null };
@@ -374,7 +407,10 @@ function ConnectDrawer({ kind, onClose, onConnected }: {
             <Button variant="outline" onClick={onClose} disabled={busy}>
               {tCommon("actions.cancel")}
             </Button>
-            <Button onClick={() => void connect()} disabled={busy || !name.trim() || !externalAccount.trim()}>
+            <Button
+              onClick={() => void connect()}
+              disabled={busy || !name.trim() || !externalAccount.trim()}
+            >
               {t("home.connectConfirm")}
             </Button>
           </>
@@ -384,14 +420,20 @@ function ConnectDrawer({ kind, onClose, onConnected }: {
       {secret ? (
         <div className="space-y-2">
           <p className="text-sm text-slate-500">{t("home.secretBody")}</p>
-          <p className="break-all rounded-lg bg-slate-100 p-3 font-mono text-sm dark:bg-slate-800">{secret}</p>
+          <p className="break-all rounded-lg bg-slate-100 p-3 font-mono text-sm dark:bg-slate-800">
+            {secret}
+          </p>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
         </div>
       ) : (
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>{t("home.connectNameLabel")}</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("home.connectNamePlaceholder")} />
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t("home.connectNamePlaceholder")}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>{t("home.connectAccountLabel")}</Label>
@@ -403,7 +445,12 @@ function ConnectDrawer({ kind, onClose, onConnected }: {
           </div>
           <div className="space-y-1.5">
             <Label>{t("home.connectCurrencyLabel")}</Label>
-            <Input value={currency} onChange={(e) => setCurrency(e.target.value)} placeholder="USD" maxLength={3} />
+            <Input
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              placeholder="USD"
+              maxLength={3}
+            />
           </div>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
         </div>

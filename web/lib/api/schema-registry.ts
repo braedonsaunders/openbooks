@@ -4,7 +4,10 @@ import { db } from "@openbooks/engine/platform/db";
 import { isFeatureEnabled } from "../features";
 import { normalizeSectionsInput } from "../record-schema";
 import { inTypeAudience } from "../records";
-import { customFieldVisible, type CustomFieldViewer } from "@openbooks/engine/records/custom-fields";
+import {
+  customFieldVisible,
+  type CustomFieldViewer,
+} from "@openbooks/engine/records/custom-fields";
 import {
   API_RECORD_TYPES,
   DOCUMENT_REVISION_READ_METADATA,
@@ -43,19 +46,35 @@ import {
 export * from "./registry-data";
 
 interface ColumnRow extends Record<string, unknown> {
-  table_name: string; column_name: string; data_type: string; is_nullable: "YES" | "NO"; column_default: string | null;
+  table_name: string;
+  column_name: string;
+  data_type: string;
+  is_nullable: "YES" | "NO";
+  column_default: string | null;
   is_generated: "ALWAYS" | "NEVER";
 }
 interface CustomFieldRow extends Record<string, unknown> {
-  target_table: string; target_kind: string | null; key: string; label: string | null;
-  field_type: string; is_required: boolean; config: { allowedRoles?: unknown } | null;
+  target_table: string;
+  target_kind: string | null;
+  key: string;
+  label: string | null;
+  field_type: string;
+  is_required: boolean;
+  config: { allowedRoles?: unknown } | null;
 }
 interface CustomRecordTypeRow extends Record<string, unknown> {
-  key: string; name: string; description: string | null; fields: unknown;
+  key: string;
+  name: string;
+  description: string | null;
+  fields: unknown;
   allowed_roles: string[] | null;
 }
 interface StoredFormField {
-  id?: string; key?: string; type?: string; required?: boolean; label?: string | null;
+  id?: string;
+  key?: string;
+  type?: string;
+  required?: boolean;
+  label?: string | null;
 }
 
 /**
@@ -69,10 +88,10 @@ export async function loadApiSchema(
   roleKeys: readonly string[] | null = null,
   customFieldViewer?: CustomFieldViewer,
 ): Promise<ApiRecordTypeSchema[]> {
-  const builtIn: ApiRecordType[] = []
+  const builtIn: ApiRecordType[] = [];
   for (const t of API_RECORD_TYPES.filter((candidate) => candidate.table)) {
-    if (t.featureKey && !(await isFeatureEnabled(orgId, t.featureKey))) continue
-    builtIn.push(t)
+    if (t.featureKey && !(await isFeatureEnabled(orgId, t.featureKey))) continue;
+    builtIn.push(t);
   }
 
   // Query live column metadata for all built-in tables at once. Table names
@@ -82,11 +101,14 @@ export async function loadApiSchema(
     tables.map((t) => sql`${t}`),
     sql`, `,
   )}]::text[]`;
-  const cols = await db.execute<ColumnRow>(sql`
+  const cols = await db.execute<ColumnRow>(
+    sql`
     select table_name, column_name, data_type, is_nullable, column_default, is_generated
       from information_schema.columns
      where table_schema = 'public' and table_name = any(${tableArray})
-     order by table_name, ordinal_position`, "objects");
+     order by table_name, ordinal_position`,
+    "objects",
+  );
 
   const byTable = new Map<string, ColumnRow[]>();
   for (const row of cols) {
@@ -98,11 +120,14 @@ export async function loadApiSchema(
   // Custom fields on built-in tables (custom_field_defs), keyed by table and
   // optional kind. Surfaced as `cf_<key>` so bills/parties/etc. advertise and
   // accept their org custom fields.
-  const cfDefs = await db.execute<CustomFieldRow>(sql`
+  const cfDefs = await db.execute<CustomFieldRow>(
+    sql`
     select target_table, target_kind, key, label, field_type, is_required, config
       from custom_field_defs
      where org_id = ${orgId} and is_active
-     order by sort_order, label`, "objects");
+     order by sort_order, label`,
+    "objects",
+  );
 
   const cfByTargetKind = new Map<string, CustomFieldRow[]>();
   for (const row of cfDefs) {
@@ -118,7 +143,11 @@ export async function loadApiSchema(
     const out: ApiField[] = [];
     for (const k of keys) {
       for (const d of cfByTargetKind.get(k) ?? []) {
-        if (customFieldViewer && !customFieldVisible({ key: d.key, config: d.config }, customFieldViewer)) continue;
+        if (
+          customFieldViewer &&
+          !customFieldVisible({ key: d.key, config: d.config }, customFieldViewer)
+        )
+          continue;
         const name = `cf_${d.key}`;
         if (seen.has(name)) continue;
         seen.add(name);
@@ -140,22 +169,39 @@ export async function loadApiSchema(
   const multiCurrencyOn = await isFeatureEnabled(orgId, "multiCurrency");
   const inventoryOn = await isFeatureEnabled(orgId, "inventory");
   const equipmentOn = await isFeatureEnabled(orgId, "equipment");
-  const itemKinds = ITEM_KIND_VALUES.filter((kind) =>
-    (inventoryOn || !ITEM_INVENTORY_KINDS.has(kind)) &&
-    (equipmentOn || !ITEM_EQUIPMENT_KINDS.has(kind)));
+  const itemKinds = ITEM_KIND_VALUES.filter(
+    (kind) =>
+      (inventoryOn || !ITEM_INVENTORY_KINDS.has(kind)) &&
+      (equipmentOn || !ITEM_EQUIPMENT_KINDS.has(kind)),
+  );
   const result: ApiRecordTypeSchema[] = builtIn.map((t) => {
     const docKind = t.writer.kind === "document" ? t.writer.docKind : undefined;
     const physical = (byTable.get(t.table!) ?? [])
-      .filter((c) => t.key !== "items" || revenueRecognitionOn || !ITEM_REVENUE_RECOGNITION_COLUMNS.has(c.column_name))
-      .filter((c) => t.key !== "items" || timeTrackingOn || !ITEM_TIME_TRACKING_COLUMNS.has(c.column_name))
+      .filter(
+        (c) =>
+          t.key !== "items" ||
+          revenueRecognitionOn ||
+          !ITEM_REVENUE_RECOGNITION_COLUMNS.has(c.column_name),
+      )
+      .filter(
+        (c) =>
+          t.key !== "items" || timeTrackingOn || !ITEM_TIME_TRACKING_COLUMNS.has(c.column_name),
+      )
       .map((c): ApiField => ({
         name: c.column_name,
         type: pgTypeToOpenApi(c.data_type),
         // GENERATED ALWAYS columns are projections the row computes itself:
         // advertised for reads, never required of or accepted from a writer.
-        required: c.is_nullable === "NO" && !c.column_default && c.is_generated === "NEVER" && !READONLY_COLUMNS.has(c.column_name),
-        writable: c.is_generated === "NEVER" && !READONLY_COLUMNS.has(c.column_name) && c.column_name !== "custom"
-          && (multiCurrencyOn || t.table !== "documents" || c.column_name !== "currency"),
+        required:
+          c.is_nullable === "NO" &&
+          !c.column_default &&
+          c.is_generated === "NEVER" &&
+          !READONLY_COLUMNS.has(c.column_name),
+        writable:
+          c.is_generated === "NEVER" &&
+          !READONLY_COLUMNS.has(c.column_name) &&
+          c.column_name !== "custom" &&
+          (multiCurrencyOn || t.table !== "documents" || c.column_name !== "currency"),
         custom: false,
         ...(t.table === "documents" && c.column_name === "updated_at"
           ? DOCUMENT_REVISION_READ_METADATA
@@ -165,19 +211,22 @@ export async function loadApiSchema(
     return {
       ...t,
       path: `/api/v1/records/${t.key}`,
-      fields: withDocumentRevisionWriteField(
-        t.writer,
-        [...physical, ...customFieldsFor(t.table!, docKind)],
-      ),
+      fields: withDocumentRevisionWriteField(t.writer, [
+        ...physical,
+        ...customFieldsFor(t.table!, docKind),
+      ]),
     };
   });
 
   // Layer on custom record types (dynamically defined by the org).
-  const custom = await db.execute<CustomRecordTypeRow>(sql`
+  const custom = await db.execute<CustomRecordTypeRow>(
+    sql`
     select key, name, description, fields, allowed_roles
       from custom_record_types
      where org_id = ${orgId} and status = 'published'
-     order by sort_order, name`, "objects");
+     order by sort_order, name`,
+    "objects",
+  );
 
   for (const row of custom) {
     if (roleKeys !== null && !inTypeAudience(roleKeys, row.allowed_roles)) continue;
@@ -222,13 +271,16 @@ export async function resolveApiType(
 ): Promise<ResolvedApiType | null> {
   const builtIn = RECORD_TYPE_BY_KEY.get(typeKey) as ApiRecordType | undefined;
   if (builtIn && builtIn.table) {
-    if (builtIn.featureKey && !(await isFeatureEnabled(orgId, builtIn.featureKey))) return null
-    return toResolved(builtIn)
+    if (builtIn.featureKey && !(await isFeatureEnabled(orgId, builtIn.featureKey))) return null;
+    return toResolved(builtIn);
   }
 
-  const r = (await db.execute(sql`
+  const r = await db.execute(
+    sql`
     select key from custom_record_types
-     where org_id = ${orgId} and key = ${typeKey} and status = 'published'`, "objects"));
+     where org_id = ${orgId} and key = ${typeKey} and status = 'published'`,
+    "objects",
+  );
   if (!r[0]) return null;
   return {
     key: typeKey,

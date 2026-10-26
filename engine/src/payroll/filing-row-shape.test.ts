@@ -70,10 +70,13 @@ test("built-in row grammars round-trip their populations' keys", () => {
     employees: [EMP],
     accounts: [],
   });
-  assert.deepEqual(yearEndFiling("FR", "recapitulatif-annuel").parseRowId(`${EMP}:2026-03:${ACCT}`), {
-    employees: [EMP],
-    accounts: [ACCT],
-  });
+  assert.deepEqual(
+    yearEndFiling("FR", "recapitulatif-annuel").parseRowId(`${EMP}:2026-03:${ACCT}`),
+    {
+      employees: [EMP],
+      accounts: [ACCT],
+    },
+  );
   assert.deepEqual(yearEndFiling("FR", "recapitulatif-annuel").parseRowId(`${EMP}:2026-03:`), {
     employees: [EMP],
     accounts: [],
@@ -119,15 +122,17 @@ test("a filing with no row-key grammar is refused at registration", () => {
       registerPayrollFilings({
         country: "ZZ",
         programTypes: [],
-        yearEnd: [{
-          key: "x",
-          label: "X",
-          cadence: "annual",
-          population: async () => ({ rowKey: "id", columns: [], rows: [] }),
-          amendment: { supported: false, refusal: "no corrections here" },
-          // Deliberately no parseRowId: the runtime assert (not the type
-          // system) must refuse it, like the cadence-refusal doubles do.
-        } as never],
+        yearEnd: [
+          {
+            key: "x",
+            label: "X",
+            cadence: "annual",
+            population: async () => ({ rowKey: "id", columns: [], rows: [] }),
+            amendment: { supported: false, refusal: "no corrections here" },
+            // Deliberately no parseRowId: the runtime assert (not the type
+            // system) must refuse it, like the cadence-refusal doubles do.
+          } as never,
+        ],
       }),
     (error: Error) => {
       assert.ok(error instanceof PayrollPackError);

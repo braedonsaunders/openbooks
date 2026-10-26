@@ -83,27 +83,53 @@ test("sandbox deletion preserves immediate parent order inside deferred cycles",
     departments: {},
     mfg_work_centers: { department_id: "departments", movement_id: "inventory_movements" },
     inventory_movements: { serial_id: "serials" },
-    serials: { current_missing_count_movement_id: "inventory_movements", center_id: "mfg_work_centers" },
+    serials: {
+      current_missing_count_movement_id: "inventory_movements",
+      center_id: "mfg_work_centers",
+    },
   };
   const tables = Object.entries(refs).map(([name, fks]) => ({
-    ...table("NO ACTION"), name, fks, hardFks: {},
-    fkDeleteRules: Object.fromEntries(Object.keys(fks).map(key => [key, key === "department_id" ? "RESTRICT" : "NO ACTION"])),
+    ...table("NO ACTION"),
+    name,
+    fks,
+    hardFks: {},
+    fkDeleteRules: Object.fromEntries(
+      Object.keys(fks).map((key) => [key, key === "department_id" ? "RESTRICT" : "NO ACTION"]),
+    ),
   }));
   const cat = { tables, tenantTables: tables, rebaseSet: new Set(Object.keys(refs)) };
   assert.ok(deferredDeletionTables(cat).has("departments"));
   const order = deletionOrder(cat);
   assert.ok(order.indexOf("mfg_work_centers") < order.indexOf("departments"));
   assert.equal(new Set(order).size, tables.length);
-  const cyclic = tables.map(t => t.name === "departments"
-    ? { ...t, fks: { center_id: "mfg_work_centers" }, fkDeleteRules: { center_id: "RESTRICT" } }
-    : t);
+  const cyclic = tables.map((t) =>
+    t.name === "departments"
+      ? { ...t, fks: { center_id: "mfg_work_centers" }, fkDeleteRules: { center_id: "RESTRICT" } }
+      : t,
+  );
   const cyclicOrder = deletionOrder({ ...cat, tables: cyclic });
-  assert.equal(new Set(cyclicOrder).size, tables.length, "structural cycles retain every table for native row validation");
-  assert.equal(Math.abs(cyclicOrder.indexOf("departments") - cyclicOrder.indexOf("mfg_work_centers")), 1);
+  assert.equal(
+    new Set(cyclicOrder).size,
+    tables.length,
+    "structural cycles retain every table for native row validation",
+  );
+  assert.equal(
+    Math.abs(cyclicOrder.indexOf("departments") - cyclicOrder.indexOf("mfg_work_centers")),
+    1,
+  );
 });
 
 test("sandbox insertion resolves inventory ownership and tracking parents inside a deferred cycle", () => {
-  const nodes = ["cost_layers", "consignment_stock", "inventory_movements", "item_inventory_profiles", "items", "stock_locations", "serials", "lots"];
+  const nodes = [
+    "cost_layers",
+    "consignment_stock",
+    "inventory_movements",
+    "item_inventory_profiles",
+    "items",
+    "stock_locations",
+    "serials",
+    "lots",
+  ];
   const refs: Record<string, Record<string, string>> = {
     inventory_movements: { item_id: "items", serial_id: "serials" },
     consignment_stock: { item_id: "items" },
@@ -114,7 +140,12 @@ test("sandbox insertion resolves inventory ownership and tracking parents inside
     lots: {},
     cost_layers: { source_movement_id: "inventory_movements" },
   };
-  const tables = nodes.map(name => ({ ...table("NO ACTION"), name, fks: refs[name]!, hardFks: {} }));
+  const tables = nodes.map((name) => ({
+    ...table("NO ACTION"),
+    name,
+    fks: refs[name]!,
+    hardFks: {},
+  }));
   const order = insertionOrder({ tables, tenantTables: tables, rebaseSet: new Set(nodes) });
   assert.ok(order.indexOf("item_inventory_profiles") < order.indexOf("inventory_movements"));
   assert.ok(order.indexOf("item_inventory_profiles") < order.indexOf("consignment_stock"));
@@ -126,7 +157,11 @@ test("sandbox insertion resolves inventory ownership and tracking parents inside
   assert.ok(order.indexOf("inventory_movements") < order.indexOf("cost_layers"));
   assert.ok(order.indexOf("cost_layers") < order.indexOf("consignment_stock"));
   assert.equal(new Set(order).size, nodes.length);
-  const deferred = deferredDeletionTables({ tables, tenantTables: tables, rebaseSet: new Set(nodes) });
+  const deferred = deferredDeletionTables({
+    tables,
+    tenantTables: tables,
+    rebaseSet: new Set(nodes),
+  });
   assert.ok(deferred.has("serials"), "native teardown must defer the current count movement cycle");
   assert.ok(deferred.has("inventory_movements"));
 });
@@ -197,57 +232,124 @@ test("sandbox insertion orders trigger-required parents inside a deferrable FK c
   assert.ok(order.indexOf("users") < order.indexOf("field_ticket_labor_snapshots"));
   assert.ok(order.indexOf("field_tickets") < order.indexOf("field_ticket_signatures"));
   assert.ok(order.indexOf("files") < order.indexOf("field_ticket_signatures"));
-  assert.ok(order.indexOf("field_ticket_labor_snapshots") < order.indexOf("field_ticket_labor_lines"));
+  assert.ok(
+    order.indexOf("field_ticket_labor_snapshots") < order.indexOf("field_ticket_labor_lines"),
+  );
 });
 
 test("sandbox insertion resolves budget ownership inside deferred source cycles", () => {
   const refs: Record<string, Record<string, string>> = {
-    budget_lines: { scenario_id: "budget_scenarios", project_id: "projects", period_id: "accounting_periods" },
+    budget_lines: {
+      scenario_id: "budget_scenarios",
+      project_id: "projects",
+      period_id: "accounting_periods",
+    },
     budget_scenarios: { book_id: "accounting_books", created_by: "users" },
     projects: { source_document_id: "documents" },
     documents: { project_id: "projects", created_by: "users" },
     users: { source_document_id: "documents" },
-    accounts: {}, accounting_books: {}, accounting_periods: {}, departments: {}, locations: {}, classes: {},
+    accounts: {},
+    accounting_books: {},
+    accounting_periods: {},
+    departments: {},
+    locations: {},
+    classes: {},
   };
   const nodes = Object.keys(refs);
-  const tables = nodes.map(name => ({ ...table("NO ACTION"), name, fks: refs[name]!, hardFks: {} }));
+  const tables = nodes.map((name) => ({
+    ...table("NO ACTION"),
+    name,
+    fks: refs[name]!,
+    hardFks: {},
+  }));
   const order = insertionOrder({ tables, tenantTables: tables, rebaseSet: new Set(nodes) });
   assert.ok(order.indexOf("accounting_books") < order.indexOf("budget_scenarios"));
   assert.ok(order.indexOf("users") < order.indexOf("budget_scenarios"));
-  for (const parent of ["budget_scenarios", "accounts", "accounting_periods", "departments", "projects", "locations", "classes"]) {
-    assert.ok(order.indexOf(parent) < order.indexOf("budget_lines"), `${parent} precedes its trigger-checked budget line`);
+  for (const parent of [
+    "budget_scenarios",
+    "accounts",
+    "accounting_periods",
+    "departments",
+    "projects",
+    "locations",
+    "classes",
+  ]) {
+    assert.ok(
+      order.indexOf(parent) < order.indexOf("budget_lines"),
+      `${parent} precedes its trigger-checked budget line`,
+    );
   }
   assert.equal(new Set(order).size, nodes.length);
 });
 
 test("sandbox insertion retains assignment ownership order through employment history cycles", () => {
-  const nodes = ["employment_assignment_versions", "employment_assignments", "employment_changes", "worker_employment_versions", "worker_employments"];
+  const nodes = [
+    "employment_assignment_versions",
+    "employment_assignments",
+    "employment_changes",
+    "worker_employment_versions",
+    "worker_employments",
+  ];
   const refs: Record<string, Record<string, string>> = {
-    employment_assignment_versions: { assignment_id: "employment_assignments", closed_by_change_id: "employment_changes", employment_id: "worker_employments" },
+    employment_assignment_versions: {
+      assignment_id: "employment_assignments",
+      closed_by_change_id: "employment_changes",
+      employment_id: "worker_employments",
+    },
     employment_assignments: { employment_id: "worker_employments" },
-    employment_changes: { assignment_id: "employment_assignments", employment_id: "worker_employments" },
-    worker_employment_versions: { closed_by_change_id: "employment_changes", employment_id: "worker_employments" },
+    employment_changes: {
+      assignment_id: "employment_assignments",
+      employment_id: "worker_employments",
+    },
+    worker_employment_versions: {
+      closed_by_change_id: "employment_changes",
+      employment_id: "worker_employments",
+    },
     worker_employments: { current_version_id: "worker_employment_versions" },
   };
-  const tables = nodes.map(name => ({ ...table("NO ACTION"), name, fks: refs[name]!, hardFks: {} }));
+  const tables = nodes.map((name) => ({
+    ...table("NO ACTION"),
+    name,
+    fks: refs[name]!,
+    hardFks: {},
+  }));
   const order = insertionOrder({ tables, tenantTables: tables, rebaseSet: new Set(nodes) });
-  assert.ok(order.indexOf("employment_assignments") < order.indexOf("employment_assignment_versions"));
+  assert.ok(
+    order.indexOf("employment_assignments") < order.indexOf("employment_assignment_versions"),
+  );
   assert.ok(order.indexOf("employment_assignments") < order.indexOf("employment_changes"));
   assert.equal(new Set(order).size, nodes.length);
 });
 
 test("sandbox insertion resolves project adjustment ownership inside the deferred document cycle", () => {
-  const nodes = ["project_financial_adjustments", "project_overhead_adjustments",
-    "project_financial_profile_versions", "projects", "documents", "project_types"];
+  const nodes = [
+    "project_financial_adjustments",
+    "project_overhead_adjustments",
+    "project_financial_profile_versions",
+    "projects",
+    "documents",
+    "project_types",
+  ];
   const refs: Record<string, Record<string, string>> = {
-    project_financial_adjustments: { project_id: "projects", reverses_adjustment_id: "project_financial_adjustments" },
-    project_overhead_adjustments: { project_id: "projects", reverses_adjustment_id: "project_overhead_adjustments" },
+    project_financial_adjustments: {
+      project_id: "projects",
+      reverses_adjustment_id: "project_financial_adjustments",
+    },
+    project_overhead_adjustments: {
+      project_id: "projects",
+      reverses_adjustment_id: "project_overhead_adjustments",
+    },
     project_financial_profile_versions: { project_type_id: "project_types" },
     projects: { source_document_id: "documents", project_type_id: "project_types" },
     documents: { project_id: "projects" },
     project_types: { current_version_id: "project_financial_profile_versions" },
   };
-  const tables = nodes.map(name => ({ ...table("NO ACTION"), name, fks: refs[name]!, hardFks: {} }));
+  const tables = nodes.map((name) => ({
+    ...table("NO ACTION"),
+    name,
+    fks: refs[name]!,
+    hardFks: {},
+  }));
   const order = insertionOrder({ tables, tenantTables: tables, rebaseSet: new Set(nodes) });
   assert.ok(order.indexOf("projects") < order.indexOf("project_financial_adjustments"));
   assert.ok(order.indexOf("projects") < order.indexOf("project_overhead_adjustments"));
@@ -261,7 +363,10 @@ test("sandbox insertion resolves project adjustment ownership inside the deferre
  * canonical UUID and cannot carry a quote or a statement.
  */
 test("assertUuid accepts a canonical uuid and refuses anything that could carry SQL", () => {
-  assert.equal(assertUuid("00000000-0000-4000-8000-00000000c001"), "00000000-0000-4000-8000-00000000c001");
+  assert.equal(
+    assertUuid("00000000-0000-4000-8000-00000000c001"),
+    "00000000-0000-4000-8000-00000000c001",
+  );
   for (const hostile of [
     "00000000-0000-4000-8000-00000000c001'; drop table orgs;--",
     "not-a-uuid",
@@ -269,6 +374,10 @@ test("assertUuid accepts a canonical uuid and refuses anything that could carry 
     "00000000-0000-4000-8000-00000000c00",
     "00000000-0000-4000-8000-00000000c00z",
   ]) {
-    assert.throws(() => assertUuid(hostile), /not a uuid/, `must refuse ${JSON.stringify(hostile)}`);
+    assert.throws(
+      () => assertUuid(hostile),
+      /not a uuid/,
+      `must refuse ${JSON.stringify(hostile)}`,
+    );
   }
 });

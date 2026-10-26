@@ -1,10 +1,10 @@
-import 'server-only'
+import "server-only";
 
-import { registeredListTable } from '../../../lib/list/prepared-spec'
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { fromUnits } from '@openbooks/engine/money'
+import { registeredListTable } from "../../../lib/list/prepared-spec";
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { fromUnits } from "@openbooks/engine/money";
 import {
   pagination,
   badge,
@@ -21,32 +21,33 @@ import {
   widgetBlock,
   widgetCell,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
-import { FORM_TYPES } from '@openbooks/engine/compliance/information-returns'
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../lib/authz";
+import { isFeatureEnabled } from "../../../lib/features";
+import { FORM_TYPES } from "@openbooks/engine/compliance/information-returns";
 import {
   buildListDrawerHref,
   isUuid,
   mergeHref,
   parseListParams,
   pickString,
-} from '../../../lib/list-params'
-import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from '../../../lib/custom-fields'
-import { loadParty } from '../../api/parties/_lib'
+} from "../../../lib/list-params";
+import {
+  customFieldViewerFor,
+  loadFieldDefs,
+  visibleCustomFieldDefs,
+} from "../../../lib/custom-fields";
+import { loadParty } from "../../api/parties/_lib";
 import {
   loadComplianceClasses,
   loadVendorComplianceClass,
   vendorTaxIdentityFromRole,
-} from '../../../lib/compliance'
-import {
-  subsidiaryUiOptions,
-  subsidiaryVisibleFilter,
-} from '../../../lib/subsidiaries'
-import { listScopedAccountOptions } from '../../../lib/scoped-options'
-import { resolveFormLayout } from '../../../lib/customization/resolve'
-import type { PartyDrawer, PartyTab } from './PartyDrawer'
-import { settlementHrefFor } from '../../../lib/settlement-href'
+} from "../../../lib/compliance";
+import { subsidiaryUiOptions, subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
+import { listScopedAccountOptions } from "../../../lib/scoped-options";
+import { resolveFormLayout } from "../../../lib/customization/resolve";
+import type { PartyDrawer, PartyTab } from "./PartyDrawer";
+import { settlementHrefFor } from "../../../lib/settlement-href";
 
 /**
  * The party list, split into a loader and a spec.
@@ -70,40 +71,41 @@ import { settlementHrefFor } from '../../../lib/settlement-href'
 const SORT_COLUMNS = {
   name: sql`p.display_name`,
   code: sql`p.short_code`,
-} as const
+} as const;
 
-type PartyDrawerProps = Parameters<typeof PartyDrawer>[0]
-type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never
+type PartyDrawerProps = Parameters<typeof PartyDrawer>[0];
+type ElementOf<T> = NonNullable<T> extends readonly (infer Item)[] ? Item : never;
 
 type PartyListRow = {
-  id: string
-  display_name: string
-  short_code: string | null
-  email: string | null
-  phone: string | null
-  is_active: boolean
-  is_customer: boolean
-  is_vendor: boolean
-  is_employee: boolean
-}
+  id: string;
+  display_name: string;
+  short_code: string | null;
+  email: string | null;
+  phone: string | null;
+  is_active: boolean;
+  is_customer: boolean;
+  is_vendor: boolean;
+  is_employee: boolean;
+};
 type PartyCounts = {
-  total: string | number
-  customers: string | number
-  vendors: string | number
-  employees: string | number
-  roleless: string | number
-  active: string | number
-  inactive: string | number
-}
+  total: string | number;
+  customers: string | number;
+  vendors: string | number;
+  employees: string | number;
+  roleless: string | number;
+  active: string | number;
+  inactive: string | number;
+};
 
 async function loadWorkerCompGroups(
   orgId: string,
-): Promise<{ rows: ElementOf<PartyDrawerProps['workerCompGroups']>[] }> {
-  if (!(await isFeatureEnabled(orgId, 'payroll'))) return { rows: [] }
-  const result = await db.execute<ElementOf<PartyDrawerProps['workerCompGroups']>>(
-    sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`, 'objects',
-  )
-  return { rows: result }
+): Promise<{ rows: ElementOf<PartyDrawerProps["workerCompGroups"]>[] }> {
+  if (!(await isFeatureEnabled(orgId, "payroll"))) return { rows: [] };
+  const result = await db.execute<ElementOf<PartyDrawerProps["workerCompGroups"]>>(
+    sql`select id, name from worker_comp_groups where org_id = ${orgId} and is_active order by name`,
+    "objects",
+  );
+  return { rows: result };
 }
 
 // A party is classified only by its active canonical role row. A party with
@@ -114,154 +116,158 @@ const ROLE_CONDITIONS = {
   customer: sql`exists (select 1 from customer_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)`,
   vendor: sql`exists (select 1 from vendor_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)`,
   employee: sql`exists (select 1 from employee_roles r where r.party_id = p.id and r.org_id = p.org_id and r.is_active)`,
-} as const
-const NO_ROLE_CONDITION =
-  sql`not ${ROLE_CONDITIONS.customer} and not ${ROLE_CONDITIONS.vendor} and not ${ROLE_CONDITIONS.employee}`
+} as const;
+const NO_ROLE_CONDITION = sql`not ${ROLE_CONDITIONS.customer} and not ${ROLE_CONDITIONS.vendor} and not ${ROLE_CONDITIONS.employee}`;
 
 export interface PartyRoleBadge {
-  label: string
-  variant: 'default' | 'secondary' | 'outline'
+  label: string;
+  variant: "default" | "secondary" | "outline";
 }
 
 export interface PartyRow {
-  id: string
-  name: string
-  href: string
-  shortCode: string
-  roleBadges: PartyRoleBadge[]
-  email: string
-  phone: string
-  statusLabel: string
-  statusVariant: 'success' | 'outline'
+  id: string;
+  name: string;
+  href: string;
+  shortCode: string;
+  roleBadges: PartyRoleBadge[];
+  email: string;
+  phone: string;
+  statusLabel: string;
+  statusVariant: "success" | "outline";
 }
 
 export interface PartiesData {
-  title: string
-  description: string
-  searchPlaceholder: string
-  roleLabel: string
-  currentParams: Record<string, string | string[] | undefined>
-  roleOptions: { value: string; label: string; count: number }[]
-  canManage: boolean
+  title: string;
+  description: string;
+  searchPlaceholder: string;
+  roleLabel: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  roleOptions: { value: string; label: string; count: number }[];
+  canManage: boolean;
   /**
    * Bulk role assignment rides the role-less slice: shown only to managers
    * while the directory is filtered to parties with no role. The slice the
    * button assigns (search text, inactives toggle, filtered count) is the
    * slice the endpoint re-applies server-side.
    */
-  showAssignRole: boolean
-  assignRoles: { value: string; label: string }[]
-  assignTotal: number
-  assignQ: string
-  assignIncludeInactive: boolean
+  showAssignRole: boolean;
+  assignRoles: { value: string; label: string }[];
+  assignTotal: number;
+  assignQ: string;
+  assignIncludeInactive: boolean;
   /** Non-commercial create entry points: a company or a person, no role stamped. */
-  newCompanyLabel: string
-  newPersonLabel: string
-  isEmpty: boolean
-  isFilteredEmpty: boolean
-  hasRows: boolean
-  emptyTitle: string
-  emptyDescription: string
-  filteredEmptyTitle: string
-  filteredEmptyDescription: string
-  columnName: string
-  columnShortCode: string
-  columnRoles: string
-  columnEmail: string
-  columnPhone: string
-  columnStatus: string
-  rows: PartyRow[]
-  total: number
-  currentPage: number
-  perPage: number
-  sort: string
-  dir: string
-  drawerOpen: boolean
-  drawer: (Record<string, unknown> & { remountKey: string }) | null
-  txnDrawerOpen: boolean
-  txnDrawer: { id: string; kind: string; partyId: string; formLayoutId?: string } | null
+  newCompanyLabel: string;
+  newPersonLabel: string;
+  isEmpty: boolean;
+  isFilteredEmpty: boolean;
+  hasRows: boolean;
+  emptyTitle: string;
+  emptyDescription: string;
+  filteredEmptyTitle: string;
+  filteredEmptyDescription: string;
+  columnName: string;
+  columnShortCode: string;
+  columnRoles: string;
+  columnEmail: string;
+  columnPhone: string;
+  columnStatus: string;
+  rows: PartyRow[];
+  total: number;
+  currentPage: number;
+  perPage: number;
+  sort: string;
+  dir: string;
+  drawerOpen: boolean;
+  drawer: (Record<string, unknown> & { remountKey: string }) | null;
+  txnDrawerOpen: boolean;
+  txnDrawer: { id: string; kind: string; partyId: string; formLayoutId?: string } | null;
 }
 
 export async function loadParties(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PartiesData> {
-  const authz = await requirePermission('parties.read')
-  const canManage = can(authz, 'parties.manage')
-  const orgId = authz.user.orgId
-  const t = await getTranslations('parties')
-  const tc = await getTranslations('common')
+  const authz = await requirePermission("parties.read");
+  const canManage = can(authz, "parties.manage");
+  const orgId = authz.user.orgId;
+  const t = await getTranslations("parties");
+  const tc = await getTranslations("common");
 
-  const partyId = typeof sp.party === 'string' ? sp.party : undefined
+  const partyId = typeof sp.party === "string" ? sp.party : undefined;
   // Unsaved-create: ?partyNew=1 opens an editable drawer on no persisted
   // row. The loader ships pickers plus an empty payload; opening writes
   // nothing, Cancel writes nothing, and the drawer's explicit Save is the
   // single idempotent POST. Gated on manage like the draft flow was.
-  const creating =
-    (pickString(sp.partyNew) === '1' || partyId === 'new') && canManage
+  const creating = (pickString(sp.partyNew) === "1" || partyId === "new") && canManage;
   // Non-commercial create: ?partyNew=1&kind=person opens the drawer naming a
   // person with no role; any other kind value falls back to company. Only
   // the base kinds travel here — roles are enabled in the drawer, never
   // smuggled through the create URL.
-  const createKind = pickString(sp.kind) === 'person' ? 'person' : 'company'
-  const partyTransactionId = pickString(sp.partyTxn)
-  const partyTransactionKind = pickString(sp.partyTxnKind)
-  const requestedPartyTab = pickString(sp.partyTab)
+  const createKind = pickString(sp.kind) === "person" ? "person" : "company";
+  const partyTransactionId = pickString(sp.partyTxn);
+  const partyTransactionKind = pickString(sp.partyTxnKind);
+  const requestedPartyTab = pickString(sp.partyTab);
   // The drawer itself guards each deep-link against its visibility
   // predicate (relationship needs the CRM read grant on a customer), so a
   // stale ?partyTab=relationship can never strand the drawer on a missing
   // panel — same contract as ?partyTab=compliance.
   const partyTab: PartyTab =
-    requestedPartyTab === 'transactions' ||
-    requestedPartyTab === 'activities' ||
-    requestedPartyTab === 'contacts' ||
-    requestedPartyTab === 'addresses' ||
-    requestedPartyTab === 'accounting' ||
-    requestedPartyTab === 'compliance' ||
-    requestedPartyTab === 'relationship' ||
-    requestedPartyTab === 'paymentMethods' ||
-    requestedPartyTab === 'billing' ||
-    requestedPartyTab === 'debitMandates' ||
-    requestedPartyTab === 'compensation'
+    requestedPartyTab === "transactions" ||
+    requestedPartyTab === "activities" ||
+    requestedPartyTab === "contacts" ||
+    requestedPartyTab === "addresses" ||
+    requestedPartyTab === "accounting" ||
+    requestedPartyTab === "compliance" ||
+    requestedPartyTab === "relationship" ||
+    requestedPartyTab === "paymentMethods" ||
+    requestedPartyTab === "billing" ||
+    requestedPartyTab === "debitMandates" ||
+    requestedPartyTab === "compensation"
       ? requestedPartyTab
-      : requestedPartyTab === 'wages' ? 'compensation' : 'overview'
+      : requestedPartyTab === "wages"
+        ? "compensation"
+        : "overview";
   const params = parseListParams(sp, {
-    sort: 'name',
-    dir: 'asc',
+    sort: "name",
+    dir: "asc",
     perPage: 25,
-    allowedSorts: ['name', 'code'] as const,
-  })
-  const roleParam = pickString(sp.role)
+    allowedSorts: ["name", "code"] as const,
+  });
+  const roleParam = pickString(sp.role);
   const role =
-    roleParam === 'customer' ||
-    roleParam === 'vendor' ||
-    roleParam === 'employee' ||
-    roleParam === 'no-role'
+    roleParam === "customer" ||
+    roleParam === "vendor" ||
+    roleParam === "employee" ||
+    roleParam === "no-role"
       ? roleParam
-      : undefined
-  const showInactive = pickString(sp.showInactive) === 'true'
+      : undefined;
+  const showInactive = pickString(sp.showInactive) === "true";
 
   const where = sql`p.org_id = ${orgId}
     ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
     ${
       params.q
-        ? sql` and (p.display_name ilike ${'%' + params.q + '%'} or p.short_code ilike ${'%' + params.q + '%'} or p.email ilike ${'%' + params.q + '%'})`
+        ? sql` and (p.display_name ilike ${"%" + params.q + "%"} or p.short_code ilike ${"%" + params.q + "%"} or p.email ilike ${"%" + params.q + "%"})`
         : sql``
     }
-    ${role === 'no-role' ? sql` and ${NO_ROLE_CONDITION}` : role ? sql` and ${ROLE_CONDITIONS[role]}` : sql``}
-    ${showInactive ? sql`` : sql` and p.is_active`}`
+    ${role === "no-role" ? sql` and ${NO_ROLE_CONDITION}` : role ? sql` and ${ROLE_CONDITIONS[role]}` : sql``}
+    ${showInactive ? sql`` : sql` and p.is_active`}`;
 
   const [parties, counts] = await Promise.all([
-    db.execute<PartyListRow>(sql`
+    db.execute<PartyListRow>(
+      sql`
       select p.id, p.display_name, p.short_code, p.email, p.phone, p.is_active,
              ${ROLE_CONDITIONS.customer} as is_customer,
              ${ROLE_CONDITIONS.vendor} as is_vendor,
              ${ROLE_CONDITIONS.employee} as is_employee
         from parties p
        where ${where}
-       order by ${SORT_COLUMNS[params.sort]} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
+       order by ${SORT_COLUMNS[params.sort]} ${params.dir === "asc" ? sql`asc` : sql`desc`} nulls last
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `, 'objects'),
-    db.execute<PartyCounts>(sql`
+    `,
+      "objects",
+    ),
+    db.execute<PartyCounts>(
+      sql`
       select count(*) as total,
              count(*) filter (where ${ROLE_CONDITIONS.customer}) as customers,
              count(*) filter (where ${ROLE_CONDITIONS.vendor}) as vendors,
@@ -272,8 +278,10 @@ export async function loadParties(
         from parties p
        where p.org_id = ${orgId}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })} ${showInactive ? sql`` : sql`and p.is_active`}
-    `, 'objects'),
-  ])
+    `,
+      "objects",
+    ),
+  ]);
   const c = counts[0] ?? {
     total: 0,
     customers: 0,
@@ -282,16 +290,19 @@ export async function loadParties(
     roleless: 0,
     active: 0,
     inactive: 0,
-  }
-  const total = Number(c.total)
+  };
+  const total = Number(c.total);
   const filteredTotal =
     params.q || role
       ? Number(
-          (await db.execute<{ n: string | number }>(
-              sql`select count(*) as n from parties p where ${where}`, 'objects',
-            ))[0]?.n ?? 0,
+          (
+            await db.execute<{ n: string | number }>(
+              sql`select count(*) as n from parties p where ${where}`,
+              "objects",
+            )
+          )[0]?.n ?? 0,
         )
-      : total
+      : total;
 
   const [
     openParty,
@@ -307,26 +318,26 @@ export async function loadParties(
     storeCreditBalances,
     consolidatedBillingEnabled,
   ] = await Promise.all([
-    partyId && partyId !== 'new' && isUuid(partyId)
-      ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds, { customFieldViewer: customFieldViewerFor(authz) })
+    partyId && partyId !== "new" && isUuid(partyId)
+      ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds, {
+          customFieldViewer: customFieldViewerFor(authz),
+        })
       : null,
-    (partyId && partyId !== 'new') || creating
+    (partyId && partyId !== "new") || creating
       ? Promise.all([
-          db.execute<ElementOf<PartyDrawerProps['paymentTerms']>>(
+          db.execute<ElementOf<PartyDrawerProps["paymentTerms"]>>(
             sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`,
           ),
-          db.execute<ElementOf<PartyDrawerProps['departments']>>(
+          db.execute<ElementOf<PartyDrawerProps["departments"]>>(
             sql`select id, name from departments where org_id = ${orgId} and is_active order by name`,
           ),
-          db.execute<ElementOf<PartyDrawerProps['trades']>>(
+          db.execute<ElementOf<PartyDrawerProps["trades"]>>(
             sql`select id, name from trades where org_id = ${orgId} and is_active order by name`,
           ),
-          loadFieldDefs('parties'),
+          loadFieldDefs("parties"),
           subsidiaryUiOptions(orgId).then((options) =>
             authz.allowedSubsidiaryIds
-              ? options.filter((option) =>
-                  authz.allowedSubsidiaryIds!.has(option.id),
-                )
+              ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
               : options,
           ),
           listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, {
@@ -337,38 +348,41 @@ export async function loadParties(
               id,
               name,
               type,
-              label: [number, name].filter(Boolean).join(' · '),
+              label: [number, name].filter(Boolean).join(" · "),
             })),
           })),
-          db.execute<ElementOf<PartyDrawerProps['taxCodes']>>(
+          db.execute<ElementOf<PartyDrawerProps["taxCodes"]>>(
             sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`,
           ),
-          db.execute<ElementOf<PartyDrawerProps['salesReps']>>(
+          db.execute<ElementOf<PartyDrawerProps["salesReps"]>>(
             sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active and er.is_sales_rep where p.org_id = ${orgId} and p.is_active
             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name`,
           ),
           loadWorkerCompGroups(orgId),
         ])
       : null,
-    isFeatureEnabled(orgId, 'payroll'),
-    isFeatureEnabled(orgId, 'multiCurrency'),
-    isFeatureEnabled(orgId, 'crm'),
-    isFeatureEnabled(orgId, 'subcontractorCompliance'),
-    isFeatureEnabled(orgId, 'informationReturns'),
-    isFeatureEnabled(orgId, 'autopay'),
-    isFeatureEnabled(orgId, 'crossBorderTax'),
-    isFeatureEnabled(orgId, 'storedValue'),
-    partyId && partyId !== 'new' && isUuid(partyId)
-      ? db.execute<{ currency: string; totalMinor: string }>(sql`
+    isFeatureEnabled(orgId, "payroll"),
+    isFeatureEnabled(orgId, "multiCurrency"),
+    isFeatureEnabled(orgId, "crm"),
+    isFeatureEnabled(orgId, "subcontractorCompliance"),
+    isFeatureEnabled(orgId, "informationReturns"),
+    isFeatureEnabled(orgId, "autopay"),
+    isFeatureEnabled(orgId, "crossBorderTax"),
+    isFeatureEnabled(orgId, "storedValue"),
+    partyId && partyId !== "new" && isUuid(partyId)
+      ? db.execute<{ currency: string; totalMinor: string }>(
+          sql`
           select currency, sum(balance_minor)::text as "totalMinor"
             from stored_value_accounts
            where org_id = ${orgId} and customer_party_id = ${partyId}
              and status in ('active', 'frozen')
              ${subsidiaryVisibleFilter(sql`subsidiary_id`, authz.allowedSubsidiaryIds)}
-           group by currency`, 'objects')
-      : [] as { currency: string; totalMinor: string }[],
-    isFeatureEnabled(orgId, 'consolidatedBilling'),
-  ])
+           group by currency`,
+          "objects",
+        )
+      : ([] as { currency: string; totalMinor: string }[]),
+    isFeatureEnabled(orgId, "consolidatedBilling"),
+  ]);
   const resolvedPartyForm =
     (openParty || creating) && pickers && role
       ? await resolveFormLayout({
@@ -380,21 +394,21 @@ export async function loadParties(
           lineDefs: [],
           explicitLayoutId: pickString(sp.partyForm),
         })
-      : null
+      : null;
 
   // The vendor Compliance tab needs the assigned class and the
   // active classes — drawer-open only, vendors only, feature on.
   // OM-16: "vendors only" means the vendor ROLE row, never the role filter
   // or the kind column — a ?role=vendor URL on a role-less party must not
   // fake the tab (or its data) into existence.
-  const showCompliance = complianceEnabled && openParty?.vendor != null
+  const showCompliance = complianceEnabled && openParty?.vendor != null;
   const compliance =
     showCompliance && partyId && isUuid(partyId)
       ? {
           classId: await loadVendorComplianceClass(orgId, partyId),
           classes: await loadComplianceClasses(orgId),
         }
-      : null
+      : null;
 
   // The vendor tax identity rides the informationReturns switch, not the
   // compliance switch: the masked row already travels on the party payload
@@ -403,7 +417,7 @@ export async function loadParties(
   const taxIdentity =
     informationReturnsEnabled && openParty?.vendor != null
       ? vendorTaxIdentityFromRole(openParty.vendor as Record<string, unknown> | null)
-      : null
+      : null;
 
   // The unsaved-create payload: no row exists, so the drawer edits blanks
   // and posts them once. Active defaults true; roles start off (the drawer's
@@ -411,20 +425,20 @@ export async function loadParties(
   // persists — the server refuses the draft sentinels outright.
   const newPartyPayload = {
     party: {
-      id: '',
-      display_name: '',
+      id: "",
+      display_name: "",
       legal_name: null,
       short_code: null,
       // Employees are people; customers and vendors default to a company. A
       // kind preset from the New person button wins on the unified
       // directory; role-scoped lists keep their own role's default.
-      kind: !role ? createKind : role === 'employee' ? 'person' : 'company',
+      kind: !role ? createKind : role === "employee" ? "person" : "company",
       email: null,
       phone: null,
       website: null,
       subsidiary_id: null,
       is_active: true,
-      updated_at: '',
+      updated_at: "",
       custom: {},
       invoicing_preference: null,
     },
@@ -441,8 +455,8 @@ export async function loadParties(
       currencies: [],
     },
     additionalSubsidiaryIds: [],
-  }
-  const closeHref = mergeHref('/parties', sp, {
+  };
+  const closeHref = mergeHref("/parties", sp, {
     party: undefined,
     partyNew: undefined,
     kind: undefined,
@@ -452,90 +466,105 @@ export async function loadParties(
     partyTxn: undefined,
     partyTxnKind: undefined,
     form: undefined,
-  })
+  });
   const drawer =
     (openParty || creating) && pickers
       ? {
-          remountKey: creating ? 'new-party' : String(openParty!.party.id),
+          remountKey: creating ? "new-party" : String(openParty!.party.id),
           payload: (creating
             ? newPartyPayload
-            : openParty) as unknown as PartyDrawerProps['payload'],
+            : openParty) as unknown as PartyDrawerProps["payload"],
           paymentTerms: pickers[0].rows,
           departments: pickers[1].rows,
           trades: pickers[2].rows,
           workerCompGroups: pickers[8].rows,
-          fieldDefs: visibleCustomFieldDefs(pickers[3], customFieldViewerFor(authz)) as unknown as PartyDrawerProps['fieldDefs'],
+          fieldDefs: visibleCustomFieldDefs(
+            pickers[3],
+            customFieldViewerFor(authz),
+          ) as unknown as PartyDrawerProps["fieldDefs"],
           customFieldViewer: customFieldViewerFor(authz),
           subsidiaries: pickers[4],
           accounts: pickers[5].rows,
           taxCodes: pickers[6].rows,
           salesReps: pickers[7].rows,
           canManage,
-          canReadActivities: crmEnabled && can(authz, 'crm.activities.read'),
+          canReadActivities: crmEnabled && can(authz, "crm.activities.read"),
           // Customer tax IDs ride the drawer like compliance does: identity
           // and the manage grant from the loader, rows from the section's
           // own read. Hidden while the feature is off; data is kept.
           taxIds:
-            crossBorderTaxOn && openParty && partyId && partyId !== 'new'
+            crossBorderTaxOn && openParty && partyId && partyId !== "new"
               ? { partyId: String(openParty.party.id), canManage }
               : null,
-          canManageWages: can(authz, 'admin.setup.manage'),
+          canManageWages: can(authz, "admin.setup.manage"),
           payrollEnabled,
           // Stored methods ride the autopay feature plus the read grant;
           // null hides the tab even on a customer drawer.
-          autopay: autopayEnabled
-            && can(authz, 'payment_methods.read')
-            && (role === 'customer' || (!role && openParty?.customer != null))
-            ? {
-                canManageMethods: can(authz, 'payment_methods.manage'),
-                canManageAutopay: can(authz, 'autopay.manage'),
-              }
-            : null,
+          autopay:
+            autopayEnabled &&
+            can(authz, "payment_methods.read") &&
+            (role === "customer" || (!role && openParty?.customer != null))
+              ? {
+                  canManageMethods: can(authz, "payment_methods.manage"),
+                  canManageAutopay: can(authz, "autopay.manage"),
+                }
+              : null,
           // Billing hierarchies ride the consolidatedBilling feature plus
           // the parties read grant; null hides the tab even on a customer
           // drawer.
-          consolidatedBilling: consolidatedBillingEnabled
-            && (role === 'customer' || (!role && openParty?.customer != null))
-            ? { canManage: can(authz, 'documents.manage') }
-            : null,
+          consolidatedBilling:
+            consolidatedBillingEnabled &&
+            (role === "customer" || (!role && openParty?.customer != null))
+              ? { canManage: can(authz, "documents.manage") }
+              : null,
           // Debit mandates ride the grant the mandate routes enforce plus
           // the persisted customer role row; null hides the tab.
-          debitMandates: can(authz, 'admin.setup.manage') && (role === 'customer' || !role) && openParty?.customer != null
-            ? { partyId: String(openParty.party.id) }
-            : null,
+          debitMandates:
+            can(authz, "admin.setup.manage") &&
+            (role === "customer" || !role) &&
+            openParty?.customer != null
+              ? { partyId: String(openParty.party.id) }
+              : null,
           // Receive payment / Pay bills open the new payment for this party,
           // offered only for the role the drawer shows and the viewer's
           // payment permission (the payment surfaces re-check both).
-          settlementHrefs: openParty && !creating
-            ? {
-                receivePayment:
-                  openParty.customer != null && role !== 'vendor' && role !== 'employee' && can(authz, 'ar.pay')
-                    ? settlementHrefFor('ar', String(openParty.party.id))
-                    : null,
-                payBills:
-                  openParty.vendor != null && role !== 'customer' && role !== 'employee' && can(authz, 'ap.pay')
-                    ? settlementHrefFor('ap', String(openParty.party.id))
-                    : null,
-              }
-            : null,
+          settlementHrefs:
+            openParty && !creating
+              ? {
+                  receivePayment:
+                    openParty.customer != null &&
+                    role !== "vendor" &&
+                    role !== "employee" &&
+                    can(authz, "ar.pay")
+                      ? settlementHrefFor("ar", String(openParty.party.id))
+                      : null,
+                  payBills:
+                    openParty.vendor != null &&
+                    role !== "customer" &&
+                    role !== "employee" &&
+                    can(authz, "ap.pay")
+                      ? settlementHrefFor("ap", String(openParty.party.id))
+                      : null,
+                }
+              : null,
           multiCurrency,
           complianceEnabled,
-          canManageCompliance: can(authz, 'compliance.manage'),
+          canManageCompliance: can(authz, "compliance.manage"),
           compliance,
           informationReturnsEnabled,
           taxIdentity,
           taxIdentityFormTypes: [...FORM_TYPES],
-          storedValue: storedValueEnabled && can(authz, 'stored_value.read') && openParty?.customer != null
-            ? {
-              balances: storeCreditBalances.map((row) => ({
-                currency: String(row.currency),
-                total: fromUnits(BigInt(row.totalMinor)),
-              })),
-            }
-            : null,
-          initialTab: creating ? 'overview' : partyTab,
-          initialMode:
-            creating || pickString(sp.mode) === 'edit' ? 'edit' : 'view',
+          storedValue:
+            storedValueEnabled && can(authz, "stored_value.read") && openParty?.customer != null
+              ? {
+                  balances: storeCreditBalances.map((row) => ({
+                    currency: String(row.currency),
+                    total: fromUnits(BigInt(row.totalMinor)),
+                  })),
+                }
+              : null,
+          initialTab: creating ? "overview" : partyTab,
+          initialMode: creating || pickString(sp.mode) === "edit" ? "edit" : "view",
           createMode: creating,
           closeHref,
           role,
@@ -543,92 +572,83 @@ export async function loadParties(
           forms: resolvedPartyForm?.available ?? [],
           currentFormId: resolvedPartyForm?.row?.id ?? null,
           recordType: role,
-          canCustomize: can(authz, 'admin.customization.manage'),
+          canCustomize: can(authz, "admin.customization.manage"),
         }
-      : null
+      : null;
 
   const txnDrawer =
-    openParty &&
-    partyTransactionId &&
-    isUuid(partyTransactionId) &&
-    partyTransactionKind
+    openParty && partyTransactionId && isUuid(partyTransactionId) && partyTransactionKind
       ? {
           id: partyTransactionId,
           kind: partyTransactionKind,
           partyId: String(openParty.party.id),
           formLayoutId: pickString(sp.form),
         }
-      : null
+      : null;
 
   return {
-    title: t('list.title'),
-    description: t('list.description'),
-    searchPlaceholder: t('list.searchPlaceholder'),
-    roleLabel: tc('labels.role'),
+    title: t("list.title"),
+    description: t("list.description"),
+    searchPlaceholder: t("list.searchPlaceholder"),
+    roleLabel: tc("labels.role"),
     currentParams: sp,
     roleOptions: [
       {
-        value: 'customer',
-        label: tc('labels.customer'),
+        value: "customer",
+        label: tc("labels.customer"),
         count: Number(c.customers),
       },
-      { value: 'vendor', label: tc('labels.vendor'), count: Number(c.vendors) },
+      { value: "vendor", label: tc("labels.vendor"), count: Number(c.vendors) },
       {
-        value: 'employee',
-        label: tc('labels.employee'),
+        value: "employee",
+        label: tc("labels.employee"),
         count: Number(c.employees),
       },
       {
-        value: 'no-role',
-        label: t('list.noRole'),
+        value: "no-role",
+        label: t("list.noRole"),
         count: Number(c.roleless),
       },
     ],
     canManage,
-    showAssignRole: canManage && role === 'no-role',
+    showAssignRole: canManage && role === "no-role",
     assignRoles: [
-      { value: 'customer', label: tc('labels.customer') },
-      { value: 'vendor', label: tc('labels.vendor') },
-      { value: 'employee', label: tc('labels.employee') },
+      { value: "customer", label: tc("labels.customer") },
+      { value: "vendor", label: tc("labels.vendor") },
+      { value: "employee", label: tc("labels.employee") },
     ],
     assignTotal: filteredTotal,
-    assignQ: params.q ?? '',
+    assignQ: params.q ?? "",
     assignIncludeInactive: showInactive,
-    newCompanyLabel: t('newParty.companyLabel'),
-    newPersonLabel: t('newParty.personLabel'),
+    newCompanyLabel: t("newParty.companyLabel"),
+    newPersonLabel: t("newParty.personLabel"),
     isEmpty: total === 0,
     isFilteredEmpty: total > 0 && filteredTotal === 0,
     hasRows: filteredTotal > 0,
-    emptyTitle: t('list.emptyTitle'),
-    emptyDescription: t('list.emptyDescription'),
-    filteredEmptyTitle: t('list.filteredEmptyTitle'),
-    filteredEmptyDescription: t('list.filteredEmptyDescription'),
-    columnName: tc('labels.name'),
-    columnShortCode: t('list.shortCode'),
-    columnRoles: t('list.roles'),
-    columnEmail: tc('labels.email'),
-    columnPhone: t('list.phone'),
-    columnStatus: tc('labels.status'),
+    emptyTitle: t("list.emptyTitle"),
+    emptyDescription: t("list.emptyDescription"),
+    filteredEmptyTitle: t("list.filteredEmptyTitle"),
+    filteredEmptyDescription: t("list.filteredEmptyDescription"),
+    columnName: tc("labels.name"),
+    columnShortCode: t("list.shortCode"),
+    columnRoles: t("list.roles"),
+    columnEmail: tc("labels.email"),
+    columnPhone: t("list.phone"),
+    columnStatus: tc("labels.status"),
     rows: parties.map((p) => ({
       id: String(p.id),
       name: p.display_name,
-      href: buildListDrawerHref('/parties', sp, 'party', String(p.id)),
-      shortCode: p.short_code ?? '',
+      href: buildListDrawerHref("/parties", sp, "party", String(p.id)),
+      shortCode: p.short_code ?? "",
       roleBadges: [
-        ...(p.is_customer
-          ? [{ label: tc('labels.customer'), variant: 'default' as const }]
-          : []),
-        ...(p.is_vendor
-          ? [{ label: tc('labels.vendor'), variant: 'secondary' as const }]
-          : []),
-        ...(p.is_employee
-          ? [{ label: tc('labels.employee'), variant: 'outline' as const }]
-          : []),
+        ...(p.is_customer ? [{ label: tc("labels.customer"), variant: "default" as const }] : []),
+        ...(p.is_vendor ? [{ label: tc("labels.vendor"), variant: "secondary" as const }] : []),
+        ...(p.is_employee ? [{ label: tc("labels.employee"), variant: "outline" as const }] : []),
       ],
-      email: p.email ?? '',
-      phone: p.phone ?? '',
-      statusLabel: p.is_active ? tc('status.active') : tc('status.inactive'),
-      statusVariant: p.is_active ? ('success' as const) : ('outline' as const),
+      email: p.email ?? "",
+      phone: p.phone ?? "",
+      statusLabel: p.is_active ? tc("status.active") : tc("status.inactive"),
+      statusVariant: p.is_active ? ("success" as const) : ("outline" as const),
     })),
     total: filteredTotal,
     currentPage: params.page,
@@ -639,50 +659,42 @@ export async function loadParties(
     drawer,
     txnDrawerOpen: Boolean(txnDrawer),
     txnDrawer,
-  }
+  };
 }
 
-const f = ref<PartiesData>()
-const item = field
-const rootF = rootRef<PartiesData>()
+const f = ref<PartiesData>();
+const item = field;
+const rootF = rootRef<PartiesData>();
 
 export function partiesSpec(data: PartiesData): PageSpec {
   return page({
-    route: '/parties',
-    layout: 'list',
+    route: "/parties",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
+        title: f("title"),
+        description: f("description"),
         actions: [
-          widget(
-            'new-party',
-            { label: data.newCompanyLabel, kind: 'company' },
-            f('canManage'),
-          ),
-          widget(
-            'new-party',
-            { label: data.newPersonLabel, kind: 'person' },
-            f('canManage'),
-          ),
+          widget("new-party", { label: data.newCompanyLabel, kind: "company" }, f("canManage")),
+          widget("new-party", { label: data.newPersonLabel, kind: "person" }, f("canManage")),
         ],
       }),
-      grid('flex flex-wrap items-center gap-2', [
-        widgetBlock('search-input', { placeholder: data.searchPlaceholder }),
-        widgetBlock('filter-chips', {
-          basePath: '/parties',
+      grid("flex flex-wrap items-center gap-2", [
+        widgetBlock("search-input", { placeholder: data.searchPlaceholder }),
+        widgetBlock("filter-chips", {
+          basePath: "/parties",
           currentParams: data.currentParams,
-          paramKey: 'role',
+          paramKey: "role",
           label: data.roleLabel,
           options: data.roleOptions,
         }),
-        widgetBlock('show-inactives-toggle', {
-          basePath: '/parties',
+        widgetBlock("show-inactives-toggle", {
+          basePath: "/parties",
           currentParams: data.currentParams,
         }),
         ...(data.showAssignRole
           ? [
-              widgetBlock('assign-party-role', {
+              widgetBlock("assign-party-role", {
                 roles: data.assignRoles,
                 total: data.assignTotal,
                 q: data.assignQ,
@@ -694,79 +706,75 @@ export function partiesSpec(data: PartiesData): PageSpec {
     ],
     body: [
       {
-        ...widgetBlock('empty-state', {
+        ...widgetBlock("empty-state", {
           title: data.emptyTitle,
           description: data.emptyDescription,
-          action: data.canManage ? 'new-party' : null,
+          action: data.canManage ? "new-party" : null,
         }),
-        when: f('isEmpty'),
+        when: f("isEmpty"),
       },
       {
-        ...widgetBlock('empty-state', {
+        ...widgetBlock("empty-state", {
           title: data.filteredEmptyTitle,
           description: data.filteredEmptyDescription,
           action: null,
         }),
-        when: f('isFilteredEmpty'),
+        when: f("isFilteredEmpty"),
       },
       {
-        ...registeredListTable('parties', {
-          variant: 'app',
-          rows: f('rows'),
-          rowKey: item('id'),
-          sorting: { basePath: '/parties', sort: f('sort'), dir: f('dir') },
+        ...registeredListTable("parties", {
+          variant: "app",
+          rows: f("rows"),
+          rowKey: item("id"),
+          sorting: { basePath: "/parties", sort: f("sort"), dir: f("dir") },
           columns: [
             column(
-              rootF('columnName'),
-              link(
-                item('name'),
-                item('href'),
-                'text-teal-700 hover:underline dark:text-teal-300',
-              ),
+              rootF("columnName"),
+              link(item("name"), item("href"), "text-teal-700 hover:underline dark:text-teal-300"),
               {
-                sort: 'name',
-                className: 'font-semibold',
+                sort: "name",
+                className: "font-semibold",
               },
             ),
-            column(rootF('columnShortCode'), text(item('shortCode')), {
-              sort: 'code',
-              className: 'font-mono text-[13px]',
+            column(rootF("columnShortCode"), text(item("shortCode")), {
+              sort: "code",
+              className: "font-mono text-[13px]",
             }),
             column(
-              rootF('columnRoles'),
-              widgetCell('party-roles-cell', { badges: item('roleBadges') }),
+              rootF("columnRoles"),
+              widgetCell("party-roles-cell", { badges: item("roleBadges") }),
             ),
-            column(rootF('columnEmail'), text(item('email')), {
-              className: 'text-slate-500 dark:text-slate-400',
+            column(rootF("columnEmail"), text(item("email")), {
+              className: "text-slate-500 dark:text-slate-400",
             }),
-            column(rootF('columnPhone'), text(item('phone')), {
-              className: 'text-slate-500 dark:text-slate-400',
+            column(rootF("columnPhone"), text(item("phone")), {
+              className: "text-slate-500 dark:text-slate-400",
             }),
             column(
-              rootF('columnStatus'),
-              badge(item('statusLabel'), { variant: item('statusVariant') }),
+              rootF("columnStatus"),
+              badge(item("statusLabel"), { variant: item("statusVariant") }),
             ),
           ],
         }),
-        when: f('hasRows'),
+        when: f("hasRows"),
       },
       {
         ...pagination({
-          basePath: '/parties',
-          total: f('total'),
-          page: f('currentPage'),
-          perPage: f('perPage'),
+          basePath: "/parties",
+          total: f("total"),
+          page: f("currentPage"),
+          perPage: f("perPage"),
         }),
-        when: f('hasRows'),
+        when: f("hasRows"),
       },
       {
-        ...widgetBlock('party-drawer', { drawer: data.drawer }),
-        when: f('drawerOpen'),
+        ...widgetBlock("party-drawer", { drawer: data.drawer }),
+        when: f("drawerOpen"),
       },
       {
-        ...widgetBlock('related-txn-drawer', { drawer: data.txnDrawer }),
-        when: f('txnDrawerOpen'),
+        ...widgetBlock("related-txn-drawer", { drawer: data.txnDrawer }),
+        when: f("txnDrawerOpen"),
       },
     ],
-  })
+  });
 }

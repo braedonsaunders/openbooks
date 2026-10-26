@@ -15,8 +15,12 @@ export interface PayrollInputMember {
 }
 
 /** Salary-profile input admission without calculated earnings or employment history. */
-export async function seedPayrollInputsFixture(label: string, members: readonly PayrollInputMember[] = [{ name: `${label} Employee` }]) {
-  if (members.length === 0) throw new Error("A payroll input fixture requires at least one declared member");
+export async function seedPayrollInputsFixture(
+  label: string,
+  members: readonly PayrollInputMember[] = [{ name: `${label} Employee` }],
+) {
+  if (members.length === 0)
+    throw new Error("A payroll input fixture requires at least one declared member");
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   await db.execute(sql`
@@ -25,7 +29,7 @@ export async function seedPayrollInputsFixture(label: string, members: readonly 
     })}::jsonb where id = ${org.orgId}`);
   await seedPayrollComponents(org.orgId, actorId, "CA");
   const scheduleId = randomUUID();
-  const otherScheduleId = members.some(member => member.otherSchedule) ? randomUUID() : null;
+  const otherScheduleId = members.some((member) => member.otherSchedule) ? randomUUID() : null;
   await db.execute(sql`
     insert into pay_schedules
       (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -33,7 +37,8 @@ export async function seedPayrollInputsFixture(label: string, members: readonly 
     values (${scheduleId}, ${org.orgId}, ${`${label} Schedule`}, 'biweekly', 26,
       '2026-07-18', 3, true, ${actorId}, ${actorId})
   `);
-  if (otherScheduleId !== null) await db.execute(sql`
+  if (otherScheduleId !== null)
+    await db.execute(sql`
     insert into pay_schedules
       (id, org_id, name, frequency, periods_per_year, anchor_period_end,
        pay_date_offset_days, is_active, created_by, updated_by)
@@ -65,9 +70,12 @@ export async function seedPayrollInputsFixture(label: string, members: readonly 
     periodStart: "2026-07-05",
     periodEnd: "2026-07-18",
   });
-  const component = (await db.execute<{ id: string }>(sql`
+  const component = await db.execute<{ id: string }>(
+    sql`
     select id from pay_components where org_id = ${org.orgId} and code = 'BONUS'
-  `, "objects"));
+  `,
+    "objects",
+  );
   return {
     orgId: org.orgId,
     actorId,

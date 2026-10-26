@@ -27,16 +27,21 @@ export const recruitingOfferSubjectProfile: FlowSubjectProfile = {
 };
 async function load(id: string) {
   return (
-    (await db.execute<{
+    (
+      await db.execute<{
         status: string;
         createdBy: string | null;
         submittedBy: string | null;
         [key: string]: unknown;
-      }>(sql`
+      }>(
+        sql`
  select id,public.offer_approval_fingerprint(hrm_offers) as "approvalFingerprint",job_title as "jobTitle",compensation_amount::text as "compensationAmount",compensation_currency as "compensationCurrency",
  compensation_basis as "compensationBasis",proposed_start_on::text as "proposedStartOn",employer_subsidiary_id as "subsidiaryId",
  version,approval_status as status,created_by as "createdBy",submitted_by as "submittedBy"
- from hrm_offers where id=${id}`, "objects"))[0] ?? null
+ from hrm_offers where id=${id}`,
+        "objects",
+      )
+    )[0] ?? null
   );
 }
 export const recruitingOffersFlowAdapter = defineTableSubjectAdapter({
@@ -72,9 +77,7 @@ export const recruitingOffersFlowAdapter = defineTableSubjectAdapter({
     throw new Error("Use native offer submission and Flow gates.");
   },
   async setField() {
-    throw new Error(
-      "Render revised offer terms before submitting a new version.",
-    );
+    throw new Error("Render revised offer terms before submitting a new version.");
   },
   async releaseApproval(subjectId, outcome, ctx, detail, run) {
     await releaseFlowApproval({

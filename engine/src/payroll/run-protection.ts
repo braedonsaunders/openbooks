@@ -8,7 +8,17 @@ import { PayrollError } from "./error.ts";
 import { add, cmp, neg, sum } from "../money/money.ts";
 import { parseMoney } from "../money/brands.ts";
 import { type PayrollDeductionTreatment } from "./packs.ts";
-import { applyDeductionProtection, protectedBase, protectionConverged, protectionNeedsIteration, PROTECTION_MAX_PASSES, settleProtectionOscillation, totalShortfall, type DeductionShortfall, type ProtectionBase } from "./limits.ts";
+import {
+  applyDeductionProtection,
+  protectedBase,
+  protectionConverged,
+  protectionNeedsIteration,
+  PROTECTION_MAX_PASSES,
+  settleProtectionOscillation,
+  totalShortfall,
+  type DeductionShortfall,
+  type ProtectionBase,
+} from "./limits.ts";
 import { protectionTreatmentIterates } from "./treatment-bases.ts";
 import { type Line } from "./run-stub-records.ts";
 import { cashGrossEarnings } from "./non-cash-earnings.ts";
@@ -52,15 +62,17 @@ export async function settleDeductionProtection(args: {
       paymentKind: l.paymentKind,
       protectedDeduction: protectedLines.includes(l),
     }));
-    const unprotected = sum(lines
-      .filter((l) => l.kind === "deduction" && !protectedLines.includes(l))
-      .map((l) => l.amount));
+    const unprotected = sum(
+      lines
+        .filter((l) => l.kind === "deduction" && !protectedLines.includes(l))
+        .map((l) => l.amount),
+    );
     // A refundable credit is take-home pay the protection pool must see: it
     // raises what the employee would take home (and therefore what a
     // garnishment measured on net pay may take) exactly like gross does.
-    const credits = sum(lines
-      .filter((l) => l.kind === "credit" && !l.accrualOnly)
-      .map((l) => l.amount));
+    const credits = sum(
+      lines.filter((l) => l.kind === "credit" && !l.accrualOnly).map((l) => l.amount),
+    );
     const available = add(add(cashGrossEarnings(gross, lines), neg(unprotected)), credits);
     return applyDeductionProtection(
       protectedLines.map((l, index) => ({
@@ -83,7 +95,8 @@ export async function settleDeductionProtection(args: {
     // taken, and the unpaid balance is reported, never silently dropped.
     // Re-parsed at this cross-struct boundary: protection math carries its
     // own amount shape, and the stub asserts the brand it pays.
-    for (const entry of entries) protectedLines[Number(entry.key)]!.amount = parseMoney(entry.amount);
+    for (const entry of entries)
+      protectedLines[Number(entry.key)]!.amount = parseMoney(entry.amount);
   };
 
   let lastProtection: ReturnType<typeof protectionPass> | null = null;
@@ -106,8 +119,10 @@ export async function settleDeductionProtection(args: {
   } else {
     // The fixpoint loop trades plain-decimal snapshots with protection math;
     // the brand is asserted once, in applyPass, where lines are written.
-    let previous: { key: string; amount: string }[] =
-      protectedLines.map((l, index) => ({ key: String(index), amount: l.amount }));
+    let previous: { key: string; amount: string }[] = protectedLines.map((l, index) => ({
+      key: String(index),
+      amount: l.amount,
+    }));
     for (let pass = 1; pass <= PROTECTION_MAX_PASSES; pass++) {
       // Withholdings computed from what the previous pass settled on, then
       // re-capped against the net pay those withholdings leave.
@@ -127,9 +142,9 @@ export async function settleDeductionProtection(args: {
         const settled = settleProtectionOscillation(previous, current);
         if (!settled) {
           throw new PayrollError(
-            `deduction protection did not converge for ${employeeLabel}`
-            + ` on ${protectedLines.map((l) => l.description).join(", ")}`
-            + ` after ${PROTECTION_MAX_PASSES} passes`,
+            `deduction protection did not converge for ${employeeLabel}` +
+              ` on ${protectedLines.map((l) => l.description).join(", ")}` +
+              ` after ${PROTECTION_MAX_PASSES} passes`,
           );
         }
         applyPass(settled);
@@ -152,7 +167,8 @@ type ProtectionOutcome = Awaited<ReturnType<typeof settleDeductionProtection>>;
  * Stamped into the factors map as PROT_SHORT and PROT_SHORT:<description>.
  */
 export function recordProtectionShortfalls(
-  factors: Record<string, string>, outcome: ProtectionOutcome,
+  factors: Record<string, string>,
+  outcome: ProtectionOutcome,
 ): void {
   const { lastProtection, protectedLines, protectionRequested } = outcome;
   const shortfalls: DeductionShortfall[] = [];

@@ -1,23 +1,33 @@
-import { sql } from 'drizzle-orm'
-import { db, type SqlExecutor } from '../platform/db.ts'
-import { featureEnabled, type FeatureState } from './feature-registry.ts'
-import { dataDependentFeatureDefault, withDataDependentDefaults } from './feature-defaults.ts'
+import { sql } from "drizzle-orm";
+import { db, type SqlExecutor } from "../platform/db.ts";
+import { featureEnabled, type FeatureState } from "./feature-registry.ts";
+import { dataDependentFeatureDefault, withDataDependentDefaults } from "./feature-defaults.ts";
 
-export { withDataDependentDefaults }
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from './org-feature-lock.ts'
+export { withDataDependentDefaults };
+import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "./org-feature-lock.ts";
 
 /** Load the org's feature state (raw overrides; combine with featureEnabled). */
-export async function orgFeatureState(orgId: string, executor: SqlExecutor = db): Promise<FeatureState> {
-  const r = (await executor.execute<{ f: FeatureState | null }>(sql`select settings->'features' as f from orgs where id = ${orgId}`, 'objects'))
-  return r[0]?.f ?? {}
+export async function orgFeatureState(
+  orgId: string,
+  executor: SqlExecutor = db,
+): Promise<FeatureState> {
+  const r = await executor.execute<{ f: FeatureState | null }>(
+    sql`select settings->'features' as f from orgs where id = ${orgId}`,
+    "objects",
+  );
+  return r[0]?.f ?? {};
 }
 
 /** Server helper for route guards: is this feature on for the org? Resolves
  * the data-dependent defaults exactly like resolvedFeatureState, so guards
  * agree with the Features page and the setup-entity gate. */
-export async function isFeatureEnabled(orgId: string, key: string, executor: SqlExecutor = db): Promise<boolean> {
-  const state = await orgFeatureState(orgId, executor)
-  return featureEnabledFromState(orgId, key, state, executor)
+export async function isFeatureEnabled(
+  orgId: string,
+  key: string,
+  executor: SqlExecutor = db,
+): Promise<boolean> {
+  const state = await orgFeatureState(orgId, executor);
+  return featureEnabledFromState(orgId, key, state, executor);
 }
 
 /** Resolve one feature from an already-read state using the native data defaults. */
@@ -27,11 +37,11 @@ export async function featureEnabledFromState(
   state: FeatureState,
   executor: SqlExecutor = db,
 ): Promise<boolean> {
-  if (key === 'multiSubsidiary') return resolveMultiSubsidiary(orgId, state, executor)
-  if (key === 'multiCurrency') return resolveMultiCurrency(orgId, state, executor)
+  if (key === "multiSubsidiary") return resolveMultiSubsidiary(orgId, state, executor);
+  if (key === "multiCurrency") return resolveMultiCurrency(orgId, state, executor);
   // A child of a data-dependent feature resolves its parent from the org's
   // data first, exactly as the Features page does.
-  return featureEnabled(await withDataDependentDefaults(executor, orgId, state, [key]), key)
+  return featureEnabled(await withDataDependentDefaults(executor, orgId, state, [key]), key);
 }
 
 /**
@@ -41,13 +51,20 @@ export async function featureEnabledFromState(
  * explicitly set, and lets a single-entity org opt in to add its first extra
  * subsidiary. An explicit stored boolean always wins.
  */
-async function resolveMultiSubsidiary(orgId: string, state: FeatureState, executor: SqlExecutor = db): Promise<boolean> {
-  return dataDependentFeatureDefault(executor, orgId, 'multiSubsidiary', state)
+async function resolveMultiSubsidiary(
+  orgId: string,
+  state: FeatureState,
+  executor: SqlExecutor = db,
+): Promise<boolean> {
+  return dataDependentFeatureDefault(executor, orgId, "multiSubsidiary", state);
 }
 
 /** Is multi-subsidiary on for this org (with the data-dependent default)? */
-export async function subsidiaryFeatureEnabled(orgId: string, executor: SqlExecutor = db): Promise<boolean> {
-  return resolveMultiSubsidiary(orgId, await orgFeatureState(orgId, executor), executor)
+export async function subsidiaryFeatureEnabled(
+  orgId: string,
+  executor: SqlExecutor = db,
+): Promise<boolean> {
+  return resolveMultiSubsidiary(orgId, await orgFeatureState(orgId, executor), executor);
 }
 
 /**
@@ -56,8 +73,12 @@ export async function subsidiaryFeatureEnabled(orgId: string, executor: SqlExecu
  * orgs working when the flag was never set; an explicit stored boolean
  * always wins.
  */
-async function resolveMultiCurrency(orgId: string, state: FeatureState, executor: SqlExecutor = db): Promise<boolean> {
-  return dataDependentFeatureDefault(executor, orgId, 'multiCurrency', state)
+async function resolveMultiCurrency(
+  orgId: string,
+  state: FeatureState,
+  executor: SqlExecutor = db,
+): Promise<boolean> {
+  return dataDependentFeatureDefault(executor, orgId, "multiCurrency", state);
 }
 
 /**
@@ -65,14 +86,23 @@ async function resolveMultiCurrency(orgId: string, state: FeatureState, executor
  * (`multiSubsidiary`, `multiCurrency`). Use this for the Features page and
  * the setup-rail gating so `featureEnabled` returns the correct value.
  */
-export async function resolvedFeatureState(orgId: string, executor: SqlExecutor = db): Promise<FeatureState> {
-  const state = await orgFeatureState(orgId, executor)
-  const [multiSubsidiary, multiCurrency] = [await resolveMultiSubsidiary(orgId, state, executor), await resolveMultiCurrency(orgId, state, executor)]
-  return { ...state, multiSubsidiary, multiCurrency }
+export async function resolvedFeatureState(
+  orgId: string,
+  executor: SqlExecutor = db,
+): Promise<FeatureState> {
+  const state = await orgFeatureState(orgId, executor);
+  const [multiSubsidiary, multiCurrency] = [
+    await resolveMultiSubsidiary(orgId, state, executor),
+    await resolveMultiCurrency(orgId, state, executor),
+  ];
+  return { ...state, multiSubsidiary, multiCurrency };
 }
 
 /** Fence project-linked writes against disabling Projects; use the writer's transaction. */
-export async function checkProjectsWriteEnabled(orgId: string, executor: SqlExecutor = db): Promise<boolean> {
-  await acquireOrgFeatureGateLock(executor, orgId)
-  return lockAndCheckOrgFeature(executor, orgId, 'projects')
+export async function checkProjectsWriteEnabled(
+  orgId: string,
+  executor: SqlExecutor = db,
+): Promise<boolean> {
+  await acquireOrgFeatureGateLock(executor, orgId);
+  return lockAndCheckOrgFeature(executor, orgId, "projects");
 }

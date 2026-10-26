@@ -73,10 +73,28 @@ test("reversalJournalLines keeps elimination and currency-adjustment flags on th
   const [reversal] = reversalJournalLines(
     [
       {
-        lineNumber: 1, accountId: ACCOUNT_ID, subsidiaryId: SUBSIDIARY_ID, amount: "40.0000", currency: "CAD",
-        txnAmount: "40.0000", fxRate: "1", partyId: null, departmentId: null, projectId: null, locationId: null,
-        classId: null, equipmentUnitId: null, extraDims: {}, paymentCardId: null, taxCodeId: null, memo: null,
-        quantity: null, unit: null, custom: {}, eliminate: true, isCurrencyAdjustment: true,
+        lineNumber: 1,
+        accountId: ACCOUNT_ID,
+        subsidiaryId: SUBSIDIARY_ID,
+        amount: "40.0000",
+        currency: "CAD",
+        txnAmount: "40.0000",
+        fxRate: "1",
+        partyId: null,
+        departmentId: null,
+        projectId: null,
+        locationId: null,
+        classId: null,
+        equipmentUnitId: null,
+        extraDims: {},
+        paymentCardId: null,
+        taxCodeId: null,
+        memo: null,
+        quantity: null,
+        unit: null,
+        custom: {},
+        eliminate: true,
+        isCurrencyAdjustment: true,
       },
     ],
     { entryId: ENTRY_ID, orgId: ORG_ID },
@@ -229,11 +247,14 @@ test("reversalJournalLines mirrors every signed field on a mixed-sign entry", ()
   ];
   const reversed = reversalJournalLines(sources, { entryId: ENTRY_ID, orgId: ORG_ID });
   assert.equal(reversed.length, 3);
-  assert.deepEqual(reversed.map((line) => [line.lineNumber, line.amount, line.txnAmount, line.quantity]), [
-    [1, "-125.0000", "-100.0000", "-10.0000"],
-    [2, "125.0000", "100.0000", "2.5000"],
-    [3, "0.0000", "0.0000", null],
-  ]);
+  assert.deepEqual(
+    reversed.map((line) => [line.lineNumber, line.amount, line.txnAmount, line.quantity]),
+    [
+      [1, "-125.0000", "-100.0000", "-10.0000"],
+      [2, "125.0000", "100.0000", "2.5000"],
+      [3, "0.0000", "0.0000", null],
+    ],
+  );
 });
 
 test("reversal source pairs net to zero in ledger units", async () => {
@@ -287,8 +308,16 @@ test("reversal source pairs net to zero in ledger units", async () => {
   const reversed = reversalJournalLines(sources, { entryId: ENTRY_ID, orgId: ORG_ID });
   for (const [index, source] of sources.entries()) {
     const line = reversed[index]!;
-    assert.equal(add(source.amount, line.amount), "0.0000", `amount nets to zero (line ${source.lineNumber})`);
-    assert.equal(add(source.txnAmount, line.txnAmount), "0.0000", `txnAmount nets to zero (line ${source.lineNumber})`);
+    assert.equal(
+      add(source.amount, line.amount),
+      "0.0000",
+      `amount nets to zero (line ${source.lineNumber})`,
+    );
+    assert.equal(
+      add(source.txnAmount, line.txnAmount),
+      "0.0000",
+      `txnAmount nets to zero (line ${source.lineNumber})`,
+    );
   }
   // Reversing the reversal restores the original signed amounts exactly.
   const restored = reversalJournalLines(
@@ -316,10 +345,13 @@ test("reversal source pairs net to zero in ledger units", async () => {
     })),
     { entryId: ENTRY_ID, orgId: ORG_ID },
   );
-  assert.deepEqual(restored.map((line) => [line.amount, line.txnAmount, line.quantity]), [
-    ["125.0000", "100.0000", "10.0000"],
-    ["-125.0000", "-100.0000", "-10.0000"],
-  ]);
+  assert.deepEqual(
+    restored.map((line) => [line.amount, line.txnAmount, line.quantity]),
+    [
+      ["125.0000", "100.0000", "10.0000"],
+      ["-125.0000", "-100.0000", "-10.0000"],
+    ],
+  );
 });
 
 test("reversalJournalLines preserves identity and analytical context, never open-item state", () => {

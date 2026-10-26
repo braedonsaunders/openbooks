@@ -62,7 +62,10 @@ test("a .none reason is adequate at 20 non-whitespace characters", () => {
 test("the preflight statement timeout defaults to five minutes and stays bounded", () => {
   assert.equal(preflightStatementTimeoutMs({}), PREFLIGHT_STATEMENT_TIMEOUT_DEFAULT_MS);
   assert.equal(PREFLIGHT_STATEMENT_TIMEOUT_DEFAULT_MS, 300_000);
-  assert.equal(preflightStatementTimeoutMs({ OPENBOOKS_PREFLIGHT_STATEMENT_TIMEOUT_MS: "60000" }), 60_000);
+  assert.equal(
+    preflightStatementTimeoutMs({ OPENBOOKS_PREFLIGHT_STATEMENT_TIMEOUT_MS: "60000" }),
+    60_000,
+  );
   for (const bad of ["forever", "0", "-5", "99999999999", "12.5"]) {
     assert.equal(
       preflightStatementTimeoutMs({ OPENBOOKS_PREFLIGHT_STATEMENT_TIMEOUT_MS: bad }),
@@ -83,22 +86,44 @@ test("only missing schema objects are candidates for preflight deferral", () => 
 
 test("a missing guard defers only for its exact no-argument pending creator", () => {
   const missing = new Error('function "public.native_history_guard()" does not exist');
-  assert.equal(earlierPendingCreatesObject(missing, ["CREATE OR REPLACE FUNCTION public.native_history_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;"]), true);
-  assert.equal(earlierPendingCreatesObject(missing, ["CREATE FUNCTION native_history_guard () RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;"]), true);
+  assert.equal(
+    earlierPendingCreatesObject(missing, [
+      "CREATE OR REPLACE FUNCTION public.native_history_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;",
+    ]),
+    true,
+  );
+  assert.equal(
+    earlierPendingCreatesObject(missing, [
+      "CREATE FUNCTION native_history_guard () RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;",
+    ]),
+    true,
+  );
   for (const sql of [
     "CREATE FUNCTION private.native_history_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;",
     "CREATE FUNCTION native_history_guard(uuid) RETURNS uuid LANGUAGE sql AS $$ SELECT $1 $$;",
     "CREATE FUNCTION another_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;",
     "-- CREATE FUNCTION native_history_guard()\nSELECT 1;",
-  ]) assert.equal(earlierPendingCreatesObject(missing, [sql]), false, sql);
+  ])
+    assert.equal(earlierPendingCreatesObject(missing, [sql]), false, sql);
   assert.equal(earlierPendingCreatesObject(missing, []), false);
-  assert.equal(earlierPendingCreatesObject(new Error('function "public.native_history_guard(uuid)" does not exist'), ["CREATE FUNCTION native_history_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;"]), false);
+  assert.equal(
+    earlierPendingCreatesObject(
+      new Error('function "public.native_history_guard(uuid)" does not exist'),
+      [
+        "CREATE FUNCTION native_history_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;",
+      ],
+    ),
+    false,
+  );
 });
 
 test("a preflight is deferred only when an earlier pending migration creates the object", () => {
-  const missingTable = Object.assign(new Error('relation "payroll_remittance_coverage" does not exist'), {
-    code: "42P01",
-  });
+  const missingTable = Object.assign(
+    new Error('relation "payroll_remittance_coverage" does not exist'),
+    {
+      code: "42P01",
+    },
+  );
   const creator = "CREATE TABLE public.payroll_remittance_coverage (id uuid PRIMARY KEY);";
   assert.equal(earlierPendingCreatesObject(missingTable, [creator]), true);
   assert.equal(earlierPendingCreatesObject(missingTable, ["select 1;"]), false);
@@ -108,12 +133,18 @@ test("a preflight is deferred only when an earlier pending migration creates the
     new Error('relation "public.financial_changes" does not exist'),
     { code: "42P01" },
   );
-  assert.equal(earlierPendingCreatesObject(qualifiedMissingTable, [
-    "SET search_path = public, pg_catalog; CREATE TABLE IF NOT EXISTS financial_changes (id uuid);",
-  ]), true);
-  assert.equal(earlierPendingCreatesObject(qualifiedMissingTable, [
-    "CREATE TABLE private.financial_changes (id uuid);",
-  ]), false);
+  assert.equal(
+    earlierPendingCreatesObject(qualifiedMissingTable, [
+      "SET search_path = public, pg_catalog; CREATE TABLE IF NOT EXISTS financial_changes (id uuid);",
+    ]),
+    true,
+  );
+  assert.equal(
+    earlierPendingCreatesObject(qualifiedMissingTable, [
+      "CREATE TABLE private.financial_changes (id uuid);",
+    ]),
+    false,
+  );
 
   const missingColumn = Object.assign(
     new Error('column "executed_snapshot" of relation "lien_waivers" does not exist'),
@@ -122,13 +153,18 @@ test("a preflight is deferred only when an earlier pending migration creates the
   const adder = "ALTER TABLE public.lien_waivers ADD COLUMN executed_snapshot jsonb;";
   assert.equal(earlierPendingCreatesObject(missingColumn, [adder]), true);
   assert.equal(
-    earlierPendingCreatesObject(missingColumn, ["ALTER TABLE public.other ADD COLUMN executed_snapshot jsonb;"]),
+    earlierPendingCreatesObject(missingColumn, [
+      "ALTER TABLE public.other ADD COLUMN executed_snapshot jsonb;",
+    ]),
     false,
   );
   assert.equal(earlierPendingCreatesObject(new Error("permission denied"), [creator]), false);
 
-  const aliased = Object.assign(new Error("column c.token_sealed does not exist"), { code: "42703" });
-  const guardedAdder = "ALTER TABLE public.payment_links ADD COLUMN IF NOT EXISTS token_sealed text;";
+  const aliased = Object.assign(new Error("column c.token_sealed does not exist"), {
+    code: "42703",
+  });
+  const guardedAdder =
+    "ALTER TABLE public.payment_links ADD COLUMN IF NOT EXISTS token_sealed text;";
   const preflight = "SELECT c.id FROM public.payment_links c WHERE c.token_sealed IS NOT NULL";
   assert.equal(earlierPendingCreatesObject(aliased, [guardedAdder], preflight), true);
   assert.equal(earlierPendingCreatesObject(aliased, ["select 1;"], preflight), false);
@@ -157,14 +193,21 @@ test("a malformed preflight row refuses by name instead of reporting clean", () 
     detail: "d",
     remedy: "r",
   };
-  assert.throws(() => validateFindingRows("generated/0296_x.sql", "0296", [{ ...good, detail: 7 }]), /detail/);
-  assert.throws(() => validateFindingRows("generated/0296_x.sql", "0296", [{ ...good, detail: "" }]), /detail/);
+  assert.throws(
+    () => validateFindingRows("generated/0296_x.sql", "0296", [{ ...good, detail: 7 }]),
+    /detail/,
+  );
+  assert.throws(
+    () => validateFindingRows("generated/0296_x.sql", "0296", [{ ...good, detail: "" }]),
+    /detail/,
+  );
   assert.throws(
     () => validateFindingRows("generated/0296_x.sql", "0296", [{ ...good, code: "bad code!" }]),
     /must look like <ordinal>\.<snake_reason>/,
   );
   assert.throws(
-    () => validateFindingRows("generated/0296_x.sql", "0296", [{ ...good, code: "0297.other_reason" }]),
+    () =>
+      validateFindingRows("generated/0296_x.sql", "0296", [{ ...good, code: "0297.other_reason" }]),
     /does not start with this migration's ordinal 0296/,
   );
   assert.throws(
@@ -174,7 +217,10 @@ test("a malformed preflight row refuses by name instead of reporting clean", () 
 });
 
 type RecordedCall = { text: string };
-function fakeClient(behavior: (text: string) => unknown): { client: pg.PoolClient; calls: RecordedCall[] } {
+function fakeClient(behavior: (text: string) => unknown): {
+  client: pg.PoolClient;
+  calls: RecordedCall[];
+} {
   const calls: RecordedCall[] = [];
   const client = {
     query: async (text: string) => {
@@ -190,7 +236,10 @@ test("a non-SELECT preflight is refused before touching the database", () => {
     () => assertReadOnlyPreflight("generated/0296_x.sql", "-- prose\nupdate t set x = 1;"),
     /not a SELECT or WITH/,
   );
-  assertReadOnlyPreflight("generated/0296_x.sql", "-- prose\nwith x as (select 1) select * from x;");
+  assertReadOnlyPreflight(
+    "generated/0296_x.sql",
+    "-- prose\nwith x as (select 1) select * from x;",
+  );
 });
 
 test("the evaluator runs BEGIN READ ONLY with a bounded timeout and always rolls back", async () => {
@@ -211,7 +260,9 @@ test("the evaluator runs BEGIN READ ONLY with a bounded timeout and always rolls
 });
 
 test("a statement timeout still rolls back, and a missing object defers", async () => {
-  const timeout = Object.assign(new Error("canceling statement due to statement timeout"), { code: "57014" });
+  const timeout = Object.assign(new Error("canceling statement due to statement timeout"), {
+    code: "57014",
+  });
   const failing = fakeClient((text) => {
     if (text.startsWith("select")) throw timeout;
     return { rows: [] };
@@ -225,14 +276,22 @@ test("a statement timeout still rolls back, and a missing object defers", async 
   );
   assert.equal(failing.calls.at(-1)?.text, "rollback");
 
-  const missing = Object.assign(new Error('relation "later_table" does not exist'), { code: "42P01" });
+  const missing = Object.assign(new Error('relation "later_table" does not exist'), {
+    code: "42P01",
+  });
   const deferring = fakeClient((text) => {
     if (text.startsWith("select")) throw missing;
     return { rows: [] };
   });
-  const deferred = await evaluatePreflight(deferring.client, "generated/0300_x.sql", "0300", "select 1", {
-    statementTimeoutMs: 60_000,
-  });
+  const deferred = await evaluatePreflight(
+    deferring.client,
+    "generated/0300_x.sql",
+    "0300",
+    "select 1",
+    {
+      statementTimeoutMs: 60_000,
+    },
+  );
   assert.equal(deferred.status, "deferred");
   assert.equal(deferring.calls.at(-1)?.text, "rollback");
 });
@@ -260,16 +319,28 @@ test("the least-privilege role is proven when assumable and reported when not", 
     if (text === "set local role openbooks_read") throw missing;
     return { rows: [] };
   });
-  const fallback = await evaluatePreflight(ungranted.client, "generated/0296_x.sql", "0296", "select 1", {
-    statementTimeoutMs: 60_000,
-    leastPrivilegeRole: "openbooks_read",
-  });
+  const fallback = await evaluatePreflight(
+    ungranted.client,
+    "generated/0296_x.sql",
+    "0296",
+    "select 1",
+    {
+      statementTimeoutMs: 60_000,
+      leastPrivilegeRole: "openbooks_read",
+    },
+  );
   assert.equal(fallback.leastPrivilege, false);
   assert.equal(fallback.status, "ready");
-  const noroleResult = await evaluatePreflight(norole.client, "generated/0296_x.sql", "0296", "select 1", {
-    statementTimeoutMs: 60_000,
-    leastPrivilegeRole: "openbooks_read",
-  });
+  const noroleResult = await evaluatePreflight(
+    norole.client,
+    "generated/0296_x.sql",
+    "0296",
+    "select 1",
+    {
+      statementTimeoutMs: 60_000,
+      leastPrivilegeRole: "openbooks_read",
+    },
+  );
   assert.equal(noroleResult.leastPrivilege, false);
   assert.equal(noroleResult.status, "ready");
 
@@ -288,8 +359,11 @@ test("a refused least-privilege role does not poison the transaction", async () 
   // carry the poison into the preflight SELECT.
   const calls: string[] = [];
   let aborted = false;
-  const missing = Object.assign(new Error('role "openbooks_read" does not exist'), { code: "22023" });
-  const abortError = () => new Error("current transaction is aborted, commands ignored until end of transaction block");
+  const missing = Object.assign(new Error('role "openbooks_read" does not exist'), {
+    code: "22023",
+  });
+  const abortError = () =>
+    new Error("current transaction is aborted, commands ignored until end of transaction block");
   const client = {
     query: async (text: string) => {
       calls.push(text);
@@ -323,7 +397,13 @@ test("findings print with code, severity, subject, detail, and remedy", () => {
     detail: "bad marker",
     remedy: "fix it",
   });
-  for (const part of ["refuse", "0296.malformed_remittance_marker", "stub 1", "bad marker", "fix it"]) {
+  for (const part of [
+    "refuse",
+    "0296.malformed_remittance_marker",
+    "stub 1",
+    "bad marker",
+    "fix it",
+  ]) {
     assert.ok(text.includes(part), part);
   }
 });
@@ -333,7 +413,9 @@ test("a preflight the read role may not read falls back to the connecting role, 
   // tables a newer preflight inspects. Those grants converge only when the
   // new bootstrap runs, which is exactly what the check runs before. The
   // denial must not refuse the check as "drift".
-  const denied = Object.assign(new Error("permission denied for table sftp_import_schedules"), { code: "42501" });
+  const denied = Object.assign(new Error("permission denied for table sftp_import_schedules"), {
+    code: "42501",
+  });
   let attempts = 0;
   const { client, calls } = fakeClient((text) => {
     if (text === "select 1") {
@@ -348,19 +430,27 @@ test("a preflight the read role may not read falls back to the connecting role, 
   });
   assert.deepEqual(result, { status: "ready", findings: [], leastPrivilege: false });
   const texts = calls.map((call) => call.text);
-  assert.ok(texts.indexOf("rollback to savepoint preflight_least_privilege") > texts.indexOf("set local role openbooks_read"));
+  assert.ok(
+    texts.indexOf("rollback to savepoint preflight_least_privilege") >
+      texts.indexOf("set local role openbooks_read"),
+  );
   assert.equal(attempts, 2);
   assert.equal(texts.at(-1), "rollback");
 });
 
 test("a permission denial for the connecting role itself is not swallowed", async () => {
-  const denied = Object.assign(new Error("permission denied for table payroll_secrets"), { code: "42501" });
+  const denied = Object.assign(new Error("permission denied for table payroll_secrets"), {
+    code: "42501",
+  });
   const { client } = fakeClient((text) => {
     if (text === "select 1") throw denied;
     return { rows: [] };
   });
   await assert.rejects(
-    () => evaluatePreflight(client, "generated/0291_x.sql", "0291", "select 1", { statementTimeoutMs: 60_000 }),
+    () =>
+      evaluatePreflight(client, "generated/0291_x.sql", "0291", "select 1", {
+        statementTimeoutMs: 60_000,
+      }),
     /permission denied for table payroll_secrets/,
   );
 });

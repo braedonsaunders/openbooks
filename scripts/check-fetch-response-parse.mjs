@@ -140,8 +140,7 @@ function discoverClientSources() {
     .split("\0")
     .filter(Boolean)
     .filter(
-      (file) =>
-        !/\.test\.[tj]sx?$/.test(file) && !/\.d\.tsx?$/.test(file) && file !== SELF_PATH,
+      (file) => !/\.test\.[tj]sx?$/.test(file) && !/\.d\.tsx?$/.test(file) && file !== SELF_PATH,
     );
 }
 
@@ -222,7 +221,11 @@ function fetchRootedChain(node) {
   while (ts.isCallExpression(inner) && ts.isPropertyAccessExpression(inner.expression)) {
     inner = unwrapExpression(inner.expression.expression);
   }
-  return ts.isCallExpression(inner) && ts.isIdentifier(inner.expression) && inner.expression.text === "fetch";
+  return (
+    ts.isCallExpression(inner) &&
+    ts.isIdentifier(inner.expression) &&
+    inner.expression.text === "fetch"
+  );
 }
 
 /** Response idents visible in a file: variables initialized or assigned from
@@ -651,8 +654,10 @@ function failureBranchBareParse(jsonCall, name) {
     const parent = current.parent;
     if (!parent) return false;
     if (ts.isIfStatement(parent)) {
-      if (parent.thenStatement === current && thenBranchGuards(parent.expression, name)) return true;
-      if (parent.elseStatement === current && !elseBranchSawOk(parent.expression, name)) return true;
+      if (parent.thenStatement === current && thenBranchGuards(parent.expression, name))
+        return true;
+      if (parent.elseStatement === current && !elseBranchSawOk(parent.expression, name))
+        return true;
       // A branch the receiver's status decides belongs to the existing
       // rules; an unrelated inner `if` must not stop the climb to an
       // outer failure branch.
@@ -710,7 +715,9 @@ export function auditRepository(files, readSource = (file) => readFileSync(file,
       ) {
         const name = node.expression.expression.text;
         const parseFn = nearestFunction(node);
-        if (!idents.some((binding) => binding.name === name && bindingVisibleAt(binding, parseFn))) {
+        if (
+          !idents.some((binding) => binding.name === name && bindingVisibleAt(binding, parseFn))
+        ) {
           ts.forEachChild(node, visit);
           return;
         }

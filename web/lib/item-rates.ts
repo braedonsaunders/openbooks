@@ -1,12 +1,18 @@
-import { versionScopePredicate } from '@openbooks/engine/projects/billing-pricing'
-import 'server-only'
-import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { lockScopeRows, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
-import { isLegacyProvenance } from '@openbooks/engine/platform/legacy-provenance'
-import { cmp, mul, normalizeDecimal } from '@openbooks/engine/money/money'
-import { priceItemRate, priceSelectedRateUnit, type PricingPolicy, type RatePrice, type RateTier } from '@openbooks/engine/sales/item-rate-pricing'
-import { convertBillRate } from './item-rate-currency'
+import { versionScopePredicate } from "@openbooks/engine/projects/billing-pricing";
+import "server-only";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { lockScopeRows, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { isLegacyProvenance } from "@openbooks/engine/platform/legacy-provenance";
+import { cmp, mul, normalizeDecimal } from "@openbooks/engine/money/money";
+import {
+  priceItemRate,
+  priceSelectedRateUnit,
+  type PricingPolicy,
+  type RatePrice,
+  type RateTier,
+} from "@openbooks/engine/sales/item-rate-pricing";
+import { convertBillRate } from "./item-rate-currency";
 
 /**
  * Rate resolution refusals are user-actionable (the message names the
@@ -16,26 +22,26 @@ import { convertBillRate } from './item-rate-currency'
  * charges, ticket lines) keep working: they re-wrap the message.
  */
 export class ItemRateResolutionError extends Error {
-  readonly status = 422
+  readonly status = 422;
   constructor(message: string) {
-    super(message)
-    this.name = 'ItemRateResolutionError'
+    super(message);
+    this.name = "ItemRateResolutionError";
   }
 }
 
 export interface ResolvedRateUnit {
-  unitCode: string
-  unitName: string
-  baseQuantity: string
-  costRate: string
-  billRate: string
+  unitCode: string;
+  unitName: string;
+  baseQuantity: string;
+  costRate: string;
+  billRate: string;
 }
 
 export interface ResolvedItemRate {
-  rateBookId: string
-  rateVersionId: string
-  baseUnit: string
-  policy: PricingPolicy
+  rateBookId: string;
+  rateVersionId: string;
+  baseUnit: string;
+  policy: PricingPolicy;
   /**
    * Where the pricing policy came from: the version's own pin ('pinned'),
    * a backfilled pin whose governing policy at version time was never
@@ -43,80 +49,114 @@ export interface ResolvedItemRate {
    * verifies before billing), or the live profile for versions that carry
    * no pin ('live').
    */
-  policyProvenance: 'pinned' | 'inferred' | 'live'
-  invoicePresentation: 'summary' | 'rate_components'
-  sourceCurrency: string
-  targetCurrency: string
-  fxRate: string
+  policyProvenance: "pinned" | "inferred" | "live";
+  invoicePresentation: "summary" | "rate_components";
+  sourceCurrency: string;
+  targetCurrency: string;
+  fxRate: string;
   /** Quantity normalized to the profile's base unit. */
-  baseQuantity: string
+  baseQuantity: string;
   /** Unit entered by the user; differs from baseUnit for explicit packages. */
-  transactionUnitCode: string
-  transactionUnitName: string
-  rateUnits: ResolvedRateUnit[]
-  cost: RatePrice
-  bill: RatePrice
+  transactionUnitCode: string;
+  transactionUnitName: string;
+  rateUnits: ResolvedRateUnit[];
+  cost: RatePrice;
+  bill: RatePrice;
 }
 
-export { versionScopePredicate } from '@openbooks/engine/projects/billing-pricing'
+export { versionScopePredicate } from "@openbooks/engine/projects/billing-pricing";
 
 /** Resolve project > customer > unit > org assignment > org default, then snapshot the
  * active version covering the usage date. A candidate without this item falls
  * through so a customer card may override only selected items. */
 export async function resolveItemRate(input: {
-  orgId: string
-  projectId: string
-  itemId: string
-  equipmentUnitId?: string | null
-  onDate: string
+  orgId: string;
+  projectId: string;
+  itemId: string;
+  equipmentUnitId?: string | null;
+  onDate: string;
   /** Dimensions of the work being priced; they live on the line, not the job. */
-  departmentId?: string | null
-  locationId?: string | null
-  classId?: string | null
-  baseQuantity: string
+  departmentId?: string | null;
+  locationId?: string | null;
+  classId?: string | null;
+  baseQuantity: string;
   /** Explicit package choice (for example day, week, or month). */
-  rateUnitCode?: string | null
-  allowedSubsidiaryIds?: ReadonlySet<string> | null
+  rateUnitCode?: string | null;
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 }): Promise<ResolvedItemRate | null> {
   return withOrgTransaction(input.orgId, async () => {
-  const targets = [
-    { kind: 'project' as const, id: input.projectId },
-    ...(input.equipmentUnitId ? [{ kind: 'equipment_unit' as const, id: input.equipmentUnitId }] : []),
-  ]
-  const scopeRows = await lockScopeRows(db, input.orgId, targets, input.allowedSubsidiaryIds ?? null, 'share')
-  const projectScope = scopeRows.find((row) => row.id === input.projectId)
-  const equipmentScope = input.equipmentUnitId ? scopeRows.find((row) => row.id === input.equipmentUnitId) : null
-  if (!projectScope || (equipmentScope && equipmentScope.subsidiaryId !== projectScope.subsidiaryId)) {
-    throw new ScopeNotFoundError()
-  }
-  // Ordinary consumables/materials use the simple item Cost + Price. Only
-  // items explicitly configured with a rate profile participate in dated,
-  // customer/project/equipment rate books and package-tier pricing.
-  const profile = (await db.execute<{ base_unit: string; pricing_policy: PricingPolicy; invoice_presentation: 'summary' | 'rate_components' }>(sql`
+    const targets = [
+      { kind: "project" as const, id: input.projectId },
+      ...(input.equipmentUnitId
+        ? [{ kind: "equipment_unit" as const, id: input.equipmentUnitId }]
+        : []),
+    ];
+    const scopeRows = await lockScopeRows(
+      db,
+      input.orgId,
+      targets,
+      input.allowedSubsidiaryIds ?? null,
+      "share",
+    );
+    const projectScope = scopeRows.find((row) => row.id === input.projectId);
+    const equipmentScope = input.equipmentUnitId
+      ? scopeRows.find((row) => row.id === input.equipmentUnitId)
+      : null;
+    if (
+      !projectScope ||
+      (equipmentScope && equipmentScope.subsidiaryId !== projectScope.subsidiaryId)
+    ) {
+      throw new ScopeNotFoundError();
+    }
+    // Ordinary consumables/materials use the simple item Cost + Price. Only
+    // items explicitly configured with a rate profile participate in dated,
+    // customer/project/equipment rate books and package-tier pricing.
+    const profile = await db.execute<{
+      base_unit: string;
+      pricing_policy: PricingPolicy;
+      invoice_presentation: "summary" | "rate_components";
+    }>(
+      sql`
     select base_unit, pricing_policy, invoice_presentation from item_rate_profiles
      where org_id = ${input.orgId} and item_id = ${input.itemId} and is_active
-  `, 'objects'))
-  const p = profile[0]
-  if (!p) return null
+  `,
+      "objects",
+    );
+    const p = profile[0];
+    if (!p) return null;
 
-  const context = (await db.execute<{ customer_id: string | null; starts_on: string | null; subsidiary_id: string | null; target_currency:string; unit_rate_book_id: string | null }>(sql`
+    const context = await db.execute<{
+      customer_id: string | null;
+      starts_on: string | null;
+      subsidiary_id: string | null;
+      target_currency: string;
+      unit_rate_book_id: string | null;
+    }>(
+      sql`
     select p.customer_id, p.starts_on, p.subsidiary_id,
            coalesce(s.base_currency,o.base_currency) as target_currency,
            (select rate_book_id from equipment_units
              where id = ${input.equipmentUnitId ?? null} and org_id = ${input.orgId}) as unit_rate_book_id
       from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
       where p.id = ${input.projectId} and p.org_id = ${input.orgId}
-  `, 'objects'))
-  const ctx = context[0]
-  if (!ctx) return null
-  const projectStart = ctx.starts_on ?? input.onDate
+  `,
+      "objects",
+    );
+    const ctx = context[0];
+    if (!ctx) return null;
+    const projectStart = ctx.starts_on ?? input.onDate;
 
-  // Candidate assignments resolve project > customer > org, and within each the
-  // MOST dimension-specific active assignment covering the date wins. Dimension
-  // filters accept a null assignment (applies broadly) or an exact match to the
-  // project's dimension, so the same customer can carry different books per
-  // department/subsidiary/location/class over identical date ranges.
-  const candidates = (await db.execute<{ rate_book_id: string;rate_version_id:string|null; priority: number }>(sql`
+    // Candidate assignments resolve project > customer > org, and within each the
+    // MOST dimension-specific active assignment covering the date wins. Dimension
+    // filters accept a null assignment (applies broadly) or an exact match to the
+    // project's dimension, so the same customer can carry different books per
+    // department/subsidiary/location/class over identical date ranges.
+    const candidates = await db.execute<{
+      rate_book_id: string;
+      rate_version_id: string | null;
+      priority: number;
+    }>(
+      sql`
     with scoped as (
       select a.rate_book_id, a.rate_version_id,
              case when a.project_id is not null then 1
@@ -144,10 +184,13 @@ export async function resolveItemRate(input: {
     select rate_book_id, rate_version_id, priority
       from scoped where rate_book_id is not null
      order by priority, dimension_specificity desc, effective_from desc nulls last, rate_book_id
-  `, 'objects'))
+  `,
+      "objects",
+    );
 
-  for (const candidate of candidates) {
-    const version = (await db.execute<{ id: string;currency:string }>(sql`
+    for (const candidate of candidates) {
+      const version = await db.execute<{ id: string; currency: string }>(
+        sql`
       select v.id,b.currency
         from item_rate_versions v
         join item_rate_books b on b.id = v.rate_book_id and b.org_id = v.org_id and b.is_active
@@ -172,86 +215,133 @@ export async function resolveItemRate(input: {
                })})
         )
        order by v.effective_from desc limit 1
-    `, 'objects'))
-    const rateVersionId = version[0]?.id
-    // Only the absence of a matching item/version falls through to a
-    // lower-priority card. Once a card is selected, its currency is the
-    // agreement: without FX coverage the resolver must refuse naming
-    // source, target and date — silently billing a cheaper card's rates in
-    // another currency reports success for numbers nobody agreed.
-    if (!rateVersionId) continue
-    const sourceCurrency=version[0]!.currency
-    const fxRate=await billRateFx(input.orgId,sourceCurrency,ctx.target_currency,input.onDate)
-    if(!fxRate) {
-      throw new ItemRateResolutionError(`No spot rate for ${sourceCurrency}→${ctx.target_currency} on or before ${input.onDate} — the selected rate card prices in ${sourceCurrency}`)
-    }
-    // Pricing behavior is pinned per (version, item) at save time: a policy
-    // switch for next month must never reprice a late entry dated in this
-    // version's month. The live profile above is only the participation gate
-    // (and the defaults for new versions). Versions without a pin — labor
-    // rate-card versions, which carry no item policy — resolve as before.
-    // A backfilled pin (0298 copied the live profile because historical
-    // policy was never recorded) prices on, but says so: legacy pins read
-    // 'inferred' so the UI can show the operator what they are trusting.
-    const pin = (await db.execute<{ id: string; base_unit: string; pricing_policy: PricingPolicy; invoice_presentation: 'summary' | 'rate_components' }>(sql`
+    `,
+        "objects",
+      );
+      const rateVersionId = version[0]?.id;
+      // Only the absence of a matching item/version falls through to a
+      // lower-priority card. Once a card is selected, its currency is the
+      // agreement: without FX coverage the resolver must refuse naming
+      // source, target and date — silently billing a cheaper card's rates in
+      // another currency reports success for numbers nobody agreed.
+      if (!rateVersionId) continue;
+      const sourceCurrency = version[0]!.currency;
+      const fxRate = await billRateFx(
+        input.orgId,
+        sourceCurrency,
+        ctx.target_currency,
+        input.onDate,
+      );
+      if (!fxRate) {
+        throw new ItemRateResolutionError(
+          `No spot rate for ${sourceCurrency}→${ctx.target_currency} on or before ${input.onDate} — the selected rate card prices in ${sourceCurrency}`,
+        );
+      }
+      // Pricing behavior is pinned per (version, item) at save time: a policy
+      // switch for next month must never reprice a late entry dated in this
+      // version's month. The live profile above is only the participation gate
+      // (and the defaults for new versions). Versions without a pin — labor
+      // rate-card versions, which carry no item policy — resolve as before.
+      // A backfilled pin (0298 copied the live profile because historical
+      // policy was never recorded) prices on, but says so: legacy pins read
+      // 'inferred' so the UI can show the operator what they are trusting.
+      const pin = (
+        await db.execute<{
+          id: string;
+          base_unit: string;
+          pricing_policy: PricingPolicy;
+          invoice_presentation: "summary" | "rate_components";
+        }>(
+          sql`
       select id, base_unit, pricing_policy, invoice_presentation from item_rate_version_profiles
        where org_id = ${input.orgId} and version_id = ${rateVersionId} and item_id = ${input.itemId}
-    `, 'objects'))[0]
-    const behavior = pin ?? p
-    const policyProvenance: ResolvedItemRate['policyProvenance'] = pin
-      ? (await isLegacyProvenance(db, input.orgId, 'item_rate_version_profiles', pin.id, { fallback: true }))
-        ? 'inferred'
-        : 'pinned'
-      : 'live'
-    const lines = (await db.execute<{ id: string; unit_code: string; unit_name: string; base_quantity: string; cost_rate: string | null; bill_rate: string | null }>(sql`
+    `,
+          "objects",
+        )
+      )[0];
+      const behavior = pin ?? p;
+      const policyProvenance: ResolvedItemRate["policyProvenance"] = pin
+        ? (await isLegacyProvenance(db, input.orgId, "item_rate_version_profiles", pin.id, {
+            fallback: true,
+          }))
+          ? "inferred"
+          : "pinned"
+        : "live";
+      const lines = await db.execute<{
+        id: string;
+        unit_code: string;
+        unit_name: string;
+        base_quantity: string;
+        cost_rate: string | null;
+        bill_rate: string | null;
+      }>(
+        sql`
       select id, unit_code, unit_name, base_quantity, cost_rate, bill_rate
         from item_rate_lines
        where org_id = ${input.orgId} and version_id = ${rateVersionId} and item_id = ${input.itemId}
        order by base_quantity, sort_order
-    `, 'objects'))
-    const tiers: RateTier[] = lines.map((r) => ({
-      id: r.id, unitCode: r.unit_code, unitName: r.unit_name,
-      baseQuantity: String(r.base_quantity), costRate: r.cost_rate == null ? null : convertBillRate(String(r.cost_rate),fxRate),
-      billRate: r.bill_rate == null ? null : convertBillRate(String(r.bill_rate),fxRate),
-    }))
-    const rateUnits: ResolvedRateUnit[] = tiers
-      .filter((tier): tier is RateTier & { costRate: string; billRate: string } => tier.costRate != null && tier.billRate != null)
-      .map((tier) => ({ unitCode: tier.unitCode, unitName: tier.unitName, baseQuantity: tier.baseQuantity,
-        costRate: tier.costRate, billRate: tier.billRate }))
-    const requestedUnit = input.rateUnitCode?.trim().toLowerCase() || null
-    const selectedTier = requestedUnit
-      ? tiers.find((tier) => tier.unitCode.toLowerCase() === requestedUnit)
-      : null
-    if (requestedUnit && (!selectedTier || selectedTier.costRate == null || selectedTier.billRate == null)) {
-      throw new ItemRateResolutionError('The selected rate unit is not available for this item and date')
+    `,
+        "objects",
+      );
+      const tiers: RateTier[] = lines.map((r) => ({
+        id: r.id,
+        unitCode: r.unit_code,
+        unitName: r.unit_name,
+        baseQuantity: String(r.base_quantity),
+        costRate: r.cost_rate == null ? null : convertBillRate(String(r.cost_rate), fxRate),
+        billRate: r.bill_rate == null ? null : convertBillRate(String(r.bill_rate), fxRate),
+      }));
+      const rateUnits: ResolvedRateUnit[] = tiers
+        .filter(
+          (tier): tier is RateTier & { costRate: string; billRate: string } =>
+            tier.costRate != null && tier.billRate != null,
+        )
+        .map((tier) => ({
+          unitCode: tier.unitCode,
+          unitName: tier.unitName,
+          baseQuantity: tier.baseQuantity,
+          costRate: tier.costRate,
+          billRate: tier.billRate,
+        }));
+      const requestedUnit = input.rateUnitCode?.trim().toLowerCase() || null;
+      const selectedTier = requestedUnit
+        ? tiers.find((tier) => tier.unitCode.toLowerCase() === requestedUnit)
+        : null;
+      if (
+        requestedUnit &&
+        (!selectedTier || selectedTier.costRate == null || selectedTier.billRate == null)
+      ) {
+        throw new ItemRateResolutionError(
+          "The selected rate unit is not available for this item and date",
+        );
+      }
+      const normalizedBaseQuantity = selectedTier
+        ? mul(input.baseQuantity, selectedTier.baseQuantity)
+        : input.baseQuantity;
+      return {
+        rateBookId: candidate.rate_book_id,
+        rateVersionId,
+        baseUnit: behavior.base_unit,
+        policy: behavior.pricing_policy,
+        policyProvenance,
+        invoicePresentation: behavior.invoice_presentation,
+        sourceCurrency,
+        targetCurrency: ctx.target_currency,
+        fxRate,
+        baseQuantity: normalizedBaseQuantity,
+        transactionUnitCode: selectedTier?.unitCode ?? behavior.base_unit,
+        transactionUnitName: selectedTier?.unitName ?? behavior.base_unit,
+        rateUnits,
+        cost: selectedTier
+          ? priceSelectedRateUnit(input.baseQuantity, selectedTier, "cost")
+          : priceItemRate(input.baseQuantity, tiers, "cost", behavior.pricing_policy),
+        bill: selectedTier
+          ? priceSelectedRateUnit(input.baseQuantity, selectedTier, "bill")
+          : priceItemRate(input.baseQuantity, tiers, "bill", behavior.pricing_policy),
+      };
     }
-    const normalizedBaseQuantity = selectedTier
-      ? mul(input.baseQuantity, selectedTier.baseQuantity)
-      : input.baseQuantity
-    return {
-      rateBookId: candidate.rate_book_id,
-      rateVersionId,
-      baseUnit: behavior.base_unit,
-      policy: behavior.pricing_policy,
-      policyProvenance,
-      invoicePresentation: behavior.invoice_presentation,
-      sourceCurrency,
-      targetCurrency:ctx.target_currency,
-      fxRate,
-      baseQuantity: normalizedBaseQuantity,
-      transactionUnitCode: selectedTier?.unitCode ?? behavior.base_unit,
-      transactionUnitName: selectedTier?.unitName ?? behavior.base_unit,
-      rateUnits,
-      cost: selectedTier
-        ? priceSelectedRateUnit(input.baseQuantity, selectedTier, 'cost')
-        : priceItemRate(input.baseQuantity, tiers, 'cost', behavior.pricing_policy),
-      bill: selectedTier
-        ? priceSelectedRateUnit(input.baseQuantity, selectedTier, 'bill')
-        : priceItemRate(input.baseQuantity, tiers, 'bill', behavior.pricing_policy),
-    }
-  }
-  return null
-  })
+    return null;
+  });
 }
 
 /**
@@ -271,22 +361,23 @@ export async function snapshotTimeBillRates(
   timeEntryIds: string[],
   opts: { dryRun?: boolean } = {},
 ): Promise<Map<string, string>> {
-  const resolved = new Map<string, string>()
-  if (timeEntryIds.length === 0) return resolved
-  const idArr = `{${timeEntryIds.join(',')}}`
-  const rows = (await db.execute<{
-      id: string
-      item_id: string
-      project_id: string | null
-      time_type_id: string | null
-      worked_on: string
-      department_id: string | null
-      subsidiary_id: string | null
-      bill_multiplier: string
-      default_rate: string | null
-      default_rate_currency: string
-      target_currency: string
-    }>(sql`
+  const resolved = new Map<string, string>();
+  if (timeEntryIds.length === 0) return resolved;
+  const idArr = `{${timeEntryIds.join(",")}}`;
+  const rows = await db.execute<{
+    id: string;
+    item_id: string;
+    project_id: string | null;
+    time_type_id: string | null;
+    worked_on: string;
+    department_id: string | null;
+    subsidiary_id: string | null;
+    bill_multiplier: string;
+    default_rate: string | null;
+    default_rate_currency: string;
+    target_currency: string;
+  }>(
+    sql`
     select te.id, te.item_id, te.project_id, te.time_type_id, te.worked_on,
            te.department_id, p.subsidiary_id,
            coalesce(tt.bill_multiplier, '1') as bill_multiplier,
@@ -299,9 +390,19 @@ export async function snapshotTimeBillRates(
       left join subsidiaries s on s.id=p.subsidiary_id and s.org_id=te.org_id
       join orgs o on o.id=te.org_id
      where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[])
-       and te.bill_rate is null and te.is_billable and te.item_id is not null`, 'objects'))
+       and te.bill_rate is null and te.is_billable and te.item_id is not null`,
+    "objects",
+  );
   for (const te of rows) {
-    const line = (await db.execute<{ rate_line_id:string; bill_rate: string | null; time_type_bill_rates: Record<string, string> | null; rate_version_id:string; rate_book_id:string; source_currency:string }>(sql`
+    const line = await db.execute<{
+      rate_line_id: string;
+      bill_rate: string | null;
+      time_type_bill_rates: Record<string, string> | null;
+      rate_version_id: string;
+      rate_book_id: string;
+      source_currency: string;
+    }>(
+      sql`
       with candidates as (
         -- Time entries carry department and inherit subsidiary from the
         -- project; they have no location/class dimensions, so those scoped
@@ -374,57 +475,70 @@ export async function snapshotTimeBillRates(
         join item_rate_books b on b.id=c.rate_book_id and b.org_id = ${orgId} and b.is_active
        order by c.priority, c.dimension_specificity desc, c.effective_from desc nulls last, v.effective_from desc,
                 case when l.unit_code = 'hour' then 0 else 1 end, l.base_quantity
-       limit 1`, 'objects'))
-    const hit = line[0]
-    const explicit = te.time_type_id ? hit?.time_type_bill_rates?.[te.time_type_id] : undefined
-    let sourceRate: string | null = null
-    let sourceCurrency: string | null = null
+       limit 1`,
+      "objects",
+    );
+    const hit = line[0];
+    const explicit = te.time_type_id ? hit?.time_type_bill_rates?.[te.time_type_id] : undefined;
+    let sourceRate: string | null = null;
+    let sourceCurrency: string | null = null;
     if (explicit != null) {
       try {
-        if (cmp(String(explicit), '0') >= 0) {
-          sourceRate = String(explicit)
-          sourceCurrency = hit?.source_currency ?? null
+        if (cmp(String(explicit), "0") >= 0) {
+          sourceRate = String(explicit);
+          sourceCurrency = hit?.source_currency ?? null;
         }
       } catch {
-        sourceRate = null
+        sourceRate = null;
       }
     }
     // Bill rate x time-type multiplier: both numeric(19,4), not an FX rate.
     else if (hit?.bill_rate != null) {
-      sourceRate = mul(String(hit.bill_rate), String(te.bill_multiplier))
-      sourceCurrency = hit.source_currency
+      sourceRate = mul(String(hit.bill_rate), String(te.bill_multiplier));
+      sourceCurrency = hit.source_currency;
     }
     if (sourceRate == null && te.default_rate != null) {
-      sourceRate = mul(String(te.default_rate), String(te.bill_multiplier))
-      sourceCurrency = te.default_rate_currency
+      sourceRate = mul(String(te.default_rate), String(te.bill_multiplier));
+      sourceCurrency = te.default_rate_currency;
     }
-    if (sourceRate == null) continue
+    if (sourceRate == null) continue;
     // item.default_rate is organization-wide and has no per-item currency;
     // it is stored in the organization's base currency, then converted to the
     // subsidiary/project currency just like any other source rate.
-    if (sourceCurrency == null) continue
-    const fxRate = await billRateFx(orgId,sourceCurrency,te.target_currency,te.worked_on)
-    if (!fxRate) throw new ItemRateResolutionError(`No spot rate for bill-out ${sourceCurrency}→${te.target_currency} on or before ${te.worked_on}`)
-    const rate=convertBillRate(sourceRate,fxRate)
-    resolved.set(te.id, rate)
+    if (sourceCurrency == null) continue;
+    const fxRate = await billRateFx(orgId, sourceCurrency, te.target_currency, te.worked_on);
+    if (!fxRate)
+      throw new ItemRateResolutionError(
+        `No spot rate for bill-out ${sourceCurrency}→${te.target_currency} on or before ${te.worked_on}`,
+      );
+    const rate = convertBillRate(sourceRate, fxRate);
+    resolved.set(te.id, rate);
     if (!opts.dryRun) {
       await db.execute(sql`
         update time_entries set bill_rate=${rate},bill_rate_source_rate=${sourceRate},
           bill_rate_source_currency=${sourceCurrency},bill_rate_fx_rate=${normalizeDecimal(fxRate, 10)},bill_rate_currency=${te.target_currency},
-          bill_rate_book_id=${hit?.rate_book_id??null},bill_rate_version_id=${hit?.rate_version_id??null},bill_rate_line_id=${hit?.rate_line_id??null}
-        where id = ${te.id} and org_id = ${orgId} and bill_rate is null`)
+          bill_rate_book_id=${hit?.rate_book_id ?? null},bill_rate_version_id=${hit?.rate_version_id ?? null},bill_rate_line_id=${hit?.rate_line_id ?? null}
+        where id = ${te.id} and org_id = ${orgId} and bill_rate is null`);
     }
   }
-  return resolved
+  return resolved;
 }
 
-async function billRateFx(orgId:string,from:string,to:string,onDate:string):Promise<string|null>{
-  if(from===to)return '1'
-  const result=(await db.execute<{rate:string}>(sql`
+async function billRateFx(
+  orgId: string,
+  from: string,
+  to: string,
+  onDate: string,
+): Promise<string | null> {
+  if (from === to) return "1";
+  const result = await db.execute<{ rate: string }>(
+    sql`
     select rate::text from (
       select rate,as_of,0 priority from fx_rates where org_id=${orgId} and from_currency=${from} and to_currency=${to} and rate_type='spot' and as_of<=${onDate}
       union all
       select (1/rate)::numeric(19,10),as_of,1 from fx_rates where org_id=${orgId} and from_currency=${to} and to_currency=${from} and rate_type='spot' and as_of<=${onDate}
-    ) x order by as_of desc,priority limit 1`, 'objects'))
-  return result[0]?.rate??null
+    ) x order by as_of desc,priority limit 1`,
+    "objects",
+  );
+  return result[0]?.rate ?? null;
 }

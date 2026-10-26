@@ -1,10 +1,10 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import type { YearEndFilingSection } from '@openbooks/engine/payroll/yearend'
-import { orgFilingYearOptions } from '@openbooks/engine/payroll/yearend'
-import { notFound } from 'next/navigation'
+import { getTranslations } from "next-intl/server";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import type { YearEndFilingSection } from "@openbooks/engine/payroll/yearend";
+import { orgFilingYearOptions } from "@openbooks/engine/payroll/yearend";
+import { notFound } from "next/navigation";
 import {
   page,
   pageHeader,
@@ -12,13 +12,13 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { groupTabs } from '../../../../components/module-home/group-tabs'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { pickString } from '../../../../lib/list-params'
-import { scopedYearEndFilings } from '../../../../lib/payroll-scoped-views'
-import type { YearEndView } from './YearEndView'
+} from "@braedonsaunders/appkit-viewspec";
+import { groupTabs } from "../../../../components/module-home/group-tabs";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { pickString } from "../../../../lib/list-params";
+import { scopedYearEndFilings } from "../../../../lib/payroll-scoped-views";
+import type { YearEndView } from "./YearEndView";
 
 /**
  * Year-end cockpit, split into a loader and a spec.
@@ -58,35 +58,36 @@ import type { YearEndView } from './YearEndView'
  * `ParallelRunView`.
  */
 
-type WorkspaceProps = Parameters<typeof YearEndView>[0]
+type WorkspaceProps = Parameters<typeof YearEndView>[0];
 
 export interface YearEndData {
-  title: string
-  description: string
-  viewTabs: Awaited<ReturnType<typeof groupTabs>>
+  title: string;
+  description: string;
+  viewTabs: Awaited<ReturnType<typeof groupTabs>>;
   workspace: {
-    year: WorkspaceProps['year']
-    years: WorkspaceProps['years']
-    sections: YearEndFilingSection[]
-    canFile: WorkspaceProps['canFile']
-  }
+    year: WorkspaceProps["year"];
+    years: WorkspaceProps["years"];
+    sections: YearEndFilingSection[];
+    canFile: WorkspaceProps["canFile"];
+  };
 }
 
 export async function loadYearEnd(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<YearEndData> {
-  const authz = await requirePermission('payroll.read')
-  await requireFeatureEnabled(authz.user.orgId, 'payroll')
-  const t = await getTranslations('payroll.yearEnd')
+  const authz = await requirePermission("payroll.read");
+  await requireFeatureEnabled(authz.user.orgId, "payroll");
+  const t = await getTranslations("payroll.yearEnd");
   // The picker list AND the default come from the installed packs (their
   // current tax year and declared editions) and the org's own payroll data —
   // never the calendar year, which hides a fiscal pack's posted year (AU
   // September posts to the next calendar year). The first offered year is the
   // default: the pack's current tax year.
-  const today = await businessToday(authz.user.orgId)
-  const years = await orgFilingYearOptions(authz.user.orgId, today)
-  const requested = Number(pickString(sp.year))
-  const year = Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : years[0]!
+  const today = await businessToday(authz.user.orgId);
+  const years = await orgFilingYearOptions(authz.user.orgId, today);
+  const requested = Number(pickString(sp.year));
+  const year =
+    Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : years[0]!;
 
   // Year-end shows ANNUAL and QUARTERLY returns only. Separation documents
   // (the ROE, a P45) are due per interruption of earnings — within days of
@@ -94,37 +95,38 @@ export async function loadYearEnd(
   // The same population guard the JSON route applies: a restricted caller
   // whose scope excludes any row of the year's population gets the route's
   // not-found answer here too, never a rendered slip.
-  const filings = await scopedYearEndFilings(authz, year)
-  if (!filings) notFound()
+  const filings = await scopedYearEndFilings(authz, year);
+  if (!filings) notFound();
   const sections = filings.filter(
-    (filing) => filing.cadence !== 'separation' && (filing.installed || filing.data.rows.length > 0),
-  )
+    (filing) =>
+      filing.cadence !== "separation" && (filing.installed || filing.data.rows.length > 0),
+  );
 
-  const moduleTabs = await groupTabs('payroll', '/payroll/year-end', { orgId: authz.user.orgId })
+  const moduleTabs = await groupTabs("payroll", "/payroll/year-end", { orgId: authz.user.orgId });
 
   return {
-    title: `${t('title')} ${year}`,
-    description: t('description'),
+    title: `${t("title")} ${year}`,
+    description: t("description"),
     viewTabs: moduleTabs,
     // Filing is a statutory act (payroll.run): a read-only caller reads
     // every filing but is never offered the download, the record-as-filed
     // act, or any correction. The routes refuse all three; the workspace
     // gates them so they are never offered.
-    workspace: { year, years, sections, canFile: can(authz, 'payroll.run') },
-  }
+    workspace: { year, years, sections, canFile: can(authz, "payroll.run") },
+  };
 }
 
-const f = ref<YearEndData>()
+const f = ref<YearEndData>();
 
 export function yearEndSpec(_data: YearEndData): PageSpec {
   return page({
-    route: '/payroll/year-end',
-    layout: 'list',
+    route: "/payroll/year-end",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actions: [widget('module-home-tabs', { tabs: _data.viewTabs })],
+        title: f("title"),
+        description: f("description"),
+        actions: [widget("module-home-tabs", { tabs: _data.viewTabs })],
       }),
     ],
     body: [
@@ -135,12 +137,12 @@ export function yearEndSpec(_data: YearEndData): PageSpec {
       // conditional pair; the spec only names where it lives. The empty
       // state (no declared filings) lives inside the component, not as a
       // negated conditional pair of blocks.
-      widgetBlock('year-end-workspace', {
-        year: f('workspace.year'),
-        years: f('workspace.years'),
-        sections: f('workspace.sections'),
-        canFile: f('workspace.canFile'),
+      widgetBlock("year-end-workspace", {
+        year: f("workspace.year"),
+        years: f("workspace.years"),
+        sections: f("workspace.sections"),
+        canFile: f("workspace.canFile"),
       }),
     ],
-  })
+  });
 }

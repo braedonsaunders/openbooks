@@ -1,4 +1,4 @@
-export type ItemsWorkspaceTab = 'catalog' | 'rate-books' | 'families'
+export type ItemsWorkspaceTab = "catalog" | "rate-books" | "families";
 
 /**
  * One route strip for the item catalog, rate books, and product families.
@@ -14,24 +14,28 @@ export function itemsWorkspaceTabs({
   showRateBooks,
   showFamilies,
 }: {
-  active: ItemsWorkspaceTab
-  catalogLabel: string
-  rateBooksLabel: string
-  familiesLabel: string
-  showRateBooks: boolean
-  showFamilies: boolean
+  active: ItemsWorkspaceTab;
+  catalogLabel: string;
+  rateBooksLabel: string;
+  familiesLabel: string;
+  showRateBooks: boolean;
+  showFamilies: boolean;
 }): { href: string; label: string; active: boolean }[] {
-  const catalog = { href: '/items', label: catalogLabel, active: active === 'catalog' }
+  const catalog = { href: "/items", label: catalogLabel, active: active === "catalog" };
   const tabs = [
     ...(showRateBooks
       ? [
           catalog,
-          { href: '/items?view=rate-books', label: rateBooksLabel, active: active === 'rate-books' },
+          {
+            href: "/items?view=rate-books",
+            label: rateBooksLabel,
+            active: active === "rate-books",
+          },
         ]
       : []),
     ...(showFamilies
-      ? [{ href: '/items/families', label: familiesLabel, active: active === 'families' }]
+      ? [{ href: "/items/families", label: familiesLabel, active: active === "families" }]
       : []),
-  ]
-  return tabs.length === 1 ? [catalog, ...tabs] : tabs
+  ];
+  return tabs.length === 1 ? [catalog, ...tabs] : tabs;
 }

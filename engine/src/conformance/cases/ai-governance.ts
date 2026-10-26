@@ -62,9 +62,7 @@ export const AI_GOVERNANCE_CONTROL_CASES: readonly ControlCase[] = [
     tier: "computation",
     assertion:
       "All six registry capabilities carry a non-empty subject notice (the one line shown wherever the output appears, stating what the AI did and that a human decided) and a prompt line stating their autonomy — a capability with no notice cannot ship silently.",
-    facts: [
-      "The six code-registry capabilities with their notices and prompt lines.",
-    ],
+    facts: ["The six code-registry capabilities with their notices and prompt lines."],
     expected: {
       values: {
         capabilities: "6",
@@ -130,7 +128,8 @@ export const AI_GOVERNANCE_CONTROL_CASES: readonly ControlCase[] = [
         deleteRefused = "true";
       }
       const rows = await db.execute<{ outcome: string }>(
-        sql`select outcome from ai_decisions where id = ${id}::uuid`, "objects",
+        sql`select outcome from ai_decisions where id = ${id}::uuid`,
+        "objects",
       );
       return {
         values: {

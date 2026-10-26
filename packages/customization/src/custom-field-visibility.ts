@@ -25,34 +25,43 @@ export interface CustomFieldVisibilityDef {
 }
 
 type CustomFieldAudience =
-  | { kind: 'open' }
-  | { kind: 'roles'; roles: readonly string[] }
-  | { kind: 'managers' };
+  { kind: "open" } | { kind: "roles"; roles: readonly string[] } | { kind: "managers" };
 
 export function customFieldAudience(def: CustomFieldVisibilityDef): CustomFieldAudience {
   const config = def.config;
-  if (config === null || config === undefined || config.allowedRoles === undefined) return { kind: 'open' };
+  if (config === null || config === undefined || config.allowedRoles === undefined)
+    return { kind: "open" };
   const roles = config.allowedRoles;
-  if (!Array.isArray(roles)) return { kind: 'managers' };
-  if (roles.length === 0) return { kind: 'open' };
-  if (roles.some((role) => typeof role !== 'string' || role.trim() === '')) return { kind: 'managers' };
-  return { kind: 'roles', roles: roles as string[] };
+  if (!Array.isArray(roles)) return { kind: "managers" };
+  if (roles.length === 0) return { kind: "open" };
+  if (roles.some((role) => typeof role !== "string" || role.trim() === ""))
+    return { kind: "managers" };
+  return { kind: "roles", roles: roles as string[] };
 }
 
-export function customFieldVisible(def: CustomFieldVisibilityDef, viewer: CustomFieldViewer): boolean {
+export function customFieldVisible(
+  def: CustomFieldVisibilityDef,
+  viewer: CustomFieldViewer,
+): boolean {
   if (viewer.canManageCustomFields) return true;
   const audience = customFieldAudience(def);
-  if (audience.kind === 'open') return true;
-  if (audience.kind === 'managers') return false;
+  if (audience.kind === "open") return true;
+  if (audience.kind === "managers") return false;
   return audience.roles.some((role) => viewer.roleKeys.includes(role));
 }
 
-export function visibleCustomFieldDefs<T extends CustomFieldVisibilityDef>(defs: readonly T[], viewer: CustomFieldViewer): T[] {
+export function visibleCustomFieldDefs<T extends CustomFieldVisibilityDef>(
+  defs: readonly T[],
+  viewer: CustomFieldViewer,
+): T[] {
   return defs.filter((def) => customFieldVisible(def, viewer));
 }
 
 /** Keys of the definitions the viewer cannot see. Unknown keys are not listed. */
-export function hiddenCustomFieldKeys(defs: readonly CustomFieldVisibilityDef[], viewer: CustomFieldViewer): Set<string> {
+export function hiddenCustomFieldKeys(
+  defs: readonly CustomFieldVisibilityDef[],
+  viewer: CustomFieldViewer,
+): Set<string> {
   return new Set(defs.filter((def) => !customFieldVisible(def, viewer)).map((def) => def.key));
 }
 

@@ -1,9 +1,9 @@
-import 'server-only'
-import { sql, type SQL } from 'drizzle-orm'
+import "server-only";
+import { sql, type SQL } from "drizzle-orm";
 // Relative (not the bare workspace specifier): worktree node_modules resolves
 // bare @openbooks/* to the main checkout, so engine predicates must bind this
 // checkout by path — a bare import would scope reads by main's code.
-import { apOpenAccountScope as sharedApOpenAccountScope } from '@openbooks/engine/records/open-item-scopes'
+import { apOpenAccountScope as sharedApOpenAccountScope } from "@openbooks/engine/records/open-item-scopes";
 
 /**
  * The one shared answer to "which ACCOUNTS carry open payables/receivables"
@@ -31,7 +31,7 @@ import { apOpenAccountScope as sharedApOpenAccountScope } from '@openbooks/engin
  * agent can never disagree on which accounts carry payables.
  */
 export function apOpenAccountScope(accounts: SQL, orgId: string): SQL {
-  return sharedApOpenAccountScope(accounts, orgId)
+  return sharedApOpenAccountScope(accounts, orgId);
 }
 
 /**
@@ -41,7 +41,7 @@ export function apOpenAccountScope(accounts: SQL, orgId: string): SQL {
  * derive from one module instead of one side being a bare literal.
  */
 export function arOpenAccountScope(accounts: SQL): SQL {
-  return sql`(${accounts}.type = 'asset_receivable')`
+  return sql`(${accounts}.type = 'asset_receivable')`;
 }
 
 /**
@@ -55,5 +55,5 @@ export function arOpenAccountScope(accounts: SQL): SQL {
  * asset_receivable account still counts, exactly as before.
  */
 export function arResidualAccountScope(accounts: SQL, orgId: string): SQL {
-  return sql`(${accounts}.type = 'asset_receivable' and ${accounts}.id is distinct from (select (settings->'controlAccounts'->>'employeeReceivable')::uuid from orgs where id = ${orgId}))`
+  return sql`(${accounts}.type = 'asset_receivable' and ${accounts}.id is distinct from (select (settings->'controlAccounts'->>'employeeReceivable')::uuid from orgs where id = ${orgId}))`;
 }

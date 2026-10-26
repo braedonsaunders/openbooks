@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
-import { cancelMaintenanceRecord, recordMaintenance } from "@openbooks/engine/assets/asset-maintenance";
+import {
+  cancelMaintenanceRecord,
+  recordMaintenance,
+} from "@openbooks/engine/assets/asset-maintenance";
 import { calendarDate, id, optionalMoney, reasonText, scopeOf } from "../../_depth";
 
 export const runtime = "nodejs";
@@ -34,11 +37,19 @@ export const POST = defineRoute({
   invalidBodyStatus: 422,
   handler: async ({ authz: gate, body: input }) => {
     if (input.action === "cancel") {
-      await cancelMaintenanceRecord(gate.user.orgId, { recordId: input.recordId, reason: input.reason, actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate) });
+      await cancelMaintenanceRecord(gate.user.orgId, {
+        recordId: input.recordId,
+        reason: input.reason,
+        actorId: gate.user.id,
+        allowedSubsidiaryIds: scopeOf(gate),
+      });
       return NextResponse.json({ ok: true });
     }
     const { action: _action, ...record } = input;
-    const created = await recordMaintenance(gate.user.orgId, record, { actorId: gate.user.id, allowedSubsidiaryIds: scopeOf(gate) });
+    const created = await recordMaintenance(gate.user.orgId, record, {
+      actorId: gate.user.id,
+      allowedSubsidiaryIds: scopeOf(gate),
+    });
     return NextResponse.json(created, { status: 201 });
   },
 });

@@ -844,7 +844,10 @@ export const PERMISSION_GROUPS: {
       // HR-14 begin: appended after construction; group order pins admin,
       // self, team, construction, then certifications keys.
       { key: "hrm.certifications.read", labelKey: permissionLabelKey("hrm.certifications.read") },
-      { key: "hrm.certifications.manage", labelKey: permissionLabelKey("hrm.certifications.manage") },
+      {
+        key: "hrm.certifications.manage",
+        labelKey: permissionLabelKey("hrm.certifications.manage"),
+      },
       { key: "hrm.shifts.read", labelKey: permissionLabelKey("hrm.shifts.read") },
       { key: "hrm.shifts.manage", labelKey: permissionLabelKey("hrm.shifts.manage") },
       { key: "hrm.shifts.approve", labelKey: permissionLabelKey("hrm.shifts.approve") },
@@ -965,11 +968,17 @@ export const PERMISSION_GROUPS: {
     key: "admin",
     labelKey: "permissions.groups.admin",
     permissions: [
-      { key: "admin.custom_fields.manage", labelKey: permissionLabelKey("admin.custom_fields.manage") },
+      {
+        key: "admin.custom_fields.manage",
+        labelKey: permissionLabelKey("admin.custom_fields.manage"),
+      },
       { key: "admin.users.manage", labelKey: permissionLabelKey("admin.users.manage") },
       { key: "admin.roles.manage", labelKey: permissionLabelKey("admin.roles.manage") },
       { key: "admin.nav.manage", labelKey: permissionLabelKey("admin.nav.manage") },
-      { key: "admin.customization.manage", labelKey: permissionLabelKey("admin.customization.manage") },
+      {
+        key: "admin.customization.manage",
+        labelKey: permissionLabelKey("admin.customization.manage"),
+      },
       { key: "admin.setup.manage", labelKey: permissionLabelKey("admin.setup.manage") },
       { key: "admin.audit.read", labelKey: permissionLabelKey("admin.audit.read") },
       { key: "admin.ai.manage", labelKey: permissionLabelKey("admin.ai.manage") },
@@ -992,15 +1001,23 @@ export const PERMISSION_GROUPS: {
  * includes instead of discovering that it is inert on its own.
  */
 export type PermissionImplication = { key: CataloguePermission; scope: "all" | "own" };
-export const PERMISSION_IMPLICATIONS: Partial<Record<CataloguePermission, readonly PermissionImplication[]>> = {
+export const PERMISSION_IMPLICATIONS: Partial<
+  Record<CataloguePermission, readonly PermissionImplication[]>
+> = {
   // Entering anyone's time is supervisory and needs to read what it edits.
   "time.manage": [{ key: "time.read", scope: "all" }],
   // Self-service time reads, enters and submits the holder's own weeks.
-  "time.self": [{ key: "time.read", scope: "own" }, { key: "time.manage", scope: "own" }],
+  "time.self": [
+    { key: "time.read", scope: "own" },
+    { key: "time.manage", scope: "own" },
+  ],
   // Clocking in shows the holder's own resulting timesheets, read-only.
   "time.clock": [{ key: "time.read", scope: "own" }],
   // Self-service expenses read, enter and submit the holder's own reports.
-  "expenses.self": [{ key: "expenses.read", scope: "own" }, { key: "expenses.create", scope: "own" }],
+  "expenses.self": [
+    { key: "expenses.read", scope: "own" },
+    { key: "expenses.create", scope: "own" },
+  ],
   // Managing and dispatching service work read every service record in scope.
   "service.manage": [{ key: "service.read", scope: "all" }],
   "service.dispatch": [{ key: "service.read", scope: "all" }],
@@ -1014,10 +1031,18 @@ export const PERMISSION_IMPLICATIONS: Partial<Record<CataloguePermission, readon
  * key implying it over the holder's own records. Order is stable (catalogue
  * order) so callers can pick the first grant an actor holds.
  */
-export function grantsConferring(permission: CataloguePermission, scope: "all" | "own"): CataloguePermission[] {
+export function grantsConferring(
+  permission: CataloguePermission,
+  scope: "all" | "own",
+): CataloguePermission[] {
   const out: CataloguePermission[] = scope === "all" ? [permission] : [];
   for (const key of PERMISSION_CATALOGUE) {
-    if (PERMISSION_IMPLICATIONS[key]?.some((implied) => implied.key === permission && implied.scope === scope)) out.push(key);
+    if (
+      PERMISSION_IMPLICATIONS[key]?.some(
+        (implied) => implied.key === permission && implied.scope === scope,
+      )
+    )
+      out.push(key);
   }
   return out;
 }
@@ -1051,7 +1076,9 @@ export type EmployeeSelfServiceBaseline = (typeof EMPLOYEE_SELF_SERVICE_BASELINE
  * grants count (`*` or `hrm.*` covers every baseline key), so a role that
  * holds everything is never reported as missing self-service.
  */
-export function roleHasSelfServiceBaseline(permissions: ReadonlySet<string> | readonly string[]): boolean {
+export function roleHasSelfServiceBaseline(
+  permissions: ReadonlySet<string> | readonly string[],
+): boolean {
   const set = new Set(permissions);
   return EMPLOYEE_SELF_SERVICE_BASELINE.every((key) => permissionSetCovers(set, key));
 }
@@ -1144,7 +1171,8 @@ export const ESTIMATE_PERMISSIONS = {
  * receivables on its own.
  */
 export function estimateConversionPermission(targetKind: string): CataloguePermission {
-  if (targetKind === "customer_invoice" || targetKind === "sales_order") return ESTIMATE_PERMISSIONS.downstream;
+  if (targetKind === "customer_invoice" || targetKind === "sales_order")
+    return ESTIMATE_PERMISSIONS.downstream;
   return ESTIMATE_PERMISSIONS.create;
 }
 
@@ -1447,7 +1475,18 @@ export const BUILT_IN_ROLES: Record<
     name: "Production",
     description:
       "Manages manufacturing masters and shop-floor work, and posts inventory movements. Files their own expense reports. Cannot reverse inventory postings or see the ledger.",
-    permissions: ["manufacturing.read", "manufacturing.manage", "items.read", "items.post", "time.self", "time.clock", "expenses.self", "hrm.self.read", "hrm.self.request", "hrm.leave.request"],
+    permissions: [
+      "manufacturing.read",
+      "manufacturing.manage",
+      "items.read",
+      "items.post",
+      "time.self",
+      "time.clock",
+      "expenses.self",
+      "hrm.self.read",
+      "hrm.self.request",
+      "hrm.leave.request",
+    ],
   },
   approver: {
     name: "Approver",
@@ -1521,23 +1560,92 @@ export const BUILT_IN_ROLES: Record<
     name: "Viewer",
     description:
       "Read-only access to the ledger, subledgers, reports and insights. Cannot create, change, post or pay transactions.",
-    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "estimates.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "intercompany.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "cash_sales.read", "amortization.read", "equity.read"],
+    permissions: [
+      "gl.read",
+      "close.read",
+      "ap.read",
+      "purchase_orders.read",
+      "ar.read",
+      "estimates.read",
+      "usage.read",
+      "payment_methods.read",
+      "contract_costs.read",
+      "resourcing.read",
+      "retainers.read",
+      "reports.read",
+      "budgets.read",
+      "allocations.read",
+      "intercompany.read",
+      "nonprofit.report",
+      "funds.read",
+      "grants.read",
+      "encumbrances.read",
+      "insights.read",
+      "records.read",
+      "items.read",
+      "assets.read",
+      "time.read",
+      "time.clock",
+      "compliance.read",
+      "assistant.use",
+      "documents.read",
+      "feedback.use",
+      "data.export",
+      "apps.use",
+      "hrm.self.read",
+      "hrm.self.request",
+      "hrm.leave.request",
+      "cash_sales.read",
+      "amortization.read",
+      "equity.read",
+    ],
   },
   sales_manager: {
     name: "Sales Manager",
     description:
       "Runs the sales team: accounts, activities, opportunities, quotas and forecasts, and drafts invoices and cash sales. Files their own expense reports. Cannot post, collect payments or see the ledger.",
     permissions: [
-      "crm.accounts.read", "crm.accounts.create", "crm.accounts.manage", "crm.accounts.assign",
-      "crm.activities.read", "crm.activities.manage",
-      "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
-      "crm.forecasts.read", "crm.forecasts.manage", "crm.forecasts.override", "crm.setup.manage",
-      "parties.read", "parties.manage", "ar.read", "ar.create", "estimates.read", "estimates.create", "estimates.issue", "stored_value.read", "stored_value.manage", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
+      "crm.accounts.read",
+      "crm.accounts.create",
+      "crm.accounts.manage",
+      "crm.accounts.assign",
+      "crm.activities.read",
+      "crm.activities.manage",
+      "crm.opportunities.read",
+      "crm.opportunities.manage",
+      "crm.opportunities.close",
+      "crm.forecasts.read",
+      "crm.forecasts.manage",
+      "crm.forecasts.override",
+      "crm.setup.manage",
+      "parties.read",
+      "parties.manage",
+      "ar.read",
+      "ar.create",
+      "estimates.read",
+      "estimates.create",
+      "estimates.issue",
+      "stored_value.read",
+      "stored_value.manage",
+      "usage.read",
+      "usage.manage",
+      "usage.bill",
+      "payment_methods.read",
+      "items.read",
+      "reports.read",
       "channels.read",
-      "cash_sales.read", "cash_sales.create",
-      "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
+      "cash_sales.read",
+      "cash_sales.create",
+      "insights.read",
+      "documents.read",
+      "feedback.use",
+      "data.export",
+      "data.import",
+      "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
-      "hrm.self.read", "hrm.self.request", "hrm.leave.request",
+      "hrm.self.read",
+      "hrm.self.request",
+      "hrm.leave.request",
       // HR-20 begin: self clock-in rides every employee role.
       "time.self",
       "time.clock",
@@ -1550,16 +1658,41 @@ export const BUILT_IN_ROLES: Record<
     description:
       "Works assigned accounts, activities, opportunities and personal forecasts, and drafts invoices and cash sales. Files their own expense reports. Cannot post, collect payments or see the ledger.",
     permissions: [
-      "crm.accounts.read", "crm.accounts.create", "crm.accounts.manage",
-      "crm.activities.read", "crm.activities.manage",
-      "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
-      "crm.forecasts.read", "crm.forecasts.manage",
-      "parties.read", "parties.manage", "ar.read", "ar.create", "estimates.read", "estimates.create", "estimates.issue", "stored_value.read", "usage.read", "usage.manage", "usage.bill", "payment_methods.read", "items.read", "reports.read",
+      "crm.accounts.read",
+      "crm.accounts.create",
+      "crm.accounts.manage",
+      "crm.activities.read",
+      "crm.activities.manage",
+      "crm.opportunities.read",
+      "crm.opportunities.manage",
+      "crm.opportunities.close",
+      "crm.forecasts.read",
+      "crm.forecasts.manage",
+      "parties.read",
+      "parties.manage",
+      "ar.read",
+      "ar.create",
+      "estimates.read",
+      "estimates.create",
+      "estimates.issue",
+      "stored_value.read",
+      "usage.read",
+      "usage.manage",
+      "usage.bill",
+      "payment_methods.read",
+      "items.read",
+      "reports.read",
       "channels.read",
-      "cash_sales.read", "cash_sales.create",
-      "documents.read", "feedback.use", "data.export", "assistant.use",
+      "cash_sales.read",
+      "cash_sales.create",
+      "documents.read",
+      "feedback.use",
+      "data.export",
+      "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
-      "hrm.self.read", "hrm.self.request", "hrm.leave.request",
+      "hrm.self.read",
+      "hrm.self.request",
+      "hrm.leave.request",
       // HR-20 begin: self clock-in rides every employee role.
       "time.self",
       "time.clock",
@@ -1575,10 +1708,22 @@ export const BUILT_IN_ROLES: Record<
     description:
       "Raises purchase orders and receives goods against them, with read access to vendors, items and payables. Files their own expense reports. Cannot post or pay bills, post inventory, or see banking or the ledger.",
     permissions: [
-      "purchase_orders.read", "purchase_orders.create", "goods_receipts.create",
-      "ap.read", "parties.read", "items.read", "reports.read",
-      "documents.read", "feedback.use", "assistant.use",
-      "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.self", "time.clock", "expenses.self",
+      "purchase_orders.read",
+      "purchase_orders.create",
+      "goods_receipts.create",
+      "ap.read",
+      "parties.read",
+      "items.read",
+      "reports.read",
+      "documents.read",
+      "feedback.use",
+      "assistant.use",
+      "hrm.self.read",
+      "hrm.self.request",
+      "hrm.leave.request",
+      "time.self",
+      "time.clock",
+      "expenses.self",
     ],
   },
   // Till operator: sells and refunds at the counter. Posting a paid-at-sale
@@ -1588,10 +1733,22 @@ export const BUILT_IN_ROLES: Record<
     description:
       "Rings up, posts and refunds cash sales at the till and the register, opens and closes the register drawer, drops till cash to the bank, and looks up gift card balances. Files their own expense reports. Cannot override prices, see invoices, banking or the ledger.",
     permissions: [
-      "cash_sales.read", "cash_sales.create", "cash_sales.post", "cash_sales.deposit",
-      "pos.sell", "pos.refund", "pos.drawer",
-      "stored_value.read", "items.read",
-      "feedback.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.self", "time.clock", "expenses.self",
+      "cash_sales.read",
+      "cash_sales.create",
+      "cash_sales.post",
+      "cash_sales.deposit",
+      "pos.sell",
+      "pos.refund",
+      "pos.drawer",
+      "stored_value.read",
+      "items.read",
+      "feedback.use",
+      "hrm.self.read",
+      "hrm.self.request",
+      "hrm.leave.request",
+      "time.self",
+      "time.clock",
+      "expenses.self",
     ],
   },
   // Project billing coordinator: time, project visibility and invoice drafts.
@@ -1602,11 +1759,27 @@ export const BUILT_IN_ROLES: Record<
     description:
       "Logs their own time, follows projects and drafts customer invoices for approval. Files their own expense reports. Cannot see coworkers' time, post invoices, take or make payments, or see banking or the ledger.",
     permissions: [
-      "projects.read", "time.self", "time.clock", "expenses.self",
-      "ar.read", "ar.create", "estimates.read", "estimates.create", "estimates.issue", "usage.read", "usage.manage", "usage.bill",
-      "parties.read", "items.read", "reports.read",
-      "documents.read", "feedback.use", "assistant.use",
-      "hrm.self.read", "hrm.self.request", "hrm.leave.request",
+      "projects.read",
+      "time.self",
+      "time.clock",
+      "expenses.self",
+      "ar.read",
+      "ar.create",
+      "estimates.read",
+      "estimates.create",
+      "estimates.issue",
+      "usage.read",
+      "usage.manage",
+      "usage.bill",
+      "parties.read",
+      "items.read",
+      "reports.read",
+      "documents.read",
+      "feedback.use",
+      "assistant.use",
+      "hrm.self.read",
+      "hrm.self.request",
+      "hrm.leave.request",
     ],
   },
   // Service dispatcher: takes service requests, quotes and prices jobs and
@@ -1617,12 +1790,24 @@ export const BUILT_IN_ROLES: Record<
     description:
       "Takes service requests, quotes and prices service jobs and agreements, and assigns and reschedules visits on dispatch boards. Logs their own time and files their own expense reports. Cannot invoice, take payments or see banking or the ledger.",
     permissions: [
-      "service.read", "service.manage", "service.dispatch",
-      "estimates.read", "estimates.create", "estimates.issue",
-      "parties.read", "items.read", "reports.read",
-      "time.self", "time.clock", "expenses.self",
-      "documents.read", "feedback.use", "assistant.use",
-      "hrm.self.read", "hrm.self.request", "hrm.leave.request",
+      "service.read",
+      "service.manage",
+      "service.dispatch",
+      "estimates.read",
+      "estimates.create",
+      "estimates.issue",
+      "parties.read",
+      "items.read",
+      "reports.read",
+      "time.self",
+      "time.clock",
+      "expenses.self",
+      "documents.read",
+      "feedback.use",
+      "assistant.use",
+      "hrm.self.read",
+      "hrm.self.request",
+      "hrm.leave.request",
     ],
   },
   // Field technician: works the visits booked on them from My visits.
@@ -1631,10 +1816,15 @@ export const BUILT_IN_ROLES: Record<
     description:
       "Sees and works only the service visits booked on them: updates their field status, records work notes, parts and labor, and collects the customer's signature. Logs their own time and files their own expense reports. Cannot see other technicians' visits, prices, invoices or the ledger.",
     permissions: [
-      "service.self", "items.read",
-      "time.self", "time.clock", "expenses.self",
+      "service.self",
+      "items.read",
+      "time.self",
+      "time.clock",
+      "expenses.self",
       "feedback.use",
-      "hrm.self.read", "hrm.self.request", "hrm.leave.request",
+      "hrm.self.read",
+      "hrm.self.request",
+      "hrm.leave.request",
     ],
   },
 };
@@ -1665,7 +1855,11 @@ export function permissionSetCovers(permissions: ReadonlySet<string>, perm: stri
  * survive), then every denied key — and everything under a wildcard deny —
  * is removed.
  */
-export function applyPermissionDenies(permissions: Set<string>, denies: string[], additionalKnownPermissions: readonly string[] = []): void {
+export function applyPermissionDenies(
+  permissions: Set<string>,
+  denies: string[],
+  additionalKnownPermissions: readonly string[] = [],
+): void {
   const catalogue: readonly string[] = [...PERMISSION_CATALOGUE, ...additionalKnownPermissions];
   const specificDenies = denies.filter((deny) => !deny.endsWith(".*"));
   // A full wildcard must be materialized before denies are applied. Leaving
@@ -1756,7 +1950,8 @@ export function resolveKeyScopeAuthority(
   if (scopeSet.size === 0) return null;
   const out = new Set<string>();
   for (const key of PERMISSION_CATALOGUE) {
-    if (permissionSetCovers(ownerPermissions, key) && permissionSetCovers(scopeSet, key)) out.add(key);
+    if (permissionSetCovers(ownerPermissions, key) && permissionSetCovers(scopeSet, key))
+      out.add(key);
   }
   return out;
 }

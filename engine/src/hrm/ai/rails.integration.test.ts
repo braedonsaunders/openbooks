@@ -12,7 +12,14 @@ import {
 import { seedPayrollProfile, seedPayrollSchedule } from "../../testing/fixtures.ts";
 import { payrollAnomalyFinalizeCheck } from "../../payroll/anomaly-finalize-gate.ts";
 import { createPayRun } from "../../payroll/run-lifecycle.ts";
-import { listDecisions, listDecisionsPage, logDecision, syncCapabilities, updateCapability, updateCapabilityForOrg } from "./governance.ts";
+import {
+  listDecisions,
+  listDecisionsPage,
+  logDecision,
+  syncCapabilities,
+  updateCapability,
+  updateCapabilityForOrg,
+} from "./governance.ts";
 import {
   checkPayrollFinalizeAllowed,
   flagsForEmployment,
@@ -52,8 +59,11 @@ async function grant(orgId: string, userId: string, permission: string): Promise
 }
 
 async function decisionCount(orgId: string): Promise<number> {
-  const rows = await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from ai_decisions where org_id = ${orgId}`, "objects");
+  const rows = await db.execute<{ n: string }>(
+    sql`
+    select count(*)::text as n from ai_decisions where org_id = ${orgId}`,
+    "objects",
+  );
   return Number(rows[0]?.n ?? 0);
 }
 
@@ -69,40 +79,67 @@ async function setup(): Promise<Harness> {
   return { org, adminId };
 }
 
-
-test("native workforce policy provisioning retains saved thresholds and refuses missing authority", { skip: !DB }, async () => {
-  const { org, adminId } = await setup();
-  try {
-    await ensureAiRailsSettingsForOrg(org.orgId, adminId);
-    await db.execute(sql`update ai_rails_settings set z_threshold=4.25, retro_threshold=725, bias_terms=array['sample phrase']::text[], review_months=6 where org_id=${org.orgId}`);
-    await ensureAiRailsSettingsForOrg(org.orgId, adminId);
-    const saved = (await db.execute<{ z: string; retro: string; terms: string[]; months: number }>(sql`
-      select z_threshold::text as z,retro_threshold::text as retro,bias_terms as terms,review_months as months from ai_rails_settings where org_id=${org.orgId}`, "objects"))[0]!;
-    assert.equal(Number(saved.z), 4.25);
-    assert.equal(Number(saved.retro), 725);
-    assert.deepEqual(saved.terms, ['sample phrase']);
-    assert.equal(saved.months, 6);
-    const denied = await createScratchUser(org.orgId, 'Policy reader', 'policy_reader');
-    await assert.rejects(ensureAiRailsSettingsForOrg(org.orgId, denied), (error) => error instanceof ScopeNotFoundError);
-    const unchanged = (await db.execute(sql`select z_threshold::text as z,retro_threshold::text as retro,bias_terms as terms,review_months as months from ai_rails_settings where org_id=${org.orgId}`, "objects"))[0];
-    assert.deepEqual(unchanged, saved);
-  } finally { await dropScratchOrg(org.orgId); }
-});
+test(
+  "native workforce policy provisioning retains saved thresholds and refuses missing authority",
+  { skip: !DB },
+  async () => {
+    const { org, adminId } = await setup();
+    try {
+      await ensureAiRailsSettingsForOrg(org.orgId, adminId);
+      await db.execute(
+        sql`update ai_rails_settings set z_threshold=4.25, retro_threshold=725, bias_terms=array['sample phrase']::text[], review_months=6 where org_id=${org.orgId}`,
+      );
+      await ensureAiRailsSettingsForOrg(org.orgId, adminId);
+      const saved = (
+        await db.execute<{ z: string; retro: string; terms: string[]; months: number }>(
+          sql`
+      select z_threshold::text as z,retro_threshold::text as retro,bias_terms as terms,review_months as months from ai_rails_settings where org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(Number(saved.z), 4.25);
+      assert.equal(Number(saved.retro), 725);
+      assert.deepEqual(saved.terms, ["sample phrase"]);
+      assert.equal(saved.months, 6);
+      const denied = await createScratchUser(org.orgId, "Policy reader", "policy_reader");
+      await assert.rejects(
+        ensureAiRailsSettingsForOrg(org.orgId, denied),
+        (error) => error instanceof ScopeNotFoundError,
+      );
+      const unchanged = (
+        await db.execute(
+          sql`select z_threshold::text as z,retro_threshold::text as retro,bias_terms as terms,review_months as months from ai_rails_settings where org_id=${org.orgId}`,
+          "objects",
+        )
+      )[0];
+      assert.deepEqual(unchanged, saved);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("migration tables exist with org isolation RLS", { skip: !DB }, async () => {
   const { org } = await setup();
   try {
     for (const table of [
-      "ai_capabilities", "ai_decisions", "payroll_anomaly_flags",
-      "anomaly_baselines", "nl_report_drafts", "ai_rails_settings",
+      "ai_capabilities",
+      "ai_decisions",
+      "payroll_anomaly_flags",
+      "anomaly_baselines",
+      "nl_report_drafts",
+      "ai_rails_settings",
     ]) {
-      const rows = await db.execute<{ rls: boolean; policy: boolean }>(sql`
+      const rows = await db.execute<{ rls: boolean; policy: boolean }>(
+        sql`
         select c.relrowsecurity as rls,
                exists(select 1 from pg_policies
                        where schemaname = 'public' and tablename = ${table}
                          and policyname = 'org_isolation') as policy
           from pg_class c join pg_namespace n on n.oid = c.relnamespace
-         where n.nspname = 'public' and c.relname = ${table}`, "objects");
+         where n.nspname = 'public' and c.relname = ${table}`,
+        "objects",
+      );
       assert.equal(rows[0]?.rls, true, `${table} must force RLS`);
       assert.equal(rows[0]?.policy, true, `${table} needs the org_isolation policy`);
     }
@@ -120,23 +157,35 @@ test("migration tables exist with org isolation RLS", { skip: !DB }, async () =>
  * Same matcher as scheduling/outbox.integration.test.ts.
  */
 async function assertRejectsWithCause(promise: Promise<unknown>, pattern: RegExp): Promise<void> {
-  await assert.rejects(promise, (error: unknown) => {
-    let current: unknown = error;
-    while (current instanceof Error) {
-      if (pattern.test(current.message)) return true;
-      current = (current as { cause?: unknown }).cause;
-    }
-    return false;
-  }, `no rejection matching ${pattern}`);
+  await assert.rejects(
+    promise,
+    (error: unknown) => {
+      let current: unknown = error;
+      while (current instanceof Error) {
+        if (pattern.test(current.message)) return true;
+        current = (current as { cause?: unknown }).cause;
+      }
+      return false;
+    },
+    `no rejection matching ${pattern}`,
+  );
 }
 
 test("ai_decisions is append-only: UPDATE and DELETE refuse", { skip: !DB }, async () => {
   const { org, adminId } = await setup();
   try {
     const id = await logDecision(db, {
-      orgId: org.orgId, actorId: adminId, capabilityKey: "hrmExplainPay",
-      subjectKind: "employment", subjectId: null, input: "in", output: "out",
-      outputSummary: "append-only probe", sources: [], outcome: "shown", model: "test",
+      orgId: org.orgId,
+      actorId: adminId,
+      capabilityKey: "hrmExplainPay",
+      subjectKind: "employment",
+      subjectId: null,
+      input: "in",
+      output: "out",
+      outputSummary: "append-only probe",
+      sources: [],
+      outcome: "shown",
+      model: "test",
     });
     await assertRejectsWithCause(
       db.execute(sql`update ai_decisions set outcome = 'rejected' where id = ${id}::uuid`),
@@ -146,8 +195,11 @@ test("ai_decisions is append-only: UPDATE and DELETE refuse", { skip: !DB }, asy
       db.execute(sql`delete from ai_decisions where id = ${id}::uuid`),
       /append-only/,
     );
-    const rows = await db.execute<{ outcome: string }>(sql`
-      select outcome from ai_decisions where id = ${id}::uuid`, "objects");
+    const rows = await db.execute<{ outcome: string }>(
+      sql`
+      select outcome from ai_decisions where id = ${id}::uuid`,
+      "objects",
+    );
     assert.equal(rows[0]?.outcome, "shown");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -162,38 +214,62 @@ test("capability sync seeds six rows; autonomy moves down only", { skip: !DB }, 
     // Re-sync preserves the org's lowered autonomy (never overwrites).
     const beforeDecisions = await decisionCount(org.orgId);
     const lowered = await updateCapabilityForOrg({
-      orgId: org.orgId, actorId: adminId, key: "hrmPayrollAnomalies", autonomy: "read_only",
+      orgId: org.orgId,
+      actorId: adminId,
+      key: "hrmPayrollAnomalies",
+      autonomy: "read_only",
     });
     assert.equal(lowered.autonomy, "read_only");
-    assert.equal(await decisionCount(org.orgId), beforeDecisions + 1, "each committed capability change has its governance row");
+    assert.equal(
+      await decisionCount(org.orgId),
+      beforeDecisions + 1,
+      "each committed capability change has its governance row",
+    );
     const reseeded = await syncCapabilities(db, org.orgId, adminId);
     assert.deepEqual(reseeded, []);
-    const rows = await db.execute<{ autonomy: string }>(sql`
+    const rows = await db.execute<{ autonomy: string }>(
+      sql`
       select autonomy from ai_capabilities
-       where org_id = ${org.orgId} and key = 'hrmPayrollAnomalies'`, "objects");
+       where org_id = ${org.orgId} and key = 'hrmPayrollAnomalies'`,
+      "objects",
+    );
     assert.equal(rows[0]?.autonomy, "read_only");
     // The rule is a CEILING, not a ratchet. hrmPayrollAnomalies declares
     // maxAutonomy "propose", so an org that lowered to read_only may
     // restore it to propose -- otherwise one mistaken click would cost
     // the capability permanently with no way back.
     const restored = await updateCapability(db, {
-      orgId: org.orgId, actorId: adminId, key: "hrmPayrollAnomalies", autonomy: "propose",
+      orgId: org.orgId,
+      actorId: adminId,
+      key: "hrmPayrollAnomalies",
+      autonomy: "propose",
     });
     assert.equal(restored.autonomy, "propose");
     // Above the ceiling refuses by name. This is the assertion that
     // matters: the code sets the maximum and the org cannot exceed it.
     await assert.rejects(
       updateCapability(db, {
-        orgId: org.orgId, actorId: adminId, key: "hrmPayrollAnomalies", autonomy: "act_with_confirmation",
+        orgId: org.orgId,
+        actorId: adminId,
+        key: "hrmPayrollAnomalies",
+        autonomy: "act_with_confirmation",
       }),
       /cannot exceed code maximum "propose"/,
     );
     await updateCapability(db, {
-      orgId: org.orgId, actorId: adminId, key: "hrmPayrollAnomalies", autonomy: "read_only",
+      orgId: org.orgId,
+      actorId: adminId,
+      key: "hrmPayrollAnomalies",
+      autonomy: "read_only",
     });
     // Unknown capability refuses with the remedy.
     await assert.rejects(
-      updateCapability(db, { orgId: org.orgId, actorId: adminId, key: "hrmTimeTravel", autonomy: "read_only" }),
+      updateCapability(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        key: "hrmTimeTravel",
+        autonomy: "read_only",
+      }),
       /not in the capability registry/,
     );
   } finally {
@@ -201,15 +277,26 @@ test("capability sync seeds six rows; autonomy moves down only", { skip: !DB }, 
   }
 });
 
-async function seedTerminatedWithInput(orgId: string, decidedBy: string): Promise<{
-  employmentId: string; documentId: string; employeePartyId: string; subsidiaryId: string;
+async function seedTerminatedWithInput(
+  orgId: string,
+  decidedBy: string,
+): Promise<{
+  employmentId: string;
+  documentId: string;
+  employeePartyId: string;
+  subsidiaryId: string;
 }> {
   const workerPartyId = randomUUID();
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
     values (${workerPartyId}, ${orgId}, 'person', 'Terminated Worker', true, '{}'::jsonb)`);
-  const subsidiary = (await db.execute<{ id: string }>(sql`
-    select id::text as id from subsidiaries where org_id = ${orgId} limit 1`, "objects"))[0]?.id;
+  const subsidiary = (
+    await db.execute<{ id: string }>(
+      sql`
+    select id::text as id from subsidiaries where org_id = ${orgId} limit 1`,
+      "objects",
+    )
+  )[0]?.id;
   assert.ok(subsidiary, "scratch org needs a subsidiary");
   const employmentId = randomUUID();
   await db.execute(sql`
@@ -240,21 +327,36 @@ async function seedTerminatedWithInput(orgId: string, decidedBy: string): Promis
   await db.execute(sql`
     insert into hrm_payroll_inputs (org_id, employee_party_id, employment_id, leave_type_id, kind, absence_date, hours, source_leave_request_id, status)
     values (${orgId}, ${workerPartyId}, ${employmentId}, ${leaveType}, 'payout', '2026-09-10', 8, ${requestId}, 'pending')`);
-  const seeded = (await db.execute<{ n: string }>(sql`
+  const seeded = (
+    await db.execute<{ n: string }>(
+      sql`
     select count(*)::text as n from hrm_payroll_inputs
-     where org_id = ${orgId} and employment_id = ${employmentId} and status = 'pending'`, "objects"))[0]?.n;
+     where org_id = ${orgId} and employment_id = ${employmentId} and status = 'pending'`,
+      "objects",
+    )
+  )[0]?.n;
   assert.equal(seeded, "1", "the fixture must actually leave a pending pay input behind");
   const scheduleId = randomUUID();
   await seedPayrollSchedule(orgId, scheduleId, decidedBy, {
-    name: "Anomaly gate schedule", frequency: "monthly", periodsPerYear: 12,
-    anchorPeriodEnd: "2026-09-30", payDateOffsetDays: 5, subsidiaryId: subsidiary,
+    name: "Anomaly gate schedule",
+    frequency: "monthly",
+    periodsPerYear: 12,
+    anchorPeriodEnd: "2026-09-30",
+    payDateOffsetDays: 5,
+    subsidiaryId: subsidiary,
   });
   await seedPayrollProfile(orgId, workerPartyId, employmentId, scheduleId, decidedBy, {
-    country: "CA", province: "ON", payBasis: "hourly",
+    country: "CA",
+    province: "ON",
+    payBasis: "hourly",
   });
   const run = await createPayRun({
-    orgId, actorId: decidedBy, payScheduleId: scheduleId,
-    periodStart: "2026-09-01", periodEnd: "2026-09-30", payDate: "2026-10-05",
+    orgId,
+    actorId: decidedBy,
+    payScheduleId: scheduleId,
+    periodStart: "2026-09-01",
+    periodEnd: "2026-09-30",
+    payDate: "2026-10-05",
   });
   await db.execute(sql`
     insert into pay_stubs
@@ -262,538 +364,841 @@ async function seedTerminatedWithInput(orgId: string, decidedBy: string): Promis
        periods_per_year, pay_date, tax_year, currency_code, created_by, updated_by)
     values ('CA', 'calculation', ${orgId}, ${run.documentId}, ${workerPartyId}, ${employmentId}, 'ON',
        12, '2026-10-05', 2026, 'CAD', ${decidedBy}, ${decidedBy})`);
-  return { employmentId, documentId: run.documentId, employeePartyId: workerPartyId, subsidiaryId: subsidiary };
+  return {
+    employmentId,
+    documentId: run.documentId,
+    employeePartyId: workerPartyId,
+    subsidiaryId: subsidiary,
+  };
 }
 
-test("scan flags terminated-with-pay as block; rescan is idempotent; finalize refuses", { skip: !DB }, async () => {
-  const { org, adminId } = await setup();
-  try {
-    const { employmentId, documentId, employeePartyId, subsidiaryId } = await seedTerminatedWithInput(org.orgId, adminId);
-    const before = await decisionCount(org.orgId);
-    const first = await scanAnomalies(db, {
-      orgId: org.orgId, actorId: adminId, periodFrom: "2026-09-01", periodTo: "2026-09-30",
-    });
-    assert.ok(first.created >= 1, "terminated employment with pending inputs must flag");
-    const flags = await listFlags(db, {
-      orgId: org.orgId, actorId: adminId,
-      periodFrom: "2026-09-01", periodTo: "2026-09-30", kind: "terminated_with_pay",
-    });
-    assert.equal(flags.length, 1);
-    assert.equal(flags[0]?.severity, "block");
-    assert.equal(flags[0]?.employmentId, employmentId);
-    assert.ok((flags[0]?.explanation ?? "").includes("2026-08-15"));
-    assert.ok((await decisionCount(org.orgId)) > before);
+test(
+  "scan flags terminated-with-pay as block; rescan is idempotent; finalize refuses",
+  { skip: !DB },
+  async () => {
+    const { org, adminId } = await setup();
+    try {
+      const { employmentId, documentId, employeePartyId, subsidiaryId } =
+        await seedTerminatedWithInput(org.orgId, adminId);
+      const before = await decisionCount(org.orgId);
+      const first = await scanAnomalies(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        periodFrom: "2026-09-01",
+        periodTo: "2026-09-30",
+      });
+      assert.ok(first.created >= 1, "terminated employment with pending inputs must flag");
+      const flags = await listFlags(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        periodFrom: "2026-09-01",
+        periodTo: "2026-09-30",
+        kind: "terminated_with_pay",
+      });
+      assert.equal(flags.length, 1);
+      assert.equal(flags[0]?.severity, "block");
+      assert.equal(flags[0]?.employmentId, employmentId);
+      assert.ok((flags[0]?.explanation ?? "").includes("2026-08-15"));
+      assert.ok((await decisionCount(org.orgId)) > before);
 
-    const flagId = flags[0]?.id ?? "";
-    await transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId, to: "resolved", reason: "reviewed; verify if the condition recurs" });
-    // A repeated blocking condition reopens the same flag after resolution.
-    const second = await scanAnomalies(db, {
-      orgId: org.orgId, actorId: adminId, periodFrom: "2026-09-01", periodTo: "2026-09-30",
-    });
-    assert.equal(second.created, 0);
-    assert.ok(second.alreadyOpen >= 1);
-    const again = await listFlags(db, {
-      orgId: org.orgId, actorId: adminId,
-      periodFrom: "2026-09-01", periodTo: "2026-09-30", kind: "terminated_with_pay",
-    });
-    assert.deepEqual(again.map((flag) => flag.status), ["open"]);
+      const flagId = flags[0]?.id ?? "";
+      await transitionFlag(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        flagId,
+        to: "resolved",
+        reason: "reviewed; verify if the condition recurs",
+      });
+      // A repeated blocking condition reopens the same flag after resolution.
+      const second = await scanAnomalies(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        periodFrom: "2026-09-01",
+        periodTo: "2026-09-30",
+      });
+      assert.equal(second.created, 0);
+      assert.ok(second.alreadyOpen >= 1);
+      const again = await listFlags(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        periodFrom: "2026-09-01",
+        periodTo: "2026-09-30",
+        kind: "terminated_with_pay",
+      });
+      assert.deepEqual(
+        again.map((flag) => flag.status),
+        ["open"],
+      );
 
-    // THE finalize hook: open block refuses with the remedy.
-    await assert.rejects(
-      checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId }),
-      /blocking payroll check\(s\) are open.*\/payroll\/anomalies/,
-    );
+      // THE finalize hook: open block refuses with the remedy.
+      await assert.rejects(
+        checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId }),
+        /blocking payroll check\(s\) are open.*\/payroll\/anomalies/,
+      );
 
-    await db.execute(sql`update employee_payroll_profiles set is_active = false where org_id = ${org.orgId} and employee_party_id = ${employeePartyId}`);
-    await assert.rejects(checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId }), /blocking payroll check/);
-    await db.execute(sql`update employee_payroll_profiles set is_active = true where org_id = ${org.orgId} and employee_party_id = ${employeePartyId}`);
+      await db.execute(
+        sql`update employee_payroll_profiles set is_active = false where org_id = ${org.orgId} and employee_party_id = ${employeePartyId}`,
+      );
+      await assert.rejects(
+        checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId }),
+        /blocking payroll check/,
+      );
+      await db.execute(
+        sql`update employee_payroll_profiles set is_active = true where org_id = ${org.orgId} and employee_party_id = ${employeePartyId}`,
+      );
 
-    // A period-wide employment flag has no retained schedule discriminator.
-    // Another run paying this same employment cannot infer an exclusion from
-    // a mutable current profile schedule.
-    const otherScheduleId = randomUUID();
-    await seedPayrollSchedule(org.orgId, otherScheduleId, adminId, {
-      name: "Other anomaly schedule", frequency: "monthly", periodsPerYear: 12,
-      anchorPeriodEnd: "2026-09-30", payDateOffsetDays: 5, subsidiaryId,
-    });
-    const otherRun = await createPayRun({
-      orgId: org.orgId, actorId: adminId, payScheduleId: otherScheduleId,
-      periodStart: "2026-09-01", periodEnd: "2026-09-30", payDate: "2026-10-05",
-    });
-    await db.execute(sql`
+      // A period-wide employment flag has no retained schedule discriminator.
+      // Another run paying this same employment cannot infer an exclusion from
+      // a mutable current profile schedule.
+      const otherScheduleId = randomUUID();
+      await seedPayrollSchedule(org.orgId, otherScheduleId, adminId, {
+        name: "Other anomaly schedule",
+        frequency: "monthly",
+        periodsPerYear: 12,
+        anchorPeriodEnd: "2026-09-30",
+        payDateOffsetDays: 5,
+        subsidiaryId,
+      });
+      const otherRun = await createPayRun({
+        orgId: org.orgId,
+        actorId: adminId,
+        payScheduleId: otherScheduleId,
+        periodStart: "2026-09-01",
+        periodEnd: "2026-09-30",
+        payDate: "2026-10-05",
+      });
+      await db.execute(sql`
       insert into pay_stubs
         (country, country_source, org_id, pay_run_document_id, employee_party_id, employment_id, province,
          periods_per_year, pay_date, tax_year, currency_code, created_by, updated_by)
       values ('CA', 'calculation', ${org.orgId}, ${otherRun.documentId}, ${employeePartyId}, ${employmentId}, 'ON',
          12, '2026-10-05', 2026, 'CAD', ${adminId}, ${adminId})`);
-    await assert.rejects(checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId: otherRun.documentId }), /blocking payroll check/);
-    await db.execute(sql`update employee_payroll_profiles set pay_schedule_id=${otherScheduleId}
+      await assert.rejects(
+        checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId: otherRun.documentId }),
+        /blocking payroll check/,
+      );
+      await db.execute(sql`update employee_payroll_profiles set pay_schedule_id=${otherScheduleId}
       where org_id=${org.orgId} and employee_party_id=${employeePartyId}`);
-    assert.equal((await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId })).openBlockCount, 1,
-      "changing the current profile schedule does not erase a retained-period blocker");
+      assert.equal(
+        (await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId })).openBlockCount,
+        1,
+        "changing the current profile schedule does not erase a retained-period blocker",
+      );
 
-    const explicitFlagId = randomUUID();
-    await db.execute(sql`insert into payroll_anomaly_flags
+      const explicitFlagId = randomUUID();
+      await db.execute(sql`insert into payroll_anomaly_flags
       (id, org_id, run_document_id, pay_period_from, pay_period_to, employment_id, kind, severity, detail, explanation, created_by)
       values (${explicitFlagId}, ${org.orgId}, ${otherRun.documentId}, '2026-09-01', '2026-09-30', ${employmentId},
         'duplicate_bank', 'block', '{}'::jsonb, 'Run-specific payment review', ${adminId})`);
-    const explicitBlocks = (await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId: otherRun.documentId })).openBlocks;
-    assert.equal(explicitBlocks.length, 2);
-    assert.ok(explicitBlocks.some(block => block.id===explicitFlagId && block.kind==='duplicate_bank'),
-      "run-linked flags do not depend on the current profile schedule");
-    const runWideFlagId = randomUUID();
-    await db.execute(sql`insert into payroll_anomaly_flags
+      const explicitBlocks = (
+        await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId: otherRun.documentId })
+      ).openBlocks;
+      assert.equal(explicitBlocks.length, 2);
+      assert.ok(
+        explicitBlocks.some(
+          (block) => block.id === explicitFlagId && block.kind === "duplicate_bank",
+        ),
+        "run-linked flags do not depend on the current profile schedule",
+      );
+      const runWideFlagId = randomUUID();
+      await db.execute(sql`insert into payroll_anomaly_flags
       (id, org_id, run_document_id, pay_period_from, pay_period_to, employment_id, kind, severity, detail, explanation, created_by)
       values (${runWideFlagId}, ${org.orgId}, ${otherRun.documentId}, '2026-09-01', '2026-09-30', null,
         'custom', 'block', '{}'::jsonb, 'Run-wide funding review', ${adminId})`);
-    assert.equal((await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId: otherRun.documentId })).openBlockCount, 3,
-      "an explicit run-wide blocker applies without an employment identity");
-    assert.equal((await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId })).openBlockCount, 1,
-      "the other run's explicit flags cannot bleed into this run");
-    await transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId: runWideFlagId, to: "acknowledged", reason: "Run-wide funding reviewed" });
-    await transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId: explicitFlagId, to: "acknowledged", reason: "Run-specific payment reviewed" });
-    const timeReviewer = await createScratchUser(org.orgId, "Time reviewer", "anomaly_time_reviewer");
-    await grant(org.orgId, timeReviewer, "time.approve");
-    await enableFeatures(org.orgId, ["timeTracking"]);
-    const timeBlockId = randomUUID();
-    await db.execute(sql`insert into payroll_anomaly_flags
+      assert.equal(
+        (
+          await payrollAnomalyFinalizeCheck(db, {
+            orgId: org.orgId,
+            documentId: otherRun.documentId,
+          })
+        ).openBlockCount,
+        3,
+        "an explicit run-wide blocker applies without an employment identity",
+      );
+      assert.equal(
+        (await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId })).openBlockCount,
+        1,
+        "the other run's explicit flags cannot bleed into this run",
+      );
+      await transitionFlag(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        flagId: runWideFlagId,
+        to: "acknowledged",
+        reason: "Run-wide funding reviewed",
+      });
+      await transitionFlag(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        flagId: explicitFlagId,
+        to: "acknowledged",
+        reason: "Run-specific payment reviewed",
+      });
+      const timeReviewer = await createScratchUser(
+        org.orgId,
+        "Time reviewer",
+        "anomaly_time_reviewer",
+      );
+      await grant(org.orgId, timeReviewer, "time.approve");
+      await enableFeatures(org.orgId, ["timeTracking"]);
+      const timeBlockId = randomUUID();
+      await db.execute(sql`insert into payroll_anomaly_flags
       (id, org_id, run_document_id, pay_period_from, pay_period_to, employment_id, kind, severity, detail, explanation, created_by)
       values (${timeBlockId}, ${org.orgId}, ${documentId}, '2026-09-01', '2026-09-30', ${employmentId},
         'missing_rate', 'block', '{"key":"payment-rate-review"}'::jsonb, 'Payment rate review', ${adminId})`);
-    await assert.rejects(transitionFlag(db, { orgId: org.orgId, actorId: timeReviewer, flagId: timeBlockId,
-      to: "acknowledged", reason: "Time approval review" }), /only the payroll manager reviews blocking flags/);
-    assert.ok((await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId })).openBlocks.some(block => block.id === timeBlockId));
-    await transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId: timeBlockId,
-      to: "acknowledged", reason: "Payroll manager reviewed payment rate" });
+      await assert.rejects(
+        transitionFlag(db, {
+          orgId: org.orgId,
+          actorId: timeReviewer,
+          flagId: timeBlockId,
+          to: "acknowledged",
+          reason: "Time approval review",
+        }),
+        /only the payroll manager reviews blocking flags/,
+      );
+      assert.ok(
+        (await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId })).openBlocks.some(
+          (block) => block.id === timeBlockId,
+        ),
+      );
+      await transitionFlag(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        flagId: timeBlockId,
+        to: "acknowledged",
+        reason: "Payroll manager reviewed payment rate",
+      });
 
-    const foreign = await createScratchOrg();
+      const foreign = await createScratchOrg();
+      try {
+        await assert.rejects(
+          payrollAnomalyFinalizeCheck(db, { orgId: foreign.orgId, documentId }),
+          /pay run not found/,
+        );
+      } finally {
+        await dropScratchOrg(foreign.orgId);
+      }
+
+      // Transitions need a reason; false-positive suppresses the next scan.
+      await assert.rejects(
+        transitionFlag(db, {
+          orgId: org.orgId,
+          actorId: adminId,
+          flagId,
+          to: "resolved",
+          reason: "  ",
+        }),
+        /a reason is required/,
+      );
+      await transitionFlag(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        flagId,
+        to: "acknowledged",
+        reason: "reviewed and accepted",
+      });
+      const acknowledged = await checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId });
+      assert.equal(
+        acknowledged.openBlockCount,
+        0,
+        "acknowledged blocks have completed the documented review gate",
+      );
+      await transitionFlag(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        flagId,
+        to: "false_positive",
+        reason: "termination backdated by correction; inputs are valid",
+      });
+      const third = await scanAnomalies(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        periodFrom: "2026-09-01",
+        periodTo: "2026-09-30",
+      });
+      assert.ok(third.suppressed >= 1, "false-positive feeds the suppression list");
+      assert.equal(third.created, 0);
+
+      // No open blocks remain: the hook passes.
+      const check = await checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId });
+      assert.equal(check.openBlockCount, 0);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "hours baseline compares each pay period once across a worker rehire",
+  { skip: !DB },
+  async () => {
+    const { org, adminId } = await setup();
     try {
-      await assert.rejects(payrollAnomalyFinalizeCheck(db, { orgId: foreign.orgId, documentId }), /pay run not found/);
-    } finally { await dropScratchOrg(foreign.orgId); }
+      await ensureAiRailsSettingsForOrg(org.orgId, adminId);
+      await db.execute(
+        sql`update ai_rails_settings set cohort_key = 'department' where org_id = ${org.orgId}`,
+      );
 
-    // Transitions need a reason; false-positive suppresses the next scan.
-    await assert.rejects(
-      transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId, to: "resolved", reason: "  " }),
-      /a reason is required/,
-    );
-    await transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId, to: "acknowledged", reason: "reviewed and accepted" });
-    const acknowledged = await checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId });
-    assert.equal(acknowledged.openBlockCount, 0, "acknowledged blocks have completed the documented review gate");
-    await transitionFlag(db, {
-      orgId: org.orgId, actorId: adminId, flagId, to: "false_positive",
-      reason: "termination backdated by correction; inputs are valid",
-    });
-    const third = await scanAnomalies(db, {
-      orgId: org.orgId, actorId: adminId, periodFrom: "2026-09-01", periodTo: "2026-09-30",
-    });
-    assert.ok(third.suppressed >= 1, "false-positive feeds the suppression list");
-    assert.equal(third.created, 0);
-
-    // No open blocks remain: the hook passes.
-    const check = await checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId });
-    assert.equal(check.openBlockCount, 0);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("hours baseline compares each pay period once across a worker rehire", { skip: !DB }, async () => {
-  const { org, adminId } = await setup();
-  try {
-    await ensureAiRailsSettingsForOrg(org.orgId, adminId);
-    await db.execute(sql`update ai_rails_settings set cohort_key = 'department' where org_id = ${org.orgId}`);
-
-    const partyId = randomUUID();
-    const oldEmploymentId = randomUUID();
-    const newEmploymentId = randomUUID();
-    await db.execute(sql`
+      const partyId = randomUUID();
+      const oldEmploymentId = randomUUID();
+      const newEmploymentId = randomUUID();
+      await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${partyId}, ${org.orgId}, 'person', 'Rehired Baseline Worker', true, '{}'::jsonb)`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id)
       values (${oldEmploymentId}, ${org.orgId}, ${partyId}, ${org.subsidiaryId}),
              (${newEmploymentId}, ${org.orgId}, ${partyId}, ${org.subsidiaryId})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to)
       values (${org.orgId}, ${oldEmploymentId}, 1, 'active', '2025-01-01', '2026-01-15'),
              (${org.orgId}, ${oldEmploymentId}, 2, 'terminated', '2026-01-15', null),
              (${org.orgId}, ${newEmploymentId}, 1, 'active', '2026-01-15', null)`);
 
-    const scheduleId = randomUUID();
-    await seedPayrollSchedule(org.orgId, scheduleId, adminId, {
-      name: "Rehire baseline weekly", frequency: "weekly", periodsPerYear: 52,
-      anchorPeriodEnd: "2026-01-11", payDateOffsetDays: 3, subsidiaryId: org.subsidiaryId,
-    });
-    const oldRun = await createPayRun({
-      orgId: org.orgId, actorId: adminId, payScheduleId: scheduleId,
-      periodStart: "2026-01-05", periodEnd: "2026-01-11", payDate: "2026-01-14",
-    });
-    const newRun = await createPayRun({
-      orgId: org.orgId, actorId: adminId, payScheduleId: scheduleId,
-      periodStart: "2026-01-12", periodEnd: "2026-01-18", payDate: "2026-01-21",
-    });
-    await db.execute(sql`
+      const scheduleId = randomUUID();
+      await seedPayrollSchedule(org.orgId, scheduleId, adminId, {
+        name: "Rehire baseline weekly",
+        frequency: "weekly",
+        periodsPerYear: 52,
+        anchorPeriodEnd: "2026-01-11",
+        payDateOffsetDays: 3,
+        subsidiaryId: org.subsidiaryId,
+      });
+      const oldRun = await createPayRun({
+        orgId: org.orgId,
+        actorId: adminId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-01-05",
+        periodEnd: "2026-01-11",
+        payDate: "2026-01-14",
+      });
+      const newRun = await createPayRun({
+        orgId: org.orgId,
+        actorId: adminId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-01-12",
+        periodEnd: "2026-01-18",
+        payDate: "2026-01-21",
+      });
+      await db.execute(sql`
       insert into pay_stubs
         (country, country_source, org_id, pay_run_document_id, employee_party_id, employment_id, province,
          periods_per_year, pay_date, tax_year, currency_code, created_by, updated_by)
       values ('CA', 'calculation', ${org.orgId}, ${oldRun.documentId}, ${partyId}, ${oldEmploymentId}, 'ON', 52, '2026-01-14', 2026, 'CAD', ${adminId}, ${adminId}),
              ('CA', 'calculation', ${org.orgId}, ${newRun.documentId}, ${partyId}, ${newEmploymentId}, 'ON', 52, '2026-01-21', 2026, 'CAD', ${adminId}, ${adminId})`);
-    await db.execute(sql`
+      await db.execute(sql`
       insert into time_entries (org_id, employee_party_id, worked_on, hours, status)
       values (${org.orgId}, ${partyId}, '2026-01-07', '8.0000', 'approved'),
              (${org.orgId}, ${partyId}, '2026-01-16', '4.0000', 'approved')`);
-    const baselineWindow = await computeAnomalyBaselines({ orgId: org.orgId, actorId: adminId, windowPeriods: 2 });
-    assert.deepEqual(baselineWindow.windowPayDates.sort(), ["2026-01-14", "2026-01-21"]);
-    const computedHoursMean = (await db.execute<{ mean: string; stddev: string }>(sql`
+      const baselineWindow = await computeAnomalyBaselines({
+        orgId: org.orgId,
+        actorId: adminId,
+        windowPeriods: 2,
+      });
+      assert.deepEqual(baselineWindow.windowPayDates.sort(), ["2026-01-14", "2026-01-21"]);
+      const computedHoursMean = (
+        await db.execute<{ mean: string; stddev: string }>(
+          sql`
       select mean::text as mean, stddev::text as stddev from anomaly_baselines
-       where org_id = ${org.orgId} and cohort_key = 'unassigned' and metric = 'hours'`, "objects"))[0];
-    assert.equal(Number(computedHoursMean?.mean), 6);
-    assert.equal(Number(computedHoursMean?.stddev), 2,
-      "the trailing two pay periods contribute one 8-hour and one 4-hour observation despite the rehire");
-    // Give the comparison a zero-spread baseline so both distinct current
-    // period observations must produce a flag below.
-    await db.execute(sql`
+       where org_id = ${org.orgId} and cohort_key = 'unassigned' and metric = 'hours'`,
+          "objects",
+        )
+      )[0];
+      assert.equal(Number(computedHoursMean?.mean), 6);
+      assert.equal(
+        Number(computedHoursMean?.stddev),
+        2,
+        "the trailing two pay periods contribute one 8-hour and one 4-hour observation despite the rehire",
+      );
+      // Give the comparison a zero-spread baseline so both distinct current
+      // period observations must produce a flag below.
+      await db.execute(sql`
       update anomaly_baselines set mean = 6, stddev = 0
        where org_id = ${org.orgId} and cohort_key = 'unassigned' and metric = 'hours'`);
 
-    const summary = await scanAnomalies(db, {
-      orgId: org.orgId, actorId: adminId, periodFrom: "2026-01-05", periodTo: "2026-01-18",
-    });
-    assert.ok(summary.created >= 2, "both period observations differ from the six-hour baseline");
-    const flags = await listFlags(db, {
-      orgId: org.orgId, actorId: adminId, periodFrom: "2026-01-05", periodTo: "2026-01-18", kind: "hours_spike",
-    });
-    assert.deepEqual(flags.map((flag) => {
-      assert.ok(flag.detail !== null && typeof flag.detail === "object" && "actual" in flag.detail);
-      return [flag.employmentId, flag.detail.actual];
-    }).sort(), [
-      [newEmploymentId, "4.0000"],
-      [oldEmploymentId, "8.0000"],
-    ].sort());
-    const overlappingEmploymentId = randomUUID();
-    await db.execute(sql`insert into worker_employments(id, org_id, worker_party_id, employer_subsidiary_id)
+      const summary = await scanAnomalies(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        periodFrom: "2026-01-05",
+        periodTo: "2026-01-18",
+      });
+      assert.ok(summary.created >= 2, "both period observations differ from the six-hour baseline");
+      const flags = await listFlags(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        periodFrom: "2026-01-05",
+        periodTo: "2026-01-18",
+        kind: "hours_spike",
+      });
+      assert.deepEqual(
+        flags
+          .map((flag) => {
+            assert.ok(
+              flag.detail !== null && typeof flag.detail === "object" && "actual" in flag.detail,
+            );
+            return [flag.employmentId, flag.detail.actual];
+          })
+          .sort(),
+        [
+          [newEmploymentId, "4.0000"],
+          [oldEmploymentId, "8.0000"],
+        ].sort(),
+      );
+      const overlappingEmploymentId = randomUUID();
+      await db.execute(sql`insert into worker_employments(id, org_id, worker_party_id, employer_subsidiary_id)
       values (${overlappingEmploymentId}, ${org.orgId}, ${partyId}, ${org.subsidiaryId})`);
-    await db.execute(sql`insert into worker_employment_versions(org_id, employment_id, version_no, status, effective_from)
+      await db.execute(sql`insert into worker_employment_versions(org_id, employment_id, version_no, status, effective_from)
       values (${org.orgId}, ${overlappingEmploymentId}, 1, 'active', '2026-01-01')`);
-    await assert.rejects(computeAnomalyBaselines({ orgId: org.orgId, actorId: adminId, windowPeriods: 2 }),
-      /exactly one employment covering each worked date/);
-    await assert.rejects(scanAnomalies(db, { orgId: org.orgId, actorId: adminId, periodFrom: "2026-01-05", periodTo: "2026-01-18" }),
-      /exactly one employment covering each worked date/);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await assert.rejects(
+        computeAnomalyBaselines({ orgId: org.orgId, actorId: adminId, windowPeriods: 2 }),
+        /exactly one employment covering each worked date/,
+      );
+      await assert.rejects(
+        scanAnomalies(db, {
+          orgId: org.orgId,
+          actorId: adminId,
+          periodFrom: "2026-01-05",
+          periodTo: "2026-01-18",
+        }),
+        /exactly one employment covering each worked date/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("concurrent rescans share one flag row without aborting either scan", { skip: !DB }, async () => {
-  const { org, adminId } = await setup();
-  try {
-    await seedTerminatedWithInput(org.orgId, adminId);
-    const query = { orgId: org.orgId, actorId: adminId, periodFrom: "2026-09-01", periodTo: "2026-09-30" };
-    // Two scans on two connections at once through the single-transaction
-    // entry point: the unique index arbitrates each flag, the loser counts
-    // it already open, and neither scan aborts (a 23505 caught inside the
-    // open scan transaction used to fail every later statement with 25P02
-    // and roll the whole scan back).
-    const outcomes = await Promise.allSettled([runAnomalyScan(query), runAnomalyScan(query)]);
-    assert.equal(outcomes[0]!.status, "fulfilled", "first scan survives the race");
-    assert.equal(outcomes[1]!.status, "fulfilled", "second scan survives the race");
-    const flags = await listFlags(db, {
-      orgId: org.orgId, actorId: adminId,
-      periodFrom: "2026-09-01", periodTo: "2026-09-30", kind: "terminated_with_pay",
-    });
-    assert.equal(flags.length, 1, "the race persists exactly one flag row");
-    const created = outcomes.reduce((total, outcome) => total + (outcome.status === "fulfilled" ? outcome.value.created : 0), 0);
-    assert.ok(created >= 1, "one of the two scans created the flag");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "concurrent rescans share one flag row without aborting either scan",
+  { skip: !DB },
+  async () => {
+    const { org, adminId } = await setup();
+    try {
+      await seedTerminatedWithInput(org.orgId, adminId);
+      const query = {
+        orgId: org.orgId,
+        actorId: adminId,
+        periodFrom: "2026-09-01",
+        periodTo: "2026-09-30",
+      };
+      // Two scans on two connections at once through the single-transaction
+      // entry point: the unique index arbitrates each flag, the loser counts
+      // it already open, and neither scan aborts (a 23505 caught inside the
+      // open scan transaction used to fail every later statement with 25P02
+      // and roll the whole scan back).
+      const outcomes = await Promise.allSettled([runAnomalyScan(query), runAnomalyScan(query)]);
+      assert.equal(outcomes[0]!.status, "fulfilled", "first scan survives the race");
+      assert.equal(outcomes[1]!.status, "fulfilled", "second scan survives the race");
+      const flags = await listFlags(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        periodFrom: "2026-09-01",
+        periodTo: "2026-09-30",
+        kind: "terminated_with_pay",
+      });
+      assert.equal(flags.length, 1, "the race persists exactly one flag row");
+      const created = outcomes.reduce(
+        (total, outcome) => total + (outcome.status === "fulfilled" ? outcome.value.created : 0),
+        0,
+      );
+      assert.ok(created >= 1, "one of the two scans created the flag");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("explain-pay trace carries lines, treatments, inputs and the diff", { skip: !DB }, async () => {
-  const { org, adminId } = await setup();
-  try {
-    const { employmentId } = await seedTerminatedWithInput(org.orgId, adminId);
-    const party = (await db.execute<{ partyId: string }>(sql`
+test(
+  "explain-pay trace carries lines, treatments, inputs and the diff",
+  { skip: !DB },
+  async () => {
+    const { org, adminId } = await setup();
+    try {
+      const { employmentId } = await seedTerminatedWithInput(org.orgId, adminId);
+      const party = (
+        await db.execute<{ partyId: string }>(
+          sql`
       select worker_party_id::text as "partyId" from worker_employments
-       where org_id = ${org.orgId} and id = ${employmentId}`, "objects"))[0]?.partyId;
-    // A pay stub needs the WHOLE run to exist first, and the chain is
-    // three rows deep: pay_schedules <- pay_runs <- pay_stubs, with the
-    // document beside the run. pay_stubs.pay_run_document_id points at
-    // PAY_RUNS(document_id), not at documents, so creating the document
-    // alone still left the stub with nothing to reference. Copied from
-    // web/lib/pdf-templates/ytd-tax-cross-pack.integration.test.ts rather
-    // than re-derived.
-    const scheduleId = randomUUID();
-    await db.execute(sql`
+       where org_id = ${org.orgId} and id = ${employmentId}`,
+          "objects",
+        )
+      )[0]?.partyId;
+      // A pay stub needs the WHOLE run to exist first, and the chain is
+      // three rows deep: pay_schedules <- pay_runs <- pay_stubs, with the
+      // document beside the run. pay_stubs.pay_run_document_id points at
+      // PAY_RUNS(document_id), not at documents, so creating the document
+      // alone still left the stub with nothing to reference. Copied from
+      // web/lib/pdf-templates/ytd-tax-cross-pack.integration.test.ts rather
+      // than re-derived.
+      const scheduleId = randomUUID();
+      await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                  pay_date_offset_days, is_active)
       values (${scheduleId}, ${org.orgId}, ${`Sched ${scheduleId.slice(0, 8)}`}, 'biweekly', 26,
               '2026-09-30', 3, true)`);
-    // ONE RUN PER PERIOD. pay_stubs is unique on (run, employee), which is
-    // correct -- a person is paid once per run -- so the previous and
-    // current payslips the diff compares cannot share a run document.
-    // Two periods means two runs, each with its own document, which is
-    // also what the explain-pay diff is reading when it names what
-    // changed between them.
-    const stubPrev = randomUUID();
-    const stubCur = randomUUID();
-    for (const [stubId, periodStart, payDate, gross, net] of [
-      [stubPrev, "2026-08-01", "2026-08-31", "5000", "3800"],
-      [stubCur, "2026-09-01", "2026-09-30", "5600", "4200"],
-    ] as const) {
-      const runId = randomUUID();
-      await db.execute(sql`
+      // ONE RUN PER PERIOD. pay_stubs is unique on (run, employee), which is
+      // correct -- a person is paid once per run -- so the previous and
+      // current payslips the diff compares cannot share a run document.
+      // Two periods means two runs, each with its own document, which is
+      // also what the explain-pay diff is reading when it names what
+      // changed between them.
+      const stubPrev = randomUUID();
+      const stubCur = randomUUID();
+      for (const [stubId, periodStart, payDate, gross, net] of [
+        [stubPrev, "2026-08-01", "2026-08-31", "5000", "3800"],
+        [stubCur, "2026-09-01", "2026-09-30", "5600", "4200"],
+      ] as const) {
+        const runId = randomUUID();
+        await db.execute(sql`
         insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
                                currency, status, created_by, updated_by)
         values (${org.orgId}, ${runId}, 'pay_run', ${`PAY-${runId.slice(0, 8)}`},
                 ${org.subsidiaryId}, ${payDate}, 'CAD', 'draft', ${adminId}, ${adminId})`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
                               pay_date, tax_year, run_status)
         values (${runId}, ${org.orgId}, ${scheduleId}, ${periodStart}, ${payDate},
                 ${payDate}, 2026, 'committed')`);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into pay_stubs (country, country_source, id, org_id, pay_run_document_id, employee_party_id, employment_id,
           province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost)
         values ('CA', 'calculation', ${stubId}, ${org.orgId}, ${runId}, ${party}, ${employmentId},
           'ON', 26, ${payDate}, 2026, 'CAD', ${gross}, ${net}, 800)`);
-    }
-    await db.execute(sql`
+      }
+      await db.execute(sql`
       insert into pay_stub_lines (org_id, stub_id, kind, description, hours, rate, amount, sequence)
       values (${org.orgId}, ${stubPrev}, 'earning', 'Base salary', 80, 62.5, 5000, 100),
              (${org.orgId}, ${stubCur}, 'earning', 'Base salary', 80, 70, 5600, 100)`);
-    const before = await decisionCount(org.orgId);
-    const trace = await explainPay(db, { orgId: org.orgId, actorId: adminId, employmentId, stubId: stubCur });
-    assert.equal(trace.stubId, stubCur);
-    assert.equal(trace.gross, "5600.0000");
-    assert.equal(trace.netPay, "4200.0000");
-    assert.equal(trace.earnings.length, 1);
-    assert.equal(trace.diffVsPrevious.previousStubId, stubPrev);
-    const change = trace.diffVsPrevious.changes.find((c) => c.description === "Base salary");
-    assert.ok(change, "rate change mid-period must appear in the diff");
-    assert.ok(change.input.includes("62.5") && change.input.includes("70"));
-    assert.ok(trace.sources.some((s) => s.kind === "pay_stub" && s.id === stubCur));
-    assert.ok((await decisionCount(org.orgId)) > before, "explain-pay must log its decision");
+      const before = await decisionCount(org.orgId);
+      const trace = await explainPay(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        employmentId,
+        stubId: stubCur,
+      });
+      assert.equal(trace.stubId, stubCur);
+      assert.equal(trace.gross, "5600.0000");
+      assert.equal(trace.netPay, "4200.0000");
+      assert.equal(trace.earnings.length, 1);
+      assert.equal(trace.diffVsPrevious.previousStubId, stubPrev);
+      const change = trace.diffVsPrevious.changes.find((c) => c.description === "Base salary");
+      assert.ok(change, "rate change mid-period must appear in the diff");
+      assert.ok(change.input.includes("62.5") && change.input.includes("70"));
+      assert.ok(trace.sources.some((s) => s.kind === "pay_stub" && s.id === stubCur));
+      assert.ok((await decisionCount(org.orgId)) > before, "explain-pay must log its decision");
 
-    // Explaining another person's pay without a grant refuses by permission name.
-    const outsider = await createScratchUser(org.orgId, "Outsider", "outsider");
-    await assert.rejects(
-      explainPay(db, { orgId: org.orgId, actorId: outsider, employmentId }),
-      /hrm\.self\.read/,
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      // Explaining another person's pay without a grant refuses by permission name.
+      const outsider = await createScratchUser(org.orgId, "Outsider", "outsider");
+      await assert.rejects(
+        explainPay(db, { orgId: org.orgId, actorId: outsider, employmentId }),
+        /hrm\.self\.read/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("inbox adapters surface blocking checks and overdue reviews through the actor's own gates", { skip: !DB }, async () => {
-  const { org, adminId } = await setup();
-  try {
-    const { payrollAnomalyBlockAdapter, aiCapabilityReviewAdapter } = await import(
-      "../../inbox/adapters/ai-rails.ts"
-    );
-    const ctx = { orgId: org.orgId, actorId: adminId, asOf: "2026-09-30T00:00:00Z" };
+test(
+  "inbox adapters surface blocking checks and overdue reviews through the actor's own gates",
+  { skip: !DB },
+  async () => {
+    const { org, adminId } = await setup();
+    try {
+      const { payrollAnomalyBlockAdapter, aiCapabilityReviewAdapter } =
+        await import("../../inbox/adapters/ai-rails.ts");
+      const ctx = { orgId: org.orgId, actorId: adminId, asOf: "2026-09-30T00:00:00Z" };
 
-    // No flags yet: the block adapter lists nothing (never an error).
-    assert.deepEqual(await payrollAnomalyBlockAdapter.list(ctx), []);
+      // No flags yet: the block adapter lists nothing (never an error).
+      assert.deepEqual(await payrollAnomalyBlockAdapter.list(ctx), []);
 
-    // Seed + scan an open block flag.
-    await seedTerminatedWithInput(org.orgId, adminId);
-    await scanAnomalies(db, {
-      orgId: org.orgId, actorId: adminId, periodFrom: "2026-09-01", periodTo: "2026-09-30",
-    });
-    const blocks = await payrollAnomalyBlockAdapter.list(ctx);
-    assert.equal(blocks.length, 1);
-    assert.equal(blocks[0]?.kind, "payroll_anomaly_block");
-    assert.equal(blocks[0]?.priority, "overdue");
-    assert.match(blocks[0]?.subjectHref ?? "", /\/payroll\/anomalies\?flag=/);
-    assert.match(blocks[0]?.subtitle ?? "", /before the run can finalize/);
-    assert.deepEqual(blocks[0]?.actions ?? [], []);
-    await assert.rejects(
-      payrollAnomalyBlockAdapter.act(ctx, "x", "resolve"),
-      /resolve it in the checks queue/,
-    );
+      // Seed + scan an open block flag.
+      await seedTerminatedWithInput(org.orgId, adminId);
+      await scanAnomalies(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        periodFrom: "2026-09-01",
+        periodTo: "2026-09-30",
+      });
+      const blocks = await payrollAnomalyBlockAdapter.list(ctx);
+      assert.equal(blocks.length, 1);
+      assert.equal(blocks[0]?.kind, "payroll_anomaly_block");
+      assert.equal(blocks[0]?.priority, "overdue");
+      assert.match(blocks[0]?.subjectHref ?? "", /\/payroll\/anomalies\?flag=/);
+      assert.match(blocks[0]?.subtitle ?? "", /before the run can finalize/);
+      assert.deepEqual(blocks[0]?.actions ?? [], []);
+      await assert.rejects(
+        payrollAnomalyBlockAdapter.act(ctx, "x", "resolve"),
+        /resolve it in the checks queue/,
+      );
 
-    // Capability sync seeds unreviewed rows: the review nudge fires for the
-    // setup admin with the declared cadence in the subtitle.
-    await syncCapabilities(db, org.orgId, adminId);
-    const reviews = await aiCapabilityReviewAdapter.list(ctx);
-    assert.ok(reviews.length >= 1, "unreviewed capabilities must nudge");
-    assert.equal(reviews[0]?.kind, "ai_capability_review");
-    assert.equal(reviews[0]?.subjectHref, "/admin/setup/ai-capabilities");
-    assert.match(reviews[0]?.subtitle ?? "", /never reviewed/);
-    await assert.rejects(
-      aiCapabilityReviewAdapter.act(ctx, "x", "review"),
-      /record the review in Assistant action reviews/,
-    );
+      // Capability sync seeds unreviewed rows: the review nudge fires for the
+      // setup admin with the declared cadence in the subtitle.
+      await syncCapabilities(db, org.orgId, adminId);
+      const reviews = await aiCapabilityReviewAdapter.list(ctx);
+      assert.ok(reviews.length >= 1, "unreviewed capabilities must nudge");
+      assert.equal(reviews[0]?.kind, "ai_capability_review");
+      assert.equal(reviews[0]?.subjectHref, "/admin/setup/ai-capabilities");
+      assert.match(reviews[0]?.subtitle ?? "", /never reviewed/);
+      await assert.rejects(
+        aiCapabilityReviewAdapter.act(ctx, "x", "review"),
+        /record the review in Assistant action reviews/,
+      );
 
-    // An actor without either grant sees neither list (no leak, no error).
-    const outsider = await createScratchUser(org.orgId, "Outsider", "outsider");
-    const outsiderCtx = { orgId: org.orgId, actorId: outsider, asOf: "2026-09-30T00:00:00Z" };
-    assert.deepEqual(await payrollAnomalyBlockAdapter.list(outsiderCtx), []);
-    assert.deepEqual(await aiCapabilityReviewAdapter.list(outsiderCtx), []);
+      // An actor without either grant sees neither list (no leak, no error).
+      const outsider = await createScratchUser(org.orgId, "Outsider", "outsider");
+      const outsiderCtx = { orgId: org.orgId, actorId: outsider, asOf: "2026-09-30T00:00:00Z" };
+      assert.deepEqual(await payrollAnomalyBlockAdapter.list(outsiderCtx), []);
+      assert.deepEqual(await aiCapabilityReviewAdapter.list(outsiderCtx), []);
 
-    // Owning module off: Payroll off silences the blocking-check adapter,
-    // the ledger off silences the review adapter.
-    await db.execute(sql`
+      // Owning module off: Payroll off silences the blocking-check adapter,
+      // the ledger off silences the review adapter.
+      await db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,payroll}', 'false'::jsonb, true)
        where id = ${org.orgId}`);
-    await db.execute(sql`
+      await db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,aiGovernanceLedger}', 'false'::jsonb, true)
        where id = ${org.orgId}`);
-    assert.deepEqual(await payrollAnomalyBlockAdapter.list(ctx), []);
-    assert.deepEqual(await aiCapabilityReviewAdapter.list(ctx), []);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+      assert.deepEqual(await payrollAnomalyBlockAdapter.list(ctx), []);
+      assert.deepEqual(await aiCapabilityReviewAdapter.list(ctx), []);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("flag reads and transitions see only the flag employment's employer", { skip: !DB }, async () => {
-  const { org, adminId } = await setup();
-  try {
-    const subB = randomUUID();
-    await db.execute(sql`
+test(
+  "flag reads and transitions see only the flag employment's employer",
+  { skip: !DB },
+  async () => {
+    const { org, adminId } = await setup();
+    try {
+      const subB = randomUUID();
+      await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
-    const seedEmployment = async (subsidiary: string, name: string): Promise<string> => {
-      const partyId = randomUUID();
-      await db.execute(sql`
+      const seedEmployment = async (subsidiary: string, name: string): Promise<string> => {
+        const partyId = randomUUID();
+        await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${partyId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
-      const employmentId = randomUUID();
-      await db.execute(sql`
+        const employmentId = randomUUID();
+        await db.execute(sql`
         insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
         values (${employmentId}, ${org.orgId}, ${partyId}, ${subsidiary}, 1)`);
-      return employmentId;
-    };
-    const empA = await seedEmployment(org.subsidiaryId, "Entity A Worker");
-    const empB = await seedEmployment(subB, "Entity B Worker");
-    const seedFlag = async (employmentId: string | null, kind: string, severity: string): Promise<string> => {
-      const rows = await db.execute<{ id: string }>(sql`
+        return employmentId;
+      };
+      const empA = await seedEmployment(org.subsidiaryId, "Entity A Worker");
+      const empB = await seedEmployment(subB, "Entity B Worker");
+      const seedFlag = async (
+        employmentId: string | null,
+        kind: string,
+        severity: string,
+      ): Promise<string> => {
+        const rows = await db.execute<{ id: string }>(
+          sql`
         insert into payroll_anomaly_flags
           (org_id, pay_period_from, pay_period_to, employment_id, kind, severity,
            detail, explanation, status, created_by)
         values (${org.orgId}, '2026-09-01', '2026-09-30', ${employmentId},
                 ${kind}, ${severity}, '{"key":"scope-probe"}'::jsonb,
                 ${`${kind} explanation with entity pay detail`}, 'open', ${adminId})
-        returning id::text as id`, "objects");
-      return rows[0]!.id;
-    };
-    // Flag visibility splits by family and capability: the
-    // scoped time/HR readers below hold time authority only, so the
-    // in-scope probe flag must be a time-family kind (retro_spike is
-    // payroll-family and correctly invisible to them now).
-    const flagA = await seedFlag(empA, "hours_spike", "warn");
-    const flagB = await seedFlag(empB, "terminated_with_pay", "block");
-    const flagNull = await seedFlag(null, "duplicate_entry", "warn");
+        returning id::text as id`,
+          "objects",
+        );
+        return rows[0]!.id;
+      };
+      // Flag visibility splits by family and capability: the
+      // scoped time/HR readers below hold time authority only, so the
+      // in-scope probe flag must be a time-family kind (retro_spike is
+      // payroll-family and correctly invisible to them now).
+      const flagA = await seedFlag(empA, "hours_spike", "warn");
+      const flagB = await seedFlag(empB, "terminated_with_pay", "block");
+      const flagNull = await seedFlag(null, "duplicate_entry", "warn");
 
-    const scopedHr = await createScratchUser(org.orgId, "Scoped HR", "scoped_hr");
-    await grant(org.orgId, scopedHr, "hrm.employment.read");
-    const scopedTime = await createScratchUser(org.orgId, "Scoped time", "scoped_time");
-    await grant(org.orgId, scopedTime, "time.approve");
-    for (const roleKey of ["scoped_hr", "scoped_time"]) {
-      await db.execute(sql`
+      const scopedHr = await createScratchUser(org.orgId, "Scoped HR", "scoped_hr");
+      await grant(org.orgId, scopedHr, "hrm.employment.read");
+      const scopedTime = await createScratchUser(org.orgId, "Scoped time", "scoped_time");
+      await grant(org.orgId, scopedTime, "time.approve");
+      for (const roleKey of ["scoped_hr", "scoped_time"]) {
+        await db.execute(sql`
         update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
          where org_id = ${org.orgId} and key = ${roleKey}`);
-    }
+      }
 
-    for (const actorId of [scopedHr, scopedTime]) {
-      const visible = await listFlags(db, { orgId: org.orgId, actorId });
+      for (const actorId of [scopedHr, scopedTime]) {
+        const visible = await listFlags(db, { orgId: org.orgId, actorId });
+        assert.deepEqual(
+          visible.map((f) => f.id).sort(),
+          [flagA].sort(),
+          `scoped reader must see exactly entity A's flag`,
+        );
+      }
+      const all = await listFlags(db, { orgId: org.orgId, actorId: adminId });
+      assert.deepEqual(all.map((f) => f.id).sort(), [flagA, flagB, flagNull].sort());
+
       assert.deepEqual(
-        visible.map((f) => f.id).sort(),
-        [flagA].sort(),
-        `scoped reader must see exactly entity A's flag`,
+        (
+          await flagsForEmployment(db, { orgId: org.orgId, actorId: scopedHr, employmentId: empB })
+        ).map((f) => f.id),
+        [],
       );
-    }
-    const all = await listFlags(db, { orgId: org.orgId, actorId: adminId });
-    assert.deepEqual(all.map((f) => f.id).sort(), [flagA, flagB, flagNull].sort());
 
-    assert.deepEqual(
-      (await flagsForEmployment(db, { orgId: org.orgId, actorId: scopedHr, employmentId: empB })).map((f) => f.id),
-      [],
-    );
+      await assert.rejects(
+        transitionFlag(db, {
+          orgId: org.orgId,
+          actorId: scopedHr,
+          flagId: flagB,
+          to: "acknowledged",
+          reason: "reviewed",
+        }),
+        /matched no row/,
+      );
+      await assert.rejects(
+        transitionFlag(db, {
+          orgId: org.orgId,
+          actorId: scopedHr,
+          flagId: flagNull,
+          to: "acknowledged",
+          reason: "reviewed",
+        }),
+        /matched no row/,
+      );
+      const missingId = randomUUID();
+      await assert.rejects(
+        transitionFlag(db, {
+          orgId: org.orgId,
+          actorId: scopedHr,
+          flagId: missingId,
+          to: "acknowledged",
+          reason: "reviewed",
+        }),
+        /matched no row/,
+      );
+      // Transitions need time authority (not just HR read): the time approver
+      // acknowledges the in-scope time flag.
+      const done = await transitionFlag(db, {
+        orgId: org.orgId,
+        actorId: scopedTime,
+        flagId: flagA,
+        to: "acknowledged",
+        reason: "confirmed with timekeeping",
+      });
+      assert.equal(done.status, "acknowledged");
 
-    await assert.rejects(
-      transitionFlag(db, { orgId: org.orgId, actorId: scopedHr, flagId: flagB, to: "acknowledged", reason: "reviewed" }),
-      /matched no row/,
-    );
-    await assert.rejects(
-      transitionFlag(db, { orgId: org.orgId, actorId: scopedHr, flagId: flagNull, to: "acknowledged", reason: "reviewed" }),
-      /matched no row/,
-    );
-    const missingId = randomUUID();
-    await assert.rejects(
-      transitionFlag(db, { orgId: org.orgId, actorId: scopedHr, flagId: missingId, to: "acknowledged", reason: "reviewed" }),
-      /matched no row/,
-    );
-    // Transitions need time authority (not just HR read): the time approver
-    // acknowledges the in-scope time flag.
-    const done = await transitionFlag(db, {
-      orgId: org.orgId, actorId: scopedTime, flagId: flagA, to: "acknowledged", reason: "confirmed with timekeeping",
-    });
-    assert.equal(done.status, "acknowledged");
-
-    const { payrollAnomalyBlockAdapter } = await import(
-      "../../inbox/adapters/ai-rails.ts"
-    );
-    const scopedPayrollA = await createScratchUser(org.orgId, "Scoped payroll A", "scoped_payroll_a");
-    await grant(org.orgId, scopedPayrollA, "payroll.manage");
-    const scopedPayrollB = await createScratchUser(org.orgId, "Scoped payroll B", "scoped_payroll_b");
-    await grant(org.orgId, scopedPayrollB, "payroll.manage");
-    await db.execute(sql`
+      const { payrollAnomalyBlockAdapter } = await import("../../inbox/adapters/ai-rails.ts");
+      const scopedPayrollA = await createScratchUser(
+        org.orgId,
+        "Scoped payroll A",
+        "scoped_payroll_a",
+      );
+      await grant(org.orgId, scopedPayrollA, "payroll.manage");
+      const scopedPayrollB = await createScratchUser(
+        org.orgId,
+        "Scoped payroll B",
+        "scoped_payroll_b",
+      );
+      await grant(org.orgId, scopedPayrollB, "payroll.manage");
+      await db.execute(sql`
       update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
        where org_id = ${org.orgId} and key = 'scoped_payroll_a'`);
-    await db.execute(sql`
+      await db.execute(sql`
       update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [subB] })}::jsonb
        where org_id = ${org.orgId} and key = 'scoped_payroll_b'`);
-    const { installEngineSeams } = await import("../../composition/install.ts");
-    const { routeSubjectSubmission } = await import("../../flows/submission-policy.ts");
-    const { businessToday } = await import("../../platform/business-date.ts");
-    installEngineSeams();
-    await grant(org.orgId, adminId, "parties.manage");
-    await withOrgTransaction(org.orgId, async () => {
-      const accounts = await db.execute<{id:string}>(sql`
+      const { installEngineSeams } = await import("../../composition/install.ts");
+      const { routeSubjectSubmission } = await import("../../flows/submission-policy.ts");
+      const { businessToday } = await import("../../platform/business-date.ts");
+      installEngineSeams();
+      await grant(org.orgId, adminId, "parties.manage");
+      await withOrgTransaction(org.orgId, async () => {
+        const accounts = await db.execute<{ id: string }>(
+          sql`
         insert into party_bank_accounts (org_id, party_id, routing, account_last_four, is_active, approval_status, submitted_by, submitted_at, created_by)
         select ${org.orgId}, e.worker_party_id, '{"institution":"scope-test"}'::jsonb, '4242', false, 'pending', ${adminId}, now(), ${adminId}
           from worker_employments e
-         where e.org_id=${org.orgId} and e.id in (${empA}::uuid,${empB}::uuid) returning id`, "objects");
-      assert.equal(accounts.length, 2);
-      for (const account of accounts) {
-        const receipt = await routeSubjectSubmission({ orgId:org.orgId, actorId:adminId,
-          subjectKind:"party_bank_account", subjectId:account.id, event:{kind:"on_create",source:"api"} });
-        assert.equal(receipt.policy.kind,"ungated");
-        assert.equal((await db.execute<never>(sql`update party_bank_accounts set approval_status='approved',is_active=true,
-          approved_at=${await businessToday(org.orgId)},approved_by=${adminId} where org_id=${org.orgId} and id=${account.id}`)).rowCount,1);
-      }
-    });
-    const flagsBeforeScan = (await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`, "objects"))[0]?.count;
-    await assert.rejects(runAnomalyScan({
-      orgId: org.orgId, actorId: scopedPayrollA, periodFrom: "2026-09-01", periodTo: "2026-09-30",
-    }), /unrestricted subsidiary access/);
-    await assert.rejects(
-      computeAnomalyBaselines({ orgId: org.orgId, actorId: scopedPayrollA, windowPeriods: 2 }),
-      /unrestricted subsidiary access/,
-    );
-    await assert.rejects(runAnomalyScan({
-      orgId: org.orgId, actorId: scopedTime, periodFrom: "2026-09-01", periodTo: "2026-09-30",
-      options: { timeOnly: true },
-    }), /unrestricted subsidiary access/);
-    const flagsAfterScan = (await db.execute<{ count: string }>(sql`
-      select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`, "objects"))[0]?.count;
-    assert.equal(flagsAfterScan, flagsBeforeScan, "a restricted scan refuses before creating cross-entity duplicate-bank flags");
-    const inboxCtx = (actorId: string) => ({ orgId: org.orgId, actorId, asOf: "2026-09-30T00:00:00Z" });
-    assert.deepEqual(await payrollAnomalyBlockAdapter.list(inboxCtx(scopedPayrollA)), []);
-    assert.deepEqual(
-      (await payrollAnomalyBlockAdapter.list(inboxCtx(scopedPayrollB))).map((item) => item.source),
-      [{ kind: "payroll_anomaly_flag", id: flagB }],
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+         where e.org_id=${org.orgId} and e.id in (${empA}::uuid,${empB}::uuid) returning id`,
+          "objects",
+        );
+        assert.equal(accounts.length, 2);
+        for (const account of accounts) {
+          const receipt = await routeSubjectSubmission({
+            orgId: org.orgId,
+            actorId: adminId,
+            subjectKind: "party_bank_account",
+            subjectId: account.id,
+            event: { kind: "on_create", source: "api" },
+          });
+          assert.equal(receipt.policy.kind, "ungated");
+          assert.equal(
+            (
+              await db.execute<never>(sql`update party_bank_accounts set approval_status='approved',is_active=true,
+          approved_at=${await businessToday(org.orgId)},approved_by=${adminId} where org_id=${org.orgId} and id=${account.id}`)
+            ).rowCount,
+            1,
+          );
+        }
+      });
+      const flagsBeforeScan = (
+        await db.execute<{ count: string }>(
+          sql`
+      select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]?.count;
+      await assert.rejects(
+        runAnomalyScan({
+          orgId: org.orgId,
+          actorId: scopedPayrollA,
+          periodFrom: "2026-09-01",
+          periodTo: "2026-09-30",
+        }),
+        /unrestricted subsidiary access/,
+      );
+      await assert.rejects(
+        computeAnomalyBaselines({ orgId: org.orgId, actorId: scopedPayrollA, windowPeriods: 2 }),
+        /unrestricted subsidiary access/,
+      );
+      await assert.rejects(
+        runAnomalyScan({
+          orgId: org.orgId,
+          actorId: scopedTime,
+          periodFrom: "2026-09-01",
+          periodTo: "2026-09-30",
+          options: { timeOnly: true },
+        }),
+        /unrestricted subsidiary access/,
+      );
+      const flagsAfterScan = (
+        await db.execute<{ count: string }>(
+          sql`
+      select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`,
+          "objects",
+        )
+      )[0]?.count;
+      assert.equal(
+        flagsAfterScan,
+        flagsBeforeScan,
+        "a restricted scan refuses before creating cross-entity duplicate-bank flags",
+      );
+      const inboxCtx = (actorId: string) => ({
+        orgId: org.orgId,
+        actorId,
+        asOf: "2026-09-30T00:00:00Z",
+      });
+      assert.deepEqual(await payrollAnomalyBlockAdapter.list(inboxCtx(scopedPayrollA)), []);
+      assert.deepEqual(
+        (await payrollAnomalyBlockAdapter.list(inboxCtx(scopedPayrollB))).map(
+          (item) => item.source,
+        ),
+        [{ kind: "payroll_anomaly_flag", id: flagB }],
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 test("ai ledger fences employment subjects and carries no pay values", { skip: !DB }, async () => {
   const { org, adminId } = await setup();
@@ -808,43 +1213,77 @@ test("ai ledger fences employment subjects and carries no pay values", { skip: !
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${partyId}, ${org.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
-      const rows = await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(
+        sql`
         insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
         values (${randomUUID()}, ${org.orgId}, ${partyId}, ${subsidiary}, 1)
-        returning id::text as id`, "objects");
+        returning id::text as id`,
+        "objects",
+      );
       return rows[0]!.id;
     };
     const empA = await seedEmployment(org.subsidiaryId, "Entity A Worker");
     const empB = await seedEmployment(subB, "Entity B Worker");
     const seedFlag = async (employmentId: string | null): Promise<string> => {
-      const rows = await db.execute<{ id: string }>(sql`
+      const rows = await db.execute<{ id: string }>(
+        sql`
         insert into payroll_anomaly_flags
           (org_id, pay_period_from, pay_period_to, employment_id, kind, severity,
            detail, explanation, status, created_by)
         values (${org.orgId}, '2026-09-01', '2026-09-30', ${employmentId},
                 'terminated_with_pay', 'block', '{"key":"ledger-probe"}'::jsonb,
                 'ledger probe flag', 'open', ${adminId})
-        returning id::text as id`, "objects");
+        returning id::text as id`,
+        "objects",
+      );
       return rows[0]!.id;
     };
     const flagA = await seedFlag(empA);
     const flagB = await seedFlag(empB);
     const flagNull = await seedFlag(null);
-    const log = (capabilityKey: string, subjectKind: string, subjectId: string | null, summary: string) =>
+    const log = (
+      capabilityKey: string,
+      subjectKind: string,
+      subjectId: string | null,
+      summary: string,
+    ) =>
       logDecision(db, {
-        orgId: org.orgId, actorId: adminId, capabilityKey, subjectKind, subjectId,
-        input: "ledger probe", output: "ledger probe", outputSummary: summary,
-        sources: [], outcome: "shown", model: "test",
+        orgId: org.orgId,
+        actorId: adminId,
+        capabilityKey,
+        subjectKind,
+        subjectId,
+        input: "ledger probe",
+        output: "ledger probe",
+        outputSummary: summary,
+        sources: [],
+        outcome: "shown",
+        model: "test",
       });
     await log("hrmExplainPay", "employment", empA, "pay trace reference A");
     await log("hrmExplainPay", "employment", empB, "pay trace reference B");
     await log("hrmPayrollAnomalies", "payroll_anomaly_flag", flagA, "flag reference A");
     await log("hrmPayrollAnomalies", "payroll_anomaly_flag", flagB, "flag reference B");
     await log("hrmPayrollAnomalies", "payroll_anomaly_flag", flagNull, "flag reference null");
-    await log("hrmPayrollAnomalies", "pay_period", null, "anomaly scan 2026-09-01 to 2026-09-30: 1 new, 0 already open");
-    await log("aiGovernanceLedger", "ai_capability", null, "capability hrmExplainPay updated (autonomy propose)");
+    await log(
+      "hrmPayrollAnomalies",
+      "pay_period",
+      null,
+      "anomaly scan 2026-09-01 to 2026-09-30: 1 new, 0 already open",
+    );
+    await log(
+      "aiGovernanceLedger",
+      "ai_capability",
+      null,
+      "capability hrmExplainPay updated (autonomy propose)",
+    );
 
-    const mkReader = async (name: string, roleKey: string, grants: string[], scope: string[] | null) => {
+    const mkReader = async (
+      name: string,
+      roleKey: string,
+      grants: string[],
+      scope: string[] | null,
+    ) => {
       const actorId = await createScratchUser(org.orgId, name, roleKey);
       for (const permission of grants) await grant(org.orgId, actorId, permission);
       if (scope !== null) {
@@ -855,7 +1294,9 @@ test("ai ledger fences employment subjects and carries no pay values", { skip: !
       return actorId;
     };
     const kindsOf = async (actorId: string): Promise<string[]> =>
-      (await listDecisions(db, { orgId: org.orgId, actorId })).map((d) => `${d.subjectKind}:${d.subjectId ?? "-"}`).sort();
+      (await listDecisions(db, { orgId: org.orgId, actorId }))
+        .map((d) => `${d.subjectKind}:${d.subjectId ?? "-"}`)
+        .sort();
 
     // Setup-only admin: aggregates stay visible, every employment-linked
     // row is fenced by the missing payroll/HR grant.
@@ -864,8 +1305,12 @@ test("ai ledger fences employment subjects and carries no pay values", { skip: !
 
     // HR reader scoped to A: A's employment and flag rows plus aggregates —
     // never B's decisions, never the unattributable flag.
-    const hrScopedA = await mkReader("Scoped HR ledger", "ledger_hr_a",
-      ["admin.setup.manage", "hrm.employment.read"], [org.subsidiaryId]);
+    const hrScopedA = await mkReader(
+      "Scoped HR ledger",
+      "ledger_hr_a",
+      ["admin.setup.manage", "hrm.employment.read"],
+      [org.subsidiaryId],
+    );
     assert.deepEqual(await kindsOf(hrScopedA), [
       "ai_capability:-",
       `employment:${empA}`,
@@ -874,37 +1319,74 @@ test("ai ledger fences employment subjects and carries no pay values", { skip: !
     ]);
 
     // Paged rows, counts and exports must use the same subject fence.
-    const scopedFirst = await listDecisionsPage(db, { orgId: org.orgId, actorId: hrScopedA, limit: 2 });
-    const scopedSecond = await listDecisionsPage(db, { orgId: org.orgId, actorId: hrScopedA, limit: 2, offset: 2 });
+    const scopedFirst = await listDecisionsPage(db, {
+      orgId: org.orgId,
+      actorId: hrScopedA,
+      limit: 2,
+    });
+    const scopedSecond = await listDecisionsPage(db, {
+      orgId: org.orgId,
+      actorId: hrScopedA,
+      limit: 2,
+      offset: 2,
+    });
     assert.equal(scopedFirst.total, 4);
     assert.equal(scopedSecond.total, 4);
-    assert.equal(new Set([...scopedFirst.decisions, ...scopedSecond.decisions].map((row) => row.id)).size, 4);
-    assert.deepEqual([...scopedFirst.decisions, ...scopedSecond.decisions].map((row) => `${row.subjectKind}:${row.subjectId ?? '-'}`).sort(), await kindsOf(hrScopedA));
-    const filtered = await listDecisionsPage(db, { orgId: org.orgId, actorId: setupOnly, capabilityKey: 'hrmPayrollAnomalies', limit: 1 });
+    assert.equal(
+      new Set([...scopedFirst.decisions, ...scopedSecond.decisions].map((row) => row.id)).size,
+      4,
+    );
+    assert.deepEqual(
+      [...scopedFirst.decisions, ...scopedSecond.decisions]
+        .map((row) => `${row.subjectKind}:${row.subjectId ?? "-"}`)
+        .sort(),
+      await kindsOf(hrScopedA),
+    );
+    const filtered = await listDecisionsPage(db, {
+      orgId: org.orgId,
+      actorId: setupOnly,
+      capabilityKey: "hrmPayrollAnomalies",
+      limit: 1,
+    });
     assert.equal(filtered.total, 1);
-    assert.equal(filtered.decisions[0]?.subjectKind, 'pay_period');
-    assert.equal('inputDigest' in scopedFirst.decisions[0]!, false);
-    assert.equal('outputDigest' in scopedFirst.decisions[0]!, false);
-    await assert.rejects(listDecisionsPage(db, { orgId: org.orgId, actorId: setupOnly, limit: 0 }), /page size/);
+    assert.equal(filtered.decisions[0]?.subjectKind, "pay_period");
+    assert.equal("inputDigest" in scopedFirst.decisions[0]!, false);
+    assert.equal("outputDigest" in scopedFirst.decisions[0]!, false);
+    await assert.rejects(
+      listDecisionsPage(db, { orgId: org.orgId, actorId: setupOnly, limit: 0 }),
+      /page size/,
+    );
 
     // Unrestricted payroll manager: the whole ledger.
-    const payrollFull = await mkReader("Payroll ledger", "ledger_payroll",
-      ["admin.setup.manage", "payroll.manage"], null);
-    assert.deepEqual(await kindsOf(payrollFull), [
-      "ai_capability:-",
-      `employment:${empA}`,
-      `employment:${empB}`,
-      "pay_period:-",
-      `payroll_anomaly_flag:${flagA}`,
-      `payroll_anomaly_flag:${flagB}`,
-      `payroll_anomaly_flag:${flagNull}`,
-    ].sort());
+    const payrollFull = await mkReader(
+      "Payroll ledger",
+      "ledger_payroll",
+      ["admin.setup.manage", "payroll.manage"],
+      null,
+    );
+    assert.deepEqual(
+      await kindsOf(payrollFull),
+      [
+        "ai_capability:-",
+        `employment:${empA}`,
+        `employment:${empB}`,
+        "pay_period:-",
+        `payroll_anomaly_flag:${flagA}`,
+        `payroll_anomaly_flag:${flagB}`,
+        `payroll_anomaly_flag:${flagNull}`,
+      ].sort(),
+    );
 
     // A real pay trace logs a REFERENCE ledger row: employment and stub
     // ids, line count — never the gross, net, or line amounts.
-    const partyA = (await db.execute<{ partyId: string }>(sql`
+    const partyA = (
+      await db.execute<{ partyId: string }>(
+        sql`
       select worker_party_id::text as "partyId" from worker_employments
-       where org_id = ${org.orgId} and id = ${empA}`, "objects"))[0]?.partyId;
+       where org_id = ${org.orgId} and id = ${empA}`,
+        "objects",
+      )
+    )[0]?.partyId;
     const scheduleId = randomUUID();
     await db.execute(sql`
       insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -926,21 +1408,39 @@ test("ai ledger fences employment subjects and carries no pay values", { skip: !
         province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay, employer_cost)
       values ('CA', 'calculation', ${stubId}, ${org.orgId}, ${runId}, ${partyA}, ${empA},
         'ON', 26, '2026-09-30', 2026, 'CAD', 7123.45, 5401.67, 800)`);
-    assert.equal((await db.execute<{ nullable: string }>(sql`
+    assert.equal(
+      (
+        await db.execute<{ nullable: string }>(
+          sql`
       select is_nullable as nullable from information_schema.columns
-       where table_schema = 'public' and table_name = 'pay_stubs' and column_name = 'employment_id'`, "objects"))[0]?.nullable, "NO");
-    await assert.rejects(explainPay(db, { orgId: org.orgId, actorId: adminId, employmentId: empB, stubId }),
-      /matched no row for this employment/);
+       where table_schema = 'public' and table_name = 'pay_stubs' and column_name = 'employment_id'`,
+          "objects",
+        )
+      )[0]?.nullable,
+      "NO",
+    );
+    await assert.rejects(
+      explainPay(db, { orgId: org.orgId, actorId: adminId, employmentId: empB, stubId }),
+      /matched no row for this employment/,
+    );
     const trace = await explainPay(db, { orgId: org.orgId, actorId: adminId, employmentId: empA });
     assert.equal(trace.gross, "7123.4500");
-    const summaries = (await listDecisions(db, {
-      orgId: org.orgId, actorId: adminId, capabilityKey: "hrmExplainPay",
-    })).filter((d) => d.subjectId === empA).map((d) => d.outputSummary);
+    const summaries = (
+      await listDecisions(db, {
+        orgId: org.orgId,
+        actorId: adminId,
+        capabilityKey: "hrmExplainPay",
+      })
+    )
+      .filter((d) => d.subjectId === empA)
+      .map((d) => d.outputSummary);
     const logged = summaries.find((s) => s.includes(stubId));
     assert.ok(logged, "the trace must log a reference row for its stub");
     assert.ok(logged.includes(empA), "the reference names the employment");
-    assert.ok(!logged.includes("7123") && !logged.includes("5401"),
-      "gross and net must never appear in the ledger summary");
+    assert.ok(
+      !logged.includes("7123") && !logged.includes("5401"),
+      "gross and net must never appear in the ledger summary",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

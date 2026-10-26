@@ -8,7 +8,10 @@
  * reaches the financial statements.
  */
 
-import { buildProvision, deferredAssetAdjustmentLabel } from "../../tax-returns/income-tax-provision.ts";
+import {
+  buildProvision,
+  deferredAssetAdjustmentLabel,
+} from "../../tax-returns/income-tax-provision.ts";
 import type { ConformanceCase } from "../types.ts";
 
 export const INCOME_TAX_CASES: readonly ConformanceCase[] = [
@@ -356,7 +359,9 @@ export const INCOME_TAX_CASES: readonly ConformanceCase[] = [
           permanentEffect: steps.find((s) => s.key.startsWith("permanent:"))!.amount,
           totalExpense: provision.totalExpense,
           effectiveRatePercent: provision.effectiveRatePercent ?? "(none)",
-          reconciliationEndsAtTotal: String(last.key === "total" && last.amount === provision.totalExpense),
+          reconciliationEndsAtTotal: String(
+            last.key === "total" && last.amount === provision.totalExpense,
+          ),
         },
       };
     },

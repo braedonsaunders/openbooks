@@ -3,20 +3,16 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { remeasureAsset } from "@openbooks/engine/assets/asset-lifecycle";
-import {
-  businessToday,
-  isIsoCalendarDate,
-} from "@openbooks/engine/platform/business-date/module";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { normalizeMoney } from "@openbooks/engine/money/money";
 import { isUuid } from "../../../../../lib/list-params";
-import {
-  canonicalDecimal,
-  compareDecimal,
-} from "../../../../../lib/exact-decimal";
+import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";
 import { exactMoney, isoDate } from "../../../../../lib/api/json";
 const postBodySchema0 = z.strictObject({
-  newCarryingValue: exactMoney("newCarryingValue must be a decimal string; JSON numbers are refused"),
+  newCarryingValue: exactMoney(
+    "newCarryingValue must be a decimal string; JSON numbers are refused",
+  ),
   date: isoDate("date must be a valid calendar date").optional(),
 });
 
@@ -32,8 +28,7 @@ export const POST = defineRoute({
   invalidBodyStatus: 422,
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid asset" }, { status: 422 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid asset" }, { status: 422 });
 
     const body = routeBody as { newCarryingValue?: string; date?: string };
     const carryingRaw = canonicalDecimal(body.newCarryingValue, 4);
@@ -49,10 +44,7 @@ export const POST = defineRoute({
       );
     }
     if (carryingRaw === null || compareDecimal(carryingRaw, "0") < 0) {
-      return NextResponse.json(
-        { error: "enter the new carrying value" },
-        { status: 422 },
-      );
+      return NextResponse.json({ error: "enter the new carrying value" }, { status: 422 });
     }
     const newCarryingValue = normalizeMoney(carryingRaw);
     if (body.date !== undefined && !isIsoCalendarDate(body.date)) {
@@ -61,10 +53,7 @@ export const POST = defineRoute({
         { status: 422 },
       );
     }
-    const date =
-      body.date === undefined
-        ? await businessToday(gate.user.orgId)
-        : body.date;
+    const date = body.date === undefined ? await businessToday(gate.user.orgId) : body.date;
 
     try {
       const result = await remeasureAsset(gate.user.orgId, id, {

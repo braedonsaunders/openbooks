@@ -19,36 +19,47 @@ const counterDueTo = "00000000-0000-0000-0000-000000000012";
 
 const ctx: SubsidiaryContext = {
   byId: new Map([
-    [originSubId, {
-      id: originSubId,
-      parentId: null,
-      name: "Origin",
-      baseCurrency: "CAD",
-      isElimination: false,
-      isActive: true,
-    }],
-    [counterSubId, {
-      id: counterSubId,
-      parentId: originSubId,
-      name: "Counter",
-      baseCurrency: "USD",
-      isElimination: false,
-      isActive: true,
-    }],
+    [
+      originSubId,
+      {
+        id: originSubId,
+        parentId: null,
+        name: "Origin",
+        baseCurrency: "CAD",
+        isElimination: false,
+        isActive: true,
+      },
+    ],
+    [
+      counterSubId,
+      {
+        id: counterSubId,
+        parentId: originSubId,
+        name: "Counter",
+        baseCurrency: "USD",
+        isElimination: false,
+        isActive: true,
+      },
+    ],
   ]),
   rootId: originSubId,
   multi: true,
 };
 
 const runner = {
-  execute: async (_query: unknown, mode?: string) => Promise.resolve({
-    rows: [{
-      fromId: originSubId,
-      toId: counterSubId,
-      dueFrom: originDueFrom,
-      dueTo: counterDueTo,
-    }],
-  }).then(<T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result)),
+  execute: async (_query: unknown, mode?: string) =>
+    Promise.resolve({
+      rows: [
+        {
+          fromId: originSubId,
+          toId: counterSubId,
+          dueFrom: originDueFrom,
+          dueTo: counterDueTo,
+        },
+      ],
+    }).then(<T extends { rows: unknown }>(result: T) =>
+      mode === "objects" ? result.rows : result,
+    ),
 } as unknown as Pick<typeof db, "execute">;
 
 function line(subsidiaryId: string, amount: string, txnAmount: string, fxRate: string): SubLine {
@@ -77,16 +88,19 @@ test("posting refuses a line party outside that line's subsidiary", async () => 
   let calls = 0;
   const runner = {
     execute: async (_query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       calls += 1;
       if (calls === 1) return inMode({ rows: [] });
       return inMode({
-        rows: [{
-          id: linePartyId,
-          name: "Root-only customer",
-          subsidiaryId: originSubId,
-          extra: [],
-        }],
+        rows: [
+          {
+            id: linePartyId,
+            name: "Root-only customer",
+            subsidiaryId: originSubId,
+            extra: [],
+          },
+        ],
       });
     },
   } as unknown as Pick<typeof db, "execute">;
@@ -96,12 +110,14 @@ test("posting refuses a line party outside that line's subsidiary", async () => 
       orgId: randomUUID(),
       ctx,
       docSubsidiaryId: originSubId,
-      lines: [{
-        accountId: randomUUID(),
-        amount: "10.0000",
-        subsidiaryId: counterSubId,
-        partyId: linePartyId,
-      }],
+      lines: [
+        {
+          accountId: randomUUID(),
+          amount: "10.0000",
+          subsidiaryId: counterSubId,
+          partyId: linePartyId,
+        },
+      ],
     }),
     (error: unknown) =>
       error instanceof SubsidiaryError &&
@@ -117,7 +133,8 @@ test("posting refuses an unknown header party instead of skipping it", async () 
   let calls = 0;
   const runner = {
     execute: async (_query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       calls += 1;
       return inMode({ rows: [] });
     },
@@ -128,11 +145,13 @@ test("posting refuses an unknown header party instead of skipping it", async () 
       ctx,
       docSubsidiaryId: originSubId,
       partyId: headerPartyId,
-      lines: [{
-        accountId: randomUUID(),
-        amount: "10.0000",
-        subsidiaryId: originSubId,
-      }],
+      lines: [
+        {
+          accountId: randomUUID(),
+          amount: "10.0000",
+          subsidiaryId: originSubId,
+        },
+      ],
     }),
     (error: unknown) =>
       error instanceof SubsidiaryError &&
@@ -149,16 +168,19 @@ test("posting refuses a header party outside the document subsidiary", async () 
   let calls = 0;
   const runner = {
     execute: async (_query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       calls += 1;
       if (calls === 1) return inMode({ rows: [] });
       return inMode({
-        rows: [{
-          id: headerPartyId,
-          name: "Root-only customer",
-          subsidiaryId: originSubId,
-          extra: [],
-        }],
+        rows: [
+          {
+            id: headerPartyId,
+            name: "Root-only customer",
+            subsidiaryId: originSubId,
+            extra: [],
+          },
+        ],
       });
     },
   } as unknown as Pick<typeof db, "execute">;
@@ -168,11 +190,13 @@ test("posting refuses a header party outside the document subsidiary", async () 
       ctx,
       docSubsidiaryId: counterSubId,
       partyId: headerPartyId,
-      lines: [{
-        accountId: randomUUID(),
-        amount: "10.0000",
-        subsidiaryId: counterSubId,
-      }],
+      lines: [
+        {
+          accountId: randomUUID(),
+          amount: "10.0000",
+          subsidiaryId: counterSubId,
+        },
+      ],
     }),
     (error: unknown) =>
       error instanceof SubsidiaryError &&
@@ -185,14 +209,17 @@ test("posting accepts a header party inside the document subsidiary", async () =
   const headerPartyId = randomUUID();
   const runner = {
     execute: async (_query: unknown, mode?: string) => {
-      const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
+      const inMode = <T extends { rows: unknown }>(result: T) =>
+        mode === "objects" ? result.rows : result;
       return inMode({
-        rows: [{
-          id: headerPartyId,
-          name: "Counter customer",
-          subsidiaryId: counterSubId,
-          extra: [],
-        }],
+        rows: [
+          {
+            id: headerPartyId,
+            name: "Counter customer",
+            subsidiaryId: counterSubId,
+            extra: [],
+          },
+        ],
       });
     },
   } as unknown as Pick<typeof db, "execute">;
@@ -201,11 +228,13 @@ test("posting accepts a header party inside the document subsidiary", async () =
     ctx,
     docSubsidiaryId: counterSubId,
     partyId: headerPartyId,
-    lines: [{
-      accountId: randomUUID(),
-      amount: "10.0000",
-      subsidiaryId: counterSubId,
-    }],
+    lines: [
+      {
+        accountId: randomUUID(),
+        amount: "10.0000",
+        subsidiaryId: counterSubId,
+      },
+    ],
   });
 });
 
@@ -244,8 +273,7 @@ test("intercompany balancing refuses a non-zero functional residual with zero tr
       line(counterSubId, "-200.0000", "-100.0000", "2"),
     ]),
     (error: unknown) =>
-      error instanceof SubsidiaryError &&
-      /zero transaction-currency total/.test(error.message),
+      error instanceof SubsidiaryError && /zero transaction-currency total/.test(error.message),
   );
 });
 
@@ -274,7 +302,9 @@ test("intercompany balancing refuses an origin residual beyond translation round
     ]),
     (error: unknown) =>
       error instanceof SubsidiaryError &&
-      /"Origin" leaves 0\.0066 of rounding across 2 lines, beyond the bound of 0\.00005 per line — the line exchange rates do not reproduce the functional amounts/.test(error.message),
+      /"Origin" leaves 0\.0066 of rounding across 2 lines, beyond the bound of 0\.00005 per line — the line exchange rates do not reproduce the functional amounts/.test(
+        error.message,
+      ),
   );
 });
 
@@ -284,9 +314,21 @@ test("FX residual folds onto the largest eligible line regardless of position", 
   // role (largest magnitude), never by position: here the largest line is
   // last, and the first two lines must be byte-identical afterwards.
   const lines = [
-    { ...line(originSubId, "-54.0494", "-40.0000", "1.3512350000"), taxCodeId: null, isOpenItem: false },
-    { ...line(originSubId, "-81.0741", "-60.0000", "1.3512350000"), taxCodeId: null, isOpenItem: false },
-    { ...line(originSubId, "135.1236", "100.0000", "1.3512360000"), taxCodeId: null, isOpenItem: false },
+    {
+      ...line(originSubId, "-54.0494", "-40.0000", "1.3512350000"),
+      taxCodeId: null,
+      isOpenItem: false,
+    },
+    {
+      ...line(originSubId, "-81.0741", "-60.0000", "1.3512350000"),
+      taxCodeId: null,
+      isOpenItem: false,
+    },
+    {
+      ...line(originSubId, "135.1236", "100.0000", "1.3512360000"),
+      taxCodeId: null,
+      isOpenItem: false,
+    },
   ];
   absorbFxRoundingResidual(lines);
   assert.equal(lines[0]!.amount, "-54.0494");
@@ -294,7 +336,10 @@ test("FX residual folds onto the largest eligible line regardless of position", 
   assert.equal(lines[2]!.amount, "135.1235");
   assert.equal(add(add(lines[0]!.amount, lines[1]!.amount), lines[2]!.amount), "0.0000");
   // The adjustment touches functional amounts only — transaction evidence is kept.
-  assert.deepEqual(lines.map((l) => l.txnAmount), ["-40.0000", "-60.0000", "100.0000"]);
+  assert.deepEqual(
+    lines.map((l) => l.txnAmount),
+    ["-40.0000", "-60.0000", "100.0000"],
+  );
 });
 
 test("FX residual never lands on a tax control or open-item leg", () => {
@@ -303,9 +348,21 @@ test("FX residual never lands on a tax control or open-item leg", () => {
   // leg (the subledger settles at that amount), landing on the small plain
   // line instead.
   const lines = [
-    { ...line(originSubId, "135.1235", "100.0000", "1.3512350000"), taxCodeId: randomUUID(), isOpenItem: false },
-    { ...line(originSubId, "-81.0741", "-60.0000", "1.3512350000"), taxCodeId: null, isOpenItem: true },
-    { ...line(originSubId, "-54.0493", "-40.0000", "1.3512325000"), taxCodeId: null, isOpenItem: false },
+    {
+      ...line(originSubId, "135.1235", "100.0000", "1.3512350000"),
+      taxCodeId: randomUUID(),
+      isOpenItem: false,
+    },
+    {
+      ...line(originSubId, "-81.0741", "-60.0000", "1.3512350000"),
+      taxCodeId: null,
+      isOpenItem: true,
+    },
+    {
+      ...line(originSubId, "-54.0493", "-40.0000", "1.3512325000"),
+      taxCodeId: null,
+      isOpenItem: false,
+    },
   ];
   absorbFxRoundingResidual(lines);
   assert.equal(lines[0]!.amount, "135.1235");
@@ -327,7 +384,10 @@ test("FX residual beyond per-line rounding is refused, not flattened", () => {
     (error: unknown) =>
       error instanceof SubsidiaryError && /exceeds per-line FX rounding/.test(error.message),
   );
-  assert.deepEqual(lines.map((l) => l.amount), ["10.0001", "-9.9999"]);
+  assert.deepEqual(
+    lines.map((l) => l.amount),
+    ["10.0001", "-9.9999"],
+  );
 });
 
 test("FX residual with only control legs to take it is refused", () => {
@@ -354,7 +414,10 @@ test("FX absorber leaves transaction-imbalanced groups for the balancer", () => 
     { ...line(originSubId, "-9.0000", "-9.0000", "1"), taxCodeId: null, isOpenItem: false },
   ];
   absorbFxRoundingResidual(lines);
-  assert.deepEqual(lines.map((l) => l.amount), ["10.0001", "-9.0000"]);
+  assert.deepEqual(
+    lines.map((l) => l.amount),
+    ["10.0001", "-9.0000"],
+  );
 });
 
 test("FX absorber is a no-op on an already balanced group", () => {
@@ -363,7 +426,10 @@ test("FX absorber is a no-op on an already balanced group", () => {
     { ...line(originSubId, "-10.0000", "-10.0000", "1"), taxCodeId: null, isOpenItem: false },
   ];
   absorbFxRoundingResidual(lines);
-  assert.deepEqual(lines.map((l) => l.amount), ["10.0000", "-10.0000"]);
+  assert.deepEqual(
+    lines.map((l) => l.amount),
+    ["10.0000", "-10.0000"],
+  );
 });
 
 test("absorbed residual meets the storage group bound through its bucket", () => {
@@ -372,9 +438,21 @@ test("absorbed residual meets the storage group bound through its bucket", () =>
   // the group holds two ledger units against the five-line bound — the exact
   // shape the storage check admits.
   const lines = [
-    { ...line(originSubId, "135.1236", "100.0000", "1.351236"), taxCodeId: null, isOpenItem: false },
-    { ...line(originSubId, "-54.0494", "-40.0000", "1.351235"), taxCodeId: null, isOpenItem: false },
-    { ...line(originSubId, "-81.0741", "-60.0000", "1.351235"), taxCodeId: null, isOpenItem: false },
+    {
+      ...line(originSubId, "135.1236", "100.0000", "1.351236"),
+      taxCodeId: null,
+      isOpenItem: false,
+    },
+    {
+      ...line(originSubId, "-54.0494", "-40.0000", "1.351235"),
+      taxCodeId: null,
+      isOpenItem: false,
+    },
+    {
+      ...line(originSubId, "-81.0741", "-60.0000", "1.351235"),
+      taxCodeId: null,
+      isOpenItem: false,
+    },
     { ...line(originSubId, "55.0001", "50.0000", "1.100002"), taxCodeId: null, isOpenItem: false },
     { ...line(originSubId, "-55.0000", "-50.0000", "1.1"), taxCodeId: null, isOpenItem: false },
   ];

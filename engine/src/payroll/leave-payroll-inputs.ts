@@ -79,10 +79,13 @@ export function readLeavePayrollInputRow(row: Record<string, unknown>): LeavePay
     hours: String(row.hours),
     sourceLeaveRequestId: String(row.sourceLeaveRequestId),
     status: status as LeavePayrollInput["status"],
-    consumedByRunDocumentId: row.consumedByRunDocumentId != null ? String(row.consumedByRunDocumentId) : null,
+    consumedByRunDocumentId:
+      row.consumedByRunDocumentId != null ? String(row.consumedByRunDocumentId) : null,
     entitlementPlanId: row.entitlementPlanId != null ? String(row.entitlementPlanId) : null,
-    entitlementMappingId: row.entitlementMappingId != null ? String(row.entitlementMappingId) : null,
-    entitlementPlanUpdatedAt: row.entitlementPlanUpdatedAt != null ? String(row.entitlementPlanUpdatedAt) : null,
+    entitlementMappingId:
+      row.entitlementMappingId != null ? String(row.entitlementMappingId) : null,
+    entitlementPlanUpdatedAt:
+      row.entitlementPlanUpdatedAt != null ? String(row.entitlementPlanUpdatedAt) : null,
   };
 }
 
@@ -90,16 +93,36 @@ const toInput = readLeavePayrollInputRow;
 
 export function requireBankedLeaveEntitlementPlan(input: {
   absenceDate: string;
-  mapping: { mapping_id: string; is_active: boolean; plan_id: string; plan_updated_at: string; unit: string; direction: string; system_key: string | null; plan_active: boolean } | undefined;
+  mapping:
+    | {
+        mapping_id: string;
+        is_active: boolean;
+        plan_id: string;
+        plan_updated_at: string;
+        unit: string;
+        direction: string;
+        system_key: string | null;
+        plan_active: boolean;
+      }
+    | undefined;
 }): { planId: string; mappingId: string; planUpdatedAt: string } {
   const mapping = input.mapping;
-  if (!mapping?.is_active || !mapping.plan_active || mapping.unit !== "hours"
-      || mapping.direction !== "accrue" || mapping.system_key === "vacation") {
+  if (
+    !mapping?.is_active ||
+    !mapping.plan_active ||
+    mapping.unit !== "hours" ||
+    mapping.direction !== "accrue" ||
+    mapping.system_key === "vacation"
+  ) {
     throw new LeavePayrollInputError(
       `approved banked leave has no effective entitlement mapping on ${input.absenceDate} — open Setup → Workforce → Leave types, add an effective-dated mapping to an active accruing hours plan other than Vacation, then recalculate payroll`,
     );
   }
-  return { planId: mapping.plan_id, mappingId: mapping.mapping_id, planUpdatedAt: mapping.plan_updated_at };
+  return {
+    planId: mapping.plan_id,
+    mappingId: mapping.mapping_id,
+    planUpdatedAt: mapping.plan_updated_at,
+  };
 }
 
 export interface ConsumeLeavePayrollInputsQuery {
@@ -129,12 +152,15 @@ export async function lockLeavePayrollInputSources(
   orgId: string,
   runDocumentId: string,
 ): Promise<void> {
-  const leaveTypes = await exec.execute<{ leave_type_id: string }>(sql`
+  const leaveTypes = await exec.execute<{ leave_type_id: string }>(
+    sql`
     select distinct leave_type_id::text as leave_type_id
       from hrm_payroll_inputs
      where org_id = ${orgId} and consumed_by_run_document_id = ${runDocumentId}
      order by leave_type_id
-  `, "objects");
+  `,
+    "objects",
+  );
   for (const row of leaveTypes) await lockLeaveEntitlementMapping(exec, orgId, row.leave_type_id);
   await exec.execute(sql`
     select id from hrm_payroll_inputs
@@ -158,10 +184,18 @@ async function resolveLeaveEntitlementPlan(
   input: { orgId: string; leaveTypeId: string; absenceDate: string },
 ): Promise<{ planId: string; mappingId: string; planUpdatedAt: string }> {
   await lockLeaveEntitlementMapping(exec, input.orgId, input.leaveTypeId);
-  const mapping = (await exec.execute<{
-    mapping_id: string; is_active: boolean; plan_id: string; plan_updated_at: string; unit: string; direction: string;
-    system_key: string | null; plan_active: boolean;
-  }>(sql`
+  const mapping = (
+    await exec.execute<{
+      mapping_id: string;
+      is_active: boolean;
+      plan_id: string;
+      plan_updated_at: string;
+      unit: string;
+      direction: string;
+      system_key: string | null;
+      plan_active: boolean;
+    }>(
+      sql`
     select m.id::text as mapping_id, m.is_active, m.entitlement_plan_id::text as plan_id,
            p.updated_at::text as plan_updated_at, p.unit, p.direction, p.system_key, p.is_active as plan_active
       from hrm_leave_payroll_entitlement_mappings m
@@ -171,7 +205,10 @@ async function resolveLeaveEntitlementPlan(
      order by m.effective_from desc
      limit 1
      for share of m, p
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return requireBankedLeaveEntitlementPlan({ absenceDate: input.absenceDate, mapping });
 }
 
@@ -196,7 +233,8 @@ export async function consumeLeavePayrollInputs(
   if (query.employeePartyIds.length === 0) return [];
   // Idempotent recalculate: release this run's own consumed rows first.
   // Voided rows stay voided — release never resurrects one.
-  if (query.releaseExisting !== false && query.simulate !== true) await exec.execute(sql`
+  if (query.releaseExisting !== false && query.simulate !== true)
+    await exec.execute(sql`
     update hrm_payroll_inputs
        set status = 'pending', consumed_by_run_document_id = null, consumed_at = null,
            resolved_entitlement_plan_id = null, resolved_entitlement_mapping_id = null,
@@ -206,7 +244,9 @@ export async function consumeLeavePayrollInputs(
        and status = 'consumed'
   `);
   // Another run's consumed rows in this scope are never absorbed.
-  const foreign = (await exec.execute<{ id: string; consumed_by_run_document_id: string }>(sql`
+  const foreign = (
+    await exec.execute<{ id: string; consumed_by_run_document_id: string }>(
+      sql`
     select id, consumed_by_run_document_id from hrm_payroll_inputs
      where org_id = ${orgId} and status = 'consumed'
        and consumed_by_run_document_id <> ${runDocumentId}
@@ -215,32 +255,45 @@ export async function consumeLeavePayrollInputs(
          select jsonb_array_elements_text(${JSON.stringify(query.employeePartyIds)}::jsonb)::uuid
        )
      limit 1
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (foreign) {
     throw new LeavePayrollInputError(
       `payroll input ${foreign.id} is already consumed by pay run ${foreign.consumed_by_run_document_id} — release that run's inputs or narrow the period instead of absorbing another run's rows`,
     );
   }
-  const pending = await exec.execute<Record<string, unknown>>(sql`
+  const pending = await exec.execute<Record<string, unknown>>(
+    sql`
     select ${INPUT_COLUMNS} from hrm_payroll_inputs
      where org_id = ${orgId}
-       and (status = 'pending' ${query.simulate === true
-         ? sql`or (status = 'consumed' and consumed_by_run_document_id = ${runDocumentId})`
-         : sql``})
+       and (status = 'pending' ${
+         query.simulate === true
+           ? sql`or (status = 'consumed' and consumed_by_run_document_id = ${runDocumentId})`
+           : sql``
+       })
        and absence_date >= ${periodStart} and absence_date <= ${periodEnd}
        and employee_party_id in (
          select jsonb_array_elements_text(${JSON.stringify(query.employeePartyIds)}::jsonb)::uuid
        )
      order by absence_date, employee_party_id
      for update
-  `, "objects");
+  `,
+    "objects",
+  );
   // Party coherence per row: the employment's live worker must still be the
   // party the ledger will read. A merge moved the worker; refuse by name.
   for (const row of pending) {
-    const employment = (await exec.execute<{ worker_party_id: string }>(sql`
+    const employment = (
+      await exec.execute<{ worker_party_id: string }>(
+        sql`
       select worker_party_id from worker_employments
        where org_id = ${orgId} and id = ${String(row.employmentId)}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (employment && employment.worker_party_id !== String(row.employeePartyId)) {
       throw new LeavePayrollInputError(
         `payroll input ${String(row.id)} names party ${String(row.employeePartyId)} but its employment now points at party ${employment.worker_party_id} — void the stale row and re-file the request so HR re-resolves the party; the run never re-points it`,
@@ -248,19 +301,26 @@ export async function consumeLeavePayrollInputs(
     }
   }
   if (pending.length === 0) return [];
-  const prepared: Array<{ row: Record<string, unknown>; plan: { planId: string; mappingId: string; planUpdatedAt: string } | null }> = [];
+  const prepared: Array<{
+    row: Record<string, unknown>;
+    plan: { planId: string; mappingId: string; planUpdatedAt: string } | null;
+  }> = [];
   for (const row of pending) {
-    const plan = String(row.kind) === "bank_in"
-      ? await resolveLeaveEntitlementPlan(exec, {
-          orgId,
-          leaveTypeId: String(row.leaveTypeId),
-          absenceDate: String(row.absenceDate).slice(0, 10),
-        })
-      : null;
-    if (String(row.kind) === "bank_in" && row.status === "consumed"
-        && (String(row.entitlementPlanId ?? "") !== plan?.planId
-          || String(row.entitlementMappingId ?? "") !== plan?.mappingId
-          || String(row.entitlementPlanUpdatedAt ?? "") !== plan?.planUpdatedAt)) {
+    const plan =
+      String(row.kind) === "bank_in"
+        ? await resolveLeaveEntitlementPlan(exec, {
+            orgId,
+            leaveTypeId: String(row.leaveTypeId),
+            absenceDate: String(row.absenceDate).slice(0, 10),
+          })
+        : null;
+    if (
+      String(row.kind) === "bank_in" &&
+      row.status === "consumed" &&
+      (String(row.entitlementPlanId ?? "") !== plan?.planId ||
+        String(row.entitlementMappingId ?? "") !== plan?.mappingId ||
+        String(row.entitlementPlanUpdatedAt ?? "") !== plan?.planUpdatedAt)
+    ) {
       throw new LeavePayrollInputError(
         `the effective entitlement destination for approved banked leave changed after this run was calculated — recalculate payroll before committing`,
       );
@@ -278,17 +338,23 @@ export async function consumeLeavePayrollInputs(
          where org_id = ${orgId} and id = ${String(row.id)} and status = 'pending'
       `);
       if (result.rowCount !== 1) {
-        throw new LeavePayrollInputError(`approved leave input ${String(row.id)} changed while payroll was calculating — recalculate the pay run`);
+        throw new LeavePayrollInputError(
+          `approved leave input ${String(row.id)} changed while payroll was calculating — recalculate the pay run`,
+        );
       }
     }
   }
-  if (query.simulate === true) return prepared.map(({ row, plan }) => toInput({
-    ...row,
-    entitlementPlanId: plan?.planId ?? row.entitlementPlanId,
-    entitlementMappingId: plan?.mappingId ?? row.entitlementMappingId,
-    entitlementPlanUpdatedAt: plan?.planUpdatedAt ?? row.entitlementPlanUpdatedAt,
-  }));
-  const consumed = await exec.execute<Record<string, unknown>>(sql`
+  if (query.simulate === true)
+    return prepared.map(({ row, plan }) =>
+      toInput({
+        ...row,
+        entitlementPlanId: plan?.planId ?? row.entitlementPlanId,
+        entitlementMappingId: plan?.mappingId ?? row.entitlementMappingId,
+        entitlementPlanUpdatedAt: plan?.planUpdatedAt ?? row.entitlementPlanUpdatedAt,
+      }),
+    );
+  const consumed = await exec.execute<Record<string, unknown>>(
+    sql`
     select ${INPUT_COLUMNS} from hrm_payroll_inputs
      where org_id = ${orgId} and consumed_by_run_document_id = ${runDocumentId}
        and status = 'consumed'
@@ -297,7 +363,9 @@ export async function consumeLeavePayrollInputs(
          select jsonb_array_elements_text(${JSON.stringify(query.employeePartyIds)}::jsonb)::uuid
        )
      order by absence_date, employee_party_id
-  `, "objects");
+  `,
+    "objects",
+  );
   return consumed.map(toInput);
 }
 
@@ -315,7 +383,8 @@ export async function releaseLeavePayrollInputs(
   exec: SqlExecutor,
   query: ReleaseLeavePayrollInputsQuery,
 ): Promise<number> {
-  const result = (await exec.execute<{ n: string }>(sql`
+  const result = await exec.execute<{ n: string }>(
+    sql`
     with released as (
       update hrm_payroll_inputs
        set status = 'pending', consumed_by_run_document_id = null, consumed_at = null,
@@ -327,7 +396,9 @@ export async function releaseLeavePayrollInputs(
       returning id
     )
     select count(*)::text as n from released
-  `, "objects"));
+  `,
+    "objects",
+  );
   return Number(result[0]?.n ?? "0");
 }
 
@@ -366,7 +437,10 @@ export async function leavePayrollInputProblems(
       and employee_party_id in (
         select jsonb_array_elements_text(${JSON.stringify(query.employeePartyIds)}::jsonb)::uuid
       )`;
-  const missingMapping = (await exec.execute<{ n: number }>(sql`
+  const missingMapping =
+    (
+      await exec.execute<{ n: number }>(
+        sql`
     select count(*)::int as n
       from hrm_payroll_inputs i
       left join lateral (
@@ -388,7 +462,10 @@ export async function leavePayrollInputProblems(
        and (mapping.is_active is distinct from true or mapping.plan_active is distinct from true
          or mapping.unit is distinct from 'hours' or mapping.direction is distinct from 'accrue'
          or mapping.system_key = 'vacation')
-  `, "objects"))[0]?.n ?? 0;
+  `,
+        "objects",
+      )
+    )[0]?.n ?? 0;
   if (missingMapping > 0) {
     return {
       code: "MAPPING_CHANGED",
@@ -396,9 +473,15 @@ export async function leavePayrollInputProblems(
       message: `${missingMapping} approved banked leave inputs have no effective entitlement mapping — open Setup → Workforce → Leave types, map each type to an active accruing hours plan other than Vacation, then recalculate payroll`,
     };
   }
-  const pending = (await exec.execute<{ n: number }>(sql`
+  const pending =
+    (
+      await exec.execute<{ n: number }>(
+        sql`
     select count(*)::int as n from hrm_payroll_inputs where ${scope} and status = 'pending'
-  `, "objects"))[0]?.n ?? 0;
+  `,
+        "objects",
+      )
+    )[0]?.n ?? 0;
   if (pending > 0) {
     return {
       code: "PENDING_INPUTS",
@@ -408,10 +491,16 @@ export async function leavePayrollInputProblems(
   }
   // The ordering is the defect: the void must land AFTER the consume for
   // this leg to fire. A void before consume leaves no consumed row behind.
-  const voided = (await exec.execute<{ n: number }>(sql`
+  const voided =
+    (
+      await exec.execute<{ n: number }>(
+        sql`
     select count(*)::int as n from hrm_payroll_inputs
      where ${scope} and status = 'voided' and consumed_by_run_document_id = ${query.runDocumentId}
-  `, "objects"))[0]?.n ?? 0;
+  `,
+        "objects",
+      )
+    )[0]?.n ?? 0;
   if (voided > 0) {
     return {
       code: "VOIDED_AFTER_CONSUME",
@@ -419,7 +508,10 @@ export async function leavePayrollInputProblems(
       message: `${voided} leave pay-run inputs consumed by this run were voided after calculation — the calculation is stale; release and recalculate the run so the voided days drop out before committing`,
     };
   }
-  const changed = (await exec.execute<{ n: number }>(sql`
+  const changed =
+    (
+      await exec.execute<{ n: number }>(
+        sql`
     select count(*)::int as n
       from hrm_payroll_inputs i
       left join lateral (
@@ -446,7 +538,10 @@ export async function leavePayrollInputProblems(
          or mapping.plan_updated_at is distinct from i.resolved_entitlement_plan_updated_at::text
          or mapping.plan_active is distinct from true or mapping.unit is distinct from 'hours'
          or mapping.direction is distinct from 'accrue' or mapping.system_key = 'vacation')
-  `, "objects"))[0]?.n ?? 0;
+  `,
+        "objects",
+      )
+    )[0]?.n ?? 0;
   if (changed > 0) {
     return {
       code: "MAPPING_CHANGED",
@@ -467,7 +562,8 @@ export async function strandedLeavePayrollInputs(
   exec: SqlExecutor,
   orgId: string,
 ): Promise<LeavePayrollInput[]> {
-  const rows = await exec.execute<Record<string, unknown>>(sql`
+  const rows = await exec.execute<Record<string, unknown>>(
+    sql`
     select ${INPUT_COLUMNS} from hrm_payroll_inputs i
      where i.org_id = ${orgId} and i.status = 'consumed'
        and exists (
@@ -477,6 +573,8 @@ export async function strandedLeavePayrollInputs(
             and r.run_status <> 'committed' and d.status <> 'voided'
        )
      order by i.absence_date, i.employee_party_id
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map(toInput);
 }

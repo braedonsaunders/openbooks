@@ -86,18 +86,38 @@ test("net-zero pair builds project legs plus the untagged contra", () => {
     ],
   });
   assert.equal(built.length, 3);
-  const [legA, legB, contra] = built as [typeof built[0], typeof built[1], typeof built[2]];
+  const [legA, legB, contra] = built as [(typeof built)[0], (typeof built)[1], (typeof built)[2]];
   assert.deepEqual(
-    { accountId: legA.line.accountId, projectId: legA.line.projectId, amount: legA.line.amount, memo: legA.line.memo },
+    {
+      accountId: legA.line.accountId,
+      projectId: legA.line.projectId,
+      amount: legA.line.amount,
+      memo: legA.line.memo,
+    },
     { accountId: ACCOUNT_ID, projectId: PROJECT_A, amount: "25.0000", memo: "Overhead applied" },
   );
   assert.deepEqual(
-    { accountId: legB.line.accountId, projectId: legB.line.projectId, amount: legB.line.amount, memo: legB.line.memo },
+    {
+      accountId: legB.line.accountId,
+      projectId: legB.line.projectId,
+      amount: legB.line.amount,
+      memo: legB.line.memo,
+    },
     { accountId: ACCOUNT_ID, projectId: PROJECT_B, amount: "20.0000", memo: "Overhead applied" },
   );
   assert.deepEqual(
-    { accountId: contra.line.accountId, projectId: contra.line.projectId, amount: contra.line.amount, memo: contra.line.memo },
-    { accountId: ACCOUNT_ID, projectId: null, amount: "-45.0000", memo: "Overhead applied — contra" },
+    {
+      accountId: contra.line.accountId,
+      projectId: contra.line.projectId,
+      amount: contra.line.amount,
+      memo: contra.line.memo,
+    },
+    {
+      accountId: ACCOUNT_ID,
+      projectId: null,
+      amount: "-45.0000",
+      memo: "Overhead applied — contra",
+    },
   );
   for (const leg of built) {
     assert.equal(leg.line.contributorKind, "rule");
@@ -136,27 +156,30 @@ test("net-zero pair lineage traces every cent to its time entry", () => {
     assert.equal(draft.documentId, null);
     assert.equal(draft.driverId, DRIVER_ID);
   }
-  const byEntry = new Map(drafts.filter((d) => d.sourceTimeEntryId).map((d) => [d.sourceTimeEntryId, d]));
-  assert.deepEqual(byEntry.get(ENTRY_1), {
-      mode: "post",
-      ruleId: RULE_ID,
-      versionId: VERSION_ID,
-      definitionHash: systemRule().version.definitionHash,
-      runId: null,
-      documentId: null,
-      sourceJournalLineId: null,
-      sourceDocumentLineId: null,
-      targetDocumentLineId: null,
-      sourceTimeEntryId: ENTRY_1,
-      driverId: DRIVER_ID,
-      driverValue: "25.0000",
-      driverTotal: "45.0000",
-      share: "0.5555555556",
-      amount: "25.0000",
-      residual: "0",
-    },
+  const byEntry = new Map(
+    drafts.filter((d) => d.sourceTimeEntryId).map((d) => [d.sourceTimeEntryId, d]),
   );
-  const contra = drafts.find((d) => d.sourceTimeEntryId === null || d.sourceTimeEntryId === undefined)!;
+  assert.deepEqual(byEntry.get(ENTRY_1), {
+    mode: "post",
+    ruleId: RULE_ID,
+    versionId: VERSION_ID,
+    definitionHash: systemRule().version.definitionHash,
+    runId: null,
+    documentId: null,
+    sourceJournalLineId: null,
+    sourceDocumentLineId: null,
+    targetDocumentLineId: null,
+    sourceTimeEntryId: ENTRY_1,
+    driverId: DRIVER_ID,
+    driverValue: "25.0000",
+    driverTotal: "45.0000",
+    share: "0.5555555556",
+    amount: "25.0000",
+    residual: "0",
+  });
+  const contra = drafts.find(
+    (d) => d.sourceTimeEntryId === null || d.sourceTimeEntryId === undefined,
+  )!;
   assert.equal(contra.amount, "-45.0000");
   assert.equal(contra.share, null);
 });

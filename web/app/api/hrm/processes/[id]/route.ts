@@ -16,10 +16,7 @@ export const GET = defineRoute({
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const { id } = routeParams;
     if (!isUuid(id))
-      return NextResponse.json(
-        { error: "process id must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "process id must be a uuid" }, { status: 400 });
     try {
       const process = await getProcess({
         orgId: gate.user.orgId,

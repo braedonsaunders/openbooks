@@ -1,7 +1,7 @@
-import test from 'node:test'
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { INFORMATION_RETURN_FORMS } from '@openbooks/engine/compliance/information-returns'
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { INFORMATION_RETURN_FORMS } from "@openbooks/engine/compliance/information-returns";
 import {
   SETUP_ENTITIES,
   SETUP_ENTITY_BY_KEY,
@@ -14,566 +14,743 @@ import {
   setupFieldVisible,
   type SetupEntity,
   type SetupField,
-} from './registry.ts'
-import { setupFieldOptions } from './types.ts'
+} from "./registry.ts";
+import { setupFieldOptions } from "./types.ts";
 
-test('agents is a first-party setup group served by custom pages, not generic entities', () => {
-  const agents = SETUP_GROUPS.find((group) => group.key === 'agents')
-  assert.ok(agents, 'SETUP_GROUPS must list the agents category')
-  assert.equal(agents.iconKey, 'sparkles')
+test("agents is a first-party setup group served by custom pages, not generic entities", () => {
+  const agents = SETUP_GROUPS.find((group) => group.key === "agents");
+  assert.ok(agents, "SETUP_GROUPS must list the agents category");
+  assert.equal(agents.iconKey, "sparkles");
   // The agents area (overview, library, policy, activity) is custom pages
   // under /admin/setup/agents/** — no generic CRUD entity may claim the
   // group, or the rail would render a second copy of the surface.
-  const claimed = setupEntitiesByGroup().get('agents') ?? []
-  assert.deepEqual(claimed.map((entity) => entity.key), [])
-})
+  const claimed = setupEntitiesByGroup().get("agents") ?? [];
+  assert.deepEqual(
+    claimed.map((entity) => entity.key),
+    [],
+  );
+});
 
-test('CRM setup lists are registry-backed, archived instead of deleted, and retain CRM authority', () => {
-  const entities = ['crm-account-statuses', 'crm-opportunity-statuses', 'crm-lead-sources'].map((key) => {
-    const entity = SETUP_ENTITY_BY_KEY.get(key)
-    assert.ok(entity)
-    return entity
-  })
+test("CRM setup lists are registry-backed, archived instead of deleted, and retain CRM authority", () => {
+  const entities = ["crm-account-statuses", "crm-opportunity-statuses", "crm-lead-sources"].map(
+    (key) => {
+      const entity = SETUP_ENTITY_BY_KEY.get(key);
+      assert.ok(entity);
+      return entity;
+    },
+  );
   for (const entity of entities) {
-    assert.equal(entity.groupKey, 'sales')
-    assert.equal(entity.featureKey, 'crm')
-    assert.equal(entity.writePermission, 'crm.setup.manage')
-    assert.equal(entity.allowDelete, false)
-    assert.equal(entity.naturalKey, 'key')
-    assert.equal(entity.rehomed, true)
+    assert.equal(entity.groupKey, "sales");
+    assert.equal(entity.featureKey, "crm");
+    assert.equal(entity.writePermission, "crm.setup.manage");
+    assert.equal(entity.allowDelete, false);
+    assert.equal(entity.naturalKey, "key");
+    assert.equal(entity.rehomed, true);
   }
-  const isWon = entities[1]!.fields.find((field) => field.key === 'isWon')!
-  assert.equal(setupFieldVisible(isWon, { isClosed: true }), true)
-  assert.equal(setupFieldVisible(isWon, { isClosed: false }), false)
-  assert.ok(!setupEntitiesByGroup().get('sales')?.some((entity) => entity.key.startsWith('crm-')))
-})
+  const isWon = entities[1]!.fields.find((field) => field.key === "isWon")!;
+  assert.equal(setupFieldVisible(isWon, { isClosed: true }), true);
+  assert.equal(setupFieldVisible(isWon, { isClosed: false }), false);
+  assert.ok(
+    !setupEntitiesByGroup()
+      .get("sales")
+      ?.some((entity) => entity.key.startsWith("crm-")),
+  );
+});
 
-test('workforce policy and native action limits have separate reachable Setup homes', () => {
-  const policy = SETUP_ENTITY_BY_KEY.get('ai-rails-settings')!
-  assert.equal(policy.rehomed, undefined)
-  assert.equal(policy.table, 'ai_rails_settings')
-  assert.equal(policy.idColumn, 'org_id')
-  assert.equal(policy.allowCreate, false)
-  assert.equal(policy.allowDelete, false)
-  assert.equal(policy.featureKey, 'aiGovernanceLedger')
-  assert.deepEqual(policy.recordSections?.map((section) => section.fields), [
-    ['zThreshold', 'retroThreshold', 'cohortKey'], ['biasTerms'], ['reviewMonths'],
-  ])
-  const limits = SETUP_ENTITY_BY_KEY.get('ai-capabilities')!
-  assert.equal(limits.readOnly, true, 'generic CRUD cannot bypass native capability commands')
-  assert.equal(limits.importVia, 'none')
-  assert.equal(limits.featureKey, 'aiGovernanceLedger')
-  assert.equal(setupEntityHref(limits), '/admin/setup/ai-capabilities')
-  assert.ok(setupEntitiesByGroup().get('workforce')?.some((entity) => entity.key === policy.key))
-  assert.ok(setupEntitiesByGroup().get('company')?.some((entity) => entity.key === limits.key))
-})
+test("workforce policy and native action limits have separate reachable Setup homes", () => {
+  const policy = SETUP_ENTITY_BY_KEY.get("ai-rails-settings")!;
+  assert.equal(policy.rehomed, undefined);
+  assert.equal(policy.table, "ai_rails_settings");
+  assert.equal(policy.idColumn, "org_id");
+  assert.equal(policy.allowCreate, false);
+  assert.equal(policy.allowDelete, false);
+  assert.equal(policy.featureKey, "aiGovernanceLedger");
+  assert.deepEqual(
+    policy.recordSections?.map((section) => section.fields),
+    [["zThreshold", "retroThreshold", "cohortKey"], ["biasTerms"], ["reviewMonths"]],
+  );
+  const limits = SETUP_ENTITY_BY_KEY.get("ai-capabilities")!;
+  assert.equal(limits.readOnly, true, "generic CRUD cannot bypass native capability commands");
+  assert.equal(limits.importVia, "none");
+  assert.equal(limits.featureKey, "aiGovernanceLedger");
+  assert.equal(setupEntityHref(limits), "/admin/setup/ai-capabilities");
+  assert.ok(
+    setupEntitiesByGroup()
+      .get("workforce")
+      ?.some((entity) => entity.key === policy.key),
+  );
+  assert.ok(
+    setupEntitiesByGroup()
+      .get("company")
+      ?.some((entity) => entity.key === limits.key),
+  );
+});
 
-test('record-owned setup collections leave the rail and declare their parent bindings', () => {
-  const taxRates = SETUP_ENTITY_BY_KEY.get('tax-rates')
-  const taxBoxes = SETUP_ENTITY_BY_KEY.get('tax-report-lines')
-  assert.ok(taxRates)
-  assert.ok(taxBoxes)
-  assert.equal(taxRates.nestedUnder, 'tax-codes')
-  assert.equal(taxBoxes.nestedUnder, 'tax-return-forms')
-  assert.equal(taxRates.docSlug, 'tax-configuration')
-  assert.equal(taxBoxes.docSlug, 'tax-returns-and-boxes')
+test("record-owned setup collections leave the rail and declare their parent bindings", () => {
+  const taxRates = SETUP_ENTITY_BY_KEY.get("tax-rates");
+  const taxBoxes = SETUP_ENTITY_BY_KEY.get("tax-report-lines");
+  assert.ok(taxRates);
+  assert.ok(taxBoxes);
+  assert.equal(taxRates.nestedUnder, "tax-codes");
+  assert.equal(taxBoxes.nestedUnder, "tax-return-forms");
+  assert.equal(taxRates.docSlug, "tax-configuration");
+  assert.equal(taxBoxes.docSlug, "tax-returns-and-boxes");
 
-  const visibleTaxKeys = setupEntitiesByGroup().get('taxes')?.map((entity) => entity.key)
-  assert.ok(visibleTaxKeys?.includes('tax-codes'))
-  assert.ok(visibleTaxKeys?.includes('tax-return-forms'))
-  assert.ok(!visibleTaxKeys?.includes('tax-rates'))
-  assert.ok(!visibleTaxKeys?.includes('tax-report-lines'))
+  const visibleTaxKeys = setupEntitiesByGroup()
+    .get("taxes")
+    ?.map((entity) => entity.key);
+  assert.ok(visibleTaxKeys?.includes("tax-codes"));
+  assert.ok(visibleTaxKeys?.includes("tax-return-forms"));
+  assert.ok(!visibleTaxKeys?.includes("tax-rates"));
+  assert.ok(!visibleTaxKeys?.includes("tax-report-lines"));
   const owners: Record<string, string[]> = {
-    'tax-registrations': ['tax-jurisdictions'],
-    'benefit-contribution-rules': ['benefit-plans'],
-    'benefit-contribution-classes': ['benefit-plans'],
-    'benefit-contribution-tiers': ['benefit-plans'],
-    'benefit-recovery-sources': ['benefit-plans'],
-    'benefit-contribution-rule-components': ['benefit-contribution-rules'],
-    'benefit-enrollment-terms': ['benefit-enrollment-configuration'],
-    'leave-policies': ['leave-types'],
-    'leave-payroll-entitlement-mappings': ['leave-types'],
-    'hrm-competencies': ['hrm-competency-frameworks'],
-    'customer-price-level-assignments': ['price-levels'],
-    'item-identifiers': ['items'],
-    'customer-item-refs': ['items'],
-    'tax-pool-classes': ['tax-regimes'],
-    'tax-first-year-rules': ['tax-regimes'],
-    'entitlement-plan-limits': ['entitlement-plans'],
-    'entitlement-service-tiers': ['entitlement-plans', 'pay-components'],
-  }
-  const visibleKeys = [...setupEntitiesByGroup().values()].flat().map((entity) => entity.key)
+    "tax-registrations": ["tax-jurisdictions"],
+    "benefit-contribution-rules": ["benefit-plans"],
+    "benefit-contribution-classes": ["benefit-plans"],
+    "benefit-contribution-tiers": ["benefit-plans"],
+    "benefit-recovery-sources": ["benefit-plans"],
+    "benefit-contribution-rule-components": ["benefit-contribution-rules"],
+    "benefit-enrollment-terms": ["benefit-enrollment-configuration"],
+    "leave-policies": ["leave-types"],
+    "leave-payroll-entitlement-mappings": ["leave-types"],
+    "hrm-competencies": ["hrm-competency-frameworks"],
+    "customer-price-level-assignments": ["price-levels"],
+    "item-identifiers": ["items"],
+    "customer-item-refs": ["items"],
+    "tax-pool-classes": ["tax-regimes"],
+    "tax-first-year-rules": ["tax-regimes"],
+    "entitlement-plan-limits": ["entitlement-plans"],
+    "entitlement-service-tiers": ["entitlement-plans", "pay-components"],
+  };
+  const visibleKeys = [...setupEntitiesByGroup().values()].flat().map((entity) => entity.key);
   for (const [key, parents] of Object.entries(owners)) {
-    const entity = SETUP_ENTITY_BY_KEY.get(key)!
-    assert.deepEqual(entity.parentRecords?.map((binding) => binding.entityKey), parents, key)
-    assert.ok(!visibleKeys.includes(key), `${key} must be opened through its owner`)
+    const entity = SETUP_ENTITY_BY_KEY.get(key)!;
+    assert.deepEqual(
+      entity.parentRecords?.map((binding) => binding.entityKey),
+      parents,
+      key,
+    );
+    assert.ok(!visibleKeys.includes(key), `${key} must be opened through its owner`);
     for (const binding of entity.parentRecords ?? []) {
-      const field = entity.fields.find((candidate) => candidate.key === binding.fieldKey)
-      assert.ok(field, `${key}: parent binding must name a declared field`)
-      assert.ok(SETUP_ENTITY_BY_KEY.has(binding.entityKey) || binding.entityKey === 'items', `${key}: owner must exist`)
+      const field = entity.fields.find((candidate) => candidate.key === binding.fieldKey);
+      assert.ok(field, `${key}: parent binding must name a declared field`);
+      assert.ok(
+        SETUP_ENTITY_BY_KEY.has(binding.entityKey) || binding.entityKey === "items",
+        `${key}: owner must exist`,
+      );
     }
   }
-  assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('tax-registrations')!), '/admin/setup/tax-jurisdictions?setupTab=tax-registrations')
-  assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('item-identifiers')!), '/items?itemSetup=item-identifiers')
-  assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('tax-pool-classes')!), '/admin/setup/tax-depreciation?tab=regimes&setupTab=tax-pool-classes')
-  assert.equal(setupEntityHref(SETUP_ENTITY_BY_KEY.get('entitlement-plan-limits')!), '/hrm/benefits?view=programs&type=time_off&setupTab=entitlement-plan-limits')
-  const tierFields = SETUP_ENTITY_BY_KEY.get('entitlement-service-tiers')!.fields
-  for (const target of [{ planId: 'saved-plan', componentId: null }, { planId: null, componentId: 'saved-component' }]) {
-    assert.equal(setupFieldVisible(tierFields.find(field => field.key === 'eligible')!, target), Boolean(target.componentId))
-    for (const key of ['accrualValue', 'annualDays']) assert.equal(setupFieldVisible(tierFields.find(field => field.key === key)!, target), Boolean(target.planId))
+  assert.equal(
+    setupEntityHref(SETUP_ENTITY_BY_KEY.get("tax-registrations")!),
+    "/admin/setup/tax-jurisdictions?setupTab=tax-registrations",
+  );
+  assert.equal(
+    setupEntityHref(SETUP_ENTITY_BY_KEY.get("item-identifiers")!),
+    "/items?itemSetup=item-identifiers",
+  );
+  assert.equal(
+    setupEntityHref(SETUP_ENTITY_BY_KEY.get("tax-pool-classes")!),
+    "/admin/setup/tax-depreciation?tab=regimes&setupTab=tax-pool-classes",
+  );
+  assert.equal(
+    setupEntityHref(SETUP_ENTITY_BY_KEY.get("entitlement-plan-limits")!),
+    "/hrm/benefits?view=programs&type=time_off&setupTab=entitlement-plan-limits",
+  );
+  const tierFields = SETUP_ENTITY_BY_KEY.get("entitlement-service-tiers")!.fields;
+  for (const target of [
+    { planId: "saved-plan", componentId: null },
+    { planId: null, componentId: "saved-component" },
+  ]) {
+    assert.equal(
+      setupFieldVisible(
+        tierFields.find((field) => field.key === "eligible")!,
+        target,
+      ),
+      Boolean(target.componentId),
+    );
+    for (const key of ["accrualValue", "annualDays"])
+      assert.equal(
+        setupFieldVisible(
+          tierFields.find((field) => field.key === key)!,
+          target,
+        ),
+        Boolean(target.planId),
+      );
   }
-})
+});
 
-test('re-homed entities stay in the CRUD registry but leave the setup rail', () => {
+test("re-homed entities stay in the CRUD registry but leave the setup rail", () => {
   const rehomed = [
-    'stock-locations',
-    'bom-components',
-    'item-inventory-profiles',
-    'item-rate-books',
-    'item-rate-book-assignments',
-    'fair-value-prices',
-    'tax-regimes',
-    'tax-pool-classes',
-    'tax-first-year-rules',
-    'depreciation-methods',
-    'depreciation-book-policies',
-    'pay-schedules',
-    'pay-components',
-    'union-agreements',
-  ]
-  const byGroup = setupEntitiesByGroup()
-  const allVisible = [...byGroup.values()].flat().map((entity) => entity.key)
+    "stock-locations",
+    "bom-components",
+    "item-inventory-profiles",
+    "item-rate-books",
+    "item-rate-book-assignments",
+    "fair-value-prices",
+    "tax-regimes",
+    "tax-pool-classes",
+    "tax-first-year-rules",
+    "depreciation-methods",
+    "depreciation-book-policies",
+    "pay-schedules",
+    "pay-components",
+    "union-agreements",
+  ];
+  const byGroup = setupEntitiesByGroup();
+  const allVisible = [...byGroup.values()].flat().map((entity) => entity.key);
   for (const key of rehomed) {
-    const entity = SETUP_ENTITY_BY_KEY.get(key)
-    assert.ok(entity, `${key} must remain resolvable for the shared API`)
-    assert.equal(entity.rehomed, true, `${key} must be marked rehomed`)
-    assert.ok(!allVisible.includes(key), `${key} must not appear in the setup rail`)
+    const entity = SETUP_ENTITY_BY_KEY.get(key);
+    assert.ok(entity, `${key} must remain resolvable for the shared API`);
+    assert.equal(entity.rehomed, true, `${key} must be marked rehomed`);
+    assert.ok(!allVisible.includes(key), `${key} must not appear in the setup rail`);
   }
 
   // The visible inventory-rail entities are policies configured in Setup,
   // not on an operational record: merchant return-fee rules and the
   // effective-dated cycle-count policies. Everything rehomed stays off the rail.
-  assert.deepEqual(byGroup.get('inventory')?.map((entity) => entity.key), ['restocking-fee-policies', 'inventory-count-policies', 'purchase-over-receipt-tolerances'])
-  assert.deepEqual(byGroup.get('sales')?.map((entity) => entity.key), ['promotions', 'pos-registers', 'pos-cash-reasons', 'pos-quick-keys', 'rebate-agreements'])
-  assert.deepEqual(byGroup.get('assets')?.map((entity) => entity.key), ['asset-categories', 'asset-capitalization-rules'])
-})
+  assert.deepEqual(
+    byGroup.get("inventory")?.map((entity) => entity.key),
+    ["restocking-fee-policies", "inventory-count-policies", "purchase-over-receipt-tolerances"],
+  );
+  assert.deepEqual(
+    byGroup.get("sales")?.map((entity) => entity.key),
+    ["promotions", "pos-registers", "pos-cash-reasons", "pos-quick-keys", "rebate-agreements"],
+  );
+  assert.deepEqual(
+    byGroup.get("assets")?.map((entity) => entity.key),
+    ["asset-categories", "asset-capitalization-rules"],
+  );
+});
 
-test('labor pricing setup entities follow the Projects parent gate', () => {
-  for (const key of ['item-rate-books', 'item-rate-book-assignments']) {
-    const entity = SETUP_ENTITY_BY_KEY.get(key)
-    assert.ok(entity, key)
-    assert.equal(entity.featureKey, 'projects', key)
+test("labor pricing setup entities follow the Projects parent gate", () => {
+  for (const key of ["item-rate-books", "item-rate-book-assignments"]) {
+    const entity = SETUP_ENTITY_BY_KEY.get(key);
+    assert.ok(entity, key);
+    assert.equal(entity.featureKey, "projects", key);
   }
-})
+});
 
-test('time types independently control field-ticket visibility', () => {
-  const timeTypes = SETUP_ENTITY_BY_KEY.get('time-types')
-  assert.ok(timeTypes)
-  assert.ok(timeTypes.fields.some((field) => field.key === 'showOnFieldTicket' && field.kind === 'boolean'))
-  assert.ok(timeTypes.columns.some((column) => column.key === 'showOnFieldTicket' && column.kind === 'boolean'))
-})
+test("time types independently control field-ticket visibility", () => {
+  const timeTypes = SETUP_ENTITY_BY_KEY.get("time-types");
+  assert.ok(timeTypes);
+  assert.ok(
+    timeTypes.fields.some((field) => field.key === "showOnFieldTicket" && field.kind === "boolean"),
+  );
+  assert.ok(
+    timeTypes.columns.some(
+      (column) => column.key === "showOnFieldTicket" && column.kind === "boolean",
+    ),
+  );
+});
 
-test('number sequences use friendly record choices and explain gapless numbering', () => {
-  const sequence = SETUP_ENTITY_BY_KEY.get('number-sequences')
-  assert.ok(sequence)
-  assert.ok(sequence.columns.some((column) => column.key === 'documentKind' && column.ref === 'number-sequence-kinds'))
-  assert.ok(sequence.fields.some((field) => field.key === 'documentKind' && field.kind === 'ref' && field.ref === 'number-sequence-kinds'))
-  assert.ok(sequence.fields.some((field) => field.key === 'gapless' && field.helpTextKey === 'fieldHelp.gapless'))
-})
+test("number sequences use friendly record choices and explain gapless numbering", () => {
+  const sequence = SETUP_ENTITY_BY_KEY.get("number-sequences");
+  assert.ok(sequence);
+  assert.ok(
+    sequence.columns.some(
+      (column) => column.key === "documentKind" && column.ref === "number-sequence-kinds",
+    ),
+  );
+  assert.ok(
+    sequence.fields.some(
+      (field) =>
+        field.key === "documentKind" &&
+        field.kind === "ref" &&
+        field.ref === "number-sequence-kinds",
+    ),
+  );
+  assert.ok(
+    sequence.fields.some(
+      (field) => field.key === "gapless" && field.helpTextKey === "fieldHelp.gapless",
+    ),
+  );
+});
 
-test('usage setup is feature-gated and keeps meter identity and plan headers controlled', () => {
-  const meters = SETUP_ENTITY_BY_KEY.get('usage-meters')
-  const plans = SETUP_ENTITY_BY_KEY.get('usage-rating-plans')
-  assert.ok(meters)
-  assert.ok(plans)
-  assert.equal(meters.groupKey, 'billing')
-  assert.equal(meters.featureKey, 'usageBilling')
-  assert.equal(meters.naturalKey, 'key')
-  assert.equal(meters.allowDelete, false)
-  assert.equal(meters.fields.some((field) => field.key === 'distinctKey'), false)
-  assert.ok(meters.fields.some((field) => field.key === 'key' && field.lockedOnEdit))
-  assert.ok(meters.fields.some((field) => field.key === 'aggregation' && field.lockedOnEdit))
-  assert.ok(meters.fields.some((field) => field.key === 'isActive' && field.kind === 'boolean'))
-  assert.equal(plans.featureKey, 'usageBilling')
-  assert.equal(plans.naturalKey, 'name')
-  assert.equal(plans.allowDelete, false)
-  assert.ok(plans.fields.some((field) => field.key === 'status' && field.kind === 'select'))
-})
+test("usage setup is feature-gated and keeps meter identity and plan headers controlled", () => {
+  const meters = SETUP_ENTITY_BY_KEY.get("usage-meters");
+  const plans = SETUP_ENTITY_BY_KEY.get("usage-rating-plans");
+  assert.ok(meters);
+  assert.ok(plans);
+  assert.equal(meters.groupKey, "billing");
+  assert.equal(meters.featureKey, "usageBilling");
+  assert.equal(meters.naturalKey, "key");
+  assert.equal(meters.allowDelete, false);
+  assert.equal(
+    meters.fields.some((field) => field.key === "distinctKey"),
+    false,
+  );
+  assert.ok(meters.fields.some((field) => field.key === "key" && field.lockedOnEdit));
+  assert.ok(meters.fields.some((field) => field.key === "aggregation" && field.lockedOnEdit));
+  assert.ok(meters.fields.some((field) => field.key === "isActive" && field.kind === "boolean"));
+  assert.equal(plans.featureKey, "usageBilling");
+  assert.equal(plans.naturalKey, "name");
+  assert.equal(plans.allowDelete, false);
+  assert.ok(plans.fields.some((field) => field.key === "status" && field.kind === "select"));
+});
 
-test('generic setup subsidiary controls follow the feature flag everywhere', () => {
-  for (const key of ['number-sequences', 'classes', 'departments', 'locations']) {
-    const entity = SETUP_ENTITY_BY_KEY.get(key)
-    assert.ok(entity)
-    const enabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: true })
-    assert.ok(enabled.fields.some((field) => field.ref === 'subsidiaries'), `${key} must expose subsidiary scope when enabled`)
+test("generic setup subsidiary controls follow the feature flag everywhere", () => {
+  for (const key of ["number-sequences", "classes", "departments", "locations"]) {
+    const entity = SETUP_ENTITY_BY_KEY.get(key);
+    assert.ok(entity);
+    const enabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: true });
+    assert.ok(
+      enabled.fields.some((field) => field.ref === "subsidiaries"),
+      `${key} must expose subsidiary scope when enabled`,
+    );
 
-    const disabled = setupEntityForFeatureState(entity, { multiSubsidiary: false, equipment: true })
-    assert.ok(!disabled.fields.some((field) => field.ref === 'subsidiaries' || field.key === 'subsidiaryIncludeChildren'))
-    assert.ok(!disabled.columns.some((column) => column.ref === 'subsidiaries'))
+    const disabled = setupEntityForFeatureState(entity, {
+      multiSubsidiary: false,
+      equipment: true,
+    });
+    assert.ok(
+      !disabled.fields.some(
+        (field) => field.ref === "subsidiaries" || field.key === "subsidiaryIncludeChildren",
+      ),
+    );
+    assert.ok(!disabled.columns.some((column) => column.ref === "subsidiaries"));
   }
-})
+});
 
-test('legal-employer payroll and benefit ownership remains writable without multi-subsidiary management', () => {
-  for (const key of ['benefit-plans', 'entitlement-plan-limits', 'entitlement-service-tiers']) {
-    const entity = SETUP_ENTITY_BY_KEY.get(key)!
-    const field = entity.fields.find((item) => item.legalEmployer)!
-    assert.equal(field.ref, 'subsidiaries')
-    assert.ok(setupEntityForFeatureState(entity, { multiSubsidiary: false }).fields.some((item) => item.key === field.key))
+test("legal-employer payroll and benefit ownership remains writable without multi-subsidiary management", () => {
+  for (const key of ["benefit-plans", "entitlement-plan-limits", "entitlement-service-tiers"]) {
+    const entity = SETUP_ENTITY_BY_KEY.get(key)!;
+    const field = entity.fields.find((item) => item.legalEmployer)!;
+    assert.equal(field.ref, "subsidiaries");
+    assert.ok(
+      setupEntityForFeatureState(entity, { multiSubsidiary: false }).fields.some(
+        (item) => item.key === field.key,
+      ),
+    );
   }
-})
+});
 
-test('compliance setup entities are gated and reachable from the rail', () => {
-  const byGroup = setupEntitiesByGroup()
-  assert.deepEqual(byGroup.get('compliance')?.map((entity) => entity.key), [
-    'compliance-classes',
-    'compliance-requirements',
-    'information-return-box-rules',
-  ])
-  for (const key of ['compliance-classes', 'compliance-requirements']) {
-    const entity = SETUP_ENTITY_BY_KEY.get(key)
-    assert.ok(entity, key)
+test("compliance setup entities are gated and reachable from the rail", () => {
+  const byGroup = setupEntitiesByGroup();
+  assert.deepEqual(
+    byGroup.get("compliance")?.map((entity) => entity.key),
+    ["compliance-classes", "compliance-requirements", "information-return-box-rules"],
+  );
+  for (const key of ["compliance-classes", "compliance-requirements"]) {
+    const entity = SETUP_ENTITY_BY_KEY.get(key);
+    assert.ok(entity, key);
     // Hiding the tab is presentation; the API re-checks this same key.
-    assert.equal(entity.featureKey, 'subcontractorCompliance', key)
-    assert.equal(entity.docSlug, 'subcontractor-compliance', key)
+    assert.equal(entity.featureKey, "subcontractorCompliance", key);
+    assert.equal(entity.docSlug, "subcontractor-compliance", key);
   }
   {
     // Box rules are year-end tax configuration, not COI tracking: they ride
     // the informationReturns switch so a 1099 filer reaches them.
-    const entity = SETUP_ENTITY_BY_KEY.get('information-return-box-rules')
-    assert.ok(entity, 'information-return-box-rules')
-    assert.equal(entity.featureKey, 'informationReturns')
-    assert.equal(entity.docSlug, 'subcontractor-compliance')
+    const entity = SETUP_ENTITY_BY_KEY.get("information-return-box-rules");
+    assert.ok(entity, "information-return-box-rules");
+    assert.equal(entity.featureKey, "informationReturns");
+    assert.equal(entity.docSlug, "subcontractor-compliance");
   }
-})
+});
 
-test('every information-return box option is a real statutory box', () => {
-  const rules = SETUP_ENTITY_BY_KEY.get('information-return-box-rules')
-  assert.ok(rules)
+test("every information-return box option is a real statutory box", () => {
+  const rules = SETUP_ENTITY_BY_KEY.get("information-return-box-rules");
+  assert.ok(rules);
   const offered = new Set(
-    rules.fields.find((field) => field.key === 'box')?.options?.map((option) => option.value) ?? [],
-  )
-  assert.ok(offered.size > 0)
+    rules.fields.find((field) => field.key === "box")?.options?.map((option) => option.value) ?? [],
+  );
+  assert.ok(offered.size > 0);
   const statutory = new Set(
     Object.values(INFORMATION_RETURN_FORMS).flatMap((form) => form.boxes.map((box) => box.key)),
-  )
+  );
   for (const box of offered) {
-    assert.ok(statutory.has(box), `${box} is offered in setup but is not a box on any form`)
+    assert.ok(statutory.has(box), `${box} is offered in setup but is not a box on any form`);
   }
   for (const box of statutory) {
-    assert.ok(offered.has(box), `${box} exists on a form but cannot be mapped in setup`)
+    assert.ok(offered.has(box), `${box} exists on a form but cannot be mapped in setup`);
   }
-})
+});
 
-test('time-type field-ticket visibility follows the Field Tickets feature flag', () => {
-  const entity = SETUP_ENTITY_BY_KEY.get('time-types')
-  assert.ok(entity)
-  const enabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: true, fieldTickets: true })
-  assert.ok(enabled.fields.some((field) => field.key === 'showOnFieldTicket'))
-  assert.ok(enabled.columns.some((column) => column.key === 'showOnFieldTicket'))
+test("time-type field-ticket visibility follows the Field Tickets feature flag", () => {
+  const entity = SETUP_ENTITY_BY_KEY.get("time-types");
+  assert.ok(entity);
+  const enabled = setupEntityForFeatureState(entity, {
+    multiSubsidiary: true,
+    equipment: true,
+    fieldTickets: true,
+  });
+  assert.ok(enabled.fields.some((field) => field.key === "showOnFieldTicket"));
+  assert.ok(enabled.columns.some((column) => column.key === "showOnFieldTicket"));
 
-  const disabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: true, fieldTickets: false })
-  assert.ok(!disabled.fields.some((field) => field.key === 'showOnFieldTicket'))
-  assert.ok(!disabled.columns.some((column) => column.key === 'showOnFieldTicket'))
-})
+  const disabled = setupEntityForFeatureState(entity, {
+    multiSubsidiary: true,
+    equipment: true,
+    fieldTickets: false,
+  });
+  assert.ok(!disabled.fields.some((field) => field.key === "showOnFieldTicket"));
+  assert.ok(!disabled.columns.some((column) => column.key === "showOnFieldTicket"));
+});
 
-test('derived-rule equipment controls follow the Equipment feature flag', () => {
-  const entity = SETUP_ENTITY_BY_KEY.get('pay-derived-rules')
-  assert.ok(entity)
-  const enabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: true })
-  assert.ok(enabled.fields.some((field) => field.key === 'equipmentUnitId'))
-  assert.ok(enabled.fields.find((field) => field.key === 'trigger')?.options?.some((option) => option.value === 'equipment_charge'))
-  assert.ok(enabled.filters?.find((filter) => filter.key === 'trigger')?.options.some((option) => option.value === 'equipment_charge'))
+test("derived-rule equipment controls follow the Equipment feature flag", () => {
+  const entity = SETUP_ENTITY_BY_KEY.get("pay-derived-rules");
+  assert.ok(entity);
+  const enabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: true });
+  assert.ok(enabled.fields.some((field) => field.key === "equipmentUnitId"));
+  assert.ok(
+    enabled.fields
+      .find((field) => field.key === "trigger")
+      ?.options?.some((option) => option.value === "equipment_charge"),
+  );
+  assert.ok(
+    enabled.filters
+      ?.find((filter) => filter.key === "trigger")
+      ?.options.some((option) => option.value === "equipment_charge"),
+  );
 
-  const disabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: false })
-  assert.ok(!disabled.fields.some((field) => field.key === 'equipmentUnitId' || field.ref === 'equipment-units'))
-  assert.ok(!disabled.fields.find((field) => field.key === 'trigger')?.options?.some((option) => option.value === 'equipment_charge'))
-  assert.ok(!disabled.filters?.find((filter) => filter.key === 'trigger')?.options.some((option) => option.value === 'equipment_charge'))
-})
+  const disabled = setupEntityForFeatureState(entity, { multiSubsidiary: true, equipment: false });
+  assert.ok(
+    !disabled.fields.some(
+      (field) => field.key === "equipmentUnitId" || field.ref === "equipment-units",
+    ),
+  );
+  assert.ok(
+    !disabled.fields
+      .find((field) => field.key === "trigger")
+      ?.options?.some((option) => option.value === "equipment_charge"),
+  );
+  assert.ok(
+    !disabled.filters
+      ?.find((filter) => filter.key === "trigger")
+      ?.options.some((option) => option.value === "equipment_charge"),
+  );
+});
 
-test('derived-rule job-title lists are chip inputs fed by the roster, never raw JSON', () => {
-  const rules = SETUP_ENTITY_BY_KEY.get('pay-derived-rules')
-  assert.ok(rules)
-  for (const key of ['includedJobTitles', 'excludedJobTitles']) {
-    const field: SetupField | undefined = rules.fields.find((entry) => entry.key === key)
-    assert.ok(field, `${key} must be editable on a derived rule`)
-    assert.equal(field.kind, 'stringArray', `${key} must render as the TagInput, not a JSON textarea`)
-    assert.equal(field.ref, 'job-titles', `${key} must type-ahead over the roster's job titles`)
+test("derived-rule job-title lists are chip inputs fed by the roster, never raw JSON", () => {
+  const rules = SETUP_ENTITY_BY_KEY.get("pay-derived-rules");
+  assert.ok(rules);
+  for (const key of ["includedJobTitles", "excludedJobTitles"]) {
+    const field: SetupField | undefined = rules.fields.find((entry) => entry.key === key);
+    assert.ok(field, `${key} must be editable on a derived rule`);
+    assert.equal(
+      field.kind,
+      "stringArray",
+      `${key} must render as the TagInput, not a JSON textarea`,
+    );
+    assert.equal(field.ref, "job-titles", `${key} must type-ahead over the roster's job titles`);
   }
   // Raw JSON is never an acceptable UI: no payroll/workforce entity may
   // expose a `json`-kind field. (The one remaining `json` field in the whole
   // registry is asset-categories.taxAttributes — an object-shaped bag with no
   // natural structured editor yet, and not a payroll surface.)
-  const byGroup = setupEntitiesByGroup()
-  const workforce = [...(byGroup.get('workforce') ?? []), rules]
+  const byGroup = setupEntitiesByGroup();
+  const workforce = [...(byGroup.get("workforce") ?? []), rules];
   for (const entity of workforce) {
     for (const field of entity.fields) {
-      assert.notEqual(field.kind, 'json', `${entity.key}.${field.key} must not render as raw JSON`)
+      assert.notEqual(field.kind, "json", `${entity.key}.${field.key} must not render as raw JSON`);
     }
   }
-})
+});
 
-test('deduction protection is offered only where it can legally apply', () => {
-  const components = SETUP_ENTITY_BY_KEY.get('pay-components')
-  assert.ok(components)
+test("deduction protection is offered only where it can legally apply", () => {
+  const components = SETUP_ENTITY_BY_KEY.get("pay-components");
+  assert.ok(components);
   const field = (key: string) => {
-    const found = components.fields.find((entry) => entry.key === key)
-    assert.ok(found, `${key} must be editable on a pay component`)
-    return found
-  }
+    const found = components.fields.find((entry) => entry.key === key);
+    assert.ok(found, `${key} must be editable on a pay component`);
+    return found;
+  };
 
   // Protection settings on a deduction only — the pay_components CHECK
   // constraint enforces the same rule at the boundary.
-  const earning = { kind: 'earning', basis: 'percent_of_gross', protectionBase: 'net_pay' }
-  const deduction = { kind: 'deduction', basis: 'fixed_amount', protectionBase: 'net_pay' }
-  assert.equal(setupFieldVisible(field('protectionBase'), earning), false)
-  assert.equal(setupFieldVisible(field('protectionBase'), deduction), true)
-  assert.equal(setupFieldVisible(field('protectionMaxPercent'), deduction), true)
+  const earning = { kind: "earning", basis: "percent_of_gross", protectionBase: "net_pay" };
+  const deduction = { kind: "deduction", basis: "fixed_amount", protectionBase: "net_pay" };
+  assert.equal(setupFieldVisible(field("protectionBase"), earning), false);
+  assert.equal(setupFieldVisible(field("protectionBase"), deduction), true);
+  assert.equal(setupFieldVisible(field("protectionMaxPercent"), deduction), true);
   assert.equal(
-    setupFieldVisible(field('protectionMaxPercent'), { ...deduction, protectionBase: 'none' }),
+    setupFieldVisible(field("protectionMaxPercent"), { ...deduction, protectionBase: "none" }),
     false,
-  )
+  );
   // Pool membership is what keeps an allowance or a benefit outside the base,
   // so it belongs on both sides of the stub.
-  assert.equal(setupFieldVisible(field('includeInDisposableEarnings'), earning), true)
-  assert.equal(setupFieldVisible(field('includeInDisposableEarnings'), deduction), true)
+  assert.equal(setupFieldVisible(field("includeInDisposableEarnings"), earning), true);
+  assert.equal(setupFieldVisible(field("includeInDisposableEarnings"), deduction), true);
 
   // The hours cap only means something once the amount is driven by hours.
-  assert.equal(setupFieldVisible(field('basisCapHoursPerPeriod'), deduction), false)
-  assert.equal(setupFieldVisible(field('basisCapHoursPerPeriod'), earning), true)
-  for (const key of ['basisCapAmountPerPeriod', 'basisCapAmountPerYear']) {
-    assert.equal(setupFieldVisible(field(key), deduction), true)
+  assert.equal(setupFieldVisible(field("basisCapHoursPerPeriod"), deduction), false);
+  assert.equal(setupFieldVisible(field("basisCapHoursPerPeriod"), earning), true);
+  for (const key of ["basisCapAmountPerPeriod", "basisCapAmountPerYear"]) {
+    assert.equal(setupFieldVisible(field(key), deduction), true);
   }
-})
+});
 
-test('allocations is a feature-gated custom-page rail entry, never generic CRUD', () => {
+test("allocations is a feature-gated custom-page rail entry, never generic CRUD", () => {
   // The Rules | Drivers | Runs workspace is a custom ModuleView page;
   // the registry entry only puts the tab on the
   // setup rail under Accounting, gated by the `allocations` feature.
-  const entry = SETUP_ENTITY_BY_KEY.get('allocations')
-  assert.ok(entry, 'registry must declare the allocations entry')
-  assert.equal(entry.groupKey, 'accounting')
-  assert.equal(entry.featureKey, 'allocations')
-  assert.equal(entry.table, 'allocation_rules')
+  const entry = SETUP_ENTITY_BY_KEY.get("allocations");
+  assert.ok(entry, "registry must declare the allocations entry");
+  assert.equal(entry.groupKey, "accounting");
+  assert.equal(entry.featureKey, "allocations");
+  assert.equal(entry.table, "allocation_rules");
   // The static custom page serves /admin/setup/allocations; the generic
   // [entity] CRUD surface must refuse every write so versioned rule config
   // only changes through the allocations API.
-  assert.equal(entry.readOnly, true)
-  assert.equal(entry.allowCreate, false)
-  assert.equal(entry.allowDelete, false)
+  assert.equal(entry.readOnly, true);
+  assert.equal(entry.allowCreate, false);
+  assert.equal(entry.allowDelete, false);
   // A rail entry, not a nested/rehomed record: it renders in the Accounting group.
-  const rail = (setupEntitiesByGroup().get('accounting') ?? []).map((e) => e.key)
-  assert.ok(rail.includes('allocations'), 'allocations must appear on the setup rail')
-})
+  const rail = (setupEntitiesByGroup().get("accounting") ?? []).map((e) => e.key);
+  assert.ok(rail.includes("allocations"), "allocations must appear on the setup rail");
+});
 
-test('every setup option labelKey resolves in its owning catalog', () => {
+test("every setup option labelKey resolves in its owning catalog", () => {
   // Registry hosts may resolve labels from their own catalog (CRM setup uses
   // the existing `crm` catalog); a missing namespace prefix still renders raw.
   const adminCatalog = JSON.parse(
-    readFileSync(new URL('../../messages/en/admin.json', import.meta.url), 'utf8'),
-  ) as Record<string, unknown>
+    readFileSync(new URL("../../messages/en/admin.json", import.meta.url), "utf8"),
+  ) as Record<string, unknown>;
   const crmCatalog = JSON.parse(
-    readFileSync(new URL('../../messages/en/crm.json', import.meta.url), 'utf8'),
-  ) as Record<string, unknown>
-  const setup = (adminCatalog.setup ?? {}) as Record<string, unknown>
-  const missing: string[] = []
-  const seen = new Set<string>()
+    readFileSync(new URL("../../messages/en/crm.json", import.meta.url), "utf8"),
+  ) as Record<string, unknown>;
+  const setup = (adminCatalog.setup ?? {}) as Record<string, unknown>;
+  const missing: string[] = [];
+  const seen = new Set<string>();
   for (const entity of SETUP_ENTITIES) {
-    const carriers = [...entity.columns, ...entity.fields, ...(entity.filters ?? [])]
+    const carriers = [...entity.columns, ...entity.fields, ...(entity.filters ?? [])];
     for (const carrier of carriers) {
       for (const option of carrier.options ?? []) {
-        if (!option.labelKey || seen.has(option.labelKey)) continue
-        seen.add(option.labelKey)
-        const crmOwned = option.labelKey.startsWith('crm.')
-        let node: unknown = crmOwned ? crmCatalog : setup
-        const path = crmOwned ? option.labelKey.slice('crm.'.length) : option.labelKey
-        for (const part of path.split('.')) {
-          node = (node as Record<string, unknown> | null)?.[part]
+        if (!option.labelKey || seen.has(option.labelKey)) continue;
+        seen.add(option.labelKey);
+        const crmOwned = option.labelKey.startsWith("crm.");
+        let node: unknown = crmOwned ? crmCatalog : setup;
+        const path = crmOwned ? option.labelKey.slice("crm.".length) : option.labelKey;
+        for (const part of path.split(".")) {
+          node = (node as Record<string, unknown> | null)?.[part];
         }
-        if (typeof node !== 'string' || node.length === 0) missing.push(`${entity.key}: ${option.labelKey}`)
+        if (typeof node !== "string" || node.length === 0)
+          missing.push(`${entity.key}: ${option.labelKey}`);
       }
     }
   }
-  assert.deepEqual(missing, [])
-})
+  assert.deepEqual(missing, []);
+});
 
-test('every setup column, field and filter resolves its rendered English label', () => {
-  const adminCatalog = JSON.parse(readFileSync(new URL('../../messages/en/admin.json', import.meta.url), 'utf8')) as Record<string, unknown>
-  const crmCatalog = JSON.parse(readFileSync(new URL('../../messages/en/crm.json', import.meta.url), 'utf8')) as Record<string, unknown>
-  const setup = adminCatalog.setup as Record<string, unknown>
-  const missing: string[] = []
+test("every setup column, field and filter resolves its rendered English label", () => {
+  const adminCatalog = JSON.parse(
+    readFileSync(new URL("../../messages/en/admin.json", import.meta.url), "utf8"),
+  ) as Record<string, unknown>;
+  const crmCatalog = JSON.parse(
+    readFileSync(new URL("../../messages/en/crm.json", import.meta.url), "utf8"),
+  ) as Record<string, unknown>;
+  const setup = adminCatalog.setup as Record<string, unknown>;
+  const missing: string[] = [];
   for (const entity of SETUP_ENTITIES) {
-    const carriers = [...entity.columns, ...entity.fields, ...(entity.filters ?? [])]
+    const carriers = [...entity.columns, ...entity.fields, ...(entity.filters ?? [])];
     for (const carrier of carriers) {
-      const path = 'labelKey' in carrier && typeof carrier.labelKey === 'string' ? carrier.labelKey : `fields.${carrier.key}`
-      const crmOwned = path.startsWith('crm.')
-      const source = crmOwned ? crmCatalog : setup
-      const resolvedPath = crmOwned ? path.slice('crm.'.length) : path
-      const label = resolvedPath.split('.').reduce<unknown>((node, key) => (node as Record<string, unknown> | null)?.[key], source)
-      if (typeof label !== 'string' || label.length === 0) missing.push(`${entity.key}: ${carrier.key}`)
+      const path =
+        "labelKey" in carrier && typeof carrier.labelKey === "string"
+          ? carrier.labelKey
+          : `fields.${carrier.key}`;
+      const crmOwned = path.startsWith("crm.");
+      const source = crmOwned ? crmCatalog : setup;
+      const resolvedPath = crmOwned ? path.slice("crm.".length) : path;
+      const label = resolvedPath
+        .split(".")
+        .reduce<unknown>((node, key) => (node as Record<string, unknown> | null)?.[key], source);
+      if (typeof label !== "string" || label.length === 0)
+        missing.push(`${entity.key}: ${carrier.key}`);
     }
   }
-  assert.deepEqual(missing, [])
-})
+  assert.deepEqual(missing, []);
+});
 
 // HR-14 begin: qualification taxonomy and vocabulary ride the registry
 // rehomed onto the Qualifications page — one surface, never two.
-test('qualification setup entities are gated and rehomed', () => {
-  for (const key of ['qualification-types', 'qualification-settings']) {
-    const entity = SETUP_ENTITY_BY_KEY.get(key)
-    assert.ok(entity, `${key} must be registered`)
-    assert.equal(entity.featureKey, 'hrmCertifications', `${key} hides while the feature is off`)
-    assert.equal(entity.rehomed, true, `${key} must be marked rehomed`)
+test("qualification setup entities are gated and rehomed", () => {
+  for (const key of ["qualification-types", "qualification-settings"]) {
+    const entity = SETUP_ENTITY_BY_KEY.get(key);
+    assert.ok(entity, `${key} must be registered`);
+    assert.equal(entity.featureKey, "hrmCertifications", `${key} hides while the feature is off`);
+    assert.equal(entity.rehomed, true, `${key} must be marked rehomed`);
   }
-  const types = SETUP_ENTITY_BY_KEY.get('qualification-types')!
-  assert.equal(types.naturalKey, 'code', 'type codes are the org-unique handle')
-  assert.equal(types.hasActive, true, 'retired types hide but keep history resolving')
-  const settings = SETUP_ENTITY_BY_KEY.get('qualification-settings')!
-  assert.equal(settings.allowCreate, false, 'the settings singleton is never created here')
-  assert.equal(settings.allowDelete, false, 'the settings singleton is never deleted here')
-})
+  const types = SETUP_ENTITY_BY_KEY.get("qualification-types")!;
+  assert.equal(types.naturalKey, "code", "type codes are the org-unique handle");
+  assert.equal(types.hasActive, true, "retired types hide but keep history resolving");
+  const settings = SETUP_ENTITY_BY_KEY.get("qualification-settings")!;
+  assert.equal(settings.allowCreate, false, "the settings singleton is never created here");
+  assert.equal(settings.allowDelete, false, "the settings singleton is never deleted here");
+});
 // HR-14 end
 
 // C7a: one authoritative setup feature gate. A descriptor carries exactly one
 // of featureKey / featureKeysAny, never both; every consumer (rail, loader,
 // drawer, shared CRUD) resolves through resolveSetupEntityGate.
 // Manufacturing rides inventory (requiresAll), so every state names it.
-const PROJECTS_MANUFACTURING_STATES: { projects: boolean; manufacturing: boolean; inventory: boolean }[] = [
+const PROJECTS_MANUFACTURING_STATES: {
+  projects: boolean;
+  manufacturing: boolean;
+  inventory: boolean;
+}[] = [
   { projects: false, manufacturing: false, inventory: true },
   { projects: true, manufacturing: false, inventory: true },
   { projects: false, manufacturing: true, inventory: true },
   { projects: true, manufacturing: true, inventory: true },
-]
+];
 
 /** A realistic any-of descriptor: overhead rates serving Projects or Manufacturing. */
-function projectsOrManufacturingRates(): Pick<SetupEntity, 'featureKey' | 'featureKeysAny'> {
-  const rates = SETUP_ENTITY_BY_KEY.get('overhead-rates')
-  assert.ok(rates, 'overhead-rates must be registered')
-  return { ...rates, featureKey: undefined, featureKeysAny: ['projects', 'manufacturing'] }
+function projectsOrManufacturingRates(): Pick<SetupEntity, "featureKey" | "featureKeysAny"> {
+  const rates = SETUP_ENTITY_BY_KEY.get("overhead-rates");
+  assert.ok(rates, "overhead-rates must be registered");
+  return { ...rates, featureKey: undefined, featureKeysAny: ["projects", "manufacturing"] };
 }
 
-test('no setup entity declares both featureKey and featureKeysAny', () => {
-  const offending = SETUP_ENTITIES.filter((entity) => entity.featureKey && entity.featureKeysAny)
+test("no setup entity declares both featureKey and featureKeysAny", () => {
+  const offending = SETUP_ENTITIES.filter((entity) => entity.featureKey && entity.featureKeysAny);
   assert.deepEqual(
     offending.map((entity) => entity.key),
     [],
-    'a descriptor with both gates has no defined verdict and fails closed',
-  )
+    "a descriptor with both gates has no defined verdict and fails closed",
+  );
   for (const entity of SETUP_ENTITIES) {
     for (const key of entity.featureKeysAny ?? []) {
-      assert.equal(typeof key, 'string', `${entity.key}: every any-of member names a feature`)
-      assert.ok(key.length > 0, `${entity.key}: any-of members are never blank`)
+      assert.equal(typeof key, "string", `${entity.key}: every any-of member names a feature`);
+      assert.ok(key.length > 0, `${entity.key}: any-of members are never blank`);
     }
-  }
-})
-
-test('the projects/manufacturing any-of gate resolves the four-state truth table', () => {
-  const entity = projectsOrManufacturingRates()
-  const verdicts = PROJECTS_MANUFACTURING_STATES.map((features) => resolveSetupEntityGate(entity, features))
-  assert.deepEqual(
-    verdicts.map((verdict) => verdict.enabled),
-    [false, true, true, true],
-    'any one member on admits; both off refuses',
-  )
-  assert.equal(
-    verdicts[0]!.remedy,
-    'Turn on Projects or Manufacturing in Company Settings → Features.',
-    'the both-off refusal names the exact operator remedy',
-  )
-  assert.equal(
-    verdicts[0]!.remedy,
-    SETUP_PROJECTS_OR_MANUFACTURING_REMEDY,
-    'the remedy is the single exported constant, never a rewritten copy',
-  )
-  for (const verdict of verdicts.slice(1)) {
-    assert.equal(verdict.remedy, null, 'an open gate carries no remedy')
-  }
-})
-
-test('the setup gate fails closed on unknown feature keys', () => {
-  assert.deepEqual(
-    resolveSetupEntityGate({ featureKey: 'no-such-feature' }, { projects: true }),
-    { enabled: false, remedy: null },
-    'an unknown single key hides rather than admits',
-  )
-  const entity = projectsOrManufacturingRates()
-  assert.equal(
-    resolveSetupEntityGate(
-      { ...entity, featureKeysAny: ['projects', 'no-such-feature'] },
-      { projects: false, manufacturing: true, inventory: true },
-    ).enabled,
-    false,
-    'an unknown member is off, never a pass-through admit',
-  )
-  assert.equal(
-    resolveSetupEntityGate(
-      { ...entity, featureKeysAny: ['no-such-feature'] },
-      { projects: true, manufacturing: true, inventory: true },
-    ).enabled,
-    false,
-    'an all-unknown member list stays closed even beside enabled features',
-  )
-})
-
-test('a descriptor declaring both gates fails closed', () => {
-  const entity = projectsOrManufacturingRates()
-  assert.equal(
-    resolveSetupEntityGate(
-      { ...entity, featureKey: 'projects' },
-      { projects: true, manufacturing: true, inventory: true },
-    ).enabled,
-    false,
-    'both gates declared refuses even when every member is on',
-  )
-})
-
-test('single-key and ungated entities keep their existing verdicts', () => {
-  assert.deepEqual(
-    resolveSetupEntityGate({ featureKey: 'projects' }, { projects: true }),
-    { enabled: true, remedy: null },
-  )
-  assert.deepEqual(
-    resolveSetupEntityGate({ featureKey: 'projects' }, { projects: false }),
-    { enabled: false, remedy: null },
-    'a closed single-key gate keeps its hide/redirect semantics with no remedy copy',
-  )
-  assert.deepEqual(resolveSetupEntityGate({}, {}), { enabled: true, remedy: null })
-})
-
-test('Benefits is the sole configuration home and write authority for entitlement and employee policies', () => {
-  for (const [key, destination] of [['entitlement-plans','/hrm/benefits?view=programs&type=time_off'],['payroll-vacation-terms','/hrm/benefits?view=employees'],['payroll-service-credits','/hrm/benefits?view=employees']]) {
-    const entity = SETUP_ENTITY_BY_KEY.get(key!)!; assert.equal(entity.rehomed, true); assert.equal(entity.writePermission, 'hrm.benefits.manage'); assert.equal(setupEntityHref(entity), destination);
   }
 });
 
-test('every domain-owned setup writer declares its import path', () => {
+test("the projects/manufacturing any-of gate resolves the four-state truth table", () => {
+  const entity = projectsOrManufacturingRates();
+  const verdicts = PROJECTS_MANUFACTURING_STATES.map((features) =>
+    resolveSetupEntityGate(entity, features),
+  );
+  assert.deepEqual(
+    verdicts.map((verdict) => verdict.enabled),
+    [false, true, true, true],
+    "any one member on admits; both off refuses",
+  );
+  assert.equal(
+    verdicts[0]!.remedy,
+    "Turn on Projects or Manufacturing in Company Settings → Features.",
+    "the both-off refusal names the exact operator remedy",
+  );
+  assert.equal(
+    verdicts[0]!.remedy,
+    SETUP_PROJECTS_OR_MANUFACTURING_REMEDY,
+    "the remedy is the single exported constant, never a rewritten copy",
+  );
+  for (const verdict of verdicts.slice(1)) {
+    assert.equal(verdict.remedy, null, "an open gate carries no remedy");
+  }
+});
+
+test("the setup gate fails closed on unknown feature keys", () => {
+  assert.deepEqual(
+    resolveSetupEntityGate({ featureKey: "no-such-feature" }, { projects: true }),
+    { enabled: false, remedy: null },
+    "an unknown single key hides rather than admits",
+  );
+  const entity = projectsOrManufacturingRates();
+  assert.equal(
+    resolveSetupEntityGate(
+      { ...entity, featureKeysAny: ["projects", "no-such-feature"] },
+      { projects: false, manufacturing: true, inventory: true },
+    ).enabled,
+    false,
+    "an unknown member is off, never a pass-through admit",
+  );
+  assert.equal(
+    resolveSetupEntityGate(
+      { ...entity, featureKeysAny: ["no-such-feature"] },
+      { projects: true, manufacturing: true, inventory: true },
+    ).enabled,
+    false,
+    "an all-unknown member list stays closed even beside enabled features",
+  );
+});
+
+test("a descriptor declaring both gates fails closed", () => {
+  const entity = projectsOrManufacturingRates();
+  assert.equal(
+    resolveSetupEntityGate(
+      { ...entity, featureKey: "projects" },
+      { projects: true, manufacturing: true, inventory: true },
+    ).enabled,
+    false,
+    "both gates declared refuses even when every member is on",
+  );
+});
+
+test("single-key and ungated entities keep their existing verdicts", () => {
+  assert.deepEqual(resolveSetupEntityGate({ featureKey: "projects" }, { projects: true }), {
+    enabled: true,
+    remedy: null,
+  });
+  assert.deepEqual(
+    resolveSetupEntityGate({ featureKey: "projects" }, { projects: false }),
+    { enabled: false, remedy: null },
+    "a closed single-key gate keeps its hide/redirect semantics with no remedy copy",
+  );
+  assert.deepEqual(resolveSetupEntityGate({}, {}), { enabled: true, remedy: null });
+});
+
+test("Benefits is the sole configuration home and write authority for entitlement and employee policies", () => {
+  for (const [key, destination] of [
+    ["entitlement-plans", "/hrm/benefits?view=programs&type=time_off"],
+    ["payroll-vacation-terms", "/hrm/benefits?view=employees"],
+    ["payroll-service-credits", "/hrm/benefits?view=employees"],
+  ]) {
+    const entity = SETUP_ENTITY_BY_KEY.get(key!)!;
+    assert.equal(entity.rehomed, true);
+    assert.equal(entity.writePermission, "hrm.benefits.manage");
+    assert.equal(setupEntityHref(entity), destination);
+  }
+});
+
+test("every domain-owned setup writer declares its import path", () => {
   // Generic CRUD refuses command-owned and aggregate-owned entities, so the
   // generic import writer must not be the one path that allows them. Each
   // such entity declares importVia: rows travel through the engine command
   // ('command') or import refuses them by name ('none').
   const undeclared = SETUP_ENTITIES.filter(
     (entity) => (entity.command ?? entity.mutationPath) && !entity.importVia,
-  ).map((entity) => entity.key)
-  assert.deepEqual(undeclared, [], `command-owned setup entities without an import mapping: ${undeclared.join(', ')}`)
+  ).map((entity) => entity.key);
+  assert.deepEqual(
+    undeclared,
+    [],
+    `command-owned setup entities without an import mapping: ${undeclared.join(", ")}`,
+  );
   // The declaration only takes its two shapes, and 'command' always pairs
   // with the command marker whose engine call the import row travels.
   for (const entity of SETUP_ENTITIES) {
     assert.ok(
-      entity.importVia === undefined || entity.importVia === 'command' || entity.importVia === 'none',
+      entity.importVia === undefined ||
+        entity.importVia === "command" ||
+        entity.importVia === "none",
       `${entity.key} declares an unknown import path`,
-    )
-    if (entity.importVia === 'command') {
-      assert.ok(entity.command, `${entity.key} routes imports through a command it does not declare`)
+    );
+    if (entity.importVia === "command") {
+      assert.ok(
+        entity.command,
+        `${entity.key} routes imports through a command it does not declare`,
+      );
     }
   }
 });
 
-test('schedule board views follow the board type: only a dispatch board offers the dispatch view', () => {
-  const board = SETUP_ENTITY_BY_KEY.get('schedule-boards')!
-  for (const key of ['views', 'defaultView']) {
-    const field = board.fields.find((candidate) => candidate.key === key)!
-    const offered = (values: Record<string, unknown>) => setupFieldOptions(field, values).map((option) => option.value)
-    assert.deepEqual(offered({ rowKind: 'people', boardType: 'people' }), ['grid', 'targets', 'timeline', 'calendar'])
-    assert.deepEqual(offered({ rowKind: 'people', boardType: 'dispatch' }), ['grid', 'timeline', 'calendar', 'dispatch'])
-    assert.deepEqual(offered({ rowKind: 'tasks' }), ['gantt', 'progress'])
+test("schedule board views follow the board type: only a dispatch board offers the dispatch view", () => {
+  const board = SETUP_ENTITY_BY_KEY.get("schedule-boards")!;
+  for (const key of ["views", "defaultView"]) {
+    const field = board.fields.find((candidate) => candidate.key === key)!;
+    const offered = (values: Record<string, unknown>) =>
+      setupFieldOptions(field, values).map((option) => option.value);
+    assert.deepEqual(offered({ rowKind: "people", boardType: "people" }), [
+      "grid",
+      "targets",
+      "timeline",
+      "calendar",
+    ]);
+    assert.deepEqual(offered({ rowKind: "people", boardType: "dispatch" }), [
+      "grid",
+      "timeline",
+      "calendar",
+      "dispatch",
+    ]);
+    assert.deepEqual(offered({ rowKind: "tasks" }), ["gantt", "progress"]);
   }
-})
+});

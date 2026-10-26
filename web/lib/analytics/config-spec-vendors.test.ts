@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { ANALYTICS_CONFIG, cleanConfigValues, isAnalyticsDashboard, mergeConfig } = await import("./config-spec.ts");
+const { ANALYTICS_CONFIG, cleanConfigValues, isAnalyticsDashboard, mergeConfig } =
+  await import("./config-spec.ts");
 
 /**
  * The vendor/span threshold specs: every hardcoded Vendor Performance and
@@ -16,7 +17,8 @@ test("vendorPerformance is a registered dashboard on the vendor-performance slug
 
 test("every dashboard's defaults satisfy its own ordered ladders", () => {
   for (const [name, spec] of Object.entries(ANALYTICS_CONFIG)) {
-    const ladders: readonly (readonly string[])[] = "ordered" in spec && spec.ordered ? spec.ordered : [];
+    const ladders: readonly (readonly string[])[] =
+      "ordered" in spec && spec.ordered ? spec.ordered : [];
     const defaults: Record<string, number | string> = spec.defaults;
     for (const ladder of ladders) {
       // Money tiers default to unset until the organization names them, so
@@ -44,11 +46,36 @@ function fullSpend(values: Record<string, number | string>): Record<string, numb
 }
 
 test("broken thresholds are refused by name", () => {
-  const cases: Array<{ name: string; dashboard: "spendVelocity" | "vendorPerformance"; values: Record<string, number | string>; key: string }> = [
-    { name: "inverted HHI ladder", dashboard: "spendVelocity", values: fullSpend({ hhiWarning: 2500, hhiCritical: 2500 }), key: "hhiCritical" },
-    { name: "inverted vendor grade ladder", dashboard: "vendorPerformance", values: { ...ANALYTICS_CONFIG.vendorPerformance.defaults, gradeB: 90 }, key: "gradeB" },
-    { name: "negative money threshold", dashboard: "spendVelocity", values: fullSpend({ minBaseAmount: "-5" }), key: "minBaseAmount" },
-    { name: "unknown key", dashboard: "vendorPerformance", values: { ...ANALYTICS_CONFIG.vendorPerformance.defaults, bogus: 1 }, key: "bogus" },
+  const cases: Array<{
+    name: string;
+    dashboard: "spendVelocity" | "vendorPerformance";
+    values: Record<string, number | string>;
+    key: string;
+  }> = [
+    {
+      name: "inverted HHI ladder",
+      dashboard: "spendVelocity",
+      values: fullSpend({ hhiWarning: 2500, hhiCritical: 2500 }),
+      key: "hhiCritical",
+    },
+    {
+      name: "inverted vendor grade ladder",
+      dashboard: "vendorPerformance",
+      values: { ...ANALYTICS_CONFIG.vendorPerformance.defaults, gradeB: 90 },
+      key: "gradeB",
+    },
+    {
+      name: "negative money threshold",
+      dashboard: "spendVelocity",
+      values: fullSpend({ minBaseAmount: "-5" }),
+      key: "minBaseAmount",
+    },
+    {
+      name: "unknown key",
+      dashboard: "vendorPerformance",
+      values: { ...ANALYTICS_CONFIG.vendorPerformance.defaults, bogus: 1 },
+      key: "bogus",
+    },
   ];
   for (const c of cases) {
     const key = c.key;

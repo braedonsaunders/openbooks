@@ -131,28 +131,44 @@ test("answer validation accepts a complete NL declaration and refuses what it do
     certificateAnswersProblem(opgaaf!, { apply_loonheffingskorting: "yes" }) ?? "",
     /not "true" or "false"/,
   );
-  assert.match(certificateAnswersProblem(premies!, { whk_percent: "101" }) ?? "", /above the declared maximum/);
+  assert.match(
+    certificateAnswersProblem(premies!, { whk_percent: "101" }) ?? "",
+    /above the declared maximum/,
+  );
   assert.match(certificateAnswersProblem(premies!, { whk_percent: "een" }) ?? "", /not a decimal/);
   // The required FR domicile and RGDU eligibility (both no default) must be
   // answered; a fully answered one with the defaulted rate option passes.
-  const pas = packCertificates("FR").certificates.find((certificate) => certificate.key === "fr_pas_option")!;
-  assert.match(certificateAnswersProblem(pas, { rgdu_eligibility: "eligible" }) ?? "", /"domicile" is required/);
-  assert.match(certificateAnswersProblem(pas, { domicile: "metropole" }) ?? "", /"rgdu_eligibility" is required/);
+  const pas = packCertificates("FR").certificates.find(
+    (certificate) => certificate.key === "fr_pas_option",
+  )!;
+  assert.match(
+    certificateAnswersProblem(pas, { rgdu_eligibility: "eligible" }) ?? "",
+    /"domicile" is required/,
+  );
+  assert.match(
+    certificateAnswersProblem(pas, { domicile: "metropole" }) ?? "",
+    /"rgdu_eligibility" is required/,
+  );
   assert.equal(
     certificateAnswersProblem(pas, { rgdu_eligibility: "eligible", domicile: "metropole" }),
     null,
   );
   // Count and code kinds, through the DE pack's real declaration.
-  const nachweis = packCertificates("DE").certificates.find((certificate) => certificate.key === "de_pv_nachweis")!;
+  const nachweis = packCertificates("DE").certificates.find(
+    (certificate) => certificate.key === "de_pv_nachweis",
+  )!;
   assert.equal(
     certificateAnswersProblem(nachweis, { kinderlosenzuschlag: "true", abschlag_kinder: "2" }),
     null,
   );
   assert.match(
-    certificateAnswersProblem(nachweis, { kinderlosenzuschlag: "true", abschlag_kinder: "5" }) ?? "",
+    certificateAnswersProblem(nachweis, { kinderlosenzuschlag: "true", abschlag_kinder: "5" }) ??
+      "",
     /above the declared maximum/,
   );
-  const elstam = packCertificates("DE").certificates.find((certificate) => certificate.key === "de_elstam")!;
+  const elstam = packCertificates("DE").certificates.find(
+    (certificate) => certificate.key === "de_elstam",
+  )!;
   assert.equal(certificateAnswersProblem(elstam, { konfession: "rk" }), null);
 });
 

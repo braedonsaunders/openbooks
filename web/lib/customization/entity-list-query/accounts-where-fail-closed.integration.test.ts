@@ -18,27 +18,36 @@ async function accountCount(
   orgId: string,
   viewFilters: { key: string; operator: string; value?: string | null }[] = [],
 ): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`select count(*)::int as n from accounts a
+  const rows = await db.execute<{ n: number }>(
+    sql`select count(*)::int as n from accounts a
       left join accounts parent on parent.id = a.parent_id and parent.org_id = a.org_id
-      where ${accountWhere({ ...defaultListView("account"), filters: viewFilters as never }, {}, orgId, null)}`, "objects");
+      where ${accountWhere({ ...defaultListView("account"), filters: viewFilters as never }, {}, orgId, null)}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
-test("malformed account parent filters match nothing instead of throwing", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    assert.ok((await accountCount(org.orgId)) >= 0, "baseline counts without throwing");
-    assert.equal(
-      await accountCount(org.orgId, [{ key: "parent_id", operator: "eq", value: "not-a-uuid" }]),
-      0,
-      "malformed parent filter matches nothing",
-    );
-    assert.equal(
-      await accountCount(org.orgId, [{ key: "parent_id", operator: "eq", value: "00000000-0000-4000-8000-000000000000" }]),
-      0,
-      "well-formed unknown parent stays empty without throwing",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "malformed account parent filters match nothing instead of throwing",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      assert.ok((await accountCount(org.orgId)) >= 0, "baseline counts without throwing");
+      assert.equal(
+        await accountCount(org.orgId, [{ key: "parent_id", operator: "eq", value: "not-a-uuid" }]),
+        0,
+        "malformed parent filter matches nothing",
+      );
+      assert.equal(
+        await accountCount(org.orgId, [
+          { key: "parent_id", operator: "eq", value: "00000000-0000-4000-8000-000000000000" },
+        ]),
+        0,
+        "well-formed unknown parent stays empty without throwing",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

@@ -1,15 +1,24 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const hrmProcesses: DocArticle = {
-  slug: 'hrm-processes',
-  title: 'Onboarding, Offboarding, and Transfer Checklists',
-  category: 'administration',
+  slug: "hrm-processes",
+  title: "Onboarding, Offboarding, and Transfer Checklists",
+  category: "administration",
   order: 11,
   summary:
-    'Every employment start, end, and transfer drives a checklist with owners, due dates, and evidence. Completion is a recorded fact: open processes, overdue steps, and template setup.',
-  updated: '2026-09-20',
-  keywords: ['onboarding', 'offboarding', 'transfer', 'checklist', 'new hire', 'exit', 'department move', 'process template'],
-  related: ['payroll', 'setup-company-group'],
+    "Every employment start, end, and transfer drives a checklist with owners, due dates, and evidence. Completion is a recorded fact: open processes, overdue steps, and template setup.",
+  updated: "2026-09-20",
+  keywords: [
+    "onboarding",
+    "offboarding",
+    "transfer",
+    "checklist",
+    "new hire",
+    "exit",
+    "department move",
+    "process template",
+  ],
+  related: ["payroll", "setup-company-group"],
   body: `# Onboarding, Offboarding, and Transfer Checklists
 
 Every employment start, end, and transfer drives a checklist with owners, due dates, and evidence. Completion is a recorded fact, not a memory: the HR overview shows open checklists, overdue steps, and the next seven days, and the Processes tab carries each checklist to completion or cancellation.
@@ -45,4 +54,4 @@ The employee themself may complete only their own steps, and sees only the step 
 
 The Process Checklists workforce report lists one row per checklist step with process and step status, owner, due date, and evidence. The assistant read tool answers checklist questions from the same canonical read service as the tab, so the numbers always agree.
 `,
-}
+};

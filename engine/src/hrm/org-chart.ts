@@ -86,7 +86,10 @@ function assertCivilDate(asOf: string): void {
   try {
     parseCivilDate(asOf);
   } catch {
-    throw new HrmOrgChartError("VALIDATION", "asOf must be a civil date (YYYY-MM-DD) — the chart is an as-of read, never a live peek");
+    throw new HrmOrgChartError(
+      "VALIDATION",
+      "asOf must be a civil date (YYYY-MM-DD) — the chart is an as-of read, never a live peek",
+    );
   }
 }
 
@@ -108,7 +111,10 @@ async function resolveOrgChartScope(
   asOf: string,
   allowChartGrant = true,
 ): Promise<OrgChartScope> {
-  if (await actorHasPermission(db, orgId, actorId, "hrm.employment.read") || (allowChartGrant && await actorHasPermission(db, orgId, actorId, "hrm.org_chart.read"))) {
+  if (
+    (await actorHasPermission(db, orgId, actorId, "hrm.employment.read")) ||
+    (allowChartGrant && (await actorHasPermission(db, orgId, actorId, "hrm.org_chart.read")))
+  ) {
     return { kind: "hr", allowed: await actorAllowedSubsidiaryIds(db, orgId, actorId) };
   }
   await requireOrgChartRead(db, orgId, actorId);
@@ -129,10 +135,12 @@ export async function loadOrgChart(query: {
 }): Promise<OrgChart> {
   assertCivilDate(query.asOf);
   const scope = await resolveOrgChartScope(query.orgId, query.actorId, query.asOf);
-  const selfFilter = scope.kind === "self"
-    ? sql` and e.id = any(${`{${scope.employmentIds.join(",")}}`}::uuid[])`
-    : sql``;
-  const incumbents = await db.execute<IncumbentRow>(sql`
+  const selfFilter =
+    scope.kind === "self"
+      ? sql` and e.id = any(${`{${scope.employmentIds.join(",")}}`}::uuid[])`
+      : sql``;
+  const incumbents = await db.execute<IncumbentRow>(
+    sql`
     with live_emp as (
       select distinct on (v.employment_id) v.employment_id
         from worker_employment_versions v
@@ -167,7 +175,9 @@ export async function loadOrgChart(query: {
        ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, scope.allowed)}
        ${selfFilter}
      order by name
-  `, "objects");
+  `,
+    "objects",
+  );
 
   // Funded-but-empty slots: positions open as of the date with no live
   // incumbent assignment. They hang at root level — positions carry no
@@ -175,12 +185,16 @@ export async function loadOrgChart(query: {
   // invented lineage, and invented lineage is refused here. Vacancies are
   // HR eyes only (scoped like employments): self-service sees no vacancy
   // nodes.
-  const vacant = scope.kind === "self" ? [] : (await db.execute<{
-    position_id: string;
-    position_code: string;
-    title: string;
-    department: string | null;
-  }>(sql`
+  const vacant =
+    scope.kind === "self"
+      ? []
+      : await db.execute<{
+          position_id: string;
+          position_code: string;
+          title: string;
+          department: string | null;
+        }>(
+          sql`
     select p.id as position_id, p.position_code, v.title, d.name as department
       from positions p
       join position_versions v
@@ -197,7 +211,9 @@ export async function loadOrgChart(query: {
             and (a.effective_to is null or a.effective_to > ${query.asOf}::date)
        )
      order by v.title
-  `, "objects"));
+  `,
+          "objects",
+        );
   const nodes = new Map<string, OrgChartNode>();
   for (const row of incumbents) {
     nodes.set(row.employment_id, {
@@ -230,9 +246,10 @@ export async function loadOrgChart(query: {
   const roots: OrgChartNode[] = [];
   for (const row of incumbents) {
     const node = nodes.get(row.employment_id)!;
-    const manager = row.manager_employment_id && nodes.has(row.manager_employment_id)
-      ? nodes.get(row.manager_employment_id)!
-      : null;
+    const manager =
+      row.manager_employment_id && nodes.has(row.manager_employment_id)
+        ? nodes.get(row.manager_employment_id)!
+        : null;
     // A manager outside the live set (terminated, future-dated) is not a
     // node: the report hangs at root rather than under a ghost.
     if (manager && manager.employmentId !== row.employment_id) {
@@ -270,7 +287,10 @@ export async function loadOrgChart(query: {
   if (query.rootEmploymentId) {
     const root = nodes.get(query.rootEmploymentId);
     if (!root) {
-      throw new HrmOrgChartError("NOT_FOUND", "the requested root employment is not on the chart as of this date");
+      throw new HrmOrgChartError(
+        "NOT_FOUND",
+        "the requested root employment is not on the chart as of this date",
+      );
     }
     focus = [root];
   }
@@ -298,18 +318,24 @@ export async function loadDirectory(query: {
   limit?: number;
   page?: number;
 }): Promise<DirectoryPage> {
-  if (!await actorHasPermission(db, query.orgId, query.actorId, "hrm.employment.read") && !await actorHasPermission(db, query.orgId, query.actorId, "hrm.self.read")) {
-    throw new HrmAuthorizationError("The employee directory requires hrm.employment.read or hrm.self.read. Ask an administrator to grant the appropriate permission in /admin/roles.");
+  if (
+    !(await actorHasPermission(db, query.orgId, query.actorId, "hrm.employment.read")) &&
+    !(await actorHasPermission(db, query.orgId, query.actorId, "hrm.self.read"))
+  ) {
+    throw new HrmAuthorizationError(
+      "The employee directory requires hrm.employment.read or hrm.self.read. Ask an administrator to grant the appropriate permission in /admin/roles.",
+    );
   }
   // Use one selected as-of date for both visibility and effective dating,
   // defaulting to the organization's business date. SQL current_date follows
   // the database session timezone instead.
-  const asOf = query.asOf ?? await businessToday(query.orgId);
+  const asOf = query.asOf ?? (await businessToday(query.orgId));
   parseCivilDate(asOf);
   const scope = await resolveOrgChartScope(query.orgId, query.actorId, asOf, false);
-  const selfFilter = scope.kind === "self"
-    ? sql` and e.id = any(${`{${scope.employmentIds.join(",")}}`}::uuid[])`
-    : sql``;
+  const selfFilter =
+    scope.kind === "self"
+      ? sql` and e.id = any(${`{${scope.employmentIds.join(",")}}`}::uuid[])`
+      : sql``;
   const q = query.search?.trim() ?? "";
   const wantedPage = Math.floor(Number(query.page ?? 1));
   const requestedPage = Number.isFinite(wantedPage) ? Math.max(wantedPage, 1) : 1;
@@ -336,9 +362,16 @@ export async function loadDirectory(query: {
            and (a.effective_to is null or a.effective_to > ${asOf}::date)
       left join departments d on d.org_id = a.org_id and d.id = a.department_id
   `;
-  const totalCount = Number((await db.execute<{ n: string }>(sql`
+  const totalCount = Number(
+    (
+      await db.execute<{ n: string }>(
+        sql`
     select count(distinct e.id)::text as n ${from} ${filters}
-  `, "objects"))[0]?.n ?? "0");
+  `,
+        "objects",
+      )
+    )[0]?.n ?? "0",
+  );
   const page = Math.min(requestedPage, Math.max(1, Math.ceil(totalCount / pageSize)));
   const rows = await db.execute<{
     employment_id: string;
@@ -348,7 +381,8 @@ export async function loadDirectory(query: {
     title: string | null;
     department: string | null;
     manager_name: string | null;
-  }>(sql`
+  }>(
+    sql`
     select e.id as employment_id, e.worker_party_id as party_id,
            coalesce(p.display_name, p.legal_name, 'Unnamed') as name,
            p.email, a.job_title as title, d.name as department,
@@ -366,7 +400,9 @@ export async function loadDirectory(query: {
      ${filters}
      order by name, e.id
      limit ${pageSize} offset ${(page - 1) * pageSize}
-  `, "objects");
+  `,
+    "objects",
+  );
   const entries = rows.map((r) => ({
     employmentId: r.employment_id,
     partyId: r.party_id,

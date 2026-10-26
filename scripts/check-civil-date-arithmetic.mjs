@@ -73,7 +73,9 @@ export function loadAllowlist(readFile = (file) => readFileSync(join(repoRoot(),
   for (const entry of entries) {
     for (const field of ["path", "fn", "test", "arg", "reason"]) {
       if (typeof entry?.[field] !== "string") {
-        throw new Error(`${ALLOWLIST_PATH}: every entry needs string "path", "fn", "test", "arg" and "reason"`);
+        throw new Error(
+          `${ALLOWLIST_PATH}: every entry needs string "path", "fn", "test", "arg" and "reason"`,
+        );
       }
     }
     if (entry.reason.trim() === "") {
@@ -91,19 +93,30 @@ export function allowlistKey(entry) {
 }
 
 export function discoverSources() {
-  return execFileSync(
-    "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "-z",
-      "engine/src/**/*.ts", "engine/src/**/*.tsx",
-      "web/lib/**/*.ts", "web/lib/**/*.tsx",
-      "packages/**/*.ts", "packages/**/*.tsx"],
-    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-  )
-    .split("\0")
-    .filter(Boolean)
-    // Test files ARE scanned: a remapped year in a fixture builds the wrong
-    // expectation silently. Justified sites take allow-list entries.
-    .filter((file) => !/\.d\.tsx?$/.test(file) && file !== OWNER_PATH && file !== SELF_PATH);
+  return (
+    execFileSync(
+      "git",
+      [
+        "ls-files",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+        "-z",
+        "engine/src/**/*.ts",
+        "engine/src/**/*.tsx",
+        "web/lib/**/*.ts",
+        "web/lib/**/*.tsx",
+        "packages/**/*.ts",
+        "packages/**/*.tsx",
+      ],
+      { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+    )
+      .split("\0")
+      .filter(Boolean)
+      // Test files ARE scanned: a remapped year in a fixture builds the wrong
+      // expectation silently. Justified sites take allow-list entries.
+      .filter((file) => !/\.d\.tsx?$/.test(file) && file !== OWNER_PATH && file !== SELF_PATH)
+  );
 }
 
 function isFunctionLike(node) {
@@ -218,8 +231,8 @@ export function scanTree(readFile = (file) => readFileSync(join(repoRoot(), file
   for (const file of discoverSources()) {
     for (const finding of scanSource(file, readFile(file))) findings.push(finding);
   }
-  findings.sort((a, b) =>
-    a.path.localeCompare(b.path) || a.line - b.line || a.arg.localeCompare(b.arg),
+  findings.sort(
+    (a, b) => a.path.localeCompare(b.path) || a.line - b.line || a.arg.localeCompare(b.arg),
   );
   return findings;
 }
@@ -231,10 +244,10 @@ export function checkTree(allowlist = loadAllowlist(), findings = scanTree()) {
     if (!allowed.has(allowlistKey(finding))) {
       problems.push(
         `${finding.path}:${finding.line} [${finding.fn}] ${finding.kind}(${finding.arg}, …) builds a civil date with a non-literal year — ` +
-        `Date.UTC/new Date map years 0-99 onto 1900-1999. Construct through ` +
-        `engine/src/platform/civil-date.ts (utcDateFromParts / calendarDaysBetween / inclusiveCalendarDays; ` +
-        `database-free, so any module may import it). ` +
-        `A wall-clock site that provably cannot see a year below 100 may take an allow-list entry with its reason.`,
+          `Date.UTC/new Date map years 0-99 onto 1900-1999. Construct through ` +
+          `engine/src/platform/civil-date.ts (utcDateFromParts / calendarDaysBetween / inclusiveCalendarDays; ` +
+          `database-free, so any module may import it). ` +
+          `A wall-clock site that provably cannot see a year below 100 may take an allow-list entry with its reason.`,
       );
     }
   }
@@ -249,12 +262,16 @@ export function checkTree(allowlist = loadAllowlist(), findings = scanTree()) {
   return problems;
 }
 
-const invoked = process.argv[1] ? process.argv[1].endsWith("check-civil-date-arithmetic.mjs") : false;
+const invoked = process.argv[1]
+  ? process.argv[1].endsWith("check-civil-date-arithmetic.mjs")
+  : false;
 if (invoked) {
   const allowlist = loadAllowlist();
   const findings = scanTree();
   const problems = checkTree(allowlist, findings);
   for (const problem of problems) console.log(problem);
-  console.log(`checked civil-date arithmetic; violations=${problems.length} (sites=${findings.length}, allowlisted=${allowlist.length})`);
+  console.log(
+    `checked civil-date arithmetic; violations=${problems.length} (sites=${findings.length}, allowlisted=${allowlist.length})`,
+  );
   process.exit(problems.length > 0 ? 1 : 0);
 }

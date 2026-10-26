@@ -39,12 +39,23 @@ function bad(error: string) {
 }
 
 const insightQueryBody = z.json().refine((value) => {
-  try { validateInsightQuery(value); return true; } catch { return false; }
+  try {
+    validateInsightQuery(value);
+    return true;
+  } catch {
+    return false;
+  }
 }, "query must follow the insight query schema");
-const revisionBody = z.string().regex(
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/,
-  "expectedUpdatedAt must be the exact card revision",
-).refine((value) => !Number.isNaN(new Date(value).getTime()), "expectedUpdatedAt must be a valid timestamp");
+const revisionBody = z
+  .string()
+  .regex(
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/,
+    "expectedUpdatedAt must be the exact card revision",
+  )
+  .refine(
+    (value) => !Number.isNaN(new Date(value).getTime()),
+    "expectedUpdatedAt must be a valid timestamp",
+  );
 
 export const GET = defineRoute({
   permission: "insights.read",
@@ -54,11 +65,9 @@ export const GET = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
     const card = await loadCard(id, gate.user.orgId);
-    if (!card)
-      return notFound("record");
+    if (!card) return notFound("record");
     return NextResponse.json(card);
   },
 });
@@ -87,21 +96,25 @@ export const PATCH = defineRoute({
       query: insightQueryBody.optional(),
       vizType: z.enum(INSIGHT_VIZ_TYPES).optional(),
       vizSettings: z.record(z.string().min(1), z.json()).optional(),
-      allowedRoles: z.array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys")).nullable().optional(),
+      allowedRoles: z
+        .array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys"))
+        .nullable()
+        .optional(),
       // Optional at the schema so a missing token reaches the handler's 409
       // (reload remedy) instead of failing as a faceless schema refusal.
       expectedUpdatedAt: revisionBody.optional(),
     })
-    .refine((body) => Object.keys(body).some((key) => key !== "expectedUpdatedAt"), "provide at least one card field to update"),
+    .refine(
+      (body) => Object.keys(body).some((key) => key !== "expectedUpdatedAt"),
+      "provide at least one card field to update",
+    ),
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const user = gate.user;
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
 
     const existing = await loadCard(id, user.orgId);
-    if (!existing)
-      return notFound("record");
+    if (!existing) return notFound("record");
 
     const body = routeBody as PatchBody;
 
@@ -109,16 +122,11 @@ export const PATCH = defineRoute({
     // caller loaded so an older debounced request can never restore stale
     // analytical definitions after a newer save commits.
     if (body.expectedUpdatedAt === undefined) {
-      return NextResponse.json(
-        { error: CARD_REVISION_REQUIRED },
-        { status: 409 },
-      );
+      return NextResponse.json({ error: CARD_REVISION_REQUIRED }, { status: 409 });
     }
     if (
       typeof body.expectedUpdatedAt !== "string" ||
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(
-        body.expectedUpdatedAt,
-      ) ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(body.expectedUpdatedAt) ||
       Number.isNaN(new Date(body.expectedUpdatedAt).getTime())
     ) {
       return NextResponse.json(
@@ -133,8 +141,7 @@ export const PATCH = defineRoute({
     if (body.name !== undefined && typeof body.name !== "string")
       return bad("Card name must be a string");
     const name = body.name !== undefined ? body.name.trim() : undefined;
-    if (name !== undefined && name === "")
-      return bad("Card name cannot be empty");
+    if (name !== undefined && name === "") return bad("Card name cannot be empty");
 
     let query: unknown = undefined;
     if (body.query !== undefined) {
@@ -147,8 +154,7 @@ export const PATCH = defineRoute({
       if (queryDenied) return queryDenied;
     }
 
-    if (body.vizType !== undefined && !isVizType(body.vizType))
-      return bad("invalid viz type");
+    if (body.vizType !== undefined && !isVizType(body.vizType)) return bad("invalid viz type");
 
     let vizSettings: unknown = undefined;
     if (body.vizSettings !== undefined) {
@@ -169,13 +175,9 @@ export const PATCH = defineRoute({
     }
 
     try {
-      const outcome = await mutateInsight(
-        gate,
-        "insight_cards",
-        id,
-        "update",
-        async (tx) => {
-          const updated = await tx.execute(sql`
+      const outcome = await mutateInsight(gate, "insight_cards", id, "update", async (tx) => {
+        const updated = await tx.execute(
+          sql`
     update insight_cards set
       name = ${name !== undefined ? name : sql`name`},
       description = ${body.description !== undefined ? strOrNull(body.description) : sql`description`},
@@ -189,18 +191,16 @@ export const PATCH = defineRoute({
       and org_id = ${user.orgId}
       and updated_at = ${body.expectedUpdatedAt}::timestamptz
     returning *, ${cardRevisionSql(sql.raw("updated_at"))} as updated_at
-  `, "objects");
-          if (!updated[0]) throw new CardRevisionConflictError();
-          return NextResponse.json(updated[0]);
-        },
-      );
+  `,
+          "objects",
+        );
+        if (!updated[0]) throw new CardRevisionConflictError();
+        return NextResponse.json(updated[0]);
+      });
       return outcome;
     } catch (error) {
       if (error instanceof CardRevisionConflictError) {
-        return NextResponse.json(
-          { error: CARD_REVISION_CONFLICT },
-          { status: 409 },
-        );
+        return NextResponse.json({ error: CARD_REVISION_CONFLICT }, { status: 409 });
       }
       throw error;
     }
@@ -216,11 +216,9 @@ export const DELETE = defineRoute({
   handler: async ({ request: _req, authz: gate, params }) => {
     const user = gate.user;
     const { id } = await params;
-    if (!isUuid(id))
-      return notFound("record");
+    if (!isUuid(id)) return notFound("record");
 
-    if (!(await loadCard(id, user.orgId)))
-      return notFound("record");
+    if (!(await loadCard(id, user.orgId))) return notFound("record");
 
     return mutateInsight(gate, "insight_cards", id, "delete", async (tx) => {
       // Lock affected boards in stable order and advance their revisions, so an
@@ -228,21 +226,25 @@ export const DELETE = defineRoute({
       const boards = await tx.execute<{
         id: string;
         snapshot: Record<string, unknown>;
-      }>(sql`
+      }>(
+        sql`
       select id, to_jsonb(d) as snapshot from insight_dashboards d
       where org_id = ${user.orgId} and layout @> ${JSON.stringify([{ cardId: id }])}::jsonb
       order by id for update
-    `, "objects");
-      await tx.execute(
-        sql`delete from insight_cards where id = ${id} and org_id = ${user.orgId}`,
+    `,
+        "objects",
       );
+      await tx.execute(sql`delete from insight_cards where id = ${id} and org_id = ${user.orgId}`);
       for (const board of boards) {
-        const updated = await tx.execute(sql`
+        const updated = await tx.execute(
+          sql`
         update insight_dashboards set layout = coalesce((
           select jsonb_agg(elem) from jsonb_array_elements(layout) elem where elem->>'cardId' <> ${id}
         ), '[]'::jsonb), updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
         where id = ${board.id} and org_id = ${user.orgId} returning *
-      `, "objects");
+      `,
+          "objects",
+        );
         await auditSetupChange(
           {
             orgId: user.orgId,

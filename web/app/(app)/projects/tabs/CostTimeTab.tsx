@@ -1,10 +1,10 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { useMoney } from '@/components/money-provider'
-import { useEffect, useState } from 'react'
-import { useLocale, useTranslations } from 'next-intl'
-import { ChevronRight } from 'lucide-react'
+import Link from "next/link";
+import { useMoney } from "@/components/money-provider";
+import { useEffect, useState } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { ChevronRight } from "lucide-react";
 import {
   Badge,
   Button,
@@ -16,129 +16,148 @@ import {
   TableHeader,
   TableRow,
   cn,
-} from '@openbooks/ui'
-import { KpiStrip, type Kpi } from '../../../../components/kpi-strip'
-import { PagedTable } from '../../../../components/paged-table'
-import { refusalMessageFromBody } from '@/lib/api-error'
+} from "@openbooks/ui";
+import { KpiStrip, type Kpi } from "../../../../components/kpi-strip";
+import { PagedTable } from "../../../../components/paged-table";
+import { refusalMessageFromBody } from "@/lib/api-error";
 // HR-20 begin: crew-today section.
-import { CrewTodaySection } from '../../../../components/field-time/CrewTodaySection'
+import { CrewTodaySection } from "../../../../components/field-time/CrewTodaySection";
 // HR-20 end
 
 interface TimeRow {
-  key: string | null
-  label: string
-  hours: number
-  billableHours: number
-  cost: string
-  bill: string
+  key: string | null;
+  label: string;
+  hours: number;
+  billableHours: number;
+  cost: string;
+  bill: string;
 }
 
 export interface CostTimeData {
-  totals: { hours: number; billableHours: number; cost: string; bill: string }
+  totals: { hours: number; billableHours: number; cost: string; bill: string };
   /** An active labor rate card exists, so bill value is priced — not merely zero. */
-  laborPricingConfigured: boolean
-  byTask: TimeRow[]
-  byEmployee: TimeRow[]
-  byItem: TimeRow[]
+  laborPricingConfigured: boolean;
+  byTask: TimeRow[];
+  byEmployee: TimeRow[];
+  byItem: TimeRow[];
 }
 
-type TimeDimension = 'employee' | 'item' | 'task'
+type TimeDimension = "employee" | "item" | "task";
 
 interface TimeEntry {
-  id: string
-  workedOn: string
-  workRegion: string | null
-  workSubregion: string | null
-  employeeName: string
-  itemName: string
-  taskName: string
-  timeTypeName: string
-  hours: string
-  billable: boolean
-  cost: string
-  bill: string
-  memo: string | null
-  fieldTicketNumber: string | null
+  id: string;
+  workedOn: string;
+  workRegion: string | null;
+  workSubregion: string | null;
+  employeeName: string;
+  itemName: string;
+  taskName: string;
+  timeTypeName: string;
+  hours: string;
+  billable: boolean;
+  cost: string;
+  bill: string;
+  memo: string | null;
+  fieldTicketNumber: string | null;
 }
 
 interface TimeEntryPage {
-  entries: TimeEntry[]
-  page: number
-  pageSize: number
-  totalPages: number
-  totals: { entries: number; hours: string; cost: string; bill: string }
+  entries: TimeEntry[];
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  totals: { entries: number; hours: string; cost: string; bill: string };
 }
 
 interface DrillTarget {
-  dimension: TimeDimension
-  key: string | null
-  label: string
+  dimension: TimeDimension;
+  key: string | null;
+  label: string;
 }
 
-const fmtHours = (v: number, locale: string) => v.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 4 })
+const fmtHours = (v: number, locale: string) =>
+  v.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 4 });
 
 export function CostTimeTab({
   data,
   projectId,
   crewToday,
 }: {
-  data: CostTimeData
-  projectId: string
+  data: CostTimeData;
+  projectId: string;
   // HR-20: who is clocked in now; undefined on surfaces without cockpit data.
-  crewToday?: { employeePartyId: string; employeeName: string | null; since: string; costCodeRef: string | null; geoCheck: string }[]
+  crewToday?: {
+    employeePartyId: string;
+    employeeName: string | null;
+    since: string;
+    costCodeRef: string | null;
+    geoCheck: string;
+  }[];
 }) {
-  const locale = useLocale()
-  const { money } = useMoney()
-  const t = useTranslations('projects')
-  const tCommon = useTranslations('common')
-  const [inner, setInner] = useState<TimeDimension>('employee')
-  const [drill, setDrill] = useState<DrillTarget | null>(null)
+  const locale = useLocale();
+  const { money } = useMoney();
+  const t = useTranslations("projects");
+  const tCommon = useTranslations("common");
+  const [inner, setInner] = useState<TimeDimension>("employee");
+  const [drill, setDrill] = useState<DrillTarget | null>(null);
 
   // Bill value prices hours through labor rate cards. With none configured
   // every bill_rate is null and the zero total means "unpriced" — printing
   // 0.00 would read as priced work worth nothing, so the tile states that
   // and links to setup instead.
-  const billPriced = data.laborPricingConfigured
+  const billPriced = data.laborPricingConfigured;
   const kpis: Kpi[] = [
-    { label: t('cockpit.totalHours'), value: fmtHours(data.totals.hours, locale) },
-    { label: t('cockpit.billableHours'), value: fmtHours(data.totals.billableHours, locale) },
-    { label: t('cockpit.laborCost'), value: money(data.totals.cost) },
-    { label: t('cockpit.laborBill'), value: billPriced ? money(data.totals.bill) : '—', tone: billPriced ? 'good' : undefined },
-  ]
+    { label: t("cockpit.totalHours"), value: fmtHours(data.totals.hours, locale) },
+    { label: t("cockpit.billableHours"), value: fmtHours(data.totals.billableHours, locale) },
+    { label: t("cockpit.laborCost"), value: money(data.totals.cost) },
+    {
+      label: t("cockpit.laborBill"),
+      value: billPriced ? money(data.totals.bill) : "—",
+      tone: billPriced ? "good" : undefined,
+    },
+  ];
 
-  const rows = inner === 'task' ? data.byTask : inner === 'item' ? data.byItem : data.byEmployee
-  const unlabeled = inner === 'task'
-    ? t('cockpit.unassignedTask')
-    : inner === 'item'
-      ? t('cockpit.unassignedItem')
-      : t('cockpit.unassignedEmployee')
-  const labelHead = inner === 'task'
-    ? t('labels.task')
-    : inner === 'item'
-      ? tCommon('labels.item')
-      : tCommon('labels.employee')
+  const rows = inner === "task" ? data.byTask : inner === "item" ? data.byItem : data.byEmployee;
+  const unlabeled =
+    inner === "task"
+      ? t("cockpit.unassignedTask")
+      : inner === "item"
+        ? t("cockpit.unassignedItem")
+        : t("cockpit.unassignedEmployee");
+  const labelHead =
+    inner === "task"
+      ? t("labels.task")
+      : inner === "item"
+        ? tCommon("labels.item")
+        : tCommon("labels.employee");
 
   const innerTabs = [
-    { key: 'employee' as const, label: t('cockpit.timeByEmployee') },
-    { key: 'item' as const, label: t('cockpit.timeByItem') },
-    { key: 'task' as const, label: t('cockpit.timeByTask') },
-  ]
+    { key: "employee" as const, label: t("cockpit.timeByEmployee") },
+    { key: "item" as const, label: t("cockpit.timeByItem") },
+    { key: "task" as const, label: t("cockpit.timeByTask") },
+  ];
 
   return (
     <div className="space-y-6">
       <KpiStrip items={kpis} />
       {!billPriced ? (
         <p className="flex flex-wrap items-center gap-x-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-          <span>{t('cockpit.noLaborPricingHint')}</span>
-          <Link href="/admin/setup/labor-pricing" className="font-medium text-teal-700 underline decoration-teal-300 underline-offset-2 hover:text-teal-800 dark:text-teal-300 dark:decoration-teal-700 dark:hover:text-teal-200">
-            {t('cockpit.setUpLaborPricing')}
+          <span>{t("cockpit.noLaborPricingHint")}</span>
+          <Link
+            href="/admin/setup/labor-pricing"
+            className="font-medium text-teal-700 underline decoration-teal-300 underline-offset-2 hover:text-teal-800 dark:text-teal-300 dark:decoration-teal-700 dark:hover:text-teal-200"
+          >
+            {t("cockpit.setUpLaborPricing")}
           </Link>
         </p>
       ) : null}
       {/* HR-20: crew-today renders only when rows exist. */}
       {crewToday && crewToday.length > 0 ? <CrewTodaySection rows={crewToday} /> : null}
       <div className="space-y-3">
-        <nav className="-mb-px flex gap-1 border-b border-slate-200 dark:border-slate-800" aria-label={t('cockpit.timeBreakdownAria')}>
+        <nav
+          className="-mb-px flex gap-1 border-b border-slate-200 dark:border-slate-800"
+          aria-label={t("cockpit.timeBreakdownAria")}
+        >
           {innerTabs.map((tab) => (
             <button
               key={tab.key}
@@ -146,10 +165,10 @@ export function CostTimeTab({
               onClick={() => setInner(tab.key)}
               aria-current={inner === tab.key}
               className={cn(
-                'border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+                "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
                 inner === tab.key
-                  ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
+                  ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300"
+                  : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200",
               )}
             >
               {tab.label}
@@ -159,46 +178,69 @@ export function CostTimeTab({
         <div className="pt-2">
           <PagedTable
             rows={rows}
-            rowKey={(r) => r.key ?? 'none'}
+            rowKey={(r) => r.key ?? "none"}
             searchable
-            empty={<p className="text-sm text-slate-500 dark:text-slate-400">{t('cockpit.noTime')}</p>}
+            empty={
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t("cockpit.noTime")}</p>
+            }
             columns={[
               {
-                key: 'label',
+                key: "label",
                 header: labelHead,
                 cell: (r) => (
                   <button
                     type="button"
-                    onClick={() => setDrill({ dimension: inner, key: r.key, label: r.label || unlabeled })}
+                    onClick={() =>
+                      setDrill({ dimension: inner, key: r.key, label: r.label || unlabeled })
+                    }
                     className={cn(
-                      'group flex w-full items-center gap-1.5 text-left font-medium text-teal-700 hover:text-teal-900 dark:text-teal-300 dark:hover:text-teal-100',
-                      !r.label && 'text-slate-500 dark:text-slate-400',
+                      "group flex w-full items-center gap-1.5 text-left font-medium text-teal-700 hover:text-teal-900 dark:text-teal-300 dark:hover:text-teal-100",
+                      !r.label && "text-slate-500 dark:text-slate-400",
                     )}
                   >
                     <span>{r.label || unlabeled}</span>
-                    <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
-                    <span className="sr-only">{t('cockpit.viewTimeEntries')}</span>
+                    <ChevronRight
+                      className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
+                      aria-hidden
+                    />
+                    <span className="sr-only">{t("cockpit.viewTimeEntries")}</span>
                   </button>
                 ),
                 search: (r) => r.label,
               },
-              { key: 'hours', header: t('cockpit.hoursHead'), align: 'right', cell: (r) => fmtHours(r.hours, locale) },
-              { key: 'billable', header: t('cockpit.billableHead'), align: 'right', cell: (r) => fmtHours(r.billableHours, locale) },
-              { key: 'cost', header: t('labels.actualCost'), align: 'right', cell: (r) => money(r.cost) },
-              { key: 'bill', header: t('cockpit.billValue'), align: 'right', cell: (r) => money(r.bill) },
+              {
+                key: "hours",
+                header: t("cockpit.hoursHead"),
+                align: "right",
+                cell: (r) => fmtHours(r.hours, locale),
+              },
+              {
+                key: "billable",
+                header: t("cockpit.billableHead"),
+                align: "right",
+                cell: (r) => fmtHours(r.billableHours, locale),
+              },
+              {
+                key: "cost",
+                header: t("labels.actualCost"),
+                align: "right",
+                cell: (r) => money(r.cost),
+              },
+              {
+                key: "bill",
+                header: t("cockpit.billValue"),
+                align: "right",
+                cell: (r) => money(r.bill),
+              },
             ]}
           />
         </div>
       </div>
       {drill ? (
-        <TimeEntriesDrawer
-          projectId={projectId}
-          target={drill}
-          onClose={() => setDrill(null)}
-        />
+        <TimeEntriesDrawer projectId={projectId} target={drill} onClose={() => setDrill(null)} />
       ) : null}
     </div>
-  )
+  );
 }
 
 function TimeEntriesDrawer({
@@ -206,57 +248,67 @@ function TimeEntriesDrawer({
   target,
   onClose,
 }: {
-  projectId: string
-  target: DrillTarget
-  onClose: () => void
+  projectId: string;
+  target: DrillTarget;
+  onClose: () => void;
 }) {
-  const { money } = useMoney()
-  const t = useTranslations('projects')
-  const tCommon = useTranslations('common')
-  const [page, setPage] = useState(1)
-  const [reload, setReload] = useState(0)
-  const [data, setData] = useState<TimeEntryPage | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const { money } = useMoney();
+  const t = useTranslations("projects");
+  const tCommon = useTranslations("common");
+  const [page, setPage] = useState(1);
+  const [reload, setReload] = useState(0);
+  const [data, setData] = useState<TimeEntryPage | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Reset the page when the request inputs change, during render (same
   // committed values, no extra render). The key mirrors the fetch effect's
   // inputs exactly, including the locale (the translator identity changes
   // with it) and the manual refresh counter.
-  const locale = useLocale()
-  const requestKey = JSON.stringify([locale, projectId, target.dimension, target.key ?? 'unassigned', page, reload])
-  const [prevRequestKey, setPrevRequestKey] = useState(requestKey)
+  const locale = useLocale();
+  const requestKey = JSON.stringify([
+    locale,
+    projectId,
+    target.dimension,
+    target.key ?? "unassigned",
+    page,
+    reload,
+  ]);
+  const [prevRequestKey, setPrevRequestKey] = useState(requestKey);
   if (prevRequestKey !== requestKey) {
-    setPrevRequestKey(requestKey)
-    setData(null)
-    setError(null)
+    setPrevRequestKey(requestKey);
+    setData(null);
+    setError(null);
   }
 
   useEffect(() => {
-    const controller = new AbortController()
+    const controller = new AbortController();
     const params = new URLSearchParams({
       dimension: target.dimension,
-      key: target.key ?? 'unassigned',
+      key: target.key ?? "unassigned",
       page: String(page),
-    })
+    });
     fetch(`/api/projects/${encodeURIComponent(projectId)}/time-entries?${params.toString()}`, {
-      cache: 'no-store',
+      cache: "no-store",
       signal: controller.signal,
     })
       .then(async (response) => {
-        if (response.ok) return response.json()
+        if (response.ok) return response.json();
         // The refusal reads through the shared helper so message, remedy and
         // code render instead of the bare `error` field.
-        const body = await response.json().catch(() => null)
-        throw new Error(refusalMessageFromBody(body, { fallback: t('cockpit.timeEntriesLoadFailed') }) ?? t('cockpit.timeEntriesLoadFailed'))
+        const body = await response.json().catch(() => null);
+        throw new Error(
+          refusalMessageFromBody(body, { fallback: t("cockpit.timeEntriesLoadFailed") }) ??
+            t("cockpit.timeEntriesLoadFailed"),
+        );
       })
       .then((body: TimeEntryPage) => setData(body))
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : t('cockpit.timeEntriesLoadFailed'))
+          setError(reason instanceof Error ? reason.message : t("cockpit.timeEntriesLoadFailed"));
         }
-      })
-    return () => controller.abort()
-  }, [page, projectId, reload, t, target.dimension, target.key])
+      });
+    return () => controller.abort();
+  }, [page, projectId, reload, t, target.dimension, target.key]);
 
   return (
     <Drawer
@@ -265,15 +317,27 @@ function TimeEntriesDrawer({
       size="xl"
       onClose={onClose}
       title={target.label}
-      description={t('cockpit.timeEntriesTitle')}
+      description={t("cockpit.timeEntriesTitle")}
       bodyClassName="overflow-hidden p-0"
     >
       <div className="flex h-full min-h-0 flex-col">
         <div className="grid grid-cols-2 gap-x-5 gap-y-2 border-b border-slate-200 bg-slate-50/70 px-5 py-3 text-sm sm:grid-cols-4 dark:border-slate-800 dark:bg-slate-950/40">
-          <TimeDetailMetric label={t('cockpit.entriesHead')} value={data ? data.totals.entries.toLocaleString(locale) : '—'} />
-          <TimeDetailMetric label={t('cockpit.hoursHead')} value={data ? fmtHours(Number(data.totals.hours), locale) : '—'} />
-          <TimeDetailMetric label={t('labels.actualCost')} value={data ? money(data.totals.cost) : '—'} />
-          <TimeDetailMetric label={t('cockpit.billValue')} value={data ? money(data.totals.bill) : '—'} />
+          <TimeDetailMetric
+            label={t("cockpit.entriesHead")}
+            value={data ? data.totals.entries.toLocaleString(locale) : "—"}
+          />
+          <TimeDetailMetric
+            label={t("cockpit.hoursHead")}
+            value={data ? fmtHours(Number(data.totals.hours), locale) : "—"}
+          />
+          <TimeDetailMetric
+            label={t("labels.actualCost")}
+            value={data ? money(data.totals.cost) : "—"}
+          />
+          <TimeDetailMetric
+            label={t("cockpit.billValue")}
+            value={data ? money(data.totals.bill) : "—"}
+          />
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto p-4">
@@ -281,26 +345,36 @@ function TimeEntriesDrawer({
             <div className="flex min-h-40 flex-col items-center justify-center gap-3 text-center">
               <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
               <Button variant="outline" size="sm" onClick={() => setReload((value) => value + 1)}>
-                {tCommon('actions.retry')}
+                {tCommon("actions.retry")}
               </Button>
             </div>
           ) : !data ? (
-            <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">{tCommon('feedback.loading')}</p>
+            <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+              {tCommon("feedback.loading")}
+            </p>
           ) : data.entries.length === 0 ? (
-            <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">{t('cockpit.noTime')}</p>
+            <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+              {t("cockpit.noTime")}
+            </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{tCommon('labels.date')}</TableHead>
-                  <TableHead>{tCommon('labels.employee')}</TableHead>
-                  <TableHead>{tCommon('labels.item')}</TableHead>
-                  <TableHead>{t('labels.task')}</TableHead>
-                  <TableHead>{t('cockpit.timeTypeHead')}</TableHead>
-                  <TableHead>{tCommon('labels.billable')}</TableHead>
-                  <TableHead className="text-right" align="right">{t('cockpit.hoursHead')}</TableHead>
-                  <TableHead className="text-right" align="right">{t('labels.actualCost')}</TableHead>
-                  <TableHead className="text-right" align="right">{t('cockpit.billValue')}</TableHead>
+                  <TableHead>{tCommon("labels.date")}</TableHead>
+                  <TableHead>{tCommon("labels.employee")}</TableHead>
+                  <TableHead>{tCommon("labels.item")}</TableHead>
+                  <TableHead>{t("labels.task")}</TableHead>
+                  <TableHead>{t("cockpit.timeTypeHead")}</TableHead>
+                  <TableHead>{tCommon("labels.billable")}</TableHead>
+                  <TableHead className="text-right" align="right">
+                    {t("cockpit.hoursHead")}
+                  </TableHead>
+                  <TableHead className="text-right" align="right">
+                    {t("labels.actualCost")}
+                  </TableHead>
+                  <TableHead className="text-right" align="right">
+                    {t("cockpit.billValue")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -308,20 +382,35 @@ function TimeEntriesDrawer({
                   <TableRow key={entry.id}>
                     <TableCell className="min-w-36">
                       <p className="whitespace-nowrap tabular-nums">{entry.workedOn}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">{entry.workRegion ? `${entry.workRegion}${entry.workSubregion ? ` · ${entry.workSubregion}` : ''}` : 'Work location not recorded'}</p>
-                      {entry.memo ? <p className="mt-0.5 max-w-52 truncate text-xs text-slate-500" title={entry.memo}>{entry.memo}</p> : null}
-                      {entry.fieldTicketNumber ? <p className="mt-0.5 text-xs text-slate-400">{entry.fieldTicketNumber}</p> : null}
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {entry.workRegion
+                          ? `${entry.workRegion}${entry.workSubregion ? ` · ${entry.workSubregion}` : ""}`
+                          : "Work location not recorded"}
+                      </p>
+                      {entry.memo ? (
+                        <p
+                          className="mt-0.5 max-w-52 truncate text-xs text-slate-500"
+                          title={entry.memo}
+                        >
+                          {entry.memo}
+                        </p>
+                      ) : null}
+                      {entry.fieldTicketNumber ? (
+                        <p className="mt-0.5 text-xs text-slate-400">{entry.fieldTicketNumber}</p>
+                      ) : null}
                     </TableCell>
-                    <TableCell>{entry.employeeName || '—'}</TableCell>
-                    <TableCell>{entry.itemName || '—'}</TableCell>
-                    <TableCell>{entry.taskName || '—'}</TableCell>
-                    <TableCell>{entry.timeTypeName || '—'}</TableCell>
+                    <TableCell>{entry.employeeName || "—"}</TableCell>
+                    <TableCell>{entry.itemName || "—"}</TableCell>
+                    <TableCell>{entry.taskName || "—"}</TableCell>
+                    <TableCell>{entry.timeTypeName || "—"}</TableCell>
                     <TableCell>
-                      <Badge variant={entry.billable ? 'success' : 'secondary'}>
-                        {entry.billable ? tCommon('labels.yes') : tCommon('labels.no')}
+                      <Badge variant={entry.billable ? "success" : "secondary"}>
+                        {entry.billable ? tCommon("labels.yes") : tCommon("labels.no")}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">{fmtHours(Number(entry.hours), locale)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {fmtHours(Number(entry.hours), locale)}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{money(entry.cost)}</TableCell>
                     <TableCell className="text-right tabular-nums">{money(entry.bill)}</TableCell>
                   </TableRow>
@@ -333,27 +422,41 @@ function TimeEntriesDrawer({
 
         {data && data.totalPages > 1 ? (
           <div className="flex items-center justify-between border-t border-slate-200 px-5 py-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-            <span>{t('cockpit.timeEntriesPage', { page: data.page, pages: data.totalPages })}</span>
+            <span>{t("cockpit.timeEntriesPage", { page: data.page, pages: data.totalPages })}</span>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={data.page <= 1} onClick={() => setPage(data.page - 1)}>
-                {tCommon('actions.previous')}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={data.page <= 1}
+                onClick={() => setPage(data.page - 1)}
+              >
+                {tCommon("actions.previous")}
               </Button>
-              <Button variant="outline" size="sm" disabled={data.page >= data.totalPages} onClick={() => setPage(data.page + 1)}>
-                {tCommon('actions.next')}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={data.page >= data.totalPages}
+                onClick={() => setPage(data.page + 1)}
+              >
+                {tCommon("actions.next")}
               </Button>
             </div>
           </div>
         ) : null}
       </div>
     </Drawer>
-  )
+  );
 }
 
 function TimeDetailMetric({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
-      <p className="mt-0.5 font-semibold tabular-nums text-slate-900 dark:text-slate-100">{value}</p>
+      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {label}
+      </p>
+      <p className="mt-0.5 font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+        {value}
+      </p>
     </div>
-  )
+  );
 }

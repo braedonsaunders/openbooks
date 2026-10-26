@@ -25,7 +25,9 @@ const DB = { skip: !process.env.OPENBOOKS_DB_URL };
 async function withUsageOrg(run: (org: ScratchOrg, actor: string) => Promise<void>): Promise<void> {
   const org = await createScratchOrg();
   try {
-    const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Usage controller", "admin"));
+    const actor = await withOrgContext(org.orgId, () =>
+      createScratchUser(org.orgId, "Usage controller", "admin"),
+    );
     await withOrgContext(org.orgId, async () => {
       const enabled = await db.execute<never>(sql`
         update orgs
@@ -37,7 +39,11 @@ async function withUsageOrg(run: (org: ScratchOrg, actor: string) => Promise<voi
              true
            )
          where id = ${org.orgId}`);
-      assert.equal(enabled.rowCount, 1, "the scratch organization must receive the usage feature settings");
+      assert.equal(
+        enabled.rowCount,
+        1,
+        "the scratch organization must receive the usage feature settings",
+      );
     });
     await withOrgContext(org.orgId, () => run(org, actor));
   } finally {
@@ -70,7 +76,11 @@ test("replaying a usage idempotency key returns the same evidence row", DB, asyn
     assert.ok(first);
     assert.ok(replay);
     assert.equal(replay.id, first.id);
-    assert.equal((await listUsageRecordsForWindow(org.orgId, meter.id, org.customerId, org.date, org.date)).length, 1);
+    assert.equal(
+      (await listUsageRecordsForWindow(org.orgId, meter.id, org.customerId, org.date, org.date))
+        .length,
+      1,
+    );
   });
 });
 
@@ -88,7 +98,13 @@ test("a reversal appends negative evidence and leaves the original unchanged", D
       reverseUsageRecord(org.orgId, actor, original.id, "Duplicate source event"),
     );
     assert.equal(reversal.occurredOn, "2026-07-16");
-    const rows = await listUsageRecordsForWindow(org.orgId, meter.id, org.customerId, org.date, reversal.occurredOn);
+    const rows = await listUsageRecordsForWindow(
+      org.orgId,
+      meter.id,
+      org.customerId,
+      org.date,
+      reversal.occurredOn,
+    );
     const stillOriginal = rows.find((row) => row.id === original.id);
     assert.deepEqual(stillOriginal, original);
     assert.equal(rows.length, 2);

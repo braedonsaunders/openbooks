@@ -133,12 +133,7 @@ const messagesFr = merge(enMessages, frMessages) as AbstractIntlMessages;
 function renderFrTable(tableData: PropertyWorkspace): string {
   return renderToStaticMarkup(
     <NextIntlClientProvider locale="fr" messages={messagesFr} timeZone="UTC">
-      <PropertiesTable
-        data={tableData}
-        view={view}
-        fieldDefs={[]}
-        onOpen={() => {}}
-      />
+      <PropertiesTable data={tableData} view={view} fieldDefs={[]} onOpen={() => {}} />
     </NextIntlClientProvider>,
   );
 }
@@ -149,14 +144,7 @@ function renderFr(): string {
 
 test("property buildings table headers render French, never English", () => {
   const html = renderFr();
-  for (const header of [
-    "Immeuble",
-    "Entité",
-    "Emplacement",
-    "Occupation",
-    "Devise",
-    "Statut",
-  ]) {
+  for (const header of ["Immeuble", "Entité", "Emplacement", "Occupation", "Devise", "Statut"]) {
     assert.ok(html.includes(header), `fr render is missing header ${header}`);
   }
   for (const english of [
@@ -167,10 +155,7 @@ test("property buildings table headers render French, never English", () => {
     ">Currency<",
     ">Status<",
   ]) {
-    assert.ok(
-      !html.includes(english),
-      `fr render leaks English header ${english}`,
-    );
+    assert.ok(!html.includes(english), `fr render leaks English header ${english}`);
   }
   // Cognates omitted into the declared fallback manifest render English by
   // design — as translated copy, never as raw key paths.
@@ -183,14 +168,8 @@ test("property type and status cells resolve through the catalog", () => {
   // Each row describes a building (un immeuble, masculine — the
   // "Immeuble"/"Type"/"Statut" headers), so the type/status adjectives agree
   // masculine. The catalog previously carried the feminine forms.
-  assert.ok(
-    html.includes(">Résidentiel<"),
-    "fr render must translate the residential type",
-  );
-  assert.ok(
-    html.includes(">Actif<"),
-    "fr render must translate the active status",
-  );
+  assert.ok(html.includes(">Résidentiel<"), "fr render must translate the residential type");
+  assert.ok(html.includes(">Actif<"), "fr render must translate the active status");
   for (const feminine of [
     "Résidentielle",
     "Commerciale",
@@ -220,7 +199,14 @@ test("spanish type and status cells agree masculine with the building noun", () 
   for (const header of ["Inmueble", "Tipo", "Estado"]) {
     assert.ok(html.includes(header), `es render is missing masculine header ${header}`);
   }
-  for (const masculine of [">Residencial<", ">Otro<", ">Comercial<", ">Vendido<", ">Activo<", ">Inactivo<"]) {
+  for (const masculine of [
+    ">Residencial<",
+    ">Otro<",
+    ">Comercial<",
+    ">Vendido<",
+    ">Activo<",
+    ">Inactivo<",
+  ]) {
     assert.ok(html.includes(masculine), `es render must use masculine ${masculine}`);
   }
   for (const feminine of [">Otra<", "Vendida", ">Activa<", ">Inactiva<"]) {
@@ -230,12 +216,6 @@ test("spanish type and status cells agree masculine with the building noun", () 
 
 test("property buildings empty state renders French", () => {
   const html = renderFrTable({ ...data, properties: [] });
-  assert.ok(
-    html.includes("Aucun immeuble pour le moment"),
-    "fr empty title must resolve",
-  );
-  assert.ok(
-    !html.includes("No properties yet"),
-    "English empty title must not leak",
-  );
+  assert.ok(html.includes("Aucun immeuble pour le moment"), "fr empty title must resolve");
+  assert.ok(!html.includes("No properties yet"), "English empty title must not leak");
 });

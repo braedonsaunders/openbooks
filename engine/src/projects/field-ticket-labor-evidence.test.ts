@@ -41,6 +41,12 @@ test("an impossible calendar date refuses by name before any database cast", asy
 test("time semantics share one classification contract across time types and evidence lines", () => {
   // Behavioural cover for tier-by-classification (crew grid buckets by
   // classification, never by multiplier).
-  assert.deepEqual([...(timeTypes.classification.enumValues ?? [])], ["regular", "overtime", "double_time", "other"]);
-  assert.deepEqual([...(fieldTicketLaborLines.timeClassification.enumValues ?? [])], ["regular", "overtime", "double_time", "other"]);
+  assert.deepEqual(
+    [...(timeTypes.classification.enumValues ?? [])],
+    ["regular", "overtime", "double_time", "other"],
+  );
+  assert.deepEqual(
+    [...(fieldTicketLaborLines.timeClassification.enumValues ?? [])],
+    ["regular", "overtime", "double_time", "other"],
+  );
 });

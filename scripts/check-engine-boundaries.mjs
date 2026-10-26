@@ -39,22 +39,31 @@ const MANIFEST = `${ENGINE}/modules.json`;
 const SOURCE = /\.(?:[cm]?[jt]sx?)$/;
 // Tests and test-support files (fixtures, the child processes tests spawn) are
 // composition: they may reach into any module. Everything else is bounded.
-const TEST = /\.(?:integration\.)?test\.[cm]?[jt]sx?$|\.probe\.test\.|\/(?:tests?|__tests__|fixtures?)\/|(?:^|[-/])test-fixtures?\.[cm]?[jt]sx?$|\.child\.[cm]?[jt]sx?$|^engine\/src\/testing\//;
+const TEST =
+  /\.(?:integration\.)?test\.[cm]?[jt]sx?$|\.probe\.test\.|\/(?:tests?|__tests__|fixtures?)\/|(?:^|[-/])test-fixtures?\.[cm]?[jt]sx?$|\.child\.[cm]?[jt]sx?$|^engine\/src\/testing\//;
 const ROOT_ALLOWED = new Set(["modules.json", "README.md"]);
 
 export function loadManifest(root = ROOT) {
   const manifest = JSON.parse(readFileSync(join(root, MANIFEST), "utf8"));
-  if (!manifest.modules || typeof manifest.modules !== "object") throw new Error(`${MANIFEST}: expected a "modules" object`);
+  if (!manifest.modules || typeof manifest.modules !== "object")
+    throw new Error(`${MANIFEST}: expected a "modules" object`);
   for (const [name, mod] of Object.entries(manifest.modules)) {
-    if (!/^[a-z][a-z0-9-]*$/.test(name)) throw new Error(`${MANIFEST}: module name "${name}" must be lowercase kebab-case`);
-    if (typeof mod.description !== "string" || !mod.description.trim()) throw new Error(`${MANIFEST}: module "${name}" needs a description`);
-    if (!Array.isArray(mod.dependsOn)) throw new Error(`${MANIFEST}: module "${name}" needs a dependsOn array`);
+    if (!/^[a-z][a-z0-9-]*$/.test(name))
+      throw new Error(`${MANIFEST}: module name "${name}" must be lowercase kebab-case`);
+    if (typeof mod.description !== "string" || !mod.description.trim())
+      throw new Error(`${MANIFEST}: module "${name}" needs a description`);
+    if (!Array.isArray(mod.dependsOn))
+      throw new Error(`${MANIFEST}: module "${name}" needs a dependsOn array`);
     for (const dep of mod.dependsOn) {
       if (dep === name) throw new Error(`${MANIFEST}: module "${name}" lists itself in dependsOn`);
-      if (!manifest.modules[dep]) throw new Error(`${MANIFEST}: module "${name}" depends on undeclared module "${dep}"`);
+      if (!manifest.modules[dep])
+        throw new Error(`${MANIFEST}: module "${name}" depends on undeclared module "${dep}"`);
     }
     const sorted = [...mod.dependsOn].sort();
-    if (JSON.stringify(sorted) !== JSON.stringify(mod.dependsOn)) throw new Error(`${MANIFEST}: module "${name}" dependsOn must be sorted (${sorted.join(", ")})`);
+    if (JSON.stringify(sorted) !== JSON.stringify(mod.dependsOn))
+      throw new Error(
+        `${MANIFEST}: module "${name}" dependsOn must be sorted (${sorted.join(", ")})`,
+      );
   }
   manifest.cycles ??= [];
   return manifest;
@@ -66,7 +75,11 @@ export function loadManifest(root = ROOT) {
 export function engineFiles(root = ROOT) {
   let listed;
   try {
-    listed = execFileSync("git", ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ENGINE], { cwd: root, maxBuffer: 1 << 27, stdio: ["ignore", "pipe", "ignore"] })
+    listed = execFileSync(
+      "git",
+      ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", ENGINE],
+      { cwd: root, maxBuffer: 1 << 27, stdio: ["ignore", "pipe", "ignore"] },
+    )
       .toString("utf8")
       .split("\0")
       .filter(Boolean);
@@ -93,12 +106,13 @@ export function moduleOf(file) {
 const RESOLVE_EXTS = ["", ".ts", ".tsx", ".mts", ".mjs", ".js", "/index.ts"];
 function resolveTarget(fromFile, spec, root, exports = {}) {
   let candidate;
-  if (spec.startsWith("@openbooks/engine/src/")) candidate = `${ENGINE}/${spec.slice("@openbooks/engine/src/".length)}`;
+  if (spec.startsWith("@openbooks/engine/src/"))
+    candidate = `${ENGINE}/${spec.slice("@openbooks/engine/src/".length)}`;
   else if (spec.startsWith("@openbooks/engine/")) {
     const target = exports[`./${spec.slice("@openbooks/engine/".length)}`];
     if (typeof target === "string") candidate = posix.normalize(posix.join("engine", target));
-  }
-  else if (spec.startsWith(".")) candidate = posix.normalize(posix.join(posix.dirname(fromFile), spec));
+  } else if (spec.startsWith("."))
+    candidate = posix.normalize(posix.join(posix.dirname(fromFile), spec));
   else return null;
   if (!candidate) return null;
   candidate = candidate.replace(/[?#].*$/, "");
@@ -121,9 +135,13 @@ export function stripComments(source) {
 export function analyze(root = ROOT) {
   const manifest = loadManifest(root);
   const packageFile = join(root, "engine/package.json");
-  const enginePackage = existsSync(packageFile) ? JSON.parse(readFileSync(packageFile, "utf8")) : null;
+  const enginePackage = existsSync(packageFile)
+    ? JSON.parse(readFileSync(packageFile, "utf8"))
+    : null;
   const exports = enginePackage?.exports ?? {};
-  const dependencies = new Set(Object.keys({ ...enginePackage?.dependencies, ...enginePackage?.devDependencies }));
+  const dependencies = new Set(
+    Object.keys({ ...enginePackage?.dependencies, ...enginePackage?.devDependencies }),
+  );
   const declared = new Set(Object.keys(manifest.modules));
   const problems = [];
   const usedEdges = new Map(); // "a->b" -> first file:line
@@ -133,11 +151,16 @@ export function analyze(root = ROOT) {
     const rel = file.slice(ENGINE.length + 1);
     const mod = moduleOf(file);
     if (mod === null) {
-      if (!ROOT_ALLOWED.has(rel)) problems.push(`${file}: files do not live at ${ENGINE} root. Move it into the module it belongs to (engine/src/<module>/) and declare any new cross-module import in ${MANIFEST}.`);
+      if (!ROOT_ALLOWED.has(rel))
+        problems.push(
+          `${file}: files do not live at ${ENGINE} root. Move it into the module it belongs to (engine/src/<module>/) and declare any new cross-module import in ${MANIFEST}.`,
+        );
       continue;
     }
     if (!declared.has(mod)) {
-      problems.push(`${file}: directory "${mod}" is not a declared module. Add it to ${MANIFEST} with a description and its dependsOn list, or move the file into an existing module.`);
+      problems.push(
+        `${file}: directory "${mod}" is not a declared module. Add it to ${MANIFEST} with a description and its dependsOn list, or move the file into an existing module.`,
+      );
       continue;
     }
     if (!SOURCE.test(file)) continue;
@@ -145,27 +168,58 @@ export function analyze(root = ROOT) {
     const source = readFileSync(join(root, file), "utf8");
     for (const { spec, line } of importsOf(file, source)) {
       if (!isTest && spec.startsWith("@openbooks/engine/testing/")) {
-        problems.push(`${file}:${line}: engine production code must not import test-support contracts ("${spec}").`);
+        problems.push(
+          `${file}:${line}: engine production code must not import test-support contracts ("${spec}").`,
+        );
         continue;
       }
       let filesystemTarget;
       if (spec.startsWith("file:")) {
-        try { filesystemTarget = relative(root, fileURLToPath(spec)); } catch { /* The compiler diagnoses invalid file URLs. */ }
+        try {
+          filesystemTarget = relative(root, fileURLToPath(spec));
+        } catch {
+          /* The compiler diagnoses invalid file URLs. */
+        }
       } else if (isAbsolute(spec)) filesystemTarget = relative(root, spec);
-      else if (spec.startsWith(".")) filesystemTarget = posix.normalize(posix.join(posix.dirname(file), spec));
-      if (spec.startsWith("@/") || spec === "web" || spec.startsWith("web/") || filesystemTarget?.startsWith("web/")
-        || spec === "next" || spec.startsWith("next/") || spec === "next-intl" || spec.startsWith("next-intl/")) {
-        if (!isTest) problems.push(`${file}:${line}: engine code must not import the web app ("${spec}"). Move the shared piece into the engine or a package; only engine TESTS may reach into web.`);
+      else if (spec.startsWith("."))
+        filesystemTarget = posix.normalize(posix.join(posix.dirname(file), spec));
+      if (
+        spec.startsWith("@/") ||
+        spec === "web" ||
+        spec.startsWith("web/") ||
+        filesystemTarget?.startsWith("web/") ||
+        spec === "next" ||
+        spec.startsWith("next/") ||
+        spec === "next-intl" ||
+        spec.startsWith("next-intl/")
+      ) {
+        if (!isTest)
+          problems.push(
+            `${file}:${line}: engine code must not import the web app ("${spec}"). Move the shared piece into the engine or a package; only engine TESTS may reach into web.`,
+          );
         continue;
       }
-      if (!isTest && enginePackage && !spec.startsWith(".") && !isAbsolute(spec) && !spec.startsWith("file:") && !isBuiltin(spec)) {
+      if (
+        !isTest &&
+        enginePackage &&
+        !spec.startsWith(".") &&
+        !isAbsolute(spec) &&
+        !spec.startsWith("file:") &&
+        !isBuiltin(spec)
+      ) {
         if (spec.startsWith("@openbooks/engine/")) {
           if (!Object.hasOwn(exports, `./${spec.slice("@openbooks/engine/".length)}`)) {
             problems.push(`${file}:${line}: unknown engine package contract "${spec}".`);
           }
         } else {
-          const dependency = spec.split('/').slice(0, spec.startsWith('@') ? 2 : 1).join('/');
-          if (!dependencies.has(dependency)) problems.push(`${file}:${line}: dependency "${dependency}" must be declared by engine/package.json; the engine cannot rely on a web workspace dependency.`);
+          const dependency = spec
+            .split("/")
+            .slice(0, spec.startsWith("@") ? 2 : 1)
+            .join("/");
+          if (!dependencies.has(dependency))
+            problems.push(
+              `${file}:${line}: dependency "${dependency}" must be declared by engine/package.json; the engine cannot rely on a web workspace dependency.`,
+            );
         }
       }
       const target = resolveTarget(file, spec, root, exports);
@@ -176,18 +230,26 @@ export function analyze(root = ROOT) {
       const key = `${mod}->${targetMod}`;
       if (!usedEdges.has(key)) usedEdges.set(key, `${file}:${line}`);
       if (!manifest.modules[mod].dependsOn.includes(targetMod)) {
-        problems.push(`${file}:${line}: module "${mod}" imports "${spec}" from module "${targetMod}", which it does not declare. Either add "${targetMod}" to modules.${mod}.dependsOn in ${MANIFEST} (and keep the module graph acyclic), or move the shared piece into a module both already depend on.`);
+        problems.push(
+          `${file}:${line}: module "${mod}" imports "${spec}" from module "${targetMod}", which it does not declare. Either add "${targetMod}" to modules.${mod}.dependsOn in ${MANIFEST} (and keep the module graph acyclic), or move the shared piece into a module both already depend on.`,
+        );
       }
     }
   }
 
   for (const [name, mod] of Object.entries(manifest.modules)) {
     for (const dep of mod.dependsOn) {
-      if (!usedEdges.has(`${name}->${dep}`)) problems.push(`${MANIFEST}: module "${name}" declares dependsOn "${dep}" but no non-test file in engine/src/${name}/ imports it. Remove the declaration; permissions are not granted in advance.`);
+      if (!usedEdges.has(`${name}->${dep}`))
+        problems.push(
+          `${MANIFEST}: module "${name}" declares dependsOn "${dep}" but no non-test file in engine/src/${name}/ imports it. Remove the declaration; permissions are not granted in advance.`,
+        );
     }
   }
   const empty = [...declared].filter((name) => !files.some((f) => moduleOf(f) === name));
-  for (const name of empty) problems.push(`${MANIFEST}: module "${name}" is declared but engine/src/${name}/ holds no files. Remove the declaration or add the module.`);
+  for (const name of empty)
+    problems.push(
+      `${MANIFEST}: module "${name}" is declared but engine/src/${name}/ holds no files. Remove the declaration or add the module.`,
+    );
 
   // Strongly connected sets over the DECLARED graph (Tarjan). The graph
   // must be acyclic: any cycle is refused, and the retired "cycles" pin
@@ -202,7 +264,9 @@ export function analyze(root = ROOT) {
     );
   }
   for (const cycle of manifest.cycles) {
-    problems.push(`${MANIFEST}: the "cycles" pin is retired; the module graph must be acyclic, so the pin must stay empty. Strike {${[...cycle].sort().join(", ")}} from "cycles".`);
+    problems.push(
+      `${MANIFEST}: the "cycles" pin is retired; the module graph must be acyclic, so the pin must stay empty. Strike {${[...cycle].sort().join(", ")}} from "cycles".`,
+    );
   }
 
   const usage = {};
@@ -262,7 +326,9 @@ if (isMain) {
     for (const p of problems) console.error(`  ${p}`);
     process.exit(1);
   }
-  console.log(`engine boundaries: ${files} files inside declared modules; acyclic; every declared edge used.`);
+  console.log(
+    `engine boundaries: ${files} files inside declared modules; acyclic; every declared edge used.`,
+  );
 }
 
 // --usage tolerates an incomplete manifest so the graph can be measured before
@@ -289,6 +355,8 @@ function analyzeUsageOnly() {
     modules[a].dependsOn.push(b);
   }
   for (const d of dirs) modules[d].dependsOn.sort();
-  const cycles = stronglyConnected(modules).filter((c) => c.length > 1).map((c) => [...c].sort());
+  const cycles = stronglyConnected(modules)
+    .filter((c) => c.length > 1)
+    .map((c) => [...c].sort());
   return { usage: Object.fromEntries(dirs.sort().map((d) => [d, modules[d].dependsOn])), cycles };
 }

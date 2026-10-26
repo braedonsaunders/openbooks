@@ -80,7 +80,9 @@ type HandlerRuntime = typeof globalThis & {
 
 const runtime = globalThis as HandlerRuntime;
 
-export function registerCrossSubsidiaryFulfillmentHandler(handler: CrossSubsidiaryFulfillmentHandler): void {
+export function registerCrossSubsidiaryFulfillmentHandler(
+  handler: CrossSubsidiaryFulfillmentHandler,
+): void {
   runtime.__openbooksCrossSubsidiaryFulfillment = handler;
 }
 
@@ -100,18 +102,27 @@ export async function foreignStockLocationOwner(
   stockLocationId: string,
   sellingSubsidiaryId: string,
 ): Promise<string | null> {
-  const row = (await runner.execute<{ subsidiary_id: string | null; include_children: boolean }>(sql`
+  const row = (
+    await runner.execute<{ subsidiary_id: string | null; include_children: boolean }>(
+      sql`
     select l.subsidiary_id, l.subsidiary_include_children as include_children
       from stock_locations sl
       join locations l on l.org_id = sl.org_id and l.id = sl.location_id
-     where sl.org_id = ${orgId} and sl.id = ${stockLocationId}`, "objects"))[0];
+     where sl.org_id = ${orgId} and sl.id = ${stockLocationId}`,
+      "objects",
+    )
+  )[0];
   if (!row?.subsidiary_id) return null;
-  if (restrictionAdmits(ctx, row.subsidiary_id, row.include_children, sellingSubsidiaryId)) return null;
+  if (restrictionAdmits(ctx, row.subsidiary_id, row.include_children, sellingSubsidiaryId))
+    return null;
   return row.subsidiary_id;
 }
 
 /** Whether a foreign-warehouse line should be routed to the handler. */
-export async function crossSubsidiaryFulfillmentActive(runner: SqlExecutor, orgId: string): Promise<boolean> {
+export async function crossSubsidiaryFulfillmentActive(
+  runner: SqlExecutor,
+  orgId: string,
+): Promise<boolean> {
   if (!crossSubsidiaryFulfillmentHandler()) return false;
   return lockAndCheckOrgFeature(runner, orgId, CROSS_SUBSIDIARY_FULFILLMENT_FEATURE);
 }
@@ -125,8 +136,18 @@ export async function crossSubsidiaryShipment(
   orgId: string,
   issueMovementId: string,
 ): Promise<{ sellingSubsidiaryId: string; fulfillingSubsidiaryId: string } | null> {
-  const row = (await runner.execute<{ selling_subsidiary_id: string; fulfilling_subsidiary_id: string }>(sql`
+  const row = (
+    await runner.execute<{ selling_subsidiary_id: string; fulfilling_subsidiary_id: string }>(
+      sql`
     select selling_subsidiary_id, fulfilling_subsidiary_id from intercompany_fulfillment_charges
-     where org_id = ${orgId} and movement_id = ${issueMovementId} and kind = 'fulfillment'`, "objects"))[0];
-  return row ? { sellingSubsidiaryId: row.selling_subsidiary_id, fulfillingSubsidiaryId: row.fulfilling_subsidiary_id } : null;
+     where org_id = ${orgId} and movement_id = ${issueMovementId} and kind = 'fulfillment'`,
+      "objects",
+    )
+  )[0];
+  return row
+    ? {
+        sellingSubsidiaryId: row.selling_subsidiary_id,
+        fulfillingSubsidiaryId: row.fulfilling_subsidiary_id,
+      }
+    : null;
 }

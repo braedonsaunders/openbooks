@@ -82,12 +82,15 @@ export async function listSchedules(query: {
   actorId: string;
 }): Promise<RetentionScheduleDTO[]> {
   await requireHrmDocumentsRead(db, query.orgId, query.actorId);
-  const rows = await db.execute<ScheduleRow>(sql`
+  const rows = await db.execute<ScheduleRow>(
+    sql`
     select id, category_key, retain_years, from_event, action, is_active
       from hrm_retention_schedules
      where org_id = ${query.orgId}
      order by category_key
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map(toScheduleDTO);
 }
 
@@ -101,8 +104,7 @@ export async function saveSchedule(input: {
   action: unknown;
   isActive?: boolean;
 }): Promise<RetentionScheduleDTO> {
-  const categoryKey =
-    typeof input.categoryKey === "string" ? input.categoryKey.trim() : "";
+  const categoryKey = typeof input.categoryKey === "string" ? input.categoryKey.trim() : "";
   if (!categoryKey) {
     throw new HrmDocumentsError(
       "VALIDATION",
@@ -111,9 +113,16 @@ export async function saveSchedule(input: {
   }
   const retainYears = Number(input.retainYears);
   if (!Number.isInteger(retainYears) || retainYears < 0 || retainYears > 100) {
-    throw new HrmDocumentsError("VALIDATION", "retainYears must be a whole number of years from 0 to 100");
+    throw new HrmDocumentsError(
+      "VALIDATION",
+      "retainYears must be a whole number of years from 0 to 100",
+    );
   }
-  if (input.fromEvent !== "completion" && input.fromEvent !== "termination" && input.fromEvent !== "creation") {
+  if (
+    input.fromEvent !== "completion" &&
+    input.fromEvent !== "termination" &&
+    input.fromEvent !== "creation"
+  ) {
     throw new HrmDocumentsError(
       "VALIDATION",
       "fromEvent must be completion, termination, or creation — the date the retention clock starts from",
@@ -134,7 +143,9 @@ export async function saveSchedule(input: {
     // vocabulary instead of stored as a dead rule.
     await assertCategoryDeclared(db, input.orgId, categoryKey);
     if (input.scheduleId) {
-      const updated = (await db.execute<ScheduleRow>(sql`
+      const updated = (
+        await db.execute<ScheduleRow>(
+          sql`
         update hrm_retention_schedules
            set category_key = ${categoryKey}, retain_years = ${retainYears},
                from_event = ${input.fromEvent}, action = ${input.action},
@@ -142,21 +153,32 @@ export async function saveSchedule(input: {
                updated_at = now(), updated_by = ${input.actorId}
          where org_id = ${input.orgId} and id = ${input.scheduleId}
         returning id, category_key, retain_years, from_event, action, is_active
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!updated) {
-        throw new HrmDocumentsError("NOT_FOUND", "retention schedule is not visible in this organization");
+        throw new HrmDocumentsError(
+          "NOT_FOUND",
+          "retention schedule is not visible in this organization",
+        );
       }
       return toScheduleDTO(updated);
     }
     try {
-      const inserted = (await db.execute<ScheduleRow>(sql`
+      const inserted = (
+        await db.execute<ScheduleRow>(
+          sql`
         insert into hrm_retention_schedules
           (org_id, category_key, retain_years, from_event, action, is_active, created_by, updated_by)
         values (${input.orgId}, ${categoryKey}, ${retainYears},
                 ${input.fromEvent}, ${input.action}, ${input.isActive ?? true},
                 ${input.actorId}, ${input.actorId})
         returning id, category_key, retain_years, from_event, action, is_active
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!inserted) {
         throw new HrmDocumentsError(
           "REFUSED",
@@ -175,7 +197,11 @@ export async function saveSchedule(input: {
         const cause = (cursor as { cause?: unknown }).cause;
         cursor = cause instanceof Error ? cause : null;
       }
-      if (/duplicate key|unique violation|23505|hrm_retention_schedules_org_category/i.test(chain.join("\n"))) {
+      if (
+        /duplicate key|unique violation|23505|hrm_retention_schedules_org_category/i.test(
+          chain.join("\n"),
+        )
+      ) {
         throw new HrmDocumentsError(
           "REFUSED",
           `category ${JSON.stringify(categoryKey)} already has a schedule — edit it instead of adding a second; two schedules for one category is ambiguous deletion`,
@@ -197,25 +223,35 @@ export async function applyCompletionRetention(
   documentId: string,
   actorId: string | null,
 ): Promise<void> {
-  const doc = (await exec.execute<{
-    category_key: string;
-    employment_id: string | null;
-    completed_at: string | null;
-    created_at: string;
-  }>(sql`
+  const doc = (
+    await exec.execute<{
+      category_key: string;
+      employment_id: string | null;
+      completed_at: string | null;
+      created_at: string;
+    }>(
+      sql`
     select category_key, employment_id,
            completed_at::text as completed_at, created_at::text as created_at
       from hrm_documents where org_id = ${orgId} and id = ${documentId}
        for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!doc) {
     throw new HrmDocumentsError("NOT_FOUND", "document is not visible in this organization");
   }
-  const schedule = (await exec.execute<ScheduleRow>(sql`
+  const schedule = (
+    await exec.execute<ScheduleRow>(
+      sql`
     select id, category_key, retain_years, from_event, action, is_active
       from hrm_retention_schedules
      where org_id = ${orgId} and category_key = ${doc.category_key} and is_active
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!schedule) return;
   let anchor: string | null = null;
   if (schedule.from_event === "completion") {
@@ -227,15 +263,22 @@ export async function applyCompletionRetention(
     // document's employment. No employment or no end date = the clock
     // cannot start — fail closed with a blocked action row, never zero.
     const term = doc.employment_id
-      ? (await exec.execute<{ end: string | null }>(sql`
+      ? ((
+          await exec.execute<{ end: string | null }>(
+            sql`
           select max(effective_to)::text as end
             from worker_employment_versions
            where org_id = ${orgId} and employment_id = ${doc.employment_id}
              and recorded_until is null
-        `, "objects"))[0]?.end ?? null
+        `,
+            "objects",
+          )
+        )[0]?.end ?? null)
       : null;
     if (!term) {
-      const existingBlock = (await exec.execute<{ id: string }>(sql`
+      const existingBlock = (
+        await exec.execute<{ id: string }>(
+          sql`
         select id from hrm_retention_actions
          where org_id = ${orgId} and document_id = ${documentId}
            and schedule_id = ${schedule.id} and executed_at is null
@@ -243,7 +286,10 @@ export async function applyCompletionRetention(
          order by created_at, id
          limit 1
          for update
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!existingBlock) {
         await exec.execute(sql`
           insert into hrm_retention_actions (org_id, document_id, schedule_id, due_on, action, blocked_reason)
@@ -267,21 +313,31 @@ export async function applyCompletionRetention(
     `);
   }
   if (!anchor) return;
-  const computed = (await exec.execute<{ until: string }>(sql`
+  const computed = (
+    await exec.execute<{ until: string }>(
+      sql`
     select (${anchor}::date + (${schedule.retain_years} || ' years')::interval)::date::text as until
-  `, "objects"))[0]!.until;
+  `,
+      "objects",
+    )
+  )[0]!.until;
   // The completion snapshot freezes the GOVERNING action alongside the
   // date: later schedule edits (anonymize → delete) govern only documents
   // that complete after the edit — never historical documents, whose tick
   // copies this frozen value instead of the schedule's live one.
-  const touched = (await exec.execute<{ n: string }>(sql`
+  const touched = (
+    await exec.execute<{ n: string }>(
+      sql`
     update hrm_documents
        set retain_until = ${computed}::date, retention_rule_id = ${schedule.id},
            retention_action = ${schedule.action},
            updated_at = now(), updated_by = coalesce(${actorId}, updated_by)
      where org_id = ${orgId} and id = ${documentId} and retain_until is null
     returning 1
-  `, "objects")).length;
+  `,
+      "objects",
+    )
+  ).length;
   if (touched === 0) {
     throw new HrmDocumentsError(
       "REFUSED",
@@ -292,9 +348,14 @@ export async function applyCompletionRetention(
 
 /** Org-declared grace days (Company settings → HRM), default 30. */
 export async function loadGraceDays(exec: SqlExecutor, orgId: string): Promise<number> {
-  const row = (await exec.execute<{ grace: unknown }>(sql`
+  const row = (
+    await exec.execute<{ grace: unknown }>(
+      sql`
     select settings->'hrmDocuments'->>'retentionGraceDays' as grace from orgs where id = ${orgId}
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   const days = Number(row?.grace);
   if (row?.grace !== undefined && row?.grace !== null && (!Number.isInteger(days) || days < 0)) {
     throw new HrmDocumentsError(
@@ -321,15 +382,24 @@ export interface RetentionTickResult {
  */
 export async function runRetentionTick(orgId: string, today: string): Promise<RetentionTickResult> {
   return withOrgTransaction(orgId, async () => {
-    const result: RetentionTickResult = { expired: 0, clocksStarted: 0, flagged: 0, executed: 0, blocked: 0 };
+    const result: RetentionTickResult = {
+      expired: 0,
+      clocksStarted: 0,
+      flagged: 0,
+      executed: 0,
+      blocked: 0,
+    };
     // (1) Expire sends past their expiry.
-    const expired = await db.execute<{ id: string }>(sql`
+    const expired = await db.execute<{ id: string }>(
+      sql`
       update hrm_documents
          set status = 'expired', updated_at = now()
        where org_id = ${orgId} and status in ('sent', 'viewed', 'partially_signed')
          and expires_at is not null and expires_at < now()
       returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of expired) {
       await db.execute(sql`
         insert into hrm_document_events (org_id, document_id, kind, actor)
@@ -338,12 +408,15 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
       result.expired += 1;
     }
     // (2) Start clocks on completed documents with no stored retain_until.
-    const unclocked = await db.execute<{ id: string }>(sql`
+    const unclocked = await db.execute<{ id: string }>(
+      sql`
       select id from hrm_documents
        where org_id = ${orgId} and status in ('signed', 'acknowledged')
          and completed_at is not null and retain_until is null
        limit 200
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of unclocked) {
       await applyCompletionRetention(db, orgId, row.id, null);
       result.clocksStarted += 1;
@@ -359,7 +432,8 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
     // The coalesce covers only rows snapshotted before the freeze column
     // existed that the backfill could not reach (no rule to inherit from);
     // every governed row carries its frozen action.
-    const due = await db.execute<{ id: string; schedule_id: string; action: string }>(sql`
+    const due = await db.execute<{ id: string; schedule_id: string; action: string }>(
+      sql`
       select d.id, d.retention_rule_id as schedule_id,
              coalesce(d.retention_action, s.action) as action
         from hrm_documents d
@@ -376,7 +450,9 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
                        and not starts_with(a.blocked_reason, 'resolved: termination anchor is now available;')))
          )
        limit 200
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of due) {
       await db.execute(sql`
         insert into hrm_retention_actions (org_id, document_id, schedule_id, due_on, action)
@@ -390,7 +466,10 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
     }
     // (4) Execute actions past grace — unless legal hold.
     const grace = await loadGraceDays(db, orgId);
-    const previouslyBlocked = (await db.execute<{ n: number }>(sql`
+    const previouslyBlocked =
+      (
+        await db.execute<{ n: number }>(
+          sql`
       select count(*)::int as n
         from hrm_retention_actions a
         join hrm_documents d on d.org_id = a.org_id and d.id = a.document_id
@@ -399,7 +478,10 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
          and not starts_with(a.blocked_reason, 'resolved: termination anchor is now available;')
          and a.due_on <= (${today}::date - (${grace} || ' days')::interval)
          and d.status not in ('deleted', 'voided')
-    `, "objects"))[0]?.n ?? 0;
+    `,
+          "objects",
+        )
+      )[0]?.n ?? 0;
     result.blocked += previouslyBlocked;
     const open = await db.execute<{
       id: string;
@@ -408,7 +490,8 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
       due_on: string;
       legal_hold: boolean;
       file_id: string | null;
-    }>(sql`
+    }>(
+      sql`
       select a.id, a.document_id, a.action, a.due_on::text as due_on,
              d.legal_hold, d.file_id
         from hrm_retention_actions a
@@ -419,7 +502,9 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
          and d.status not in ('deleted', 'voided')
        limit 200
        for update of a, d
-    `, "objects");
+    `,
+      "objects",
+    );
     for (const row of open) {
       if (row.legal_hold) {
         await db.execute(sql`
@@ -432,37 +517,64 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
       }
       if (row.action === "delete") {
         if (row.file_id) await purgeCabinetBytes(db, orgId, row.file_id);
-        const changed = (await db.execute<{ id: string }>(sql`
+        const changed = (
+          await db.execute<{ id: string }>(
+            sql`
           update hrm_documents set status = 'deleted', updated_at = now()
            where org_id = ${orgId} and id = ${row.document_id}
           returning id
-        `, "objects"))[0];
-        if (!changed) throw new HrmDocumentsError("REFUSED", "the locked retention document disappeared before deletion");
+        `,
+            "objects",
+          )
+        )[0];
+        if (!changed)
+          throw new HrmDocumentsError(
+            "REFUSED",
+            "the locked retention document disappeared before deletion",
+          );
         await db.execute(sql`
           insert into hrm_document_events (org_id, document_id, kind, actor)
           values (${orgId}, ${row.document_id}, 'deleted', null)
         `);
       } else {
         if (row.file_id) await purgeCabinetBytes(db, orgId, row.file_id);
-        const changed = (await db.execute<{ id: string }>(sql`
+        const changed = (
+          await db.execute<{ id: string }>(
+            sql`
           update hrm_documents
              set title = 'Anonymized document', party_id = null, employment_id = null,
                  file_id = null, updated_at = now()
            where org_id = ${orgId} and id = ${row.document_id}
           returning id
-        `, "objects"))[0];
-        if (!changed) throw new HrmDocumentsError("REFUSED", "the locked retention document disappeared before anonymization");
+        `,
+            "objects",
+          )
+        )[0];
+        if (!changed)
+          throw new HrmDocumentsError(
+            "REFUSED",
+            "the locked retention document disappeared before anonymization",
+          );
         await db.execute(sql`
           insert into hrm_document_events (org_id, document_id, kind, actor)
           values (${orgId}, ${row.document_id}, 'deleted', null)
         `);
       }
-      const executed = (await db.execute<{ id: string }>(sql`
+      const executed = (
+        await db.execute<{ id: string }>(
+          sql`
         update hrm_retention_actions set executed_at = now(), executed_by = null
          where org_id = ${orgId} and id = ${row.id}
         returning id
-      `, "objects"))[0];
-      if (!executed) throw new HrmDocumentsError("REFUSED", "the locked retention action disappeared before completion");
+      `,
+          "objects",
+        )
+      )[0];
+      if (!executed)
+        throw new HrmDocumentsError(
+          "REFUSED",
+          "the locked retention action disappeared before completion",
+        );
       result.executed += 1;
     }
     return result;
@@ -486,7 +598,8 @@ export async function listRetentionActions(query: {
   pendingOnly?: boolean;
 }): Promise<RetentionActionDTO[]> {
   const allowed = await requireAggregateDocumentsRead(db, query.orgId, query.actorId);
-  const employmentInScope = allowed === null ? sql`` : subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed);
+  const employmentInScope =
+    allowed === null ? sql`` : subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed);
   const rows = await db.execute<{
     id: string;
     document_id: string;
@@ -496,15 +609,23 @@ export async function listRetentionActions(query: {
     action: string;
     executed_by: string | null;
     blocked_reason: string | null;
-  }>(sql`
+  }>(
+    sql`
     select a.id, a.document_id, a.schedule_id, a.due_on::text as due_on,
            a.executed_at::text as executed_at, a.action, a.executed_by, a.blocked_reason
       from hrm_retention_actions a
       join hrm_documents d on d.org_id = a.org_id and d.id = a.document_id
      where a.org_id = ${query.orgId}
-       ${query.pendingOnly ? sql`and a.executed_at is null
-         and not starts_with(coalesce(a.blocked_reason, ''), 'resolved: termination anchor is now available;')` : sql``}
-       ${allowed === null ? sql`` : sql`and (
+       ${
+         query.pendingOnly
+           ? sql`and a.executed_at is null
+         and not starts_with(coalesce(a.blocked_reason, ''), 'resolved: termination anchor is now available;')`
+           : sql``
+       }
+       ${
+         allowed === null
+           ? sql``
+           : sql`and (
          (d.employment_id is not null and exists (
            select 1 from worker_employments e
             where e.org_id = d.org_id and e.id = d.employment_id ${employmentInScope}
@@ -512,10 +633,13 @@ export async function listRetentionActions(query: {
            select 1 from worker_employments e
             where e.org_id = d.org_id and e.worker_party_id = d.party_id ${employmentInScope}
          ))
-       )`}
+       )`
+       }
      order by a.due_on desc
      limit 200
-  `, "objects");
+  `,
+    "objects",
+  );
   return rows.map((r) => ({
     id: r.id,
     documentId: r.document_id,

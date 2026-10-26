@@ -7,7 +7,7 @@ import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
 import { Field } from "./workspace-ui";
 import type { CamPool, PropertyWorkspace, SaveAction } from "./types";
-import { DateField } from '@/components/date-field'
+import { DateField } from "@/components/date-field";
 
 export function CamDrawer({
   open,
@@ -37,8 +37,7 @@ export function CamDrawer({
   const year = Number(today.slice(0, 4));
   const initial = useMemo(
     () => ({
-      propertyId:
-        pool?.propertyId ?? initialPropertyId ?? data.properties[0]?.id ?? "",
+      propertyId: pool?.propertyId ?? initialPropertyId ?? data.properties[0]?.id ?? "",
       name: pool?.name ?? "Operating expenses",
       fiscalYear: String(pool?.fiscalYear ?? year),
       periodStartsOn: pool?.periodStartsOn ?? `${year}-01-01`,
@@ -55,9 +54,9 @@ export function CamDrawer({
   // Reseed the form when the drawer opens for another pool, during render
   // (same committed values, no extra render). Keyed on the memoized `initial`
   // (stable identity — the sibling slice's restructuring) plus `open`.
-  const [prevFormKeys, setPrevFormKeys] = useState(() => ({ open, initial }))
+  const [prevFormKeys, setPrevFormKeys] = useState(() => ({ open, initial }));
   if (prevFormKeys.open !== open || prevFormKeys.initial !== initial) {
-    setPrevFormKeys({ open, initial })
+    setPrevFormKeys({ open, initial });
     if (open) setForm(initial);
   }
   const submit = () => onSave({ ...form, fiscalYear: Number(form.fiscalYear) });
@@ -106,10 +105,7 @@ export function CamDrawer({
             </Select>
           </Field>
           <Field label="Pool name">
-            <Input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </Field>
           <Field label="Fiscal year">
             <Input
@@ -128,9 +124,7 @@ export function CamDrawer({
                   // Only a rentable-area pool can leave vacancy with the
                   // landlord; the server refuses the combination otherwise.
                   vacancyTreatment:
-                    e.target.value === "rentable_area"
-                      ? form.vacancyTreatment
-                      : "occupied_area",
+                    e.target.value === "rentable_area" ? form.vacancyTreatment : "occupied_area",
                 })
               }
             >
@@ -150,32 +144,22 @@ export function CamDrawer({
             <Select
               value={form.vacancyTreatment}
               disabled={form.allocationBasis !== "rentable_area"}
-              onChange={(e) =>
-                setForm({ ...form, vacancyTreatment: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, vacancyTreatment: e.target.value })}
             >
-              <option value="occupied_area">
-                {tCam("vacancyOccupiedArea")}
-              </option>
-              <option value="total_rentable_area">
-                {tCam("vacancyTotalRentableArea")}
-              </option>
+              <option value="occupied_area">{tCam("vacancyOccupiedArea")}</option>
+              <option value="total_rentable_area">{tCam("vacancyTotalRentableArea")}</option>
             </Select>
           </Field>
           <Field label="Period starts">
             <DateField
               value={form.periodStartsOn}
-              onChange={(value) =>
-                setForm({ ...form, periodStartsOn: value })
-              }
+              onChange={(value) => setForm({ ...form, periodStartsOn: value })}
             />
           </Field>
           <Field label="Period ends">
             <DateField
               value={form.periodEndsOn}
-              onChange={(value) =>
-                setForm({ ...form, periodEndsOn: value })
-              }
+              onChange={(value) => setForm({ ...form, periodEndsOn: value })}
             />
           </Field>
           <Field label="Budget">
@@ -183,9 +167,7 @@ export function CamDrawer({
               type="number"
               min="0"
               value={form.budgetAmount}
-              onChange={(e) =>
-                setForm({ ...form, budgetAmount: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, budgetAmount: e.target.value })}
             />
           </Field>
         </div>
@@ -241,9 +223,9 @@ export function CamCorrectionDrawer({
   const [reason, setReason] = useState("");
   // Clear the reason when the dialog opens for another pool, during render
   // (same committed value, no extra render).
-  const [prevReasonKeys, setPrevReasonKeys] = useState(() => ({ open, poolId: pool?.id }))
+  const [prevReasonKeys, setPrevReasonKeys] = useState(() => ({ open, poolId: pool?.id }));
   if (prevReasonKeys.open !== open || prevReasonKeys.poolId !== pool?.id) {
-    setPrevReasonKeys({ open, poolId: pool?.id })
+    setPrevReasonKeys({ open, poolId: pool?.id });
     if (open) setReason("");
   }
   return (
@@ -259,10 +241,7 @@ export function CamCorrectionDrawer({
           <Button variant="outline" disabled={busy} onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            disabled={busy || !reason.trim()}
-            onClick={() => onSave(reason)}
-          >
+          <Button disabled={busy || !reason.trim()} onClick={() => onSave(reason)}>
             {busy ? "Reopening…" : "Reopen pool"}
           </Button>
         </>

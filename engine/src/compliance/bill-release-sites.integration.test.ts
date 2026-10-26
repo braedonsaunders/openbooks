@@ -17,7 +17,9 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture(siteJurisdiction: string | null) {
   const org = await createScratchOrg();
-  await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true'::jsonb) where id = ${org.orgId}`);
+  await db.execute(
+    sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,subcontractorCompliance}', 'true'::jsonb) where id = ${org.orgId}`,
+  );
   const classId = randomUUID();
   const vendorId = randomUUID();
   const projectId = randomUUID();
@@ -32,7 +34,12 @@ async function fixture(siteJurisdiction: string | null) {
   return { org, vendorId, projectId };
 }
 
-async function signWaiver(orgId: string, vendorId: string, projectId: string, jurisdiction: string | null) {
+async function signWaiver(
+  orgId: string,
+  vendorId: string,
+  projectId: string,
+  jurisdiction: string | null,
+) {
   const waiverId = randomUUID();
   await db.execute(sql`insert into lien_waivers
     (id, org_id, waiver_number, direction, party_id, project_id, waiver_type, status,
@@ -88,19 +95,23 @@ test("a wrong-state waiver is refused by name end to end", { skip: !DB }, async 
   }
 });
 
-test("an unrecorded project site fails closed as unevaluable end to end", { skip: !DB }, async () => {
-  const { org, vendorId, projectId } = await fixture(null);
-  try {
-    await signWaiver(org.orgId, vendorId, projectId, "US-CA");
-    const [decision] = await evaluateBillsForRelease({
-      orgId: org.orgId,
-      bills: [billFor(vendorId, projectId)],
-      asOf: "2026-06-30",
-    });
-    assert.equal(decision!.lienWaiver.covered, false);
-    assert.equal(decision!.lienWaiver.reason, "unevaluable");
-    assert.equal(decision!.decision, "blocked");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "an unrecorded project site fails closed as unevaluable end to end",
+  { skip: !DB },
+  async () => {
+    const { org, vendorId, projectId } = await fixture(null);
+    try {
+      await signWaiver(org.orgId, vendorId, projectId, "US-CA");
+      const [decision] = await evaluateBillsForRelease({
+        orgId: org.orgId,
+        bills: [billFor(vendorId, projectId)],
+        asOf: "2026-06-30",
+      });
+      assert.equal(decision!.lienWaiver.covered, false);
+      assert.equal(decision!.lienWaiver.reason, "unevaluable");
+      assert.equal(decision!.decision, "blocked");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

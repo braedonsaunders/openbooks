@@ -31,127 +31,179 @@ async function receiveComponents(org: ScratchOrg): Promise<void> {
   });
 }
 
-test("building an inactive finished item is refused by name with nothing posted", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await receiveComponents(org);
-    await deactivateItem(org.orgId, org.items.assembly);
-    const before = await postedCounts(org.orgId);
-    const componentBefore = await getOnHand(org.orgId, org.items.component, org.stockLocationId);
-    await assert.rejects(
-      buildAssembly(org.orgId, null, {
-        assemblyItemId: org.items.assembly,
-        quantity: "2",
-        stockLocationId: org.stockLocationId,
-        subsidiaryId: org.subsidiaryId,
-        date: org.date,
-      }),
-      (e: unknown) => {
-        assert.ok(e instanceof InventoryError, "inactive build must refuse as InventoryError (HTTP 422)");
-        assert.match((e as Error).message, /Assembly/, "the refusal must name the finished item");
-        assert.match((e as Error).message, /inactive/, "the refusal must say inactive");
-        assert.match((e as Error).message, /reactivate/, "the refusal must name the remedy");
-        return true;
-      },
-    );
-    assert.deepEqual(await postedCounts(org.orgId), before, "no movement, journal, or layer may be written");
-    assert.deepEqual(
-      await getOnHand(org.orgId, org.items.component, org.stockLocationId),
-      componentBefore,
-      "components must not be consumed",
-    );
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "building an inactive finished item is refused by name with nothing posted",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await receiveComponents(org);
+      await deactivateItem(org.orgId, org.items.assembly);
+      const before = await postedCounts(org.orgId);
+      const componentBefore = await getOnHand(org.orgId, org.items.component, org.stockLocationId);
+      await assert.rejects(
+        buildAssembly(org.orgId, null, {
+          assemblyItemId: org.items.assembly,
+          quantity: "2",
+          stockLocationId: org.stockLocationId,
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+        }),
+        (e: unknown) => {
+          assert.ok(
+            e instanceof InventoryError,
+            "inactive build must refuse as InventoryError (HTTP 422)",
+          );
+          assert.match((e as Error).message, /Assembly/, "the refusal must name the finished item");
+          assert.match((e as Error).message, /inactive/, "the refusal must say inactive");
+          assert.match((e as Error).message, /reactivate/, "the refusal must name the remedy");
+          return true;
+        },
+      );
+      assert.deepEqual(
+        await postedCounts(org.orgId),
+        before,
+        "no movement, journal, or layer may be written",
+      );
+      assert.deepEqual(
+        await getOnHand(org.orgId, org.items.component, org.stockLocationId),
+        componentBefore,
+        "components must not be consumed",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("building with an inactive component is refused by name with nothing posted", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    await receiveComponents(org);
-    await deactivateItem(org.orgId, org.items.component);
-    const before = await postedCounts(org.orgId);
-    await assert.rejects(
-      buildAssembly(org.orgId, null, {
-        assemblyItemId: org.items.assembly,
-        quantity: "2",
-        stockLocationId: org.stockLocationId,
-        subsidiaryId: org.subsidiaryId,
-        date: org.date,
-      }),
-      (e: unknown) => {
-        assert.ok(e instanceof InventoryError, "inactive component must refuse as InventoryError (HTTP 422)");
-        assert.match((e as Error).message, /Component/, "the refusal must name the component item");
-        assert.match((e as Error).message, /inactive/, "the refusal must say inactive");
-        return true;
-      },
-    );
-    assert.deepEqual(await postedCounts(org.orgId), before, "no movement, journal, or layer may be written");
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+test(
+  "building with an inactive component is refused by name with nothing posted",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await receiveComponents(org);
+      await deactivateItem(org.orgId, org.items.component);
+      const before = await postedCounts(org.orgId);
+      await assert.rejects(
+        buildAssembly(org.orgId, null, {
+          assemblyItemId: org.items.assembly,
+          quantity: "2",
+          stockLocationId: org.stockLocationId,
+          subsidiaryId: org.subsidiaryId,
+          date: org.date,
+        }),
+        (e: unknown) => {
+          assert.ok(
+            e instanceof InventoryError,
+            "inactive component must refuse as InventoryError (HTTP 422)",
+          );
+          assert.match(
+            (e as Error).message,
+            /Component/,
+            "the refusal must name the component item",
+          );
+          assert.match((e as Error).message, /inactive/, "the refusal must say inactive");
+          return true;
+        },
+      );
+      assert.deepEqual(
+        await postedCounts(org.orgId),
+        before,
+        "no movement, journal, or layer may be written",
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
-test("a deactivation racing a build serializes to one refusal with no partial post", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  const editor = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
-  await editor.connect();
-  let editorCommitted = false;
-  let pendingBuild: ReturnType<typeof buildAssembly> | undefined;
-  try {
-    await receiveComponents(org);
-    const before = await postedCounts(org.orgId);
-    const componentBefore = await getOnHand(org.orgId, org.items.component, org.stockLocationId);
-
-    // Hold the deactivation's FOR UPDATE uncommitted — the same lock the
-    // item PATCH takes — so the build must queue on the items row.
-    await editor.query("begin");
-    await editor.query("select set_config('app.bypass_rls', 'on', true)"); // 0399 gates the bypass GUC by session role: the editor connects as the privileged test login above.
-    assert.equal((await editor.query(`update items set is_active = false where id = '${org.items.assembly}'`)).rowCount, 1, "concurrent editor must hold the assembly item row");
-
-    pendingBuild = buildAssembly(org.orgId, null, {
-      assemblyItemId: org.items.assembly,
-      quantity: "2",
-      stockLocationId: org.stockLocationId,
-      subsidiaryId: org.subsidiaryId,
-      date: org.date,
+test(
+  "a deactivation racing a build serializes to one refusal with no partial post",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const editor = new pg.Client({
+      connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL,
     });
+    await editor.connect();
+    let editorCommitted = false;
+    let pendingBuild: ReturnType<typeof buildAssembly> | undefined;
+    try {
+      await receiveComponents(org);
+      const before = await postedCounts(org.orgId);
+      const componentBefore = await getOnHand(org.orgId, org.items.component, org.stockLocationId);
 
-    // Row-level waits never appear as ungranted relation locks in pg_locks
-    // (they queue on the holder's transaction id), so watch the blocked
-    // backend itself: the build's items read waiting on a Lock event.
-    let queuedOnItems = false;
-    for (let waited = 0; waited < 10_000 && !queuedOnItems; waited += 25) {
-      const waiting = (await db.execute<{ waiting: boolean }>(sql`
+      // Hold the deactivation's FOR UPDATE uncommitted — the same lock the
+      // item PATCH takes — so the build must queue on the items row.
+      await editor.query("begin");
+      await editor.query("select set_config('app.bypass_rls', 'on', true)"); // 0399 gates the bypass GUC by session role: the editor connects as the privileged test login above.
+      assert.equal(
+        (
+          await editor.query(
+            `update items set is_active = false where id = '${org.items.assembly}'`,
+          )
+        ).rowCount,
+        1,
+        "concurrent editor must hold the assembly item row",
+      );
+
+      pendingBuild = buildAssembly(org.orgId, null, {
+        assemblyItemId: org.items.assembly,
+        quantity: "2",
+        stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+      });
+
+      // Row-level waits never appear as ungranted relation locks in pg_locks
+      // (they queue on the holder's transaction id), so watch the blocked
+      // backend itself: the build's items read waiting on a Lock event.
+      let queuedOnItems = false;
+      for (let waited = 0; waited < 10_000 && !queuedOnItems; waited += 25) {
+        const waiting = (
+          await db.execute<{ waiting: boolean }>(
+            sql`
         select exists(
           select 1 from pg_stat_activity
            where wait_event_type = 'Lock'
              and query ilike '%from items%'
         ) as waiting
-      `, "objects"))[0]?.waiting;
-      queuedOnItems = waiting === true;
-      if (!queuedOnItems) await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    assert.equal(queuedOnItems, true, "the build must wait for the concurrent deactivation");
+      `,
+            "objects",
+          )
+        )[0]?.waiting;
+        queuedOnItems = waiting === true;
+        if (!queuedOnItems) await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      assert.equal(queuedOnItems, true, "the build must wait for the concurrent deactivation");
 
-    await editor.query("commit");
-    editorCommitted = true;
-    await assert.rejects(pendingBuild, (e: unknown) => {
-      assert.ok(e instanceof InventoryError, "the loser must refuse as InventoryError (HTTP 422)");
-      assert.match((e as Error).message, /Assembly/, "the refusal must name the finished item");
-      assert.match((e as Error).message, /inactive/, "the refusal must say inactive");
-      return true;
-    });
-    assert.deepEqual(await postedCounts(org.orgId), before, "the raced build must leave no partial post");
-    assert.deepEqual(
-      await getOnHand(org.orgId, org.items.component, org.stockLocationId),
-      componentBefore,
-      "components must not be consumed",
-    );
-  } finally {
-    if (!editorCommitted) await editor.query("rollback").catch(() => undefined);
-    await editor.end().catch(() => undefined);
-    await pendingBuild?.catch(() => undefined);
-    await dropScratchOrg(org.orgId);
-  }
-});
+      await editor.query("commit");
+      editorCommitted = true;
+      await assert.rejects(pendingBuild, (e: unknown) => {
+        assert.ok(
+          e instanceof InventoryError,
+          "the loser must refuse as InventoryError (HTTP 422)",
+        );
+        assert.match((e as Error).message, /Assembly/, "the refusal must name the finished item");
+        assert.match((e as Error).message, /inactive/, "the refusal must say inactive");
+        return true;
+      });
+      assert.deepEqual(
+        await postedCounts(org.orgId),
+        before,
+        "the raced build must leave no partial post",
+      );
+      assert.deepEqual(
+        await getOnHand(org.orgId, org.items.component, org.stockLocationId),
+        componentBefore,
+        "components must not be consumed",
+      );
+    } finally {
+      if (!editorCommitted) await editor.query("rollback").catch(() => undefined);
+      await editor.end().catch(() => undefined);
+      await pendingBuild?.catch(() => undefined);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

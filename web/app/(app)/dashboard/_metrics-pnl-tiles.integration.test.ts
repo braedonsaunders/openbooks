@@ -1,4 +1,4 @@
-import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
+import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -21,14 +21,16 @@ registerHooks({
     if (specifier === "next-intl/server") {
       return {
         shortCircuit: true,
-        url: "data:text/javascript," + encodeURIComponent(
-          "export async function getLocale() { return \"en\" }"
-          + "export async function getTranslations() { return (key, values) => {"
-          + " if (key === \"metricContext.periodToDate\" && values && typeof values.label === \"string\") return `${values.label} to date`;"
-          + " if (key === \"metricContext.noAccountingPeriod\" && values) return `Business date ${values.date} precedes the first accounting period ${values.period} — configure a covering period in Close Setup`;"
-          + " if (key === \"metricContext.consolidatedScope\" && values && typeof values.name === \"string\") return `${values.name} (consolidated)`;"
-          + " return key } }",
-        ),
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            'export async function getLocale() { return "en" }' +
+              "export async function getTranslations() { return (key, values) => {" +
+              ' if (key === "metricContext.periodToDate" && values && typeof values.label === "string") return `${values.label} to date`;' +
+              ' if (key === "metricContext.noAccountingPeriod" && values) return `Business date ${values.date} precedes the first accounting period ${values.period} — configure a covering period in Close Setup`;' +
+              ' if (key === "metricContext.consolidatedScope" && values && typeof values.name === "string") return `${values.name} (consolidated)`;' +
+              " return key } }",
+          ),
       };
     }
 
@@ -47,7 +49,8 @@ registerHooks({
 const { sql } = await import("drizzle-orm");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { toUnits } = await import("@openbooks/engine/money/money");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { withSimClock: pinClock } = await import("@openbooks/engine/testing/platform/clock");
 const { dashboardConsolidatedProfitAndLoss } = await import("./_metrics.ts");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
@@ -61,13 +64,24 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 // date off the pinned business day, so the clock and the postings share it.
 const TODAY = "2026-07-15";
 
-function authzFor(orgId: string, userId: string, permissions: string[], allowedSubsidiaryIds: Set<string> | null = null): Authz {
+function authzFor(
+  orgId: string,
+  userId: string,
+  permissions: string[],
+  allowedSubsidiaryIds: Set<string> | null = null,
+): Authz {
   return {
     user: {
-      id: userId, email: `${userId}@test`, name: "P&L Watcher", orgId,
+      id: userId,
+      email: `${userId}@test`,
+      name: "P&L Watcher",
+      orgId,
       roles: [{ key: "staff", name: "staff" }],
-      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
-      homeUserId: userId, homeOrgId: orgId,
+      envKind: "sandbox",
+      productionOrgId: orgId,
+      isSuperAdmin: false,
+      homeUserId: userId,
+      homeOrgId: orgId,
     },
     permissions: new Set(permissions),
     allowedSubsidiaryIds,
@@ -89,17 +103,30 @@ async function loadPlTiles(
   locale?: string,
 ) {
   const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
-  const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read", "gl.read"], allowedSubsidiaryIds);
+  const authz = authzFor(
+    org.orgId,
+    actor as unknown as string,
+    ["dashboard.read", "reports.read", "gl.read"],
+    allowedSubsidiaryIds,
+  );
   for (const id of PNL_IDS) assert.equal(canSeeWidget(authz, id), true);
   return pinClock(TODAY, () =>
-    withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...widgetIds], denialProofReaders(calls), locale)),
+    withOrgContext(org.orgId, () =>
+      loadDashboardMetrics(authz, [...widgetIds], denialProofReaders(calls), locale),
+    ),
   );
 }
 
 /** Post a balanced manual entry; legs are [accountId, amount] (credit-negative). */
 async function post(
   org: ScratchOrg,
-  opts: { date?: string; period?: string; sub?: string; currency?: string; legs: Array<[string, string]> },
+  opts: {
+    date?: string;
+    period?: string;
+    sub?: string;
+    currency?: string;
+    legs: Array<[string, string]>;
+  },
 ): Promise<void> {
   const entry = randomUUID();
   const currency = opts.currency ?? "CAD";
@@ -109,7 +136,9 @@ async function post(
     await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
       values(${randomUUID()},${org.orgId},${entry},${index + 1},${account},${opts.sub ?? org.subsidiaryId},${amount},${currency},${amount},'1')`);
   }
-  await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
+  await db.execute(
+    sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`,
+  );
 }
 
 function denialProofReaders(calls: string[]): DashboardMoneyReaders {
@@ -132,105 +161,205 @@ function denialProofReaders(calls: string[]): DashboardMoneyReaders {
   };
 }
 
-test("P&L tiles read one consolidated period-to-date call and exclude out-of-window postings", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const cogs = randomUUID();
-    const june = randomUUID();
-    await withBypass(async () => {
-      // The scratch COGS account is typed expense; gross profit needs a true
-      // cogs leg, like production charts carry.
-      await db.execute(sql`insert into accounts(id,org_id,number,name,type,subsidiary_id,is_summary,is_active)
+test(
+  "P&L tiles read one consolidated period-to-date call and exclude out-of-window postings",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const cogs = randomUUID();
+      const june = randomUUID();
+      await withBypass(async () => {
+        // The scratch COGS account is typed expense; gross profit needs a true
+        // cogs leg, like production charts carry.
+        await db.execute(sql`insert into accounts(id,org_id,number,name,type,subsidiary_id,is_summary,is_active)
         values(${cogs},${org.orgId},'5010','Merchandise COGS','cogs',${org.subsidiaryId},false,true)`);
-      const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-        select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and starts_on='2026-07-01'`, "objects"))[0]!.fiscal_calendar_id;
-      await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
+        const cal = (
+          await db.execute<{ fiscal_calendar_id: string }>(
+            sql`
+        select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and starts_on='2026-07-01'`,
+            "objects",
+          )
+        )[0]!.fiscal_calendar_id;
+        await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
         values(${june},${org.orgId},2026,6,'2026-06','2026-06-01','2026-06-30',false,${cal})`);
-    });
-    // July (in window): revenue 1000, COGS 400, expense 100.
-    await withBypass(() => post(org, { legs: [[org.accounts.bank, "1000"], [org.accounts.revenue, "-1000"]] }));
-    await withBypass(() => post(org, { legs: [[cogs, "400"], [org.accounts.bank, "-400"]] }));
-    await withBypass(() => post(org, { legs: [[org.accounts.adjustment, "100"], [org.accounts.bank, "-100"]] }));
-    // June (out of window): must not move any tile.
-    await withBypass(() => post(org, { date: "2026-06-20", period: june, legs: [[org.accounts.bank, "200"], [org.accounts.revenue, "-200"]] }));
+      });
+      // July (in window): revenue 1000, COGS 400, expense 100.
+      await withBypass(() =>
+        post(org, {
+          legs: [
+            [org.accounts.bank, "1000"],
+            [org.accounts.revenue, "-1000"],
+          ],
+        }),
+      );
+      await withBypass(() =>
+        post(org, {
+          legs: [
+            [cogs, "400"],
+            [org.accounts.bank, "-400"],
+          ],
+        }),
+      );
+      await withBypass(() =>
+        post(org, {
+          legs: [
+            [org.accounts.adjustment, "100"],
+            [org.accounts.bank, "-100"],
+          ],
+        }),
+      );
+      // June (out of window): must not move any tile.
+      await withBypass(() =>
+        post(org, {
+          date: "2026-06-20",
+          period: june,
+          legs: [
+            [org.accounts.bank, "200"],
+            [org.accounts.revenue, "-200"],
+          ],
+        }),
+      );
 
-    const calls: string[] = [];
-    const metrics = await loadPlTiles(org, null, calls);
-    assert.deepEqual(calls, ["profitAndLoss"], "revenue, income and margin share a single P&L read");
-    assert.equal(toUnits(metrics.revenueMtd ?? "0"), toUnits("1000"), "period revenue, June excluded");
-    assert.equal(toUnits(metrics.grossProfitMtd ?? "0"), toUnits("600"), "revenue minus COGS only");
-    assert.equal(Number(metrics.grossMarginMtd), 0.6, "margin ratio on the 0-1 scale");
-    assert.equal(toUnits(metrics.netIncomeMtd ?? "0"), toUnits("500"), "gross profit minus expenses");
-    assert.equal(metrics.plCurrency, "CAD", "the tile labels the reader's currency");
-    assert.ok(metrics.plPeriodLabel?.endsWith("to date"), `the tile labels the resolved period, not the civil month: ${metrics.plPeriodLabel}`);
-    // The period reads by its fiscal position, never its stored "2026-07";
-    // with the viewer's locale it carries the month it covers.
-    assert.equal(metrics.plPeriodLabel, "P07 FY2026 to date");
-    const localized = await loadPlTiles(org, null, [], [...PNL_IDS], "en");
-    assert.equal(localized.plPeriodLabel, "P07 FY2026 · Jul 2026 to date");
-    assert.equal(metrics.plUnavailable, null);
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      const calls: string[] = [];
+      const metrics = await loadPlTiles(org, null, calls);
+      assert.deepEqual(
+        calls,
+        ["profitAndLoss"],
+        "revenue, income and margin share a single P&L read",
+      );
+      assert.equal(
+        toUnits(metrics.revenueMtd ?? "0"),
+        toUnits("1000"),
+        "period revenue, June excluded",
+      );
+      assert.equal(
+        toUnits(metrics.grossProfitMtd ?? "0"),
+        toUnits("600"),
+        "revenue minus COGS only",
+      );
+      assert.equal(Number(metrics.grossMarginMtd), 0.6, "margin ratio on the 0-1 scale");
+      assert.equal(
+        toUnits(metrics.netIncomeMtd ?? "0"),
+        toUnits("500"),
+        "gross profit minus expenses",
+      );
+      assert.equal(metrics.plCurrency, "CAD", "the tile labels the reader's currency");
+      assert.ok(
+        metrics.plPeriodLabel?.endsWith("to date"),
+        `the tile labels the resolved period, not the civil month: ${metrics.plPeriodLabel}`,
+      );
+      // The period reads by its fiscal position, never its stored "2026-07";
+      // with the viewer's locale it carries the month it covers.
+      assert.equal(metrics.plPeriodLabel, "P07 FY2026 to date");
+      const localized = await loadPlTiles(org, null, [], [...PNL_IDS], "en");
+      assert.equal(localized.plPeriodLabel, "P07 FY2026 · Jul 2026 to date");
+      assert.equal(metrics.plUnavailable, null);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("a multi-functional scope without derived rates refuses by name, never zeros", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const usSub = randomUUID();
-    await withBypass(async () => {
-      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+test(
+  "a multi-functional scope without derived rates refuses by name, never zeros",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const usSub = randomUUID();
+      await withBypass(async () => {
+        await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
         values(${usSub},${org.orgId},${org.subsidiaryId},'US Co','USD','US')`);
-      // CAD revenue on the root subsidiary plus USD revenue inside the
-      // window: the scope spans functional currencies and no consolidated
-      // rates were derived, so the read refuses.
-      await post(org, { legs: [[org.accounts.bank, "1000"], [org.accounts.revenue, "-1000"]] });
-      await post(org, { sub: usSub, currency: "USD", legs: [[org.accounts.bank, "100"], [org.accounts.revenue, "-100"]] });
-    });
-    const calls: string[] = [];
-    const metrics = await loadPlTiles(org, null, calls);
-    // The reader ran (denial is not the story here) and refused; the loader
-    // caught the declared refusal into nulls plus the message, so the tiles
-    // render the remedy instead of "—".
-    assert.deepEqual(calls, ["profitAndLoss"]);
-    assert.equal(metrics.revenueMtd, null);
-    assert.equal(metrics.netIncomeMtd, null);
-    assert.equal(metrics.grossProfitMtd, null);
-    assert.equal(metrics.grossMarginMtd, null);
-    assert.ok(metrics.plPeriodLabel?.endsWith("to date"), "the refusal still names the window it covers");
-    assert.ok(
-      metrics.plUnavailable?.includes("Derive rates"),
-      `the refusal names the remedy: ${metrics.plUnavailable}`,
-    );
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+        // CAD revenue on the root subsidiary plus USD revenue inside the
+        // window: the scope spans functional currencies and no consolidated
+        // rates were derived, so the read refuses.
+        await post(org, {
+          legs: [
+            [org.accounts.bank, "1000"],
+            [org.accounts.revenue, "-1000"],
+          ],
+        });
+        await post(org, {
+          sub: usSub,
+          currency: "USD",
+          legs: [
+            [org.accounts.bank, "100"],
+            [org.accounts.revenue, "-100"],
+          ],
+        });
+      });
+      const calls: string[] = [];
+      const metrics = await loadPlTiles(org, null, calls);
+      // The reader ran (denial is not the story here) and refused; the loader
+      // caught the declared refusal into nulls plus the message, so the tiles
+      // render the remedy instead of "—".
+      assert.deepEqual(calls, ["profitAndLoss"]);
+      assert.equal(metrics.revenueMtd, null);
+      assert.equal(metrics.netIncomeMtd, null);
+      assert.equal(metrics.grossProfitMtd, null);
+      assert.equal(metrics.grossMarginMtd, null);
+      assert.ok(
+        metrics.plPeriodLabel?.endsWith("to date"),
+        "the refusal still names the window it covers",
+      );
+      assert.ok(
+        metrics.plUnavailable?.includes("Derive rates"),
+        `the refusal names the remedy: ${metrics.plUnavailable}`,
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
-test("derived consolidated rates translate a multi-functional scope into figures", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    const usSub = randomUUID();
-    await withBypass(async () => {
-      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+test(
+  "derived consolidated rates translate a multi-functional scope into figures",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const usSub = randomUUID();
+      await withBypass(async () => {
+        await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
         values(${usSub},${org.orgId},${org.subsidiaryId},'US Co','USD','US')`);
-      await db.execute(sql`insert into consolidated_fx_rates(org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate)
+        await db.execute(sql`insert into consolidated_fx_rates(org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate)
         values(${org.orgId},${org.periodId},'USD','CAD',1.35,1.35,1.3)`);
-      // CAD 1000 plus USD 100 at the derived July average: translated, not refused.
-      await post(org, { legs: [[org.accounts.bank, "1000"], [org.accounts.revenue, "-1000"]] });
-      await post(org, { sub: usSub, currency: "USD", legs: [[org.accounts.bank, "100"], [org.accounts.revenue, "-100"]] });
-    });
-    const calls: string[] = [];
-    const metrics = await loadPlTiles(org, null, calls);
-    assert.deepEqual(calls, ["profitAndLoss"]);
-    assert.equal(toUnits(metrics.revenueMtd ?? "0"), toUnits("1135"), "USD 100 at 1.35 joins CAD 1000");
-    assert.equal(metrics.plCurrency, "CAD");
-    assert.ok(metrics.plScopeLabel?.endsWith(" (consolidated)"), `the tile names the consolidated scope it covers: ${metrics.plScopeLabel}`);
-    assert.equal(metrics.plUnavailable, null);
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+        // CAD 1000 plus USD 100 at the derived July average: translated, not refused.
+        await post(org, {
+          legs: [
+            [org.accounts.bank, "1000"],
+            [org.accounts.revenue, "-1000"],
+          ],
+        });
+        await post(org, {
+          sub: usSub,
+          currency: "USD",
+          legs: [
+            [org.accounts.bank, "100"],
+            [org.accounts.revenue, "-100"],
+          ],
+        });
+      });
+      const calls: string[] = [];
+      const metrics = await loadPlTiles(org, null, calls);
+      assert.deepEqual(calls, ["profitAndLoss"]);
+      assert.equal(
+        toUnits(metrics.revenueMtd ?? "0"),
+        toUnits("1135"),
+        "USD 100 at 1.35 joins CAD 1000",
+      );
+      assert.equal(metrics.plCurrency, "CAD");
+      assert.ok(
+        metrics.plScopeLabel?.endsWith(" (consolidated)"),
+        `the tile names the consolidated scope it covers: ${metrics.plScopeLabel}`,
+      );
+      assert.equal(metrics.plUnavailable, null);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("a subsidiary-scoped caller tiles exactly the named scope", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
@@ -243,15 +372,36 @@ test("a subsidiary-scoped caller tiles exactly the named scope", { skip: !DB }, 
               (${west},${org.orgId},${org.subsidiaryId},'West Co','CAD','CA')`);
       // Root revenue 1000 (invisible to both callers below), East revenue
       // 100, West revenue 200.
-      await post(org, { legs: [[org.accounts.bank, "1000"], [org.accounts.revenue, "-1000"]] });
-      await post(org, { sub: east, legs: [[org.accounts.bank, "100"], [org.accounts.revenue, "-100"]] });
-      await post(org, { sub: west, legs: [[org.accounts.bank, "200"], [org.accounts.revenue, "-200"]] });
+      await post(org, {
+        legs: [
+          [org.accounts.bank, "1000"],
+          [org.accounts.revenue, "-1000"],
+        ],
+      });
+      await post(org, {
+        sub: east,
+        legs: [
+          [org.accounts.bank, "100"],
+          [org.accounts.revenue, "-100"],
+        ],
+      });
+      await post(org, {
+        sub: west,
+        legs: [
+          [org.accounts.bank, "200"],
+          [org.accounts.revenue, "-200"],
+        ],
+      });
     });
     // One subtree: the caller tiles East only, named — never as the company.
     const singleCalls: string[] = [];
     const single = await loadPlTiles(org, new Set([east]), singleCalls);
     assert.deepEqual(singleCalls, ["profitAndLoss"]);
-    assert.equal(toUnits(single.revenueMtd ?? "0"), toUnits("100"), "the scoped caller tiles their subtree only");
+    assert.equal(
+      toUnits(single.revenueMtd ?? "0"),
+      toUnits("100"),
+      "the scoped caller tiles their subtree only",
+    );
     assert.equal(single.plScopeLabel, "East Co", "the tile hint names the visible subtree");
     assert.equal(single.plCurrency, "CAD");
     assert.equal(single.plUnavailable, null);
@@ -262,55 +412,78 @@ test("a subsidiary-scoped caller tiles exactly the named scope", { skip: !DB }, 
     const pair = await loadPlTiles(org, new Set([east, west]), pairCalls);
     assert.deepEqual(pairCalls, ["profitAndLoss"]);
     const expected = pair.plScopeLabel === "West Co" ? "200" : "100";
-    assert.ok(pair.plScopeLabel === "East Co" || pair.plScopeLabel === "West Co", `the tile names the shown subtree: ${pair.plScopeLabel}`);
-    assert.equal(toUnits(pair.revenueMtd ?? "0"), toUnits(expected), "the figures cover the named subtree only");
+    assert.ok(
+      pair.plScopeLabel === "East Co" || pair.plScopeLabel === "West Co",
+      `the tile names the shown subtree: ${pair.plScopeLabel}`,
+    );
+    assert.equal(
+      toUnits(pair.revenueMtd ?? "0"),
+      toUnits(expected),
+      "the figures cover the named subtree only",
+    );
     assert.equal(pair.plUnavailable, null);
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
 
-test("a business day before the first accounting period refuses on the tiles, never rejects the dashboard", { skip: !DB }, async () => {
-  const org = await withBypass(() => createScratchOrg());
-  try {
-    await withBypass(async () => {
-      // No configured period covers the pinned business day: resolution
-      // throws, and the loader must map that misconfiguration into the tile
-      // refusal — the dashboard still renders.
-      await db.execute(sql`delete from accounting_periods where org_id = ${org.orgId}`);
-      const cal = (await db.execute<{ id: string }>(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`, "objects"))[0]!.id;
-      await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
+test(
+  "a business day before the first accounting period refuses on the tiles, never rejects the dashboard",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await withBypass(async () => {
+        // No configured period covers the pinned business day: resolution
+        // throws, and the loader must map that misconfiguration into the tile
+        // refusal — the dashboard still renders.
+        await db.execute(sql`delete from accounting_periods where org_id = ${org.orgId}`);
+        const cal = (
+          await db.execute<{ id: string }>(
+            sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`,
+            "objects",
+          )
+        )[0]!.id;
+        await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
         values(${randomUUID()},${org.orgId},2026,8,'2026-08','2026-08-01','2026-08-31',false,${cal})`);
-    });
-    const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
-    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "reports.read", "gl.read"]);
-    const readers: DashboardMoneyReaders = {
-      ...denialProofReaders([]),
-      profitAndLoss: (async () => {
-        throw new Error("profitAndLoss must not run without a resolved period");
-      }) as DashboardMoneyReaders["profitAndLoss"],
-    };
-    const metrics = await pinClock(TODAY, () =>
-      withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], readers)),
-    );
-    assert.equal(metrics.revenueMtd, null);
-    assert.equal(metrics.netIncomeMtd, null);
-    assert.equal(metrics.plPeriodLabel, null, "no window was resolved to label");
-    assert.ok(
-      metrics.plUnavailable?.includes("Close Setup"),
-      `the refusal names the remedy: ${metrics.plUnavailable}`,
-    );
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
-  }
-});
+      });
+      const actor = await withBypass(() => createScratchUser(org.orgId, "P&L Reader", "admin"));
+      const authz = authzFor(org.orgId, actor as unknown as string, [
+        "dashboard.read",
+        "reports.read",
+        "gl.read",
+      ]);
+      const readers: DashboardMoneyReaders = {
+        ...denialProofReaders([]),
+        profitAndLoss: (async () => {
+          throw new Error("profitAndLoss must not run without a resolved period");
+        }) as DashboardMoneyReaders["profitAndLoss"],
+      };
+      const metrics = await pinClock(TODAY, () =>
+        withOrgContext(org.orgId, () => loadDashboardMetrics(authz, [...PNL_IDS], readers)),
+      );
+      assert.equal(metrics.revenueMtd, null);
+      assert.equal(metrics.netIncomeMtd, null);
+      assert.equal(metrics.plPeriodLabel, null, "no window was resolved to label");
+      assert.ok(
+        metrics.plUnavailable?.includes("Close Setup"),
+        `the refusal names the remedy: ${metrics.plUnavailable}`,
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
 
 test("P&L readers never run without the ledger grant", { skip: !DB }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     // reports.read opens the reporting tools; the P&L tiles read the ledger.
     const deniedId = await withBypass(() => createScratchUser(org.orgId, "No Ledger", "staff"));
-    const denied = authzFor(org.orgId, deniedId as unknown as string, ["dashboard.read", "reports.read"]);
+    const denied = authzFor(org.orgId, deniedId as unknown as string, [
+      "dashboard.read",
+      "reports.read",
+    ]);
     for (const id of PNL_IDS) assert.equal(canSeeWidget(denied, id), false);
     const readers: DashboardMoneyReaders = {
       bankBalances: (async () => []) as DashboardMoneyReaders["bankBalances"],

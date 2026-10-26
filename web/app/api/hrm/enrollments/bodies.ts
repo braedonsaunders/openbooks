@@ -7,9 +7,19 @@ const uuid = z.string().refine(isUuid, "must be a valid id");
 const civilDate = civilDateInput();
 const reason = z.string().trim().min(1, "reason required").max(2000);
 
-export const contributionTermBody = z.discriminatedUnion('electionMode', [
-  z.object({ruleId: uuid,electionMode: z.literal('fixed'),electedRate: z.string().trim().min(1),declaredPeriodsPerYear: z.number().int().min(1).max(366).nullish()}),
-  z.object({ruleId: uuid,electionMode: z.literal('follows_policy'),electedRate: z.null().optional(),declaredPeriodsPerYear: z.number().int().min(1).max(366).nullish()}),
+export const contributionTermBody = z.discriminatedUnion("electionMode", [
+  z.object({
+    ruleId: uuid,
+    electionMode: z.literal("fixed"),
+    electedRate: z.string().trim().min(1),
+    declaredPeriodsPerYear: z.number().int().min(1).max(366).nullish(),
+  }),
+  z.object({
+    ruleId: uuid,
+    electionMode: z.literal("follows_policy"),
+    electedRate: z.null().optional(),
+    declaredPeriodsPerYear: z.number().int().min(1).max(366).nullish(),
+  }),
 ]);
 const contributionSelection = {
   classKey: z.string().trim().min(1).max(120).nullish(),
@@ -33,13 +43,21 @@ export const electEnrollmentBody = electBase.extend({
 });
 
 export const waiveEnrollmentBody = electBase
-  .pick({ employmentId: true, planId: true, windowId: true, effectiveFrom: true, selfService: true })
+  .pick({
+    employmentId: true,
+    planId: true,
+    windowId: true,
+    effectiveFrom: true,
+    selfService: true,
+  })
   .extend({ action: z.literal("waive"), reason });
 
-export const enrollmentPostBody = z.discriminatedUnion("action", [electEnrollmentBody, waiveEnrollmentBody]);
+export const enrollmentPostBody = z.discriminatedUnion("action", [
+  electEnrollmentBody,
+  waiveEnrollmentBody,
+]);
 
 const enrollmentId = z.object({ enrollmentId: uuid });
-
 
 export const changeEnrollmentBody = z.object({
   action: z.literal("change"),

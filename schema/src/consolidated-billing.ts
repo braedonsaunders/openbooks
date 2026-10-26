@@ -45,10 +45,7 @@ export const consolidationGroups = pgTable(
   },
   (t) => [
     index("consolidation_groups_org_payer").on(t.orgId, t.payerPartyId),
-    check(
-      "consolidation_groups_cutoff_valid",
-      sql`${t.cutoffDay} BETWEEN 1 AND 28`,
-    ),
+    check("consolidation_groups_cutoff_valid", sql`${t.cutoffDay} BETWEEN 1 AND 28`),
     foreignKey({
       columns: [t.orgId],
       foreignColumns: [orgs.id],
@@ -140,16 +137,8 @@ export const consolidationRuns = pgTable(
     ...auditColumns,
   },
   (t) => [
-    index("consolidation_runs_group_period").on(
-      t.orgId,
-      t.groupId,
-      t.periodStart,
-      t.periodEnd,
-    ),
-    check(
-      "consolidation_runs_period_valid",
-      sql`${t.periodEnd} >= ${t.periodStart}`,
-    ),
+    index("consolidation_runs_group_period").on(t.orgId, t.groupId, t.periodStart, t.periodEnd),
+    check("consolidation_runs_period_valid", sql`${t.periodEnd} >= ${t.periodStart}`),
     foreignKey({
       columns: [t.orgId],
       foreignColumns: [orgs.id],

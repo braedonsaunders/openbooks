@@ -1,51 +1,51 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { stubModules } from '../../../../testing/stub-modules'
+import assert from "node:assert/strict";
+import test from "node:test";
+import { stubModules } from "../../../../testing/stub-modules";
 
 const state = {
   authz: {
-    user: { orgId: 'org-visible', id: 'actor-visible' },
+    user: { orgId: "org-visible", id: "actor-visible" },
     allowedSubsidiaryIds: null as Set<string> | null,
   },
   readCalls: [] as string[],
-}
-const key = Symbol.for('openbooks.parallel-run-view-scope')
-Object.assign(globalThis, { [key]: state })
+};
+const key = Symbol.for("openbooks.parallel-run-view-scope");
+Object.assign(globalThis, { [key]: state });
 
 stubModules({
   navigation: {
     source: "export function notFound(){throw new Error('NEXT_NOT_FOUND')}",
   },
-  intl: 'export async function getTranslations(){return {has:()=>false}}',
+  intl: "export async function getTranslations(){return {has:()=>false}}",
   authz: false,
   features: false,
-})
+});
 
 // Scope doubles stay parent-conditioned: they answer only the parallel-run
 // view's own imports, which no shared stub shape matches.
-const { registerHooks: registerScopeHooks } = await import('node:module')
+const { registerHooks: registerScopeHooks } = await import("node:module");
 registerScopeHooks({
   resolve(specifier, context, next) {
-    const parent = decodeURIComponent(context.parentURL ?? '')
+    const parent = decodeURIComponent(context.parentURL ?? "");
     const virtual = (source: string) => ({
       shortCircuit: true,
       url: `data:text/javascript,${encodeURIComponent(source)}`,
-    })
-    if (parent.endsWith('/payroll/parallel-run/view.ts')) {
-      if (specifier.endsWith('/lib/authz')) {
+    });
+    if (parent.endsWith("/payroll/parallel-run/view.ts")) {
+      if (specifier.endsWith("/lib/authz")) {
         return virtual(`
           export async function requirePermission(){return globalThis[Symbol.for('openbooks.parallel-run-view-scope')].authz}
           export function can(){return true}
           export async function guardRootSubsidiaryScope(authz){return authz.allowedSubsidiaryIds === null ? null : {status:404}}
-        `)
+        `);
       }
-      if (specifier.endsWith('/lib/feature-gates')) {
-        return virtual('export async function requireFeatureEnabled(){}')
+      if (specifier.endsWith("/lib/feature-gates")) {
+        return virtual("export async function requireFeatureEnabled(){}");
       }
-      if (specifier.endsWith('/module-home/group-tabs')) {
-        return virtual('export async function groupTabs(){return []}')
+      if (specifier.endsWith("/module-home/group-tabs")) {
+        return virtual("export async function groupTabs(){return []}");
       }
-      if (specifier === '@openbooks/engine/payroll/parallel-run-store') {
+      if (specifier === "@openbooks/engine/payroll/parallel-run-store") {
         return virtual(`
           const visible = (scope) => scope?.allowedSubsidiaryIds === null || scope?.allowedSubsidiaryIds?.has('sub-visible')
           const row = (scope) => [{id: visible(scope) ? 'VISIBLE' : 'HIDDEN'}]
@@ -55,28 +55,37 @@ registerScopeHooks({
           export async function parallelComparisons(_org, options){calls.push('comparisons');return row(options)}
           export async function parallelTolerances(){calls.push('tolerances');return []}
           export async function comparableSlots(){calls.push('slots');return []}
-        `)
+        `);
       }
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const { loadParallelRun } = await import('./view.ts')
+const { loadParallelRun } = await import("./view.ts");
 
-test('parallel-run page loader scopes every server-rendered payroll dataset', async () => {
-  state.readCalls.length = 0
-  const data = await loadParallelRun()
-  assert.deepEqual(data.workspace.registers.map((row) => row.id), ['VISIBLE'])
-  assert.deepEqual(data.workspace.runs.map((row) => row.documentId), ['VISIBLE'])
-  assert.deepEqual(data.workspace.comparisons.map((row) => row.id), ['VISIBLE'])
-  assert.deepEqual(state.readCalls, ['registers', 'runs', 'comparisons', 'tolerances', 'slots'])
-})
+test("parallel-run page loader scopes every server-rendered payroll dataset", async () => {
+  state.readCalls.length = 0;
+  const data = await loadParallelRun();
+  assert.deepEqual(
+    data.workspace.registers.map((row) => row.id),
+    ["VISIBLE"],
+  );
+  assert.deepEqual(
+    data.workspace.runs.map((row) => row.documentId),
+    ["VISIBLE"],
+  );
+  assert.deepEqual(
+    data.workspace.comparisons.map((row) => row.id),
+    ["VISIBLE"],
+  );
+  assert.deepEqual(state.readCalls, ["registers", "runs", "comparisons", "tolerances", "slots"]);
+});
 
-test('parallel-run page refuses subsidiary-restricted readers before loading org-wide tolerances', async () => {
-  state.authz.allowedSubsidiaryIds = new Set(['sub-visible'])
-  state.readCalls.length = 0
-  await assert.rejects(loadParallelRun(), /NEXT_NOT_FOUND/)
-  assert.deepEqual(state.readCalls, [])
-  state.authz.allowedSubsidiaryIds = null
-})
+test("parallel-run page refuses subsidiary-restricted readers before loading org-wide tolerances", async () => {
+  state.authz.allowedSubsidiaryIds = new Set(["sub-visible"]);
+  state.readCalls.length = 0;
+  await assert.rejects(loadParallelRun(), /NEXT_NOT_FOUND/);
+  assert.deepEqual(state.readCalls, []);
+  state.authz.allowedSubsidiaryIds = null;
+});

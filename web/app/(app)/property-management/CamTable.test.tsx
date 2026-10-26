@@ -5,7 +5,10 @@ import { CamTable, formatCamAmount } from "./CamTable";
 import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import type { PropertyWorkspace } from "./types";
 
-await bootJsdomEnvironment({ url: "http://localhost:4800/property-management", matchMediaMatches: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/property-management",
+  matchMediaMatches: false,
+});
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../messages/en")).default;
 
@@ -67,7 +70,6 @@ const permissions = { manage: false, account: false, bill: false };
 const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
 
-
 test("CAM allocation rows format exact amounts in their property's currency", () => {
   const calls: MoneyCall[] = [];
   const money = (value: string | number, options?: { currency?: string }) => {
@@ -105,17 +107,24 @@ test("CAM amount helper keeps organization-base formatting when no property curr
 
 test("an invoiced CAM pool exposes replacement billing only for released nonzero allocations", () => {
   for (const [amount, invoice, expected] of [
-    ["100.0000", null, true], ["-100.0000", null, true],
-    ["0.0000", null, false], ["100.0000", "existing-invoice", false],
+    ["100.0000", null, true],
+    ["-100.0000", null, true],
+    ["0.0000", null, false],
+    ["100.0000", "existing-invoice", false],
   ] as const) {
     const data = structuredClone(workspace);
     data.camPools[0]!.status = "invoiced";
     data.camAllocations[0]!.reconciliationAmount = amount;
     data.camAllocations[0]!.invoiceDocumentId = invoice;
-    const html = renderToStaticMarkup(camTableElement({
-      data, money: value => String(value), busy: false,
-      permissions: { manage: false, account: false, bill: true }, act: async () => null,
-    }));
+    const html = renderToStaticMarkup(
+      camTableElement({
+        data,
+        money: (value) => String(value),
+        busy: false,
+        permissions: { manage: false, account: false, bill: true },
+        act: async () => null,
+      }),
+    );
     assert.equal(html.includes("Create true-ups"), expected);
     assert.equal(html.includes("Reopen for correction"), false);
   }
@@ -140,15 +149,19 @@ test("a refused CAM finalize displays the server remedy on its pool card", async
   };
 
   await act(async () => {
-    root.render(camTableElement({
-      data: workspace,
-      money: value => String(value),
-      busy: false,
-      permissions: { manage: false, account: true, bill: false },
-      act: actAction,
-    }));
+    root.render(
+      camTableElement({
+        data: workspace,
+        money: (value) => String(value),
+        busy: false,
+        permissions: { manage: false, account: true, bill: false },
+        act: actAction,
+      }),
+    );
   });
-  const finalize = [...host.querySelectorAll("button")].find(button => button.textContent?.trim() === "Finalize");
+  const finalize = [...host.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === "Finalize",
+  );
   assert.ok(finalize, "an account user can finalize an open CAM pool");
   await act(async () => {
     finalize!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));

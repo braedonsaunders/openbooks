@@ -8,11 +8,19 @@ import test from "node:test";
 // ECharts needs no canvas for this).
 
 const { bootJsdomEnvironment } = await import("../../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/analytics/financial-health", matchMediaMatches: false, scrollIntoView: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/analytics/financial-health",
+  matchMediaMatches: false,
+  scrollIntoView: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__scRouter}export function usePathname(){return '/analytics/financial-health'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__scRouter}export function usePathname(){return '/analytics/financial-health'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier.endsWith("/_ui/charts")) {
@@ -121,7 +129,11 @@ test("the scenario model prices exact decimal strings from the baseline", async 
   // compact rendering that could hide drift. A 2.125% growth input scales
   // operating revenue by exactly 1.02125 (a naive money-scale factor would
   // round to 1.0213 and overstate revenue by 45).
-  const atZero = computeScenario(baselineFigures() as never, { growth: "0", price: "0", cogs: "0", opex: "0" }, SCENARIO_BANDS);
+  const atZero = computeScenario(
+    baselineFigures() as never,
+    { growth: "0", price: "0", cogs: "0", opex: "0" },
+    SCENARIO_BANDS,
+  );
   assert.equal(atZero.revenue, "1000000.0000");
   assert.equal(atZero.grossProfit, "400000.0000");
   assert.equal(atZero.operatingIncome, "50000.0000");
@@ -133,7 +145,11 @@ test("the scenario model prices exact decimal strings from the baseline", async 
   // safety floor: moderate risk — a hardcoded 0.30 default would read low.
   assert.equal(atZero.risk, "moderate");
 
-  const grown = computeScenario(baselineFigures() as never, { growth: "2.125", price: "0", cogs: "0", opex: "0" }, SCENARIO_BANDS);
+  const grown = computeScenario(
+    baselineFigures() as never,
+    { growth: "2.125", price: "0", cogs: "0", opex: "0" },
+    SCENARIO_BANDS,
+  );
   assert.equal(grown.revenue, "1019125.0000");
 });
 
@@ -166,15 +182,26 @@ test("a non-numeric input refuses by name with no scenario", async () => {
     assert.ok(input, "the builder offers numeric inputs");
     await act(async () => {
       // Through React's own value tracker so the controlled input notices.
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+      const setter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )!.set!;
       setter.call(input, "");
       input.dispatchEvent(new window.Event("input", { bubbles: true }));
       await tick();
     });
     await tick();
     const text = host.textContent ?? "";
-    assert.match(text, /Growth % must be a plain number/, "the refusal names the field and the remedy");
-    assert.match(text, /unavailable until it is fixed/, "the copy says exactly what is shown: no scenario, not a held baseline");
+    assert.match(
+      text,
+      /Growth % must be a plain number/,
+      "the refusal names the field and the remedy",
+    );
+    assert.match(
+      text,
+      /unavailable until it is fixed/,
+      "the copy says exactly what is shown: no scenario, not a held baseline",
+    );
     assert.match(text, /—/, "refused figures read as unavailable, never zero");
   } finally {
     await unmount();

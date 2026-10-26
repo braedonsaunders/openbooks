@@ -28,16 +28,17 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function grantConsolidationOperator(orgId: string, actorId: string): Promise<void> {
-  const result = await db.execute(sql`
+  const result = await db.execute(
+    sql`
     update app_roles set permissions='["documents.manage","ar.post","ar.pay"]'::jsonb,
       subsidiary_restriction='{"mode":"all"}'::jsonb
     where org_id=${orgId} and id in
       (select role_id from role_assignments where org_id=${orgId} and user_id=${actorId}) returning id
-  `, "objects");
+  `,
+    "objects",
+  );
   assert.equal(result.length, 1);
 }
-
-
 
 async function enableFeatures(orgId: string): Promise<void> {
   await db.execute(sql`
@@ -47,13 +48,20 @@ async function enableFeatures(orgId: string): Promise<void> {
   `);
 }
 
-async function seedCustomer(orgId: string, name: string, subsidiaryId: string | null, email: string | null): Promise<string> {
+async function seedCustomer(
+  orgId: string,
+  name: string,
+  subsidiaryId: string | null,
+  email: string | null,
+): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
     values (${id}, ${orgId}, 'customer', ${name}, ${subsidiaryId}, true, '{}'::jsonb)`);
   if (email) {
-    await db.execute(sql`update parties set email = ${email} where id = ${id} and org_id = ${orgId}`);
+    await db.execute(
+      sql`update parties set email = ${email} where id = ${id} and org_id = ${orgId}`,
+    );
   }
   return id;
 }
@@ -117,11 +125,18 @@ async function seedPayerInvoice(dueDate: string): Promise<PayerFixture> {
     values (${subscriptionId}, ${org.orgId}, ${child}, ${planId}, '1', 'active',
             ${org.date}, ${org.date}, false, ${actorId})`);
   await billSubscriptionNow(org.orgId, subscriptionId, { actorId }, null);
-  const [run] = await runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", { actorId });
+  const [run] = await runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", {
+    actorId,
+  });
   assert.ok(run && !run.replayed);
   const invoiceId = run.invoiceId;
-  const header = (await db.execute<{ party: string; custom: Record<string, unknown> }>(sql`
-      select party_id as party, custom from documents where id = ${invoiceId} and org_id = ${org.orgId}`, "objects"))[0]!;
+  const header = (
+    await db.execute<{ party: string; custom: Record<string, unknown> }>(
+      sql`
+      select party_id as party, custom from documents where id = ${invoiceId} and org_id = ${org.orgId}`,
+      "objects",
+    )
+  )[0]!;
   assert.equal(header.party, payer);
   assert.equal(header.custom["consolidationStatus"], "consolidated");
   await db.execute(sql`
@@ -134,20 +149,30 @@ async function seedPayerInvoice(dueDate: string): Promise<PayerFixture> {
 
   // The service child's own method plus the subscription enrollment anchored
   // on the child: collection must still hit the payer's method below.
-  const childMethod = (await db.execute<{ id: string }>(sql`
+  const childMethod = (
+    await db.execute<{ id: string }>(
+      sql`
       insert into customer_payment_methods
         (org_id, party_id, provider, provider_customer_id, provider_method_id,
          brand, last4, exp_month, exp_year, is_default, status, created_by, updated_by)
       values (${org.orgId}, ${child}, 'stripe', 'cus_child', 'pm_child',
               'visa', '4242', 12, 2030, true, 'active', ${actorId}, ${actorId})
-      returning id`, "objects"))[0]!.id;
-  const payerMethodId = (await db.execute<{ id: string }>(sql`
+      returning id`,
+      "objects",
+    )
+  )[0]!.id;
+  const payerMethodId = (
+    await db.execute<{ id: string }>(
+      sql`
       insert into customer_payment_methods
         (org_id, party_id, provider, provider_customer_id, provider_method_id,
          brand, last4, exp_month, exp_year, is_default, status, created_by, updated_by)
       values (${org.orgId}, ${payer}, 'stripe', 'cus_payer', 'pm_payer',
               'visa', '4242', 12, 2030, true, 'active', ${actorId}, ${actorId})
-      returning id`, "objects"))[0]!.id;
+      returning id`,
+      "objects",
+    )
+  )[0]!.id;
   await db.execute(sql`
     insert into psp_provider_configs
       (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
@@ -171,40 +196,63 @@ async function seedPayerInvoice(dueDate: string): Promise<PayerFixture> {
   return { org, actorId, payer, child, subscriptionId, invoiceId, payerMethodId };
 }
 
-test("autopay collects a consolidated invoice through the subscription enrollment onto the payer method", { skip: !DB }, async () => {
-  const fix = await seedPayerInvoice("2026-06-15");
-  try {
-    const result = await runAutopayCollectionForOrg(fix.org.orgId, { asOf: "2026-08-15", charge: succeedCharge });
-    assert.deepEqual(result.orgErrors, []);
-    assert.deepEqual(result.notices.filter(notice => notice.status === "error"), []);
-    assert.equal(result.charged, 1);
-    assert.equal(result.succeeded, 1);
-    const attempt = (await db.execute<{ methodId: string; enrollmentParty: string; status: string }>(sql`
+test(
+  "autopay collects a consolidated invoice through the subscription enrollment onto the payer method",
+  { skip: !DB },
+  async () => {
+    const fix = await seedPayerInvoice("2026-06-15");
+    try {
+      const result = await runAutopayCollectionForOrg(fix.org.orgId, {
+        asOf: "2026-08-15",
+        charge: succeedCharge,
+      });
+      assert.deepEqual(result.orgErrors, []);
+      assert.deepEqual(
+        result.notices.filter((notice) => notice.status === "error"),
+        [],
+      );
+      assert.equal(result.charged, 1);
+      assert.equal(result.succeeded, 1);
+      const attempt = (
+        await db.execute<{ methodId: string; enrollmentParty: string; status: string }>(
+          sql`
         select a.payment_method_id as "methodId", e.party_id as "enrollmentParty", a.status
           from collection_attempts a
           join autopay_enrollments e on e.id = a.enrollment_id and e.org_id = a.org_id
-         where a.org_id = ${fix.org.orgId} and a.invoice_id = ${fix.invoiceId}`, "objects"))[0]!;
-    assert.equal(attempt.methodId, fix.payerMethodId);
-    assert.equal(attempt.enrollmentParty, fix.child);
-    assert.equal(attempt.status, "succeeded");
+         where a.org_id = ${fix.org.orgId} and a.invoice_id = ${fix.invoiceId}`,
+          "objects",
+        )
+      )[0]!;
+      assert.equal(attempt.methodId, fix.payerMethodId);
+      assert.equal(attempt.enrollmentParty, fix.child);
+      assert.equal(attempt.status, "succeeded");
 
-    // One invoice collects once: the subscription arm must not double-charge
-    // what the payer enrollment path (or a rerun) already owns.
-    const again = await runAutopayCollectionForOrg(fix.org.orgId, { asOf: "2026-08-15", charge: succeedCharge });
-    assert.equal(again.charged, 0);
-  } finally {
-    await dropScratchOrg(fix.org.orgId);
-  }
-});
+      // One invoice collects once: the subscription arm must not double-charge
+      // what the payer enrollment path (or a rerun) already owns.
+      const again = await runAutopayCollectionForOrg(fix.org.orgId, {
+        asOf: "2026-08-15",
+        charge: succeedCharge,
+      });
+      assert.equal(again.charged, 0);
+    } finally {
+      await dropScratchOrg(fix.org.orgId);
+    }
+  },
+);
 
 test("dunning writes to the payer, never the service child", { skip: !DB }, async () => {
   const fix = await seedPayerInvoice("2026-06-15");
   try {
     const result = await runDunningForOrg(fix.org.orgId, "2026-08-15");
     assert.ok(result.scanned >= 1);
-    const log = (await db.execute<{ partyId: string; toEmail: string }>(sql`
+    const log = (
+      await db.execute<{ partyId: string; toEmail: string }>(
+        sql`
         select party_id as "partyId", to_email as "toEmail" from dunning_log
-         where org_id = ${fix.org.orgId} and document_id = ${fix.invoiceId}`, "objects"))[0]!;
+         where org_id = ${fix.org.orgId} and document_id = ${fix.invoiceId}`,
+        "objects",
+      )
+    )[0]!;
     assert.equal(log.partyId, fix.payer);
     assert.equal(log.toEmail, "payer@example.test");
   } finally {
@@ -212,18 +260,25 @@ test("dunning writes to the payer, never the service child", { skip: !DB }, asyn
   }
 });
 
-test("an enrolled consolidated invoice without a payer method is refused by name", { skip: !DB }, async () => {
-  const fix = await seedPayerInvoice("2026-06-15");
-  try {
-    await db.execute(sql`
+test(
+  "an enrolled consolidated invoice without a payer method is refused by name",
+  { skip: !DB },
+  async () => {
+    const fix = await seedPayerInvoice("2026-06-15");
+    try {
+      await db.execute(sql`
       delete from customer_payment_methods where org_id = ${fix.org.orgId} and party_id = ${fix.payer}`);
-    const result = await runAutopayCollectionForOrg(fix.org.orgId, { asOf: "2026-08-15", charge: succeedCharge });
-    assert.equal(result.charged, 0);
-    assert.equal(result.skipped, 1);
-    const notice = result.notices.find((item) => item.invoiceId === fix.invoiceId);
-    assert.ok(notice);
-    assert.match(notice.detail, /no active payment method/);
-  } finally {
-    await dropScratchOrg(fix.org.orgId);
-  }
-});
+      const result = await runAutopayCollectionForOrg(fix.org.orgId, {
+        asOf: "2026-08-15",
+        charge: succeedCharge,
+      });
+      assert.equal(result.charged, 0);
+      assert.equal(result.skipped, 1);
+      const notice = result.notices.find((item) => item.invoiceId === fix.invoiceId);
+      assert.ok(notice);
+      assert.match(notice.detail, /no active payment method/);
+    } finally {
+      await dropScratchOrg(fix.org.orgId);
+    }
+  },
+);

@@ -31,8 +31,26 @@ const requireFromRoot = createRequire(new URL("../package.json", import.meta.url
 const ts = requireFromRoot("typescript");
 const RELATIONS = new Set(["journal_entries", "journal_lines", "documents", "document_lines"]);
 const RESERVED = new Set([
-  "as", "cross", "except", "fetch", "for", "full", "group", "having", "inner", "intersect",
-  "join", "left", "limit", "natural", "offset", "on", "order", "right", "union", "where",
+  "as",
+  "cross",
+  "except",
+  "fetch",
+  "for",
+  "full",
+  "group",
+  "having",
+  "inner",
+  "intersect",
+  "join",
+  "left",
+  "limit",
+  "natural",
+  "offset",
+  "on",
+  "order",
+  "right",
+  "union",
+  "where",
 ]);
 
 export function repoRoot() {
@@ -42,9 +60,19 @@ export function repoRoot() {
 export function discoverSources() {
   return execFileSync(
     "git",
-    ["ls-files", "--cached", "--others", "--exclude-standard", "-z",
-      "engine/src/**/*.ts", "engine/src/**/*.tsx", "web/**/*.ts", "web/**/*.tsx",
-      "packages/**/*.ts", "packages/**/*.tsx"],
+    [
+      "ls-files",
+      "--cached",
+      "--others",
+      "--exclude-standard",
+      "-z",
+      "engine/src/**/*.ts",
+      "engine/src/**/*.tsx",
+      "web/**/*.ts",
+      "web/**/*.tsx",
+      "packages/**/*.ts",
+      "packages/**/*.tsx",
+    ],
     { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   )
     .split("\0")
@@ -63,7 +91,10 @@ function isSqlTemplateNode(node) {
   const text = ts.isNoSubstitutionTemplateLiteral(node)
     ? node.text
     : `${node.head.text}${node.templateSpans.map((span) => span.literal.text).join(" ")}`;
-  return /\bselect\b[\s\S]*\bfrom\b/i.test(text) && /\b(?:journal_entries|journal_lines|documents|document_lines)\b/i.test(text);
+  return (
+    /\bselect\b[\s\S]*\bfrom\b/i.test(text) &&
+    /\b(?:journal_entries|journal_lines|documents|document_lines)\b/i.test(text)
+  );
 }
 
 function templateText(template, sourceFile) {
@@ -84,7 +115,10 @@ function stripSqlComments(text) {
 
 function relationAliases(text) {
   const aliases = [];
-  const relationPattern = new RegExp(`\\b(?:from|join)\\s+(${[...RELATIONS].join("|")})\\b(?:\\s+(?:as\\s+)?([a-z_][\\w$]*))?`, "gi");
+  const relationPattern = new RegExp(
+    `\\b(?:from|join)\\s+(${[...RELATIONS].join("|")})\\b(?:\\s+(?:as\\s+)?([a-z_][\\w$]*))?`,
+    "gi",
+  );
   for (const match of text.matchAll(relationPattern)) {
     const relation = match[1].toLowerCase();
     const possibleAlias = match[2]?.toLowerCase();
@@ -99,16 +133,29 @@ function relationAliases(text) {
 
 function statusConditions(text, alias) {
   const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const prefix = alias === "documents" || alias === "journal_entries" || alias === "journal_lines" || alias === "document_lines"
-    ? `(?<![\\w$.])(?:\\b${escapedAlias}\\s*\\.\\s*)?status\\s*`
-    : `\\b${escapedAlias}\\s*\\.\\s*status\\s*`;
+  const prefix =
+    alias === "documents" ||
+    alias === "journal_entries" ||
+    alias === "journal_lines" ||
+    alias === "document_lines"
+      ? `(?<![\\w$.])(?:\\b${escapedAlias}\\s*\\.\\s*)?status\\s*`
+      : `\\b${escapedAlias}\\s*\\.\\s*status\\s*`;
   const conditions = [];
   for (const match of text.matchAll(new RegExp(`${prefix}(=|==)\\s*'([^']+)'`, "gi"))) {
-    conditions.push({ values: [match[2].toLowerCase()], offset: match.index ?? 0, end: (match.index ?? 0) + match[0].length });
+    conditions.push({
+      values: [match[2].toLowerCase()],
+      offset: match.index ?? 0,
+      end: (match.index ?? 0) + match[0].length,
+    });
   }
   for (const match of text.matchAll(new RegExp(`${prefix}in\\s*\\(([^)]*)\\)`, "gi"))) {
     const values = [...match[1].matchAll(/'([^']+)'/g)].map((value) => value[1].toLowerCase());
-    if (values.length) conditions.push({ values, offset: match.index ?? 0, end: (match.index ?? 0) + match[0].length });
+    if (values.length)
+      conditions.push({
+        values,
+        offset: match.index ?? 0,
+        end: (match.index ?? 0) + match[0].length,
+      });
   }
   return conditions;
 }
@@ -136,20 +183,35 @@ function hasDocumentAmountAggregate(text, aliases) {
     .map(({ alias }) => alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const aggregate = /\b(?:sum|avg|count)\s*\(/i;
   if (!aggregate.test(text)) return false;
-  if (amountAliases.some((alias) =>
-    new RegExp(`\\b(?:sum|avg)\\s*\\(\\s*(?:distinct\\s+)?${alias}\\s*\\.\\s*(?:amount|total|open_balance)\\b`, "i").test(text),
-  )) return true;
-  if (/\b(?:sum|avg)\s*\(\s*(?:distinct\s+)?(?:amount|total|open_balance)\b/i.test(text)) return true;
-  return aliases.some(({ relation, alias }) => relation === "documents" &&
-    (new RegExp(`\\bcount\\s*\\(\\s*(?:distinct\\s+)?${alias}\\s*\\.\\s*id\\s*\\)`, "i").test(text) || /\bcount\s*\(\s*\*\s*\)/i.test(text)));
+  if (
+    amountAliases.some((alias) =>
+      new RegExp(
+        `\\b(?:sum|avg)\\s*\\(\\s*(?:distinct\\s+)?${alias}\\s*\\.\\s*(?:amount|total|open_balance)\\b`,
+        "i",
+      ).test(text),
+    )
+  )
+    return true;
+  if (/\b(?:sum|avg)\s*\(\s*(?:distinct\s+)?(?:amount|total|open_balance)\b/i.test(text))
+    return true;
+  return aliases.some(
+    ({ relation, alias }) =>
+      relation === "documents" &&
+      (new RegExp(`\\bcount\\s*\\(\\s*(?:distinct\\s+)?${alias}\\s*\\.\\s*id\\s*\\)`, "i").test(
+        text,
+      ) ||
+        /\bcount\s*\(\s*\*\s*\)/i.test(text)),
+  );
 }
 
 const LIVE_ENTRIES_ONLY_TRAILING = /(?:--|\/\/)\s*Live entries only: \S/;
 const LIVE_ENTRIES_ONLY_ABOVE = /^\s*(?:--|\/\/)\s*Live entries only: \S/;
 
 function hasLiveEntriesOnlyIntent(sourceLines, line) {
-  return LIVE_ENTRIES_ONLY_TRAILING.test(sourceLines[line - 1] ?? "") ||
-    LIVE_ENTRIES_ONLY_ABOVE.test(sourceLines[line - 2] ?? "");
+  return (
+    LIVE_ENTRIES_ONLY_TRAILING.test(sourceLines[line - 1] ?? "") ||
+    LIVE_ENTRIES_ONLY_ABOVE.test(sourceLines[line - 2] ?? "")
+  );
 }
 
 export function scanSource(path, content) {
@@ -166,18 +228,34 @@ export function scanSource(path, content) {
         const conditions = statusConditions(sqlText, alias);
         for (const condition of conditions) {
           const values = new Set(condition.values);
-          const templateLine = sourceFile.getLineAndCharacterOfPosition(template.getStart(sourceFile) + 1).line;
-          const line = templateLine + (raw.slice(0, condition.offset).match(/\n/g) ?? []).length + 1;
+          const templateLine = sourceFile.getLineAndCharacterOfPosition(
+            template.getStart(sourceFile) + 1,
+          ).line;
+          const line =
+            templateLine + (raw.slice(0, condition.offset).match(/\n/g) ?? []).length + 1;
           const liveEntriesOnly = hasLiveEntriesOnlyIntent(sourceLines, line);
           let reason = null;
-          if (relation === "journal_entries" && values.has("posted") && !values.has("reversed") &&
-              !hasOrStatus(sqlText, alias, "posted", "reversed") && !liveEntriesOnly) {
-            reason = "journal-entry filters that include posted must also include reversed; authorization checks need the documented intent comment";
+          if (
+            relation === "journal_entries" &&
+            values.has("posted") &&
+            !values.has("reversed") &&
+            !hasOrStatus(sqlText, alias, "posted", "reversed") &&
+            !liveEntriesOnly
+          ) {
+            reason =
+              "journal-entry filters that include posted must also include reversed; authorization checks need the documented intent comment";
           }
-          if (relation === "documents" && values.has("posted") && !values.has("voided") &&
-              !hasOrStatus(sqlText, alias, "posted", "voided") &&
-              hasDocumentAmountAggregate(sqlText, aliases) && !hasDocumentAsOfVoidPredicate(sqlText, alias) && !liveEntriesOnly) {
-            reason = "document amount aggregates must include voided history or an as-of void-date predicate; current-state exclusions need the documented intent comment";
+          if (
+            relation === "documents" &&
+            values.has("posted") &&
+            !values.has("voided") &&
+            !hasOrStatus(sqlText, alias, "posted", "voided") &&
+            hasDocumentAmountAggregate(sqlText, aliases) &&
+            !hasDocumentAsOfVoidPredicate(sqlText, alias) &&
+            !liveEntriesOnly
+          ) {
+            reason =
+              "document amount aggregates must include voided history or an as-of void-date predicate; current-state exclusions need the documented intent comment";
           }
           if (reason) {
             findings.push({ path, line, alias, relation, reason });
@@ -188,7 +266,14 @@ export function scanSource(path, content) {
     ts.forEachChild(node, visit);
   };
   visit(sourceFile);
-  return [...new Map(findings.map((finding) => [`${finding.path}:${finding.line}:${finding.alias}:${finding.relation}`, finding])).values()];
+  return [
+    ...new Map(
+      findings.map((finding) => [
+        `${finding.path}:${finding.line}:${finding.alias}:${finding.relation}`,
+        finding,
+      ]),
+    ).values(),
+  ];
 }
 
 export function scanTree(readFile = (file) => readFileSync(join(repoRoot(), file), "utf8")) {
@@ -196,16 +281,21 @@ export function scanTree(readFile = (file) => readFileSync(join(repoRoot(), file
 }
 
 export function checkTree(findings = scanTree()) {
-  return findings.map(({ path, line, alias, relation, reason }) =>
-    `${path}:${line} alias ${alias} (${relation}) ${reason}`,
+  return findings.map(
+    ({ path, line, alias, relation, reason }) =>
+      `${path}:${line} alias ${alias} (${relation}) ${reason}`,
   );
 }
 
-const invoked = process.argv[1] ? process.argv[1].endsWith("check-journal-status-filter.mjs") : false;
+const invoked = process.argv[1]
+  ? process.argv[1].endsWith("check-journal-status-filter.mjs")
+  : false;
 if (invoked) {
   const findings = scanTree();
   const problems = checkTree(findings);
   for (const problem of problems) console.log(problem);
-  console.log(`checked journal status filters; violations=${problems.length} (sites=${findings.length})`);
+  console.log(
+    `checked journal status filters; violations=${problems.length} (sites=${findings.length})`,
+  );
   process.exit(problems.length > 0 ? 1 : 0);
 }

@@ -1,9 +1,14 @@
 /** Statutory remittance declarations and schedules. Split from packs.ts (pure moves only). */
-import { type PayrollCountryPack, type PayrollRemittanceFrequencyBand, type PayrollRemittanceSchedule, type StatutoryRemittanceDeclaration } from "./pack-types"
-import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry"
-import { declaredJurisdictions, payrollJurisdictionDeclared } from "./pack-jurisdictions"
-import { cmp } from "../money/money.ts"
-import { PayrollPackError } from "./payroll-error.ts"
+import {
+  type PayrollCountryPack,
+  type PayrollRemittanceFrequencyBand,
+  type PayrollRemittanceSchedule,
+  type StatutoryRemittanceDeclaration,
+} from "./pack-types";
+import { PAYROLL_COUNTRY_PACKS, payrollPack } from "./pack-registry";
+import { declaredJurisdictions, payrollJurisdictionDeclared } from "./pack-jurisdictions";
+import { cmp } from "../money/money.ts";
+import { PayrollPackError } from "./payroll-error.ts";
 
 // ---------------------------------------------------------------------------
 // Destination remittance schedules — the pack declarations due dates compute from
@@ -17,8 +22,7 @@ export function statutoryRemittanceDeclaration(country: string): StatutoryRemitt
   const regionalVendorKey = new Map<string, Readonly<Record<string, string>>>();
   for (const slot of pack.statutorySlots) {
     for (const component of slot.components) {
-      (component.remittance === "internal_accrual" ? internal : remitted)
-        .add(component.systemKey);
+      (component.remittance === "internal_accrual" ? internal : remitted).add(component.systemKey);
       if (component.remittance === "tax_authority") {
         // The vendor is the pack's single remittanceVendorSettingsKey, so one
         // pack cannot map one system key to two vendors — the type is the
@@ -41,7 +45,6 @@ export function statutoryRemittanceDeclaration(country: string): StatutoryRemitt
           regionalVendorKey.set(component.systemKey, declared);
         }
       }
-
     }
   }
   for (const systemKey of internal) {
@@ -74,34 +77,47 @@ export function allRemittanceSchedules(
   );
   for (const { country, schedule } of schedules) {
     const where = `the ${country} payroll pack's remittance schedule for ${schedule.vendorSettingsKey || "(no vendor key)"}`;
-    if (!schedule.vendorSettingsKey) throw new PayrollPackError(`${where} names no vendor settings key`);
-    if (!schedule.authority?.trim()) throw new PayrollPackError(`${where} names no receiving authority`);
-    if (schedule.sources.length === 0) throw new PayrollPackError(`${where} cites no published source`);
+    if (!schedule.vendorSettingsKey)
+      throw new PayrollPackError(`${where} names no vendor settings key`);
+    if (!schedule.authority?.trim())
+      throw new PayrollPackError(`${where} names no receiving authority`);
+    if (schedule.sources.length === 0)
+      throw new PayrollPackError(`${where} cites no published source`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(schedule.effectiveFrom)) {
       throw new PayrollPackError(`${where} has no effective-from date`);
     }
-    if (schedule.effectiveTo !== undefined
-      && (!/^\d{4}-\d{2}-\d{2}$/.test(schedule.effectiveTo) || schedule.effectiveTo <= schedule.effectiveFrom)) {
+    if (
+      schedule.effectiveTo !== undefined &&
+      (!/^\d{4}-\d{2}-\d{2}$/.test(schedule.effectiveTo) ||
+        schedule.effectiveTo <= schedule.effectiveFrom)
+    ) {
       throw new PayrollPackError(`${where} has an effective range that ends before it opens`);
     }
     if (!schedule.calendar) throw new PayrollPackError(`${where} names no due-date calendar`);
     if (!payrollJurisdictionDeclared(schedule.calendar)) {
       throw new PayrollPackError(
         `${where} moves deadlines against "${schedule.calendar}", which no payroll pack declares — ` +
-        `this jurisdiction is not yet supported by any payroll pack; contact support. (Declared: ${
-          declaredJurisdictions().map((j) => j.key).join(", ")})`,
+          `this jurisdiction is not yet supported by any payroll pack; contact support. (Declared: ${declaredJurisdictions()
+            .map((j) => j.key)
+            .join(", ")})`,
       );
     }
-    if (schedule.frequencySource !== "organization" && schedule.frequencySource !== "filing_account") {
+    if (
+      schedule.frequencySource !== "organization" &&
+      schedule.frequencySource !== "filing_account"
+    ) {
       throw new PayrollPackError(`${where} names no supported frequency source`);
     }
     if (schedule.frequencySource === "organization" && !schedule.frequencySettingsKey) {
       throw new PayrollPackError(`${where} names no organization frequency settings key`);
     }
     if (schedule.frequencySource === "filing_account" && schedule.frequencySettingsKey) {
-      throw new PayrollPackError(`${where} has an ignored frequency settings key despite using filing-account data`);
+      throw new PayrollPackError(
+        `${where} has an ignored frequency settings key despite using filing-account data`,
+      );
     }
-    if (schedule.frequencies.length === 0) throw new PayrollPackError(`${where} declares no frequencies`);
+    if (schedule.frequencies.length === 0)
+      throw new PayrollPackError(`${where} declares no frequencies`);
     const names = new Set(schedule.frequencies.map((band) => band.frequency));
     if (names.size !== schedule.frequencies.length) {
       throw new PayrollPackError(`${where} declares a frequency twice`);
@@ -130,16 +146,23 @@ export function allRemittanceSchedules(
           );
       }
       if (!band.rule?.trim()) {
-        throw new PayrollPackError(`${where} states no due-date rule for its ${band.frequency} frequency`);
+        throw new PayrollPackError(
+          `${where} states no due-date rule for its ${band.frequency} frequency`,
+        );
       }
       if (band.due.kind === "split_month" && !band.ruleSecondHalf?.trim()) {
         throw new PayrollPackError(
           `${where} states no second-half due-date rule for its ${band.frequency} frequency`,
         );
       }
-      if (band.averageMonthlyMin !== undefined && band.averageMonthlyMaxExclusive !== undefined
-        && cmp(band.averageMonthlyMin, band.averageMonthlyMaxExclusive) >= 0) {
-        throw new PayrollPackError(`${where} has an empty average-monthly band for its ${band.frequency} frequency`);
+      if (
+        band.averageMonthlyMin !== undefined &&
+        band.averageMonthlyMaxExclusive !== undefined &&
+        cmp(band.averageMonthlyMin, band.averageMonthlyMaxExclusive) >= 0
+      ) {
+        throw new PayrollPackError(
+          `${where} has an empty average-monthly band for its ${band.frequency} frequency`,
+        );
       }
     }
   }
@@ -171,10 +194,12 @@ export function remittanceScheduleInForce(
   date: string,
   schedules: readonly PayrollRemittanceSchedule[] = allRemittanceSchedules(),
 ): PayrollRemittanceSchedule | null {
-  const covering = schedules
-    .filter((schedule) => schedule.vendorSettingsKey === vendorSettingsKey
-      && schedule.effectiveFrom <= date
-      && (schedule.effectiveTo === undefined || date < schedule.effectiveTo));
+  const covering = schedules.filter(
+    (schedule) =>
+      schedule.vendorSettingsKey === vendorSettingsKey &&
+      schedule.effectiveFrom <= date &&
+      (schedule.effectiveTo === undefined || date < schedule.effectiveTo),
+  );
   covering.sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : -1));
   return covering[0] ?? null;
 }
@@ -197,11 +222,15 @@ export function remittanceBandForAverage(
   schedule: PayrollRemittanceSchedule,
   averageMonthly: string,
 ): PayrollRemittanceFrequencyBand | null {
-  return schedule.frequencies.find((band) =>
-    (band.averageMonthlyMin === undefined || cmp(averageMonthly, band.averageMonthlyMin) >= 0)
-    && (band.averageMonthlyMaxExclusive === undefined
-      || cmp(averageMonthly, band.averageMonthlyMaxExclusive) < 0),
-  ) ?? null;
+  return (
+    schedule.frequencies.find(
+      (band) =>
+        (band.averageMonthlyMin === undefined ||
+          cmp(averageMonthly, band.averageMonthlyMin) >= 0) &&
+        (band.averageMonthlyMaxExclusive === undefined ||
+          cmp(averageMonthly, band.averageMonthlyMaxExclusive) < 0),
+    ) ?? null
+  );
 }
 
 /**
@@ -221,9 +250,13 @@ export function packRemittanceSchedules(country: string): readonly PayrollRemitt
 export function remittanceScheduleForFrequencyKey(
   frequencySettingsKey: string,
 ): PayrollRemittanceSchedule | null {
-  return allRemittanceSchedules()
-    .find((schedule) => schedule.frequencySource === "organization"
-      && schedule.frequencySettingsKey === frequencySettingsKey) ?? null;
+  return (
+    allRemittanceSchedules().find(
+      (schedule) =>
+        schedule.frequencySource === "organization" &&
+        schedule.frequencySettingsKey === frequencySettingsKey,
+    ) ?? null
+  );
 }
 
 /**
@@ -233,10 +266,11 @@ export function remittanceScheduleForFrequencyKey(
  * declares it.
  */
 export function declaredRemittanceFrequencySettingsKeys(): string[] {
-  return allRemittanceSchedules()
-    .flatMap((schedule) => schedule.frequencySource === "organization" && schedule.frequencySettingsKey
+  return allRemittanceSchedules().flatMap((schedule) =>
+    schedule.frequencySource === "organization" && schedule.frequencySettingsKey
       ? [schedule.frequencySettingsKey]
-      : []);
+      : [],
+  );
 }
 
 /**

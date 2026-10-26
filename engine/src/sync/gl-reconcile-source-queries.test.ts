@@ -52,10 +52,7 @@ test("a mid-period since builds the same predicate shape as an aligned one", () 
   // The false-parity defect: June 1 and June 15 must cover the same
   // transaction population rule, differing only in the date literal.
   const aligned = sourcePlQuery("2024-06-01").replaceAll("2024-06-01", "SINCE");
-  const midPeriod = sourcePlQuery("2024-06-15").replaceAll(
-    "2024-06-15",
-    "SINCE",
-  );
+  const midPeriod = sourcePlQuery("2024-06-15").replaceAll("2024-06-15", "SINCE");
   assert.equal(midPeriod, aligned);
 });
 
@@ -180,14 +177,8 @@ test("money display never passes through a float", () => {
 });
 
 test("query builders refuse unchecked since values", () => {
-  assert.throws(
-    () => sourcePlQuery("2024/06/15"),
-    /unchecked since value/,
-  );
-  assert.throws(
-    () => sourceInvoiceQuery("'; drop table x; --"),
-    /unchecked since value/,
-  );
+  assert.throws(() => sourcePlQuery("2024/06/15"), /unchecked since value/);
+  assert.throws(() => sourceInvoiceQuery("'; drop table x; --"), /unchecked since value/);
 });
 
 test("an empty verdict population refuses by name instead of agreeing", () => {

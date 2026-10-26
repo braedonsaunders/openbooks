@@ -1,6 +1,6 @@
-import 'server-only'
-import { reportResultToCsv, reportResultToXlsx, type ReportRunResult } from '@openbooks/office'
-import type { CellValue } from './types'
+import "server-only";
+import { reportResultToCsv, reportResultToXlsx, type ReportRunResult } from "@openbooks/office";
+import type { CellValue } from "./types";
 
 /**
  * Turn a resource read result into the reports' `ReportRunResult` shape so the
@@ -16,7 +16,7 @@ export function buildRunResult(
   return {
     groups: [
       {
-        kind: 'results',
+        kind: "results",
         title,
         columns: columns.map((c) => c.key),
         rows: rows.map((r) => columns.map((c) => cellForSheet(r[c.key]))),
@@ -24,18 +24,22 @@ export function buildRunResult(
     ],
     summary: [],
     rowCount: rows.length,
-  }
+  };
 }
 
 /** Booleans render as text in spreadsheets; numbers/strings pass through. */
 function cellForSheet(v: CellValue | undefined): string | number | null {
-  if (v === null || v === undefined) return null
-  if (typeof v === 'boolean') return v ? 'true' : 'false'
-  return v
+  if (v === null || v === undefined) return null;
+  if (typeof v === "boolean") return v ? "true" : "false";
+  return v;
 }
 
-export function toCsv(title: string, columns: { key: string; label: string }[], rows: Record<string, CellValue>[]): string {
-  return reportResultToCsv(buildRunResult(title, columns, rows))
+export function toCsv(
+  title: string,
+  columns: { key: string; label: string }[],
+  rows: Record<string, CellValue>[],
+): string {
+  return reportResultToCsv(buildRunResult(title, columns, rows));
 }
 
 export function toXlsx(
@@ -45,16 +49,23 @@ export function toXlsx(
   generatedAt?: Date,
 ): Promise<Buffer> {
   // Data transfers carry their values as typed by the resource, never money-flagged columns.
-  return reportResultToXlsx(buildRunResult(title, columns, rows), { reportName: title, generatedAt, money: null })
+  return reportResultToXlsx(buildRunResult(title, columns, rows), {
+    reportName: title,
+    generatedAt,
+    money: null,
+  });
 }
 
 /** Array-of-objects JSON keyed by column key — full-fidelity, human-diffable. */
-export function toJson(columns: { key: string; label: string }[], rows: Record<string, CellValue>[]): string {
-  const keys = columns.map((c) => c.key)
+export function toJson(
+  columns: { key: string; label: string }[],
+  rows: Record<string, CellValue>[],
+): string {
+  const keys = columns.map((c) => c.key);
   const shaped = rows.map((r) => {
-    const o: Record<string, CellValue> = {}
-    for (const k of keys) o[k] = r[k] ?? null
-    return o
-  })
-  return JSON.stringify(shaped, null, 2)
+    const o: Record<string, CellValue> = {};
+    for (const k of keys) o[k] = r[k] ?? null;
+    return o;
+  });
+  return JSON.stringify(shaped, null, 2);
 }

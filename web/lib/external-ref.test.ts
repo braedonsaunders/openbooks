@@ -4,18 +4,14 @@ import test from "node:test";
 // One rule for the external (source, ref) pair, shared by the document and
 // order writers: absent leaves, null clears, a valued half requires its
 // partner, and a valued half is never silently dropped.
-const {
-  isExternalRefCheckViolation,
-  isExternalRefConflict,
-  resolveExternalRefPair,
-} = await import("./external-ref.ts");
+const { isExternalRefCheckViolation, isExternalRefConflict, resolveExternalRefPair } =
+  await import("./external-ref.ts");
 
 test("absent pair leaves the stored value", () => {
   assert.deepEqual(resolveExternalRefPair({}), { action: "leave" });
-  assert.deepEqual(
-    resolveExternalRefPair({ externalRef: undefined, externalSource: undefined }),
-    { action: "leave" },
-  );
+  assert.deepEqual(resolveExternalRefPair({ externalRef: undefined, externalSource: undefined }), {
+    action: "leave",
+  });
 });
 
 test("two values set the trimmed pair", () => {
@@ -28,10 +24,9 @@ test("two values set the trimmed pair", () => {
 test("an explicit null with no valued half clears both", () => {
   assert.deepEqual(resolveExternalRefPair({ externalRef: null }), { action: "clear" });
   assert.deepEqual(resolveExternalRefPair({ externalSource: null }), { action: "clear" });
-  assert.deepEqual(
-    resolveExternalRefPair({ externalRef: null, externalSource: null }),
-    { action: "clear" },
-  );
+  assert.deepEqual(resolveExternalRefPair({ externalRef: null, externalSource: null }), {
+    action: "clear",
+  });
 });
 
 test("a valued half without its partner is refused, never coerced", () => {
@@ -44,11 +39,7 @@ test("a valued half without its partner is refused, never coerced", () => {
   ]) {
     const result = resolveExternalRefPair(input);
     assert.equal(result.action, "refuse", JSON.stringify(input));
-    assert.match(
-      (result as { message: string }).message,
-      /travel together/,
-      JSON.stringify(input),
-    );
+    assert.match((result as { message: string }).message, /travel together/, JSON.stringify(input));
   }
 });
 
@@ -65,10 +56,16 @@ test("storage conflict detection names only the dedupe index", () => {
   const conflict = { code: "23505", constraint: "documents_org_external_ref" };
   assert.equal(isExternalRefConflict(conflict), true);
   assert.equal(isExternalRefConflict({ cause: conflict }), true);
-  assert.equal(isExternalRefConflict({ code: "23505", constraint: "documents_org_kind_number" }), false);
+  assert.equal(
+    isExternalRefConflict({ code: "23505", constraint: "documents_org_kind_number" }),
+    false,
+  );
   assert.equal(isExternalRefConflict(new Error("boom")), false);
   assert.equal(
-    isExternalRefCheckViolation({ code: "23514", constraint: "documents_external_ref_source_pair" }),
+    isExternalRefCheckViolation({
+      code: "23514",
+      constraint: "documents_external_ref_source_pair",
+    }),
     true,
   );
   assert.equal(

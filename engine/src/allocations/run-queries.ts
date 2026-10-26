@@ -93,11 +93,17 @@ export interface LineageAnchor {
 
 /** The drill anchors on exactly one object — never an unfiltered dump. */
 export function validateLineageAnchor(query: LineageAnchorQuery): LineageAnchor {
-  const present = (["runId", "journalEntryId", "documentId"] as const).filter((k) => query[k] !== undefined);
-  if (present.length !== 1) fail("validation", "provide exactly one of runId, journalEntryId, documentId");
+  const present = (["runId", "journalEntryId", "documentId"] as const).filter(
+    (k) => query[k] !== undefined,
+  );
+  if (present.length !== 1)
+    fail("validation", "provide exactly one of runId, journalEntryId, documentId");
   const key = present[0]!;
   const id = asUuid(query[key], key);
-  return { kind: key === "runId" ? "run" : key === "journalEntryId" ? "journalEntry" : "document", id };
+  return {
+    kind: key === "runId" ? "run" : key === "journalEntryId" ? "journalEntry" : "document",
+    id,
+  };
 }
 
 /**
@@ -159,7 +165,14 @@ function mapRun(row: Record<string, unknown>): RunSummary {
   };
 }
 
-const RUN_STATUSES: readonly string[] = ["previewed", "pending_approval", "posted", "reversed", "failed", "superseded"];
+const RUN_STATUSES: readonly string[] = [
+  "previewed",
+  "pending_approval",
+  "posted",
+  "reversed",
+  "failed",
+  "superseded",
+];
 
 export async function listRuns(
   orgId: string,
@@ -169,60 +182,84 @@ export async function listRuns(
   const ex = executor ?? db;
   const limit = filter.limit === undefined ? 25 : filter.limit;
   const offset = filter.offset ?? 0;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) fail("validation", "limit must be 1..100");
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100)
+    fail("validation", "limit must be 1..100");
   if (!Number.isInteger(offset) || offset < 0) fail("validation", "offset must be >= 0");
   const conds: ReturnType<typeof sql>[] = [sql`r.org_id = ${orgId}`];
   if (filter.ruleId !== undefined) conds.push(sql`r.rule_id = ${asUuid(filter.ruleId, "ruleId")}`);
-  if (filter.periodId !== undefined) conds.push(sql`r.period_id = ${asUuid(filter.periodId, "periodId")}`);
+  if (filter.periodId !== undefined)
+    conds.push(sql`r.period_id = ${asUuid(filter.periodId, "periodId")}`);
   if (filter.bookId !== undefined) conds.push(sql`r.book_id = ${asUuid(filter.bookId, "bookId")}`);
   if (filter.subsidiaryId !== undefined) {
     conds.push(sql`r.subsidiary_id = ${asUuid(filter.subsidiaryId, "subsidiaryId")}`);
   }
   if (filter.status !== undefined) {
-    if (!RUN_STATUSES.includes(filter.status)) fail("validation", `unknown status: ${filter.status}`);
+    if (!RUN_STATUSES.includes(filter.status))
+      fail("validation", `unknown status: ${filter.status}`);
     conds.push(sql`r.status = ${filter.status}`);
   }
   const where = sql.join(conds, sql` and `);
   const allowed = filter.allowedSubsidiaryIds;
-  if (allowed !== undefined && allowed !== null && allowed.size === 0) return { runs: [], total: 0 };
+  if (allowed !== undefined && allowed !== null && allowed.size === 0)
+    return { runs: [], total: 0 };
   if (allowed !== undefined && allowed !== null) {
     // Visibility depends on every subsidiary recorded in the frozen
     // computation, not only the header pin. Filter before count and paging so
     // hidden runs cannot leak through totals or displace visible rows.
-    const candidates = await ex.execute<Record<string, unknown>>(sql`
+    const candidates = await ex.execute<Record<string, unknown>>(
+      sql`
       select r.*, rule.key as rule_key, rule.name as rule_name
         from allocation_runs r
         left join allocation_rules rule on rule.org_id = r.org_id and rule.id = r.rule_id
        where ${where}
-       order by r.created_at desc`, "objects");
+       order by r.created_at desc`,
+      "objects",
+    );
     const visible = candidates.filter((row) =>
-      allocationScopeVisible(allowed, (row.subsidiary_id as string | null) ?? null, row.computation),
+      allocationScopeVisible(
+        allowed,
+        (row.subsidiary_id as string | null) ?? null,
+        row.computation,
+      ),
     );
     return {
       runs: visible.slice(offset, offset + limit).map(mapRun),
       total: visible.length,
     };
   }
-  const rows = await ex.execute<Record<string, unknown>>(sql`
+  const rows = await ex.execute<Record<string, unknown>>(
+    sql`
     select r.*, rule.key as rule_key, rule.name as rule_name
       from allocation_runs r
       left join allocation_rules rule on rule.org_id = r.org_id and rule.id = r.rule_id
      where ${where}
      order by r.created_at desc
-     limit ${limit} offset ${offset}`, "objects");
-  const counted = await ex.execute<{ n: string }>(sql`
-    select count(*) as n from allocation_runs r where ${where}`, "objects");
+     limit ${limit} offset ${offset}`,
+    "objects",
+  );
+  const counted = await ex.execute<{ n: string }>(
+    sql`
+    select count(*) as n from allocation_runs r where ${where}`,
+    "objects",
+  );
   return { runs: rows.map(mapRun), total: Number(counted[0]?.n ?? 0) };
 }
 
-export async function getRun(orgId: string, id: string, executor?: SqlExecutor): Promise<RunDetail> {
+export async function getRun(
+  orgId: string,
+  id: string,
+  executor?: SqlExecutor,
+): Promise<RunDetail> {
   const runId = asUuid(id, "run id");
   const ex = executor ?? db;
-  const rows = await ex.execute<Record<string, unknown>>(sql`
+  const rows = await ex.execute<Record<string, unknown>>(
+    sql`
     select r.*, rule.key as rule_key, rule.name as rule_name
       from allocation_runs r
       left join allocation_rules rule on rule.org_id = r.org_id and rule.id = r.rule_id
-     where r.org_id = ${orgId} and r.id = ${runId}`, "objects");
+     where r.org_id = ${orgId} and r.id = ${runId}`,
+    "objects",
+  );
   const row = rows[0];
   if (!row) fail("not_found", "run not found");
   return {
@@ -271,31 +308,49 @@ async function assertLineageAnchorVisible(
 ): Promise<void> {
   if (allowed === null || allowed === undefined) return;
   if (anchor.kind === "run") {
-    const run = (await ex.execute<{ subsidiary_id: string | null; computation: unknown }>(sql`
+    const run = (
+      await ex.execute<{ subsidiary_id: string | null; computation: unknown }>(
+        sql`
       select subsidiary_id, computation from allocation_runs
-       where org_id = ${orgId} and id = ${anchor.id}`, "objects"))[0];
+       where org_id = ${orgId} and id = ${anchor.id}`,
+        "objects",
+      )
+    )[0];
     if (!run || !allocationScopeVisible(allowed, run.subsidiary_id, run.computation)) {
       fail("not_found", "run not found");
     }
     return;
   }
   if (anchor.kind === "journalEntry") {
-    const head = (await ex.execute<{ subsidiary_id: string | null }>(sql`
+    const head = (
+      await ex.execute<{ subsidiary_id: string | null }>(
+        sql`
       select subsidiary_id from journal_entries
-       where org_id = ${orgId} and id = ${anchor.id}`, "objects"))[0];
+       where org_id = ${orgId} and id = ${anchor.id}`,
+        "objects",
+      )
+    )[0];
     if (!head) fail("not_found", "journal entry not found");
-    const lines = await ex.execute<{ subsidiary_id: string | null }>(sql`
+    const lines = await ex.execute<{ subsidiary_id: string | null }>(
+      sql`
       select distinct subsidiary_id from journal_lines
-       where org_id = ${orgId} and entry_id = ${anchor.id}`, "objects");
+       where org_id = ${orgId} and entry_id = ${anchor.id}`,
+      "objects",
+    );
     const touched = [head.subsidiary_id, ...lines.map((line) => line.subsidiary_id)];
     if (touched.some((sub) => sub === null || !allowed.has(sub))) {
       fail("not_found", "journal entry not found");
     }
     return;
   }
-  const doc = (await ex.execute<{ subsidiary_id: string | null }>(sql`
+  const doc = (
+    await ex.execute<{ subsidiary_id: string | null }>(
+      sql`
     select subsidiary_id from documents
-     where org_id = ${orgId} and id = ${anchor.id}`, "objects"))[0];
+     where org_id = ${orgId} and id = ${anchor.id}`,
+      "objects",
+    )
+  )[0];
   if (!doc || doc.subsidiary_id === null || !allowed.has(doc.subsidiary_id)) {
     fail("not_found", "document not found");
   }
@@ -308,7 +363,8 @@ export async function queryLineage(
 ): Promise<LineageResult> {
   const anchor = validateLineageAnchor(query);
   const limit = opts?.limit ?? 200;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 500) fail("validation", "limit must be 1..500");
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500)
+    fail("validation", "limit must be 1..500");
   const offset = opts?.offset ?? 0;
   if (!Number.isInteger(offset) || offset < 0) fail("validation", "offset must be >= 0");
   const ex = opts?.executor ?? db;
@@ -319,11 +375,15 @@ export async function queryLineage(
       : anchor.kind === "journalEntry"
         ? sql`l.journal_entry_id = ${anchor.id}`
         : sql`l.document_id = ${anchor.id}`;
-  const counted = await ex.execute<{ n: string }>(sql`
+  const counted = await ex.execute<{ n: string }>(
+    sql`
     select count(*) as n from allocation_lineage l
-     where l.org_id = ${orgId} and ${anchorCond}`, "objects");
+     where l.org_id = ${orgId} and ${anchorCond}`,
+    "objects",
+  );
   const total = Number(counted[0]?.n ?? 0);
-  const rows = await ex.execute<Record<string, unknown>>(sql`
+  const rows = await ex.execute<Record<string, unknown>>(
+    sql`
     select l.*,
            rule.key as rule_key,
            driver.key as driver_key
@@ -332,7 +392,9 @@ export async function queryLineage(
       left join allocation_drivers driver on driver.org_id = l.org_id and driver.id = l.driver_id
      where l.org_id = ${orgId} and ${anchorCond}
      order by l.created_at, l.id
-     limit ${limit} offset ${offset}`, "objects");
+     limit ${limit} offset ${offset}`,
+    "objects",
+  );
   return {
     anchor,
     total,

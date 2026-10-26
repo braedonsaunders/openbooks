@@ -23,8 +23,14 @@ test("sample catalog covers every setup industry exactly once", () => {
     SAMPLE_COMPANY_PROFILES.map((profile) => profile.industryKey).sort(),
     [...setupIndustries].sort(),
   );
-  assert.equal(new Set(SAMPLE_COMPANY_PROFILES.map((profile) => profile.profileId)).size, setupIndustries.length);
-  assert.equal(new Set(SAMPLE_COMPANY_PROFILES.map((profile) => profile.companyName)).size, setupIndustries.length);
+  assert.equal(
+    new Set(SAMPLE_COMPANY_PROFILES.map((profile) => profile.profileId)).size,
+    setupIndustries.length,
+  );
+  assert.equal(
+    new Set(SAMPLE_COMPANY_PROFILES.map((profile) => profile.companyName)).size,
+    setupIndustries.length,
+  );
 });
 
 test("every sample profile describes meaningful data coverage", () => {

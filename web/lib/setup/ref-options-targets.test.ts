@@ -50,7 +50,10 @@ function ddlColumnsByTable(): Map<string, Set<string>> {
   }
   // A reader that parses nothing would silently accept or reject every
   // term; pin that it sees the schema's tables and their columns.
-  assert.ok(out.size > 500 && out.get("flows")?.has("org_id"), `release schema yielded ${out.size} tables`);
+  assert.ok(
+    out.size > 500 && out.get("flows")?.has("org_id"),
+    `release schema yielded ${out.size} tables`,
+  );
   return out;
 }
 
@@ -91,7 +94,9 @@ test("every ref target resolves its generic picker columns", () => {
     const tableCols = new Set([...declared, ...(ddl.get(target.table) ?? [])]);
     // refValue names the stored value: it must be a real field.
     if (target.refValue != null && !fieldKeys.has(target.refValue)) {
-      offenders.push(`${source}: refValue ${JSON.stringify(target.refValue)} is not a declared field of ${target.key}`);
+      offenders.push(
+        `${source}: refValue ${JSON.stringify(target.refValue)} is not a declared field of ${target.key}`,
+      );
     }
     // The REAL derivation loadEntityOptions builds its SQL from — every
     // column it emits must exist on the table. (A target with no
@@ -99,15 +104,21 @@ test("every ref target resolves its generic picker columns", () => {
     // rows by id — but it must never select a missing column.)
     const picked = refTargetPicker(target);
     if (!tableCols.has(picked.valueCol)) {
-      offenders.push(`${source}: option value column ${JSON.stringify(picked.valueCol)} does not exist on ${target.table}`);
+      offenders.push(
+        `${source}: option value column ${JSON.stringify(picked.valueCol)} does not exist on ${target.table}`,
+      );
     }
     for (const col of picked.labelCols) {
       if (!tableCols.has(col)) {
-        offenders.push(`${source}: option label column ${JSON.stringify(col)} does not exist on ${target.table}`);
+        offenders.push(
+          `${source}: option label column ${JSON.stringify(col)} does not exist on ${target.table}`,
+        );
       }
     }
     if (!tableCols.has(picked.orderCol)) {
-      offenders.push(`${source}: option order column ${JSON.stringify(picked.orderCol)} does not exist on ${target.table}`);
+      offenders.push(
+        `${source}: option order column ${JSON.stringify(picked.orderCol)} does not exist on ${target.table}`,
+      );
     }
   }
   assert.deepEqual(

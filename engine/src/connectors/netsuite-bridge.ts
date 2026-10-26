@@ -115,13 +115,16 @@ function isSafeCount(value: unknown): value is number {
 }
 
 function isOwnedExportFile(name: string, jobId: string): boolean {
-  return name === `ob-summary-${jobId}.json` || [
-    `ob-request-${jobId}-`,
-    `ob-complete-${jobId}-`,
-    `ob-chunk-${jobId}-`,
-    `ob-error-${jobId}-`,
-    `ob-failed-${jobId}-`,
-  ].some((prefix) => name.startsWith(prefix));
+  return (
+    name === `ob-summary-${jobId}.json` ||
+    [
+      `ob-request-${jobId}-`,
+      `ob-complete-${jobId}-`,
+      `ob-chunk-${jobId}-`,
+      `ob-error-${jobId}-`,
+      `ob-failed-${jobId}-`,
+    ].some((prefix) => name.startsWith(prefix))
+  );
 }
 
 function parseManifestPageIndex(name: string, jobId: string, partId: string): number | undefined {
@@ -146,7 +149,8 @@ type BridgeRequest = <T>(params: Record<string, unknown>) => Promise<T>;
 
 /** Numeric dotted-version comparison; a malformed installed version never satisfies. */
 export function bridgeVersionSatisfies(installed: string, required: string): boolean {
-  const parse = (value: string) => (/^\d+(\.\d+)*$/.test(value) ? value.split(".").map(Number) : null);
+  const parse = (value: string) =>
+    /^\d+(\.\d+)*$/.test(value) ? value.split(".").map(Number) : null;
   const have = parse(String(installed).trim());
   const need = parse(required);
   if (!have || !need) return false;
@@ -190,19 +194,19 @@ export class NetSuiteBridgeClient {
   private readonly request: BridgeRequest;
   private compatibility?: Promise<NetSuiteBridgeHealth>;
 
-  constructor(
-    creds: NetSuiteCreds,
-    config: NetSuiteBridgeConfig = {},
-    request?: BridgeRequest,
-  ) {
+  constructor(creds: NetSuiteCreds, config: NetSuiteBridgeConfig = {}, request?: BridgeRequest) {
     const scriptId = config.scriptId ?? DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID;
     const deploymentId = config.deploymentId ?? DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID;
-    this.request = request ?? (<T>(params: Record<string, unknown>) =>
-      netsuiteRestlet<T>(scriptId, deploymentId, params, creds, "POST"));
+    this.request =
+      request ??
+      (<T>(params: Record<string, unknown>) =>
+        netsuiteRestlet<T>(scriptId, deploymentId, params, creds, "POST"));
   }
 
   async health(): Promise<NetSuiteBridgeHealth> {
-    return assertBridgeResponse(await this.request<NetSuiteBridgeHealth | BridgeError>({ action: "health" }));
+    return assertBridgeResponse(
+      await this.request<NetSuiteBridgeHealth | BridgeError>({ action: "health" }),
+    );
   }
 
   /**
@@ -212,10 +216,12 @@ export class NetSuiteBridgeClient {
    * instead of an unsupported-action error mid-run.
    */
   async requireCompatible(): Promise<NetSuiteBridgeHealth> {
-    this.compatibility ??= this.health().then(assertBridgeVersion).catch((error: unknown) => {
-      this.compatibility = undefined;
-      throw error;
-    });
+    this.compatibility ??= this.health()
+      .then(assertBridgeVersion)
+      .catch((error: unknown) => {
+        this.compatibility = undefined;
+        throw error;
+      });
     return this.compatibility;
   }
 
@@ -226,13 +232,15 @@ export class NetSuiteBridgeClient {
     const rows: T[] = [];
     let pageIndex = 0;
     for (;;) {
-      const page = assertBridgeResponse(await this.request<QueryPage<T> | BridgeError>({
-        action: "query",
-        sql,
-        pageIndex,
-        pageSize: opts.pageSize ?? 1_000,
-        ...(opts.params ? { params: opts.params } : {}),
-      }));
+      const page = assertBridgeResponse(
+        await this.request<QueryPage<T> | BridgeError>({
+          action: "query",
+          sql,
+          pageIndex,
+          pageSize: opts.pageSize ?? 1_000,
+          ...(opts.params ? { params: opts.params } : {}),
+        }),
+      );
       if (page.pageIndex !== pageIndex) {
         throw new Error(`NetSuite bridge returned page ${page.pageIndex}; expected ${pageIndex}`);
       }
@@ -248,15 +256,34 @@ export class NetSuiteBridgeClient {
     const rows: NetSuiteCrmActivity[] = [];
     let afterId = "0";
     for (;;) {
-      const page = assertBridgeResponse(await this.request<{
-        schemaVersion: number; recordType: string; rows: NetSuiteCrmActivity[]; hasMore: boolean;
-      } | BridgeError>({ action: "crmActivities", recordType, afterId }));
-      if (page.recordType !== recordType || !Array.isArray(page.rows) || typeof page.hasMore !== "boolean") {
+      const page = assertBridgeResponse(
+        await this.request<
+          | {
+              schemaVersion: number;
+              recordType: string;
+              rows: NetSuiteCrmActivity[];
+              hasMore: boolean;
+            }
+          | BridgeError
+        >({ action: "crmActivities", recordType, afterId }),
+      );
+      if (
+        page.recordType !== recordType ||
+        !Array.isArray(page.rows) ||
+        typeof page.hasMore !== "boolean"
+      ) {
         throw new Error("NetSuite bridge returned an invalid CRM activity page");
       }
       for (const row of page.rows) {
-        if (!/^\d+$/.test(row.id) || BigInt(row.id) <= BigInt(afterId) || !row.fields || typeof row.fields !== "object") {
-          throw new Error("NetSuite bridge CRM activity identities must advance without duplicates");
+        if (
+          !/^\d+$/.test(row.id) ||
+          BigInt(row.id) <= BigInt(afterId) ||
+          !row.fields ||
+          typeof row.fields !== "object"
+        ) {
+          throw new Error(
+            "NetSuite bridge CRM activity identities must advance without duplicates",
+          );
         }
         afterId = row.id;
         rows.push(row);
@@ -266,45 +293,71 @@ export class NetSuiteBridgeClient {
     }
   }
 
-  async deletedRecords(since: Date, recordType?: string, recordIds?: string[]): Promise<NetSuiteDeletedRecord[]> {
-    const response = assertBridgeResponse(await this.request<{
-      schemaVersion: number;
-      rows: NetSuiteDeletedRecord[];
-    } | BridgeError>({
-      action: "deleted",
-      since: since.toISOString(),
-      ...(recordType ? { recordType } : {}),
-      ...(recordIds ? { recordIds } : {}),
-    }));
+  async deletedRecords(
+    since: Date,
+    recordType?: string,
+    recordIds?: string[],
+  ): Promise<NetSuiteDeletedRecord[]> {
+    const response = assertBridgeResponse(
+      await this.request<
+        | {
+            schemaVersion: number;
+            rows: NetSuiteDeletedRecord[];
+          }
+        | BridgeError
+      >({
+        action: "deleted",
+        since: since.toISOString(),
+        ...(recordType ? { recordType } : {}),
+        ...(recordIds ? { recordIds } : {}),
+      }),
+    );
     return response.rows;
   }
 
   async paymentTerms(): Promise<NetSuitePaymentTerm[]> {
-    const response = assertBridgeResponse(await this.request<{
-      schemaVersion: number;
-      rows: NetSuitePaymentTerm[];
-    } | BridgeError>({ action: "paymentTerms" }));
+    const response = assertBridgeResponse(
+      await this.request<
+        | {
+            schemaVersion: number;
+            rows: NetSuitePaymentTerm[];
+          }
+        | BridgeError
+      >({ action: "paymentTerms" }),
+    );
     return response.rows;
   }
 
   async record<T = Record<string, unknown>>(recordType: string, internalId: string): Promise<T> {
-    return assertBridgeResponse(await this.request<T & { schemaVersion: number } | BridgeError>({
-      action: "record",
-      recordType,
-      internalId,
-    })) as T;
+    return assertBridgeResponse(
+      await this.request<(T & { schemaVersion: number }) | BridgeError>({
+        action: "record",
+        recordType,
+        internalId,
+      }),
+    ) as T;
   }
 
   async startExport(
     jobId: string,
-    partitions: Array<{ id: string; sql: string; pageSize?: number; params?: Array<string | number | boolean | null> }>,
+    partitions: Array<{
+      id: string;
+      sql: string;
+      pageSize?: number;
+      params?: Array<string | number | boolean | null>;
+    }>,
   ): Promise<{ schemaVersion: number; jobId: string; taskId: string; partitions: number }> {
-    return assertBridgeResponse(await this.request<{
-      schemaVersion: number;
-      jobId: string;
-      taskId: string;
-      partitions: number;
-    } | BridgeError>({ action: "startExport", jobId, partitions }));
+    return assertBridgeResponse(
+      await this.request<
+        | {
+            schemaVersion: number;
+            jobId: string;
+            taskId: string;
+            partitions: number;
+          }
+        | BridgeError
+      >({ action: "startExport", jobId, partitions }),
+    );
   }
 
   async exportStatus(jobId: string): Promise<{
@@ -313,20 +366,30 @@ export class NetSuiteBridgeClient {
     status: "running" | "complete" | "failed";
     files: NetSuiteExportFile[];
   }> {
-    return assertBridgeResponse(await this.request<{
-      schemaVersion: number;
-      jobId: string;
-      status: "running" | "complete" | "failed";
-      files: NetSuiteExportFile[];
-    } | BridgeError>({ action: "exportStatus", jobId }));
+    return assertBridgeResponse(
+      await this.request<
+        | {
+            schemaVersion: number;
+            jobId: string;
+            status: "running" | "complete" | "failed";
+            files: NetSuiteExportFile[];
+          }
+        | BridgeError
+      >({ action: "exportStatus", jobId }),
+    );
   }
 
   async exportTaskStatus(taskId: string): Promise<string> {
-    const response = assertBridgeResponse(await this.request<{
-      schemaVersion: number;
-      taskId: string;
-      status: string;
-    } | BridgeError>({ action: "exportTaskStatus", taskId }));
+    const response = assertBridgeResponse(
+      await this.request<
+        | {
+            schemaVersion: number;
+            taskId: string;
+            status: string;
+          }
+        | BridgeError
+      >({ action: "exportTaskStatus", taskId }),
+    );
     if (response.taskId !== taskId || !response.status) {
       throw new Error(`NetSuite export task ${taskId} returned an invalid status`);
     }
@@ -334,68 +397,101 @@ export class NetSuiteBridgeClient {
   }
 
   async cancelExportTask(taskId: string): Promise<void> {
-    const response = assertBridgeResponse(await this.request<{
-      schemaVersion: number;
-      taskId: string;
-      accepted: boolean;
-    } | BridgeError>({ action: "cancelExportTask", taskId }));
+    const response = assertBridgeResponse(
+      await this.request<
+        | {
+            schemaVersion: number;
+            taskId: string;
+            accepted: boolean;
+          }
+        | BridgeError
+      >({ action: "cancelExportTask", taskId }),
+    );
     if (response.taskId !== taskId) {
       throw new Error(`NetSuite export task ${taskId} returned an invalid cancellation response`);
     }
   }
 
   async listExports(): Promise<NetSuiteExportFile[]> {
-    const response = assertBridgeResponse(await this.request<{
-      schemaVersion: number;
-      files: NetSuiteExportFile[];
-    } | BridgeError>({ action: "listExports" }));
+    const response = assertBridgeResponse(
+      await this.request<
+        | {
+            schemaVersion: number;
+            files: NetSuiteExportFile[];
+          }
+        | BridgeError
+      >({ action: "listExports" }),
+    );
     return response.files;
   }
 
-  async readChunk(fileId: string): Promise<{ schemaVersion: number; fileId: string; name: string; contents: string }> {
-    return assertBridgeResponse(await this.request<{
-      schemaVersion: number;
-      fileId: string;
-      name: string;
-      contents: string;
-    } | BridgeError>({ action: "readChunk", fileId }));
+  async readChunk(
+    fileId: string,
+  ): Promise<{ schemaVersion: number; fileId: string; name: string; contents: string }> {
+    return assertBridgeResponse(
+      await this.request<
+        | {
+            schemaVersion: number;
+            fileId: string;
+            name: string;
+            contents: string;
+          }
+        | BridgeError
+      >({ action: "readChunk", fileId }),
+    );
   }
 
-  async deleteExport(jobId: string): Promise<{ schemaVersion: number; jobId: string; deleted: number }> {
+  async deleteExport(
+    jobId: string,
+  ): Promise<{ schemaVersion: number; jobId: string; deleted: number }> {
     const files = await this.listExports();
     const related = files.filter((file) => file.name.includes(jobId));
     assertNoForeignExportFiles(related, jobId);
     return this.deleteExportBatches(jobId);
   }
 
-  private async deleteExportBatches(jobId: string): Promise<{ schemaVersion: number; jobId: string; deleted: number }> {
+  private async deleteExportBatches(
+    jobId: string,
+  ): Promise<{ schemaVersion: number; jobId: string; deleted: number }> {
     let deleted = 0;
     for (let batch = 0; batch < 1_000; batch += 1) {
-      const response = assertBridgeResponse(await this.request<{
-        schemaVersion: number;
-        jobId: string;
-        deleted: number;
-        remaining?: number;
-      } | BridgeError>({ action: "deleteExport", jobId }));
+      const response = assertBridgeResponse(
+        await this.request<
+          | {
+              schemaVersion: number;
+              jobId: string;
+              deleted: number;
+              remaining?: number;
+            }
+          | BridgeError
+        >({ action: "deleteExport", jobId }),
+      );
       if (
-        response.jobId !== jobId
-        || !isSafeCount(response.deleted)
-        || (response.remaining !== undefined && !isSafeCount(response.remaining))
+        response.jobId !== jobId ||
+        !isSafeCount(response.deleted) ||
+        (response.remaining !== undefined && !isSafeCount(response.remaining))
       ) {
         throw new Error(`NetSuite bulk export ${jobId} cleanup returned an invalid response`);
       }
       deleted += response.deleted;
-      if (!response.remaining) return { schemaVersion: response.schemaVersion, jobId: response.jobId, deleted };
+      if (!response.remaining)
+        return { schemaVersion: response.schemaVersion, jobId: response.jobId, deleted };
     }
     throw new Error(`NetSuite bulk export ${jobId} cleanup exceeded its safety limit`);
   }
 
   async bulkQuery<T = Record<string, unknown>>(
-    partitions: Array<{ id: string; sql: string; params?: Array<string | number | boolean | null> }>,
+    partitions: Array<{
+      id: string;
+      sql: string;
+      params?: Array<string | number | boolean | null>;
+    }>,
     opts: { pollMs?: number; timeoutMs?: number; drainMs?: number } = {},
   ): Promise<Map<string, T[]>> {
     if (partitions.length === 0) return new Map();
-    const duplicate = partitions.find((part, index) => partitions.findIndex((candidate) => candidate.id === part.id) !== index);
+    const duplicate = partitions.find(
+      (part, index) => partitions.findIndex((candidate) => candidate.id === part.id) !== index,
+    );
     if (duplicate) throw new Error(`NetSuite bulk export partition ${duplicate.id} is duplicated`);
     await this.requireCompatible();
     const out = new Map(partitions.map((partition) => [partition.id, [] as T[]]));
@@ -419,8 +515,15 @@ export class NetSuiteBridgeClient {
       let taskTerminal = false;
       let timedOut = false;
       try {
-        const startedExport = await this.startExport(jobId, batch.map((partition) => ({ ...partition, pageSize: 1_000 })));
-        if (startedExport.jobId !== jobId || startedExport.partitions !== batch.length || !startedExport.taskId) {
+        const startedExport = await this.startExport(
+          jobId,
+          batch.map((partition) => ({ ...partition, pageSize: 1_000 })),
+        );
+        if (
+          startedExport.jobId !== jobId ||
+          startedExport.partitions !== batch.length ||
+          !startedExport.taskId
+        ) {
           throw new Error(`NetSuite bulk export ${jobId} returned an invalid start response`);
         }
         started = true;
@@ -445,8 +548,8 @@ export class NetSuiteBridgeClient {
               throw new Error(`NetSuite bulk export ${jobId} returned an invalid file listing`);
             }
             if (
-              state.jobId !== jobId
-              || !["running", "complete", "failed"].includes(state.status)
+              state.jobId !== jobId ||
+              !["running", "complete", "failed"].includes(state.status)
             ) {
               cleanupSafe = false;
               throw new Error(`NetSuite bulk export ${jobId} returned an invalid status response`);
@@ -468,7 +571,9 @@ export class NetSuiteBridgeClient {
               }
               if (!["pending", "processing"].includes(taskStatus)) {
                 cleanupSafe = false;
-                throw new Error(`NetSuite export task ${taskId} returned unknown status ${taskStatus}`);
+                throw new Error(
+                  `NetSuite export task ${taskId} returned unknown status ${taskStatus}`,
+                );
               }
             }
           }
@@ -498,12 +603,14 @@ export class NetSuiteBridgeClient {
             }
             if (probe !== undefined) {
               if (
-                !Array.isArray(probe.files)
-                || probe.jobId !== jobId
-                || !["running", "complete", "failed"].includes(probe.status)
+                !Array.isArray(probe.files) ||
+                probe.jobId !== jobId ||
+                !["running", "complete", "failed"].includes(probe.status)
               ) {
                 cleanupSafe = false;
-                throw new Error(`NetSuite bulk export ${jobId} returned an invalid status response`);
+                throw new Error(
+                  `NetSuite bulk export ${jobId} returned an invalid status response`,
+                );
               }
               try {
                 assertNoForeignExportFiles(probe.files, jobId);
@@ -527,13 +634,15 @@ export class NetSuiteBridgeClient {
             cleanupSafe = false;
             throw new Error(
               `NetSuite bulk export ${jobId} timed out with the export task still running; ` +
-              `cleanup skipped so no partial delete strands late files — delete ob-*-${jobId}-* ` +
-              `from the NetSuite File Cabinet OpenBooks Jobs folder, then re-run the sync`,
+                `cleanup skipped so no partial delete strands late files — delete ob-*-${jobId}-* ` +
+                `from the NetSuite File Cabinet OpenBooks Jobs folder, then re-run the sync`,
             );
           }
           throw new Error(
             `NetSuite bulk export ${jobId} timed out` +
-            (pollError !== null ? ` with its status response lost (${pollError instanceof Error ? pollError.message : String(pollError)})` : ""),
+              (pollError !== null
+                ? ` with its status response lost (${pollError instanceof Error ? pollError.message : String(pollError)})`
+                : ""),
           );
         }
         if (state.status === "failed") {
@@ -547,62 +656,78 @@ export class NetSuiteBridgeClient {
               errors.push(`${file.name} could not be parsed`);
             }
           }
-          throw new Error(`NetSuite bulk export failed${errors.length ? `: ${errors.join("; ")}` : ""}`);
+          throw new Error(
+            `NetSuite bulk export failed${errors.length ? `: ${errors.join("; ")}` : ""}`,
+          );
         }
         const summaryFiles = state.files.filter((item) => item.name === `ob-summary-${jobId}.json`);
         if (summaryFiles.length !== 1) {
-          throw new Error(`NetSuite bulk export ${jobId} returned ${summaryFiles.length} summary manifests; expected exactly one`);
+          throw new Error(
+            `NetSuite bulk export ${jobId} returned ${summaryFiles.length} summary manifests; expected exactly one`,
+          );
         }
         let summary: NetSuiteExportSummary;
         try {
           const read = await this.readChunk(summaryFiles[0]!.id);
           summary = JSON.parse(read.contents) as NetSuiteExportSummary;
-          if (read.name !== summaryFiles[0]!.name) throw new Error("summary filename does not match its listing");
+          if (read.name !== summaryFiles[0]!.name)
+            throw new Error("summary filename does not match its listing");
         } catch (error) {
-          throw new Error(`NetSuite bulk export ${jobId} returned an invalid summary manifest: ${String(error)}`);
+          throw new Error(
+            `NetSuite bulk export ${jobId} returned an invalid summary manifest: ${String(error)}`,
+          );
         }
         if (
-          summary.schemaVersion !== NETSUITE_BRIDGE_SCHEMA_VERSION
-          || summary.jobId !== jobId
-          || summary.status !== "complete"
-          || !isSafeCount(summary.rows)
-          || !Array.isArray(summary.parts)
+          summary.schemaVersion !== NETSUITE_BRIDGE_SCHEMA_VERSION ||
+          summary.jobId !== jobId ||
+          summary.status !== "complete" ||
+          !isSafeCount(summary.rows) ||
+          !Array.isArray(summary.parts)
         ) {
           throw new Error(`NetSuite bulk export ${jobId} returned an invalid summary manifest`);
         }
 
         const expectedPartitionIds = new Set(batch.map((partition) => partition.id));
-        const manifests = new Map<string, { rows: number; chunks: Map<number, ExpectedExportChunk> }>();
+        const manifests = new Map<
+          string,
+          { rows: number; chunks: Map<number, ExpectedExportChunk> }
+        >();
         for (const part of summary.parts) {
           if (
-            typeof part.partId !== "string"
-            || !expectedPartitionIds.has(part.partId)
-            || part.status !== "complete"
-            || !isSafeCount(part.rows)
-            || !Array.isArray(part.chunks)
+            typeof part.partId !== "string" ||
+            !expectedPartitionIds.has(part.partId) ||
+            part.status !== "complete" ||
+            !isSafeCount(part.rows) ||
+            !Array.isArray(part.chunks)
           ) {
             throw new Error(`NetSuite bulk export ${jobId} returned an invalid partition manifest`);
           }
           if (manifests.has(part.partId)) {
-            throw new Error(`NetSuite bulk export ${jobId} returned a duplicate partition manifest ${part.partId}`);
+            throw new Error(
+              `NetSuite bulk export ${jobId} returned a duplicate partition manifest ${part.partId}`,
+            );
           }
           const manifest = { rows: part.rows, chunks: new Map<number, ExpectedExportChunk>() };
           manifests.set(part.partId, manifest);
           for (const chunk of part.chunks) {
             if (
-              typeof chunk.id !== "string"
-              || chunk.id.length === 0
-              || typeof chunk.name !== "string"
-              || !isSafeCount(chunk.rows)
+              typeof chunk.id !== "string" ||
+              chunk.id.length === 0 ||
+              typeof chunk.name !== "string" ||
+              !isSafeCount(chunk.rows)
             ) {
               throw new Error(`NetSuite bulk export ${jobId} returned an invalid chunk manifest`);
             }
             const pageIndex = parseManifestPageIndex(chunk.name, jobId, part.partId);
             if (pageIndex === undefined) {
-              throw new Error(`NetSuite bulk export ${jobId} returned an invalid chunk name ${chunk.name}`);
+              throw new Error(
+                `NetSuite bulk export ${jobId} returned an invalid chunk name ${chunk.name}`,
+              );
             }
             if (manifest.chunks.has(pageIndex)) {
-              throw new Error(`NetSuite bulk export ${jobId} returned a duplicate chunk manifest ${chunk.name}`);
+              throw new Error(
+                `NetSuite bulk export ${jobId} returned a duplicate chunk manifest ${chunk.name}`,
+              );
             }
             manifest.chunks.set(pageIndex, { ...chunk, pageIndex });
           }
@@ -615,7 +740,9 @@ export class NetSuiteBridgeClient {
           throw new Error(`NetSuite bulk export ${jobId} summary row count does not reconcile`);
         }
 
-        const listedChunks = state.files.filter((item) => item.name.startsWith(`ob-chunk-${jobId}-`));
+        const listedChunks = state.files.filter((item) =>
+          item.name.startsWith(`ob-chunk-${jobId}-`),
+        );
         const listedById = new Map(listedChunks.map((file) => [file.id, file]));
         const listedNames = new Set(listedChunks.map((file) => file.name));
         const expectedChunks = [...manifests.values()].flatMap((part) => [...part.chunks.values()]);
@@ -636,14 +763,17 @@ export class NetSuiteBridgeClient {
           const target = out.get(partId)!;
           const pageIndexes = [...manifest.chunks.keys()].sort((a, b) => a - b);
           if (pageIndexes.some((pageIndex, index) => pageIndex !== index)) {
-            throw new Error(`NetSuite bulk export ${jobId} has non-contiguous chunks for partition ${partId}`);
+            throw new Error(
+              `NetSuite bulk export ${jobId} has non-contiguous chunks for partition ${partId}`,
+            );
           }
           let rows = 0;
           for (const pageIndex of pageIndexes) {
             const chunk = manifest.chunks.get(pageIndex)!;
             const listed = listedById.get(chunk.id)!;
             const read = await this.readChunk(listed.id);
-            if (read.name !== listed.name) throw new Error(`NetSuite bulk export returned an invalid chunk ${listed.name}`);
+            if (read.name !== listed.name)
+              throw new Error(`NetSuite bulk export returned an invalid chunk ${listed.name}`);
             let body: {
               schemaVersion?: number;
               jobId?: string;
@@ -657,13 +787,13 @@ export class NetSuiteBridgeClient {
               throw new Error(`NetSuite bulk export returned an invalid chunk ${listed.name}`);
             }
             if (
-              body.schemaVersion !== NETSUITE_BRIDGE_SCHEMA_VERSION
-              || body.jobId !== jobId
-              || body.partId !== partId
-              || body.pageIndex !== pageIndex
-              || !isSafeCount(body.pageIndex)
-              || !Array.isArray(body.rows)
-              || body.rows.length !== chunk.rows
+              body.schemaVersion !== NETSUITE_BRIDGE_SCHEMA_VERSION ||
+              body.jobId !== jobId ||
+              body.partId !== partId ||
+              body.pageIndex !== pageIndex ||
+              !isSafeCount(body.pageIndex) ||
+              !Array.isArray(body.rows) ||
+              body.rows.length !== chunk.rows
             ) {
               throw new Error(`NetSuite bulk export returned an invalid chunk ${listed.name}`);
             }
@@ -672,7 +802,9 @@ export class NetSuiteBridgeClient {
             rows += pageRows.length;
           }
           if (rows !== manifest.rows) {
-            throw new Error(`NetSuite bulk export ${jobId} row count does not reconcile for partition ${partId}`);
+            throw new Error(
+              `NetSuite bulk export ${jobId} row count does not reconcile for partition ${partId}`,
+            );
           }
         }
       } finally {

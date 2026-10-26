@@ -109,7 +109,9 @@ const PAYLOAD = {
 function scriptFetch(handler: (url: string, init?: RequestInit) => Response | null) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     return handler(url, init) ?? Response.json({});
   }) as typeof fetch;
   return () => {
@@ -173,7 +175,10 @@ async function click(button: HTMLButtonElement) {
 test("a refused deactivate pins the reason like a refused save does", async (t) => {
   const restoreFetch = scriptFetch((url, init) => {
     if (url === `/api/parties/${PARTY_ID}` && init?.method === "PATCH") {
-      return Response.json({ error: "Party has open bills and cannot be deactivated" }, { status: 422 });
+      return Response.json(
+        { error: "Party has open bills and cannot be deactivated" },
+        { status: 422 },
+      );
     }
     return null;
   });
@@ -221,14 +226,25 @@ test("a refused save still pins, toasts, and stays in edit mode", async (t) => {
   await tick();
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the save refusal must pin as an alert");
-  assert.match(alert.textContent ?? "", /Duplicate short code/, "the alert must carry the server reason");
-  assert.match(alert.textContent ?? "", /Save failed/, "the alert keeps the familiar save-failed heading");
+  assert.match(
+    alert.textContent ?? "",
+    /Duplicate short code/,
+    "the alert must carry the server reason",
+  );
+  assert.match(
+    alert.textContent ?? "",
+    /Save failed/,
+    "the alert keeps the familiar save-failed heading",
+  );
   const toasts = globalThis.__partyToasts ?? [];
   assert.ok(
     toasts.some((toast) => toast.kind === "error" && /Duplicate short code/.test(toast.message)),
     "the save refusal must also toast",
   );
-  assert.ok(buttonsNamed("Save").length > 0, "a refused save must stay in edit mode with values intact");
+  assert.ok(
+    buttonsNamed("Save").length > 0,
+    "a refused save must stay in edit mode with values intact",
+  );
   assert.equal(save.disabled, false, "busy must release after the refusal");
 });
 
@@ -254,25 +270,25 @@ async function renderEmployeeDrawer(canManageEmployeeBanks: boolean) {
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <BusinessDateProvider today="2026-10-01">
-          <PartyDrawer
-            payload={EMPLOYEE_PAYLOAD as never}
-            paymentTerms={[]}
-            departments={[]}
-            trades={[]}
-            fieldDefs={[]}
-            subsidiaries={[]}
-            canManage={false}
-            canManageEmployeeBanks={canManageEmployeeBanks}
-            recordType="employee"
-            role="employee"
-            initialTab="employment"
-            hrm={{
-              employmentIds: ["33333333-3333-4333-8333-333333333333"],
-              canManageHrm: true,
-              canReadExits: false,
-              canRecordExit: false,
-            }}
-          />
+            <PartyDrawer
+              payload={EMPLOYEE_PAYLOAD as never}
+              paymentTerms={[]}
+              departments={[]}
+              trades={[]}
+              fieldDefs={[]}
+              subsidiaries={[]}
+              canManage={false}
+              canManageEmployeeBanks={canManageEmployeeBanks}
+              recordType="employee"
+              role="employee"
+              initialTab="employment"
+              hrm={{
+                employmentIds: ["33333333-3333-4333-8333-333333333333"],
+                canManageHrm: true,
+                canReadExits: false,
+                canRecordExit: false,
+              }}
+            />
           </BusinessDateProvider>
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -364,7 +380,9 @@ async function renderVendorAsAccountant() {
 }
 
 function openMenuText(): string {
-  return [...document.querySelectorAll("[data-ui-overlay]")].map((el) => el.textContent ?? "").join("\n");
+  return [...document.querySelectorAll("[data-ui-overlay]")]
+    .map((el) => el.textContent ?? "")
+    .join("\n");
 }
 
 test("a 1099 vendor offers its statement and compliance to a read-only accountant", async (t) => {
@@ -377,7 +395,11 @@ test("a 1099 vendor offers its statement and compliance to a read-only accountan
   await click(menu);
   const entries = openMenuText();
   assert.match(entries, /View statement/, "the statement stays readable without the manage grant");
-  assert.match(entries, /Compliance/, "the 1099 settings ride the same predicate as the Compliance tab");
+  assert.match(
+    entries,
+    /Compliance/,
+    "the 1099 settings ride the same predicate as the Compliance tab",
+  );
   const compliance = [...document.querySelectorAll("[data-ui-overlay] button")].find(
     (b) => b.textContent?.trim() === "Compliance",
   ) as HTMLButtonElement | undefined;

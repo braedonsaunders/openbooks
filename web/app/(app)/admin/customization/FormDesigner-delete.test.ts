@@ -1,115 +1,123 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
-const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/customization?recordType=vendor_bill&tab=forms', matchMediaMatches: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/customization?recordType=vendor_bill&tab=forms",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
-const { registerHooks } = await import('node:module')
-const { pathToFileURL } = await import('node:url')
-const { join } = await import('node:path')
+const { registerHooks } = await import("node:module");
+const { pathToFileURL } = await import("node:url");
+const { join } = await import("node:path");
 // @openbooks/* symlinks resolve to the MAIN checkout (stale); pin the real
 // worktree copies so the test runs the code under test.
-const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
-const worktreeCustomization = pathToFileURL(join(process.cwd(), 'packages', 'customization', 'src', 'index.ts')).href
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: { pathname: '/admin/customization' } })
+const worktreeUi = pathToFileURL(join(process.cwd(), "packages", "ui", "src", "index.ts")).href;
+const worktreeCustomization = pathToFileURL(
+  join(process.cwd(), "packages", "customization", "src", "index.ts"),
+).href;
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: { pathname: "/admin/customization" } });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '@openbooks/ui') {
-      return { shortCircuit: true, url: worktreeUi }
+    if (specifier === "@openbooks/ui") {
+      return { shortCircuit: true, url: worktreeUi };
     }
-    if (specifier === '@openbooks/customization') {
-      return { shortCircuit: true, url: worktreeCustomization }
+    if (specifier === "@openbooks/customization") {
+      return { shortCircuit: true, url: worktreeCustomization };
     }
 
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}',
-      }
+        url: "data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}",
+      };
     }
-    if (specifier === '@/lib/confirm') {
+    if (specifier === "@/lib/confirm") {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export function confirmDialog(o){(globalThis.__confirms??=[]).push(String(typeof o==="string"?o:o.message));return Promise.resolve(globalThis.__confirmAnswer??false)};export function ConfirmRoot(){return null}',
-      }
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { act } = await import('react')
-const { createRoot } = await import('react-dom/client')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../messages/en')).default
-const { FormDesigner } = await import('./FormDesigner')
-const { defaultFormLayout } = await import('@openbooks/customization')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { act } = await import("react");
+const { createRoot } = await import("react-dom/client");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default;
+const { FormDesigner } = await import("./FormDesigner");
+const { defaultFormLayout } = await import("@openbooks/customization");
 
-const FORM_ID = '019f68a5-6a24-78ec-bed6-cc04e06f2078'
+const FORM_ID = "019f68a5-6a24-78ec-bed6-cc04e06f2078";
 
-type FetchCall = { url: string; method: string }
-const calls: FetchCall[] = []
+type FetchCall = { url: string; method: string };
+const calls: FetchCall[] = [];
 declare global {
-  var __confirms: string[] | undefined
-  var __confirmAnswer: boolean | undefined
+  var __confirms: string[] | undefined;
+  var __confirmAnswer: boolean | undefined;
 }
-globalThis.__confirms = []
-globalThis.__confirmAnswer = false
+globalThis.__confirms = [];
+globalThis.__confirmAnswer = false;
 globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
-  calls.push({ url: String(url), method: init?.method ?? 'GET' })
-  return new Response(JSON.stringify({}), { headers: { 'content-type': 'application/json' } })
-}) as typeof fetch
+  calls.push({ url: String(url), method: init?.method ?? "GET" });
+  return new Response(JSON.stringify({}), { headers: { "content-type": "application/json" } });
+}) as typeof fetch;
 
 async function mountDefault() {
-  document.body.innerHTML = ''
-  calls.length = 0
-  globalThis.__confirms = []
-  globalThis.__confirmAnswer = false
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+  document.body.innerHTML = "";
+  calls.length = 0;
+  globalThis.__confirms = [];
+  globalThis.__confirmAnswer = false;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   /* eslint-disable react/no-children-prop */
   await act(async () => {
     root.render(
       React.createElement(NextIntlClientProvider, {
-        locale: 'en',
+        locale: "en",
         messages,
-        timeZone: 'UTC',
+        timeZone: "UTC",
         children: React.createElement(FormDesigner, {
-          recordType: 'vendor_bill',
+          recordType: "vendor_bill",
           def: {
             id: FORM_ID,
-            name: 'Standard Bill Form',
+            name: "Standard Bill Form",
             isDefault: true,
             isActive: true,
-            layout: defaultFormLayout('vendor_bill'),
-            recordType: 'vendor_bill',
+            layout: defaultFormLayout("vendor_bill"),
+            recordType: "vendor_bill",
           },
           headerDefs: [],
           lineDefs: [],
           subsidiaryEnabled: false,
         }),
       }),
-    )
-    await new Promise((resolve) => setTimeout(resolve, 0))
-  })
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
   /* eslint-enable react/no-children-prop */
   return {
     async unmount() {
       await act(async () => {
-        root.unmount()
-      })
-      host.remove()
+        root.unmount();
+      });
+      host.remove();
     },
-  }
+  };
 }
 
 function deleteButton(): HTMLButtonElement {
-  const found = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Delete form')
-  assert.ok(found, 'the Delete form button must render')
-  return found as HTMLButtonElement
+  const found = [...document.querySelectorAll("button")].find(
+    (b) => (b.textContent ?? "").trim() === "Delete form",
+  );
+  assert.ok(found, "the Delete form button must render");
+  return found as HTMLButtonElement;
 }
 
 /**
@@ -118,24 +126,34 @@ function deleteButton(): HTMLButtonElement {
  * the standard layout silently). Deleting the default confirms first, and
  * nothing is sent until the operator accepts.
  */
-test('deleting the org-default form confirms before the DELETE goes out', async () => {
-  const { unmount } = await mountDefault()
+test("deleting the org-default form confirms before the DELETE goes out", async () => {
+  const { unmount } = await mountDefault();
   try {
     await act(async () => {
-      deleteButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
-    assert.equal(globalThis.__confirms?.length, 1, 'deleting the default must ask for confirmation')
-    assert.match(globalThis.__confirms?.[0] ?? '', /Standard Bill Form/, 'the confirmation must name the form being deleted')
-    assert.deepEqual(calls, [], 'no DELETE request before the operator confirms')
+      deleteButton().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.equal(
+      globalThis.__confirms?.length,
+      1,
+      "deleting the default must ask for confirmation",
+    );
+    assert.match(
+      globalThis.__confirms?.[0] ?? "",
+      /Standard Bill Form/,
+      "the confirmation must name the form being deleted",
+    );
+    assert.deepEqual(calls, [], "no DELETE request before the operator confirms");
 
-    globalThis.__confirmAnswer = true
+    globalThis.__confirmAnswer = true;
     await act(async () => {
-      deleteButton().dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
-    assert.deepEqual(calls, [{ url: `/api/customization/form-layouts/${FORM_ID}`, method: 'DELETE' }])
+      deleteButton().dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.deepEqual(calls, [
+      { url: `/api/customization/form-layouts/${FORM_ID}`, method: "DELETE" },
+    ]);
   } finally {
-    await unmount()
+    await unmount();
   }
-})
+});

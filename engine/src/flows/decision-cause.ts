@@ -16,7 +16,11 @@ export function sanitizeDecisionCause(error: unknown): string {
   if (
     error !== null &&
     typeof error === "object" &&
-    ("query" in error || "params" in error || "constraint" in error || "detail" in error || "table" in error)
+    ("query" in error ||
+      "params" in error ||
+      "constraint" in error ||
+      "detail" in error ||
+      "table" in error)
   ) {
     console.error("[flows] approval stage failed on a storage error:", error);
     return "the change could not be recorded because of a storage failure";

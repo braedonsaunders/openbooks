@@ -67,10 +67,7 @@ export const billingImportRuns = pgTable(
       "billing_import_runs_provider_valid",
       sql`${t.provider} in ('chargebee', 'recurly', 'maxio', 'zuora')`,
     ),
-    check(
-      "billing_import_runs_account_nonblank",
-      sql`length(btrim(${t.externalAccount})) > 0`,
-    ),
+    check("billing_import_runs_account_nonblank", sql`length(btrim(${t.externalAccount})) > 0`),
     check(
       "billing_import_runs_status_valid",
       sql`${t.status} in ('draft', 'preflight', 'ready', 'running', 'reconciling', 'complete', 'failed')`,
@@ -87,6 +84,10 @@ export const billingImportRuns = pgTable(
       "billing_import_runs_finished_valid",
       sql`(${t.status} in ('complete', 'failed')) = (${t.finishedAt} is not null)`,
     ),
-    foreignKey({ name: "billing_import_runs_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "billing_import_runs_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
   ],
 );

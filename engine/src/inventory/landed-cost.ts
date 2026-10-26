@@ -6,9 +6,26 @@ import { apportion, cmp, fromUnits, isZero, neg, roundDiv, sum, toUnits } from "
 import { extendCost } from "./costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { InventoryError, type InventoryProfile } from "./contracts.ts";
-import { assertStockLocationAdmitsSubsidiary, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
-import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
-import { primaryBookId, periodForDate, subsidiaryCurrency, lockInventoryPosition, persistReceiptMoney, assertInventoryDate } from "./position.ts";
+import {
+  assertStockLocationAdmitsSubsidiary,
+  resolveProfile,
+  assertMovementOwner,
+  assertInventoryFeature,
+} from "./profile-policy.ts";
+import {
+  stockLocationDim,
+  postInventoryEntry,
+  inventoryOffsetAccountProblem,
+  type JournalLineInput,
+} from "./journal.ts";
+import {
+  primaryBookId,
+  periodForDate,
+  subsidiaryCurrency,
+  lockInventoryPosition,
+  persistReceiptMoney,
+  assertInventoryDate,
+} from "./position.ts";
 import { revalueLayerExactly, devalueLayerExactly, type RevaluableLayer } from "./revaluation.ts";
 import { nextSequenceNumber } from "./document-numbering.ts";
 
@@ -71,19 +88,15 @@ export async function postLandedCostVoucher(
   actorId: string | null,
   input: PostLandedCostVoucherInput,
 ): Promise<{ id: string; documentNumber: string; entryId: string }> {
-  if (cmp(input.amount, "0") <= 0)
-    throw new InventoryError("landed cost amount must be positive");
+  if (cmp(input.amount, "0") <= 0) throw new InventoryError("landed cost amount must be positive");
   if (!input.targets?.length)
     throw new InventoryError("landed cost voucher needs at least one target");
   const periodId = await periodForDate(orgId, input.voucherDate);
-  if (!periodId)
-    throw new InventoryError(`no accounting period for ${input.voucherDate}`);
+  if (!periodId) throw new InventoryError(`no accounting period for ${input.voucherDate}`);
   const ctx = await loadSubsidiaryContext(db, orgId);
   assertMovementOwner(ctx, input.subsidiaryId);
 
-  const targetKeys = input.targets.map(
-    (target) => `${target.itemId}:${target.stockLocationId}`,
-  );
+  const targetKeys = input.targets.map((target) => `${target.itemId}:${target.stockLocationId}`);
   if (new Set(targetKeys).size !== targetKeys.length) {
     throw new InventoryError(
       "landed cost voucher targets must be unique by item and stock location",
@@ -94,11 +107,7 @@ export async function postLandedCostVoucher(
     await assertInventoryFeature(tx, orgId);
     for (const key of [...targetKeys].sort()) {
       const separator = key.indexOf(":");
-      await lockInventoryPosition(
-        tx,
-        key.slice(0, separator),
-        key.slice(separator + 1),
-      );
+      await lockInventoryPosition(tx, key.slice(0, separator), key.slice(separator + 1));
     }
 
     // Resolve and lock layers only after every target position is serialized,
@@ -125,16 +134,25 @@ export async function postLandedCostVoucher(
       // Capitalize only onto the voucher entity's own layers — freight on
       // another legal entity's stock is another form of taking its value.
       const receipt = input.sourceDocumentLineId
-        ? await sourceReceipt(tx, orgId, input.sourceDocumentLineId, target, input.subsidiaryId, profile)
+        ? await sourceReceipt(
+            tx,
+            orgId,
+            input.sourceDocumentLineId,
+            target,
+            input.subsidiaryId,
+            profile,
+          )
         : null;
       // A voucher tied to a receipt line capitalizes onto the layers that
       // receipt created; only an unattributed voucher spreads across every
       // open layer of the item and location. A moving-average receipt has
       // been blended into its pool, so the pool is what carries it.
-      const receiptLayerFilter = receipt && profile.costingMethod !== "moving_average"
-        ? sql`and source_movement_id in (${joinIds(receipt.movementIds)})`
-        : sql``;
-      const layers = await tx.execute<OpenLayer>(sql`
+      const receiptLayerFilter =
+        receipt && profile.costingMethod !== "moving_average"
+          ? sql`and source_movement_id in (${joinIds(receipt.movementIds)})`
+          : sql``;
+      const layers = await tx.execute<OpenLayer>(
+        sql`
         select id, subsidiary_id, source_movement_id, received_at::text, original_quantity,
                remaining_quantity, unit_cost, remaining_original_cost
           from cost_layers
@@ -144,77 +162,87 @@ export async function postLandedCostVoucher(
            and remaining_quantity > 0
            ${receiptLayerFilter}
          order by received_at, id
-         for update`, "objects");
-    if (receipt) {
-      const onHand = sum(layers.map((layer) => layer.remaining_quantity));
-      receipt.onHandQuantity = cmp(onHand, receipt.quantity) > 0 ? receipt.quantity : onHand;
-    }
-    if (layers.length === 0 && !receipt) {
-      throw new InventoryError(
-        `no on-hand layers for item ${target.itemId} at location ${target.stockLocationId}`,
+         for update`,
+        "objects",
       );
-    }
-    const manualAmount = target.manualAmount ?? null;
-    let shareWeight = "0";
-    let weightsByLayer: Map<string, string> | undefined;
-    if (input.basis === "manual") {
-      if (!manualAmount || cmp(manualAmount, "0") <= 0) {
+      if (receipt) {
+        const onHand = sum(layers.map((layer) => layer.remaining_quantity));
+        receipt.onHandQuantity = cmp(onHand, receipt.quantity) > 0 ? receipt.quantity : onHand;
+      }
+      if (layers.length === 0 && !receipt) {
         throw new InventoryError(
-          "manual-basis vouchers require a positive manual amount per target",
+          `no on-hand layers for item ${target.itemId} at location ${target.stockLocationId}`,
         );
       }
-    } else if (receipt) {
-      // The receipt carries its share whether or not its units are still on
-      // hand, so it is weighed by what it received, not by what remains.
-      if (input.basis === "weight") {
-        throw new InventoryError(
-          `weight-basis landed cost cannot be measured on receipt line ${input.sourceDocumentLineId} for item ${target.itemId} — choose a value, quantity, or manual basis instead`,
-        );
-      }
-      shareWeight = input.basis === "quantity" ? receipt.quantity : receipt.value;
-      if (isZero(shareWeight)) {
-        throw new InventoryError(
-          `target item ${target.itemId} has no ${input.basis} basis to apportion on`,
-        );
-      }
-    } else {
-      // Weight evidence is loaded once per target, inside this transaction
-      // after the layer locks, and the same map serves both the target share
-      // and the later per-layer sub-apportionment — one read per financial
-      // decision, no second query after mutations begin.
-      if (input.basis === "weight") {
-        weightsByLayer = new Map();
-        const w = (await tx.execute<{ cost_layer_id: string; weight: string }>(sql`
-          select cost_layer_id, weight from cost_layer_weights
-           where org_id = ${orgId} and cost_layer_id in (${joinIds(layers.map((l) => l.id))})`, "objects"));
-        for (const row of w)
-          weightsByLayer.set(row.cost_layer_id, row.weight);
-        // Narrow once for the closure below: the map is fully loaded here.
-        const loadedWeights = weightsByLayer;
-        // An absent weight row is unconfigured input, not zero: refusing by
-        // name beats accruing zero. An explicit zero row (weight '0') is a
-        // configured value and keeps its existing meaning — it contributes
-        // no share, and an all-zero target still hits the no-basis refusal
-        // below. There is no supported production writer for weight rows,
-        // so the remedy names the bases the operator can choose instead.
-        const missing = layers
-          .filter((l) => !loadedWeights.has(l.id))
-          .map((l) => l.id);
-        if (missing.length > 0) {
+      const manualAmount = target.manualAmount ?? null;
+      let shareWeight = "0";
+      let weightsByLayer: Map<string, string> | undefined;
+      if (input.basis === "manual") {
+        if (!manualAmount || cmp(manualAmount, "0") <= 0) {
           throw new InventoryError(
-            `weight-basis landed cost refused: item ${target.itemId} at location ${target.stockLocationId} has ${missing.length} on-hand layer(s) without a weight (layer ${missing.join(", ")}) — choose a value, quantity, or manual basis instead`,
+            "manual-basis vouchers require a positive manual amount per target",
+          );
+        }
+      } else if (receipt) {
+        // The receipt carries its share whether or not its units are still on
+        // hand, so it is weighed by what it received, not by what remains.
+        if (input.basis === "weight") {
+          throw new InventoryError(
+            `weight-basis landed cost cannot be measured on receipt line ${input.sourceDocumentLineId} for item ${target.itemId} — choose a value, quantity, or manual basis instead`,
+          );
+        }
+        shareWeight = input.basis === "quantity" ? receipt.quantity : receipt.value;
+        if (isZero(shareWeight)) {
+          throw new InventoryError(
+            `target item ${target.itemId} has no ${input.basis} basis to apportion on`,
+          );
+        }
+      } else {
+        // Weight evidence is loaded once per target, inside this transaction
+        // after the layer locks, and the same map serves both the target share
+        // and the later per-layer sub-apportionment — one read per financial
+        // decision, no second query after mutations begin.
+        if (input.basis === "weight") {
+          weightsByLayer = new Map();
+          const w = await tx.execute<{ cost_layer_id: string; weight: string }>(
+            sql`
+          select cost_layer_id, weight from cost_layer_weights
+           where org_id = ${orgId} and cost_layer_id in (${joinIds(layers.map((l) => l.id))})`,
+            "objects",
+          );
+          for (const row of w) weightsByLayer.set(row.cost_layer_id, row.weight);
+          // Narrow once for the closure below: the map is fully loaded here.
+          const loadedWeights = weightsByLayer;
+          // An absent weight row is unconfigured input, not zero: refusing by
+          // name beats accruing zero. An explicit zero row (weight '0') is a
+          // configured value and keeps its existing meaning — it contributes
+          // no share, and an all-zero target still hits the no-basis refusal
+          // below. There is no supported production writer for weight rows,
+          // so the remedy names the bases the operator can choose instead.
+          const missing = layers.filter((l) => !loadedWeights.has(l.id)).map((l) => l.id);
+          if (missing.length > 0) {
+            throw new InventoryError(
+              `weight-basis landed cost refused: item ${target.itemId} at location ${target.stockLocationId} has ${missing.length} on-hand layer(s) without a weight (layer ${missing.join(", ")}) — choose a value, quantity, or manual basis instead`,
+            );
+          }
+        }
+        const weights = layerWeights(layers, input.basis, weightsByLayer);
+        shareWeight = sum(weights);
+        if (isZero(shareWeight)) {
+          throw new InventoryError(
+            `target item ${target.itemId} has no ${input.basis} basis to apportion on`,
           );
         }
       }
-      const weights = layerWeights(layers, input.basis, weightsByLayer);
-      shareWeight = sum(weights);
-      if (isZero(shareWeight)) {
-        throw new InventoryError(
-          `target item ${target.itemId} has no ${input.basis} basis to apportion on`,
-        );
-      }
-    }
-    resolved.push({ target, profile, layers, shareWeight, manualAmount, weightsByLayer, receipt });
+      resolved.push({
+        target,
+        profile,
+        layers,
+        shareWeight,
+        manualAmount,
+        weightsByLayer,
+        receipt,
+      });
     }
 
     const shares =
@@ -239,9 +267,19 @@ export async function postLandedCostVoucher(
     for (let i = 0; i < resolved.length; i++) {
       const r = resolved[i]!;
       if (shares[i] !== 0n) {
-        const accountProblem = inventoryOffsetAccountProblem(r.profile.assetAccountId, input.freightAccountId, "freight offset")
-          ?? (r.profile.costingMethod === "standard"
-            ? inventoryOffsetAccountProblem(r.profile.assetAccountId, r.profile.varianceAccountId, "variance") : null);
+        const accountProblem =
+          inventoryOffsetAccountProblem(
+            r.profile.assetAccountId,
+            input.freightAccountId,
+            "freight offset",
+          ) ??
+          (r.profile.costingMethod === "standard"
+            ? inventoryOffsetAccountProblem(
+                r.profile.assetAccountId,
+                r.profile.varianceAccountId,
+                "variance",
+              )
+            : null);
         if (accountProblem) throw new InventoryError(accountProblem);
       }
       if (
@@ -255,27 +293,21 @@ export async function postLandedCostVoucher(
       }
     }
 
-    const documentNumber = await nextSequenceNumber(
-      orgId,
-      "landed_cost_voucher",
-      "LCV-",
-      tx,
-    );
+    const documentNumber = await nextSequenceNumber(orgId, "landed_cost_voucher", "LCV-", tx);
     const bookId = await primaryBookId(orgId, tx);
-    const currency = await subsidiaryCurrency(
-      orgId,
-      input.subsidiaryId,
-      tx,
-    );
+    const currency = await subsidiaryCurrency(orgId, input.subsidiaryId, tx);
     const voucherAmount = persistReceiptMoney(input.amount, "landed cost amount");
-    const voucher = (await tx.execute<{ id: string }>(sql`
+    const voucher = await tx.execute<{ id: string }>(
+      sql`
       insert into landed_cost_vouchers
         (org_id, document_number, status, amount, basis, freight_account_id, source_document_line_id,
          subsidiary_id, voucher_date, memo, created_by, updated_by)
       values (${orgId}, ${documentNumber}, 'draft', ${voucherAmount}, ${input.basis}, ${input.freightAccountId},
               ${input.sourceDocumentLineId ?? null}, ${input.subsidiaryId}, ${input.voucherDate},
               ${input.memo ?? null}, ${actorId}, ${actorId})
-      returning id`, "objects"));
+      returning id`,
+      "objects",
+    );
     const voucherId = voucher[0]!.id;
 
     const entryLines: JournalLineInput[] = [];
@@ -287,7 +319,9 @@ export async function postLandedCostVoucher(
       const share = shares[i]!;
       const shareAmount = fromUnits(share);
       const manualAmount =
-        r.manualAmount == null ? null : persistReceiptMoney(r.manualAmount, "landed cost target amount");
+        r.manualAmount == null
+          ? null
+          : persistReceiptMoney(r.manualAmount, "landed cost target amount");
       await tx.execute(sql`
         insert into landed_cost_voucher_targets
           (org_id, voucher_id, item_id, stock_location_id, manual_amount, allocated_amount, created_by, updated_by)
@@ -362,7 +396,8 @@ export async function postLandedCostVoucher(
             `landed cost share ${fromUnits(share2)} for item ${r.target.itemId} at location ${r.target.stockLocationId} cannot be apportioned across its on-hand layers on the ${input.basis} basis`,
           );
         }
-        const subShares = share2 === 0n ? subWeights.map(() => 0n) : apportion(share2, subWeights.map(toUnits));
+        const subShares =
+          share2 === 0n ? subWeights.map(() => 0n) : apportion(share2, subWeights.map(toUnits));
         for (let j = 0; j < r.layers.length; j++) {
           const layerShare = subShares[j]!;
           if (layerShare === 0n) continue;
@@ -392,19 +427,26 @@ export async function postLandedCostVoucher(
       // that stock location's business location — otherwise location-sliced
       // statements could not tie a location's inventory GL to its layers.
       const targetLocationId = await stockLocationDim(tx, orgId, r.target.stockLocationId, null);
-      const assetAmount = capitalizedShares.has(i) ? fromUnits(capitalizedShares.get(i)!) : shareAmount;
-      if (!isZero(assetAmount)) entryLines.push({
-        accountId:
-          r.profile.costingMethod === "standard"
-            ? r.profile.varianceAccountId!
-            : r.profile.assetAccountId,
-        amount: assetAmount,
-        locationId: targetLocationId,
-        memo: input.memo ?? `Landed cost ${documentNumber}`,
-      });
+      const assetAmount = capitalizedShares.has(i)
+        ? fromUnits(capitalizedShares.get(i)!)
+        : shareAmount;
+      if (!isZero(assetAmount))
+        entryLines.push({
+          accountId:
+            r.profile.costingMethod === "standard"
+              ? r.profile.varianceAccountId!
+              : r.profile.assetAccountId,
+          amount: assetAmount,
+          locationId: targetLocationId,
+          memo: input.memo ?? `Landed cost ${documentNumber}`,
+        });
       for (const leg of consumedLegs.splice(0)) {
-        entryLines.push({ accountId: leg.accountId, amount: leg.amount, locationId: targetLocationId,
-          memo: input.memo ?? `Landed cost ${documentNumber} on units already sold` });
+        entryLines.push({
+          accountId: leg.accountId,
+          amount: leg.amount,
+          locationId: targetLocationId,
+          memo: input.memo ?? `Landed cost ${documentNumber} on units already sold`,
+        });
       }
       // The freight offset splits across the same targets, so every leg of
       // the entry stays location-stamped even for multi-location vouchers.
@@ -465,39 +507,41 @@ export async function reverseLandedCostVoucher(
 ): Promise<ReverseLandedCostVoucherResult> {
   const reason = input.reason.trim();
   if (reason.length < 5 || reason.length > 500) {
-    throw new InventoryError(
-      "reversal reason must be between 5 and 500 characters",
-    );
+    throw new InventoryError("reversal reason must be between 5 and 500 characters");
   }
   assertInventoryDate(input.reversalDate, "reversal date");
 
   return db.transaction(async (tx) => {
-    const voucherResult = (await tx.execute<{
-        id: string;
-        status: string;
-        amount: string;
-        journal_entry_id: string | null;
-        reversal_journal_entry_id: string | null;
-      }>(sql`
+    const voucherResult = await tx.execute<{
+      id: string;
+      status: string;
+      amount: string;
+      journal_entry_id: string | null;
+      reversal_journal_entry_id: string | null;
+    }>(
+      sql`
       select id, status, amount, journal_entry_id, reversal_journal_entry_id
         from landed_cost_vouchers
        where id = ${input.voucherId} and org_id = ${orgId}
        for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const voucher = voucherResult[0];
     if (!voucher) throw new InventoryError("landed-cost voucher not found");
     if (voucher.status === "void") {
       if (!voucher.reversal_journal_entry_id) {
-        throw new InventoryError(
-          "void landed-cost voucher is missing reversal evidence",
-        );
+        throw new InventoryError("void landed-cost voucher is missing reversal evidence");
       }
-      const count = (await tx.execute<{ count: number }>(sql`
+      const count = await tx.execute<{ count: number }>(
+        sql`
         select count(*)::int as count
           from landed_cost_allocations
          where org_id = ${orgId} and voucher_id = ${voucher.id}
            and reverses_allocation_id is not null
-      `, "objects"));
+      `,
+        "objects",
+      );
       return {
         voucherId: voucher.id,
         entryId: voucher.reversal_journal_entry_id,
@@ -506,42 +550,40 @@ export async function reverseLandedCostVoucher(
       };
     }
     if (voucher.status !== "posted" || !voucher.journal_entry_id) {
-      throw new InventoryError(
-        "only a posted landed-cost voucher can be reversed",
-      );
+      throw new InventoryError("only a posted landed-cost voucher can be reversed");
     }
 
-    const targets = (await tx.execute<{ item_id: string; stock_location_id: string }>(sql`
+    const targets = await tx.execute<{ item_id: string; stock_location_id: string }>(
+      sql`
       select item_id, stock_location_id
         from landed_cost_voucher_targets
        where voucher_id = ${voucher.id} and org_id = ${orgId}
        order by item_id, stock_location_id
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!targets.length) {
       throw new InventoryError("landed-cost voucher has no target evidence");
     }
     for (const target of targets) {
-      await lockInventoryPosition(
-        tx,
-        target.item_id,
-        target.stock_location_id,
-      );
+      await lockInventoryPosition(tx, target.item_id, target.stock_location_id);
     }
 
-    const allocations = (await tx.execute<{
-        id: string;
-        target_cost_layer_id: string;
-        basis: "value" | "quantity" | "weight" | "manual" | "standard_variance" | "consumed";
-        amount: string;
-        source_document_line_id: string | null;
-        subsidiary_id: string;
-        source_movement_id: string;
-        received_at: string;
-        original_quantity: string;
-        remaining_quantity: string;
-        unit_cost: string;
-        remaining_original_cost: string | null;
-      }>(sql`
+    const allocations = await tx.execute<{
+      id: string;
+      target_cost_layer_id: string;
+      basis: "value" | "quantity" | "weight" | "manual" | "standard_variance" | "consumed";
+      amount: string;
+      source_document_line_id: string | null;
+      subsidiary_id: string;
+      source_movement_id: string;
+      received_at: string;
+      original_quantity: string;
+      remaining_quantity: string;
+      unit_cost: string;
+      remaining_original_cost: string | null;
+    }>(
+      sql`
       select allocation.id, allocation.target_cost_layer_id, allocation.basis,
              allocation.amount::text, allocation.source_document_line_id,
              layer.subsidiary_id, layer.source_movement_id, layer.received_at::text,
@@ -556,31 +598,28 @@ export async function reverseLandedCostVoucher(
          and allocation.reverses_allocation_id is null
        order by allocation.created_at desc, allocation.id desc
        for update of layer
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (!allocations.length) {
-      throw new InventoryError(
-        "landed-cost voucher has no linked allocation evidence",
-      );
+      throw new InventoryError("landed-cost voucher has no linked allocation evidence");
     }
     const allocated = sum(allocations.map((row) => row.amount));
     if (cmp(allocated, voucher.amount) !== 0) {
-      throw new InventoryError(
-        "landed-cost voucher allocation evidence does not equal its amount",
-      );
+      throw new InventoryError("landed-cost voucher allocation evidence does not equal its amount");
     }
-    const prior = (await tx.execute(sql`
+    const prior = await tx.execute(
+      sql`
       select reverses_allocation_id
         from landed_cost_allocations
        where org_id = ${orgId}
-         and reverses_allocation_id in (${joinIds(
-           allocations.map((row) => row.id),
-         )})
+         and reverses_allocation_id in (${joinIds(allocations.map((row) => row.id))})
        limit 1
-    `, "objects"));
+    `,
+      "objects",
+    );
     if (prior.length) {
-      throw new InventoryError(
-        "landed-cost voucher has partial reversal evidence",
-      );
+      throw new InventoryError("landed-cost voucher has partial reversal evidence");
     }
 
     for (const allocation of allocations) {
@@ -677,10 +716,15 @@ type SourceReceipt = {
  * Reversed receipts are excluded; a line that received nothing here refuses.
  */
 async function sourceReceipt(
-  tx: Parameters<typeof revalueLayerExactly>[0], orgId: string, sourceDocumentLineId: string,
-  target: LandedCostVoucherTargetInput, subsidiaryId: string, profile: InventoryProfile,
+  tx: Parameters<typeof revalueLayerExactly>[0],
+  orgId: string,
+  sourceDocumentLineId: string,
+  target: LandedCostVoucherTargetInput,
+  subsidiaryId: string,
+  profile: InventoryProfile,
 ): Promise<SourceReceipt> {
-  const receipts = await tx.execute<{ id: string; quantity: string; total_value: string | null }>(sql`
+  const receipts = await tx.execute<{ id: string; quantity: string; total_value: string | null }>(
+    sql`
     select movement.id, movement.quantity::text, movement.total_value::text
       from inventory_movements movement
      where movement.org_id = ${orgId} and movement.document_line_id = ${sourceDocumentLineId}
@@ -688,18 +732,25 @@ async function sourceReceipt(
        and movement.subsidiary_id = ${subsidiaryId} and movement.status = 'posted' and movement.quantity > 0
        and not exists (select 1 from inventory_movements reversal
           where reversal.org_id = movement.org_id and reversal.reverses_movement_id = movement.id)
-     order by movement.id`, "objects");
+     order by movement.id`,
+    "objects",
+  );
   if (receipts.length === 0) {
     throw new InventoryError(
       `source line ${sourceDocumentLineId} received no item ${target.itemId} at location ${target.stockLocationId} — choose the receipt line that brought this stock in, or post the voucher without a source line`,
     );
   }
   const movementIds = receipts.map((row) => row.id);
-  const evidence = (await tx.execute<{ id: string }>(sql`
+  const evidence = (
+    await tx.execute<{ id: string }>(
+      sql`
     select id from cost_layers
      where org_id = ${orgId} and item_id = ${target.itemId} and stock_location_id = ${target.stockLocationId}
        and ${profile.costingMethod === "moving_average" ? sql`true` : sql`source_movement_id in (${joinIds(movementIds)})`}
-     order by received_at desc, id limit 1`, "objects"))[0];
+     order by received_at desc, id limit 1`,
+      "objects",
+    )
+  )[0];
   if (!evidence) {
     throw new InventoryError(
       `the receipt from source line ${sourceDocumentLineId} has no cost layer at location ${target.stockLocationId} to anchor landed cost on`,

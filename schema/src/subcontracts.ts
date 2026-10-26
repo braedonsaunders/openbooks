@@ -7,7 +7,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
@@ -30,7 +30,9 @@ export const subcontracts = pgTable(
     description: text("description"),
     status: text("status", {
       enum: ["draft", "pending_approval", "active", "substantially_complete", "closed", "void"],
-    }).notNull().default("draft"),
+    })
+      .notNull()
+      .default("draft"),
     currency: currencyCode("currency").notNull(),
     originalCommitment: money("original_commitment").notNull().default("0"),
     defaultRetainagePercent: money("default_retainage_percent").notNull().default("10"),
@@ -51,14 +53,11 @@ export const subcontracts = pgTable(
     index("subcontracts_project_status").on(t.orgId, t.projectId, t.status),
     index("subcontracts_vendor_status").on(t.orgId, t.vendorId, t.status),
     check("subcontracts_original_nonnegative", sql`${t.originalCommitment} >= 0`),
+    check("subcontracts_retainage_range", sql`${t.defaultRetainagePercent} between 0 and 100`),
     check(
-      "subcontracts_retainage_range",
-      sql`${t.defaultRetainagePercent} between 0 and 100`,
+      "subcontracts_date_window",
+      sql`${t.endsOn} is null or ${t.startsOn} is null or ${t.endsOn} >= ${t.startsOn}`,
     ),
-    check("subcontracts_date_window", sql`${t.endsOn} is null or ${t.startsOn} is null or ${t.endsOn} >= ${t.startsOn}`),
-    check(
-      "subcontracts_approval_pair",
-      sql`(${t.approvedAt} is null) = (${t.approvedBy} is null)`,
-    ),
+    check("subcontracts_approval_pair", sql`(${t.approvedAt} is null) = (${t.approvedBy} is null)`),
   ],
 );

@@ -2,8 +2,15 @@ import "server-only";
 import { z } from "zod";
 import { db } from "@openbooks/engine/platform/db";
 import { listPutawayRules } from "@openbooks/engine/inventory/putaway";
-import { getWarehouse, listWarehouseLocations, listWarehouses } from "@openbooks/engine/inventory/warehouses";
-import { AvailabilityRefusal, getAvailableToPromise } from "@openbooks/engine/inventory/availability";
+import {
+  getWarehouse,
+  listWarehouseLocations,
+  listWarehouses,
+} from "@openbooks/engine/inventory/warehouses";
+import {
+  AvailabilityRefusal,
+  getAvailableToPromise,
+} from "@openbooks/engine/inventory/availability";
 import { replenishmentProposals } from "@openbooks/engine/inventory/replenishment";
 import { isFeatureEnabled } from "../features";
 import { availabilityEntityScope, availabilityRefusalText } from "../availability-report";
@@ -27,7 +34,8 @@ const listWarehousesTool: AssistantToolDef = {
   feature: "warehousing",
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "warehousing"))) return { ok: false, error: "warehousing_feature_disabled" };
+    if (!(await isFeatureEnabled(authz.user.orgId, "warehousing")))
+      return { ok: false, error: "warehousing_feature_disabled" };
     const warehouses = await listWarehouses(db, authz.user.orgId);
     return { ok: true, data: { total: warehouses.length, warehouses, href: "/warehouse" } };
   },
@@ -44,7 +52,8 @@ const getWarehouseTool: AssistantToolDef = {
     id: uuidInput.describe("Warehouse id from list_warehouses"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "warehousing"))) return { ok: false, error: "warehousing_feature_disabled" };
+    if (!(await isFeatureEnabled(authz.user.orgId, "warehousing")))
+      return { ok: false, error: "warehousing_feature_disabled" };
     const { id } = raw as { id: string };
     const orgId = authz.user.orgId;
     const warehouse = await getWarehouse(db, orgId, id);
@@ -66,7 +75,10 @@ const getWarehouseTool: AssistantToolDef = {
  * it, otherwise the caller's default. An entity outside the caller's scope
  * answers "not found", the same as one that does not exist.
  */
-async function toolEntity(authz: Parameters<AssistantToolDef["execute"]>[1], requested: string | undefined) {
+async function toolEntity(
+  authz: Parameters<AssistantToolDef["execute"]>[1],
+  requested: string | undefined,
+) {
   const scope = await availabilityEntityScope(authz, requested);
   if (requested && scope.selectedId !== requested) return null;
   return scope.selectedId;
@@ -87,17 +99,29 @@ const itemAvailabilityTool: AssistantToolDef = {
   feature: "warehousing",
   inputSchema: z.object({
     itemId: uuidInput.describe("Item id"),
-    warehouseId: uuidInput.optional().describe("Warehouse id from list_warehouses; omit for every location"),
-    subsidiaryId: uuidInput.optional().describe("Legal entity; omit for the caller's default entity"),
+    warehouseId: uuidInput
+      .optional()
+      .describe("Warehouse id from list_warehouses; omit for every location"),
+    subsidiaryId: uuidInput
+      .optional()
+      .describe("Legal entity; omit for the caller's default entity"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "warehousing"))) return { ok: false, error: "warehousing_feature_disabled" };
+    if (!(await isFeatureEnabled(authz.user.orgId, "warehousing")))
+      return { ok: false, error: "warehousing_feature_disabled" };
     const input = raw as { itemId: string; warehouseId?: string; subsidiaryId?: string };
     const subsidiaryId = await toolEntity(authz, input.subsidiaryId);
     if (!subsidiaryId) return { ok: false, error: "not found" };
     try {
-      const availability = await getAvailableToPromise(db, authz.user.orgId, { ...input, subsidiaryId });
-      const query = new URLSearchParams({ q: availability.itemLabel, sub: subsidiaryId, ...(input.warehouseId ? { warehouse: input.warehouseId } : {}) });
+      const availability = await getAvailableToPromise(db, authz.user.orgId, {
+        ...input,
+        subsidiaryId,
+      });
+      const query = new URLSearchParams({
+        q: availability.itemLabel,
+        sub: subsidiaryId,
+        ...(input.warehouseId ? { warehouse: input.warehouseId } : {}),
+      });
       return { ok: true, data: { ...availability, href: `/reports/availability?${query}` } };
     } catch (error) {
       return refused(error);
@@ -113,18 +137,33 @@ const replenishmentTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["items.read"] },
   feature: "warehousing",
   inputSchema: z.object({
-    subsidiaryId: uuidInput.optional().describe("Legal entity; omit for the caller's default entity"),
-    status: z.enum(["reorder", "covered", "no_reorder_point", "points_inverted"]).optional().describe("Only lines with this status"),
+    subsidiaryId: uuidInput
+      .optional()
+      .describe("Legal entity; omit for the caller's default entity"),
+    status: z
+      .enum(["reorder", "covered", "no_reorder_point", "points_inverted"])
+      .optional()
+      .describe("Only lines with this status"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "warehousing"))) return { ok: false, error: "warehousing_feature_disabled" };
+    if (!(await isFeatureEnabled(authz.user.orgId, "warehousing")))
+      return { ok: false, error: "warehousing_feature_disabled" };
     const input = raw as { subsidiaryId?: string; status?: string };
     const subsidiaryId = await toolEntity(authz, input.subsidiaryId);
     if (!subsidiaryId) return { ok: false, error: "not found" };
     try {
-      const lines = (await replenishmentProposals(db, authz.user.orgId, { subsidiaryId }))
-        .filter((line) => !input.status || line.status === input.status);
-      return { ok: true, data: { subsidiaryId, total: lines.length, lines, href: `/reports/replenishment?sub=${subsidiaryId}` } };
+      const lines = (await replenishmentProposals(db, authz.user.orgId, { subsidiaryId })).filter(
+        (line) => !input.status || line.status === input.status,
+      );
+      return {
+        ok: true,
+        data: {
+          subsidiaryId,
+          total: lines.length,
+          lines,
+          href: `/reports/replenishment?sub=${subsidiaryId}`,
+        },
+      };
     } catch (error) {
       return refused(error);
     }

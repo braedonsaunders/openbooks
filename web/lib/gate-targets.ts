@@ -15,9 +15,7 @@ export function featureRequiredHref(featureKey: string): string {
   return `/feature-required?feature=${encodeURIComponent(featureKey)}`;
 }
 
-export function parseFeatureRequiredParam(
-  value: string | string[] | undefined,
-): string | null {
+export function parseFeatureRequiredParam(value: string | string[] | undefined): string | null {
   const key = Array.isArray(value) ? value[0] : value;
   // Feature keys are camelCase slugs; anything else is a crafted URL, not a
   // gate outcome — the page answers not-found for those (honest nonexistent).

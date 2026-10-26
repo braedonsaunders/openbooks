@@ -3,11 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import type { MigrationSource } from "./source.ts";
 import { verifyCurrentLedgerState } from "./sync.ts";
 
@@ -18,11 +14,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
-    const actorId = await createScratchUser(
-      org.orgId,
-      "Projection Boundary Controller",
-      "admin",
-    );
+    const actorId = await createScratchUser(org.orgId, "Projection Boundary Controller", "admin");
     const sourceDocumentId = randomUUID();
     const sourceEntryId = randomUUID();
     const nativeEntryId = randomUUID();

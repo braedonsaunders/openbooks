@@ -1,5 +1,5 @@
-import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 /**
  * The customise page's heading stack, moved out of `page.tsx` so both render
@@ -17,10 +17,10 @@ export function CustomizeDashboardHeader({
   title,
   roleLabel,
 }: {
-  backHref: string
-  backLabel: string
-  title: string
-  roleLabel: string
+  backHref: string;
+  backLabel: string;
+  title: string;
+  roleLabel: string;
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -36,5 +36,5 @@ export function CustomizeDashboardHeader({
         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{roleLabel}</p>
       </div>
     </div>
-  )
+  );
 }

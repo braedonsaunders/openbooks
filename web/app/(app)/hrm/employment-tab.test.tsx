@@ -12,14 +12,17 @@ import test from "node:test";
 
 // jsdom first: the tab reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/entities/employees", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/entities/employees",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../testing/stub-modules");
 stubModules({ navigation: "export function useRouter(){return { refresh(){}, push(){} }}" });
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -71,7 +74,8 @@ function installFetch(handler: (url: string) => Response): () => void {
 function recordOf(record: Record<string, unknown>): (url: string) => Response {
   return (url: string) => {
     if (url.startsWith("/api/hrm/employments/emp-1?")) return Response.json({ record });
-    if (url.startsWith("/api/hrm/qualifications?")) return Response.json({ error: "denied" }, { status: 403 });
+    if (url.startsWith("/api/hrm/qualifications?"))
+      return Response.json({ error: "denied" }, { status: 403 });
     if (url.startsWith("/api/hrm/enrollments?")) return Response.json({ enrollments: [] });
     if (url.startsWith("/api/hrm/dependents?")) return Response.json({ dependents: [] });
     if (url.startsWith("/api/hrm/feedback?")) return Response.json({ feedback: [] });
@@ -108,7 +112,8 @@ test("a refused as-of resolution renders the code and remedy, never the record",
       asOf: null,
       asOfRefusal: {
         code: "NO_VERSION",
-        message: "no version covers 2026-09-22 — file a change request with an earlier effective date",
+        message:
+          "no version covers 2026-09-22 — file a change request with an earlier effective date",
       },
       episodes: [],
       changeRequests: [],
@@ -127,7 +132,10 @@ test("a refused as-of resolution renders the code and remedy, never the record",
     text.includes("no version covers 2026-09-22"),
     "the refusal panel carries the server remedy verbatim",
   );
-  assert.ok(textOf().includes("No change requests yet."), "the request list still states its own empty state");
+  assert.ok(
+    textOf().includes("No change requests yet."),
+    "the request list still states its own empty state",
+  );
 });
 
 test("a benefits 403 hides the section while the record renders", async (t) => {
@@ -135,14 +143,18 @@ test("a benefits 403 hides the section while the record renders", async (t) => {
     if (url.startsWith("/api/hrm/employments/emp-1?")) {
       return Response.json({
         record: {
-          asOf: { version: { status: "active", effectiveFrom: "2026-01-01", effectiveTo: null }, assignments: [] },
+          asOf: {
+            version: { status: "active", effectiveFrom: "2026-01-01", effectiveTo: null },
+            assignments: [],
+          },
           asOfRefusal: null,
           episodes: [],
           changeRequests: [],
         },
       });
     }
-    if (url.startsWith("/api/hrm/enrollments?")) return Response.json({ error: "denied" }, { status: 403 });
+    if (url.startsWith("/api/hrm/enrollments?"))
+      return Response.json({ error: "denied" }, { status: 403 });
     return recordOf({})(url);
   });
   t.after(restoreFetch);
@@ -150,19 +162,39 @@ test("a benefits 403 hides the section while the record renders", async (t) => {
   t.after(unmount);
 
   const text = textOf();
-  assert.ok(!text.includes("Benefits"), "a 403 without the benefits grant hides the section instead of failing the tab");
-  assert.equal(document.querySelector('[role="alert"]'), null, "no refusal renders beside the readable record");
-  assert.ok(text.includes("No change requests yet."), "the record sections render around the hidden benefits");
+  assert.ok(
+    !text.includes("Benefits"),
+    "a 403 without the benefits grant hides the section instead of failing the tab",
+  );
+  assert.equal(
+    document.querySelector('[role="alert"]'),
+    null,
+    "no refusal renders beside the readable record",
+  );
+  assert.ok(
+    text.includes("No change requests yet."),
+    "the record sections render around the hidden benefits",
+  );
 });
 
 test("change requests list status, revision binding, and the approval link", async (t) => {
   const restoreFetch = installFetch(
     recordOf({
-      asOf: { version: { status: "active", effectiveFrom: "2026-01-01", effectiveTo: null }, assignments: [] },
+      asOf: {
+        version: { status: "active", effectiveFrom: "2026-01-01", effectiveTo: null },
+        assignments: [],
+      },
       asOfRefusal: null,
       episodes: [],
       changeRequests: [
-        { id: "cr-1", status: "draft", requestRevision: 3, expectedEmploymentRevision: 2, submittedAt: null, flowRunId: null },
+        {
+          id: "cr-1",
+          status: "draft",
+          requestRevision: 3,
+          expectedEmploymentRevision: 2,
+          submittedAt: null,
+          flowRunId: null,
+        },
         {
           id: "cr-2",
           status: "pending_approval",
@@ -184,7 +216,10 @@ test("change requests list status, revision binding, and the approval link", asy
     text.includes("Request revision 3 against employment revision 2"),
     "rows bind the request revision to the employment revision",
   );
-  assert.ok(text.includes("Draft — no approval run yet."), "drafts state their lack of a run instead of a dead link");
+  assert.ok(
+    text.includes("Draft — no approval run yet."),
+    "drafts state their lack of a run instead of a dead link",
+  );
   assert.ok(text.includes("View in inbox"), "bound runs link to the native inbox surface");
   assert.ok(text.includes("2026-08-21"), "submitted rows show their stamp");
 });

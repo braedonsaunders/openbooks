@@ -40,7 +40,11 @@ function errorChain(error: unknown): string {
 async function bankFileFixture(): Promise<BankFileFixture> {
   const org = await createScratchOrg();
   try {
-    const actorId = await createScratchUser(org.orgId, "Payroll release operator", "payroll_release");
+    const actorId = await createScratchUser(
+      org.orgId,
+      "Payroll release operator",
+      "payroll_release",
+    );
     await grantScratchPermissions(org.orgId, actorId, ["payroll.run"]);
     const documentId = randomUUID();
     const scheduleId = randomUUID();
@@ -133,91 +137,119 @@ async function bankFileFixture(): Promise<BankFileFixture> {
   }
 }
 
-test("payroll bank-file release records valid evidence at the storage boundary", { skip: !DB }, async () => {
-  const fixture = await bankFileFixture();
-  try {
-    const released = await releasePayRunBankFile(
-      fixture.org.orgId,
-      fixture.artifactId,
-      fixture.actorId,
-    );
-    assert.equal(released.artifact.status, "released");
-    assert.equal(released.artifact.releaseCount, 1);
-    assert.ok(released.artifact.firstReleasedAt);
-    assert.ok(released.artifact.lastReleasedAt);
+test(
+  "payroll bank-file release records valid evidence at the storage boundary",
+  { skip: !DB },
+  async () => {
+    const fixture = await bankFileFixture();
+    try {
+      const released = await releasePayRunBankFile(
+        fixture.org.orgId,
+        fixture.artifactId,
+        fixture.actorId,
+      );
+      assert.equal(released.artifact.status, "released");
+      assert.equal(released.artifact.releaseCount, 1);
+      assert.ok(released.artifact.firstReleasedAt);
+      assert.ok(released.artifact.lastReleasedAt);
 
-    const row = (await db.execute<{
-      status: string;
-      releaseCount: number;
-      firstReleasedAt: string | null;
-      lastReleasedAt: string | null;
-    }>(sql`
+      const row = (
+        await db.execute<{
+          status: string;
+          releaseCount: number;
+          firstReleasedAt: string | null;
+          lastReleasedAt: string | null;
+        }>(sql`
       select status, release_count as "releaseCount",
              first_released_at as "firstReleasedAt",
              last_released_at as "lastReleasedAt"
         from pay_run_bank_files
-       where org_id = ${fixture.org.orgId} and id = ${fixture.artifactId}`)).rows[0]!;
-    assert.deepEqual(row, {
-      status: "released",
-      releaseCount: 1,
-      firstReleasedAt: row.firstReleasedAt,
-      lastReleasedAt: row.lastReleasedAt,
-    });
-    await db.execute(sql`update pay_run_bank_files set status = 'superseded', superseded_at = now(), superseded_by = ${fixture.actorId}, supersede_reason = 'bank replacement' where org_id = ${fixture.org.orgId} and id = ${fixture.artifactId}`);
-    await assert.rejects(releasePayRunBankFile(fixture.org.orgId, fixture.artifactId, fixture.actorId), /superseded.*replacement/i);
-  } finally {
-    await dropScratchOrgReporting(fixture.org.orgId);
-  }
-});
+       where org_id = ${fixture.org.orgId} and id = ${fixture.artifactId}`)
+      ).rows[0]!;
+      assert.deepEqual(row, {
+        status: "released",
+        releaseCount: 1,
+        firstReleasedAt: row.firstReleasedAt,
+        lastReleasedAt: row.lastReleasedAt,
+      });
+      await db.execute(
+        sql`update pay_run_bank_files set status = 'superseded', superseded_at = now(), superseded_by = ${fixture.actorId}, supersede_reason = 'bank replacement' where org_id = ${fixture.org.orgId} and id = ${fixture.artifactId}`,
+      );
+      await assert.rejects(
+        releasePayRunBankFile(fixture.org.orgId, fixture.artifactId, fixture.actorId),
+        /superseded.*replacement/i,
+      );
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
 
-test("payroll bank-file status cannot be changed without release evidence", { skip: !DB }, async () => {
-  const fixture = await bankFileFixture();
-  try {
-    await assert.rejects(
-      db.execute(sql`
+test(
+  "payroll bank-file status cannot be changed without release evidence",
+  { skip: !DB },
+  async () => {
+    const fixture = await bankFileFixture();
+    try {
+      await assert.rejects(
+        db.execute(sql`
         update pay_run_bank_files
            set status = 'released'
          where org_id = ${fixture.org.orgId} and id = ${fixture.artifactId}`),
-      (error) => errorChain(error).includes("pay_run_bank_files_release_evidence"),
-    );
-    await assert.rejects(
-      db.execute(sql`
+        (error) => errorChain(error).includes("pay_run_bank_files_release_evidence"),
+      );
+      await assert.rejects(
+        db.execute(sql`
         update pay_run_bank_files
            set release_count = 1,
                first_released_at = now(),
                last_released_at = now()
          where org_id = ${fixture.org.orgId} and id = ${fixture.artifactId}`),
-      (error) => errorChain(error).includes("pay_run_bank_files_release_evidence"),
-    );
-  } finally {
-    await dropScratchOrgReporting(fixture.org.orgId);
-  }
-});
+        (error) => errorChain(error).includes("pay_run_bank_files_release_evidence"),
+      );
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
 
-test("the payroll bank-file release-evidence constraint is validated over every stored row", { skip: !DB }, async () => {
-  const constraint = (await db.execute<{ validated: boolean }>(sql`
+test(
+  "the payroll bank-file release-evidence constraint is validated over every stored row",
+  { skip: !DB },
+  async () => {
+    const constraint = (
+      await db.execute<{ validated: boolean }>(sql`
     select convalidated as validated
       from pg_constraint
      where conrelid = 'public.pay_run_bank_files'::regclass
-       and conname = 'pay_run_bank_files_release_evidence'`)).rows[0];
-  assert.deepEqual(constraint, { validated: true });
-});
+       and conname = 'pay_run_bank_files_release_evidence'`)
+    ).rows[0];
+    assert.deepEqual(constraint, { validated: true });
+  },
+);
 
 test("payroll bank-file release is tenant-isolated", { skip: !DB }, async () => {
   const fixture = await bankFileFixture();
   const otherOrg = await createScratchOrg();
   try {
-    const otherActorId = await createScratchUser(otherOrg.orgId, "Other payroll release operator", "payroll_release");
+    const otherActorId = await createScratchUser(
+      otherOrg.orgId,
+      "Other payroll release operator",
+      "payroll_release",
+    );
     await grantScratchPermissions(otherOrg.orgId, otherActorId, ["payroll.run"]);
     await assert.rejects(
       withOrgContext(otherOrg.orgId, () =>
-        releasePayRunBankFile(otherOrg.orgId, fixture.artifactId, otherActorId)),
+        releasePayRunBankFile(otherOrg.orgId, fixture.artifactId, otherActorId),
+      ),
       /payroll bank file not found/,
     );
-    const row = (await db.execute<{ status: string; releaseCount: number }>(sql`
+    const row = (
+      await db.execute<{ status: string; releaseCount: number }>(sql`
       select status, release_count as "releaseCount"
         from pay_run_bank_files
-       where org_id = ${fixture.org.orgId} and id = ${fixture.artifactId}`)).rows[0]!;
+       where org_id = ${fixture.org.orgId} and id = ${fixture.artifactId}`)
+    ).rows[0]!;
     assert.deepEqual(row, { status: "generated", releaseCount: 0 });
   } finally {
     await dropScratchOrgReporting(otherOrg.orgId);

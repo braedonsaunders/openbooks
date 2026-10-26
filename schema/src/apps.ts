@@ -6,7 +6,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid
+  uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -58,7 +58,10 @@ export const apps = pgTable(
      * deliberately PRESERVES provisioned objects (they hold living master
      * data); this map is how a reinstall knows it may upgrade them.
      */
-    provisioned: jsonb("provisioned").$type<{ recordTypes?: string[]; customFields?: string[] }>().notNull().default({}),
+    provisioned: jsonb("provisioned")
+      .$type<{ recordTypes?: string[]; customFields?: string[] }>()
+      .notNull()
+      .default({}),
     ...auditColumns,
   },
   (t) => [

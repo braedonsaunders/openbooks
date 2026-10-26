@@ -1,12 +1,12 @@
-import { reportEntityCatalog } from '@/lib/custom-record-report-catalog'
-import 'server-only'
+import { reportEntityCatalog } from "@/lib/custom-record-report-catalog";
+import "server-only";
 
-import { notFound, redirect } from 'next/navigation'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { payrollSubsidiaryScopeFilter } from '@openbooks/engine/payroll/scope'
-import { getLocale, getTranslations } from 'next-intl/server'
-import { civilDateParams, reportPeriodLabel } from '../../../../../../lib/format'
+import { notFound, redirect } from "next/navigation";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { payrollSubsidiaryScopeFilter } from "@openbooks/engine/payroll/scope";
+import { getLocale, getTranslations } from "next-intl/server";
+import { civilDateParams, reportPeriodLabel } from "../../../../../../lib/format";
 import {
   pagination,
   ref,
@@ -14,27 +14,33 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
+} from "@braedonsaunders/appkit-viewspec";
 import {
   applyBuiltInUrlFilters,
   BUILT_IN_REPORT_DEFINITION_MAP,
   POINT_IN_TIME_DEFAULT_PERIOD_PRESET,
   POINT_IN_TIME_PERIOD_PRESETS,
   type ReportRunResult,
-} from '@openbooks/reports'
-import { can, requirePermission } from '../../../../../../lib/authz'
-import { canRunReportEntity, requireReportEntityFeature } from '../../../../../../lib/report-authz'
-import { clamp, isUuid, pickString } from '../../../../../../lib/list-params'
+} from "@openbooks/reports";
+import { can, requirePermission } from "../../../../../../lib/authz";
+import { canRunReportEntity, requireReportEntityFeature } from "../../../../../../lib/report-authz";
+import { clamp, isUuid, pickString } from "../../../../../../lib/list-params";
 import {
-  applyPeriodOverride, executeReport, executeReportPage, loadReportDefinition, reportAsOfField, reportPeriodField, resolveReportAsOf,
-} from '../../../../../../lib/custom-reports'
-import { statementPageHref } from '../../../../../../lib/report-run'
-import { orgBranding } from '../../../../../../lib/report-pdf'
-import { parseReportQuery } from '../../../../../../lib/report-filters'
-import { resolvePeriod } from '../../../../../../lib/periods'
-import type { ExtraPeriodOption } from '../../../ReportFilterBar'
-import type { ReportDrillTarget } from '../../../../../../lib/report-drill'
-import { statementReportSpec } from '@/lib/reports/statement-report-spec'
+  applyPeriodOverride,
+  executeReport,
+  executeReportPage,
+  loadReportDefinition,
+  reportAsOfField,
+  reportPeriodField,
+  resolveReportAsOf,
+} from "../../../../../../lib/custom-reports";
+import { statementPageHref } from "../../../../../../lib/report-run";
+import { orgBranding } from "../../../../../../lib/report-pdf";
+import { parseReportQuery } from "../../../../../../lib/report-filters";
+import { resolvePeriod } from "../../../../../../lib/periods";
+import type { ExtraPeriodOption } from "../../../ReportFilterBar";
+import type { ReportDrillTarget } from "../../../../../../lib/report-drill";
+import { statementReportSpec } from "@/lib/reports/statement-report-spec";
 
 /**
  * A saved query report IS a regular report: this screen is the exact native
@@ -70,89 +76,91 @@ import { statementReportSpec } from '@/lib/reports/statement-report-spec'
  */
 
 export interface ReportRunData {
-  title: string
-  description: string | null
-  backHref: string
-  backLabel: string
-  hasPeriodField: boolean
+  title: string;
+  description: string | null;
+  backHref: string;
+  backLabel: string;
+  hasPeriodField: boolean;
   /** The report is read as of one date (a point-in-time source). */
-  hasAsOfField: boolean
+  hasAsOfField: boolean;
   /** The presets the as-of control offers: single days and a custom date. */
-  asOfPeriodPresets: string[]
-  noPeriodField: boolean
+  asOfPeriodPresets: string[];
+  noPeriodField: boolean;
   /** Payroll pay periods offered atop the fiscal presets; undefined otherwise. */
-  extraPeriods: ExtraPeriodOption[] | undefined
-  canCreate: boolean
-  editHref: string
-  editLabel: string
-  definitionId: string
-  historyHref: string
-  exportBaseHref: string
-  company: string
-  periodPhrase: string | null
-  periodLabel: string | undefined
-  hasResult: boolean
-  hasError: boolean
-  result: ReportRunResult | null
-  drillTarget: ReportDrillTarget | null
-  error: string | null
-  hasPageInfo: boolean
-  pagerBasePath: string
-  totalRows: number
-  currentPage: number
-  perPage: number
+  extraPeriods: ExtraPeriodOption[] | undefined;
+  canCreate: boolean;
+  editHref: string;
+  editLabel: string;
+  definitionId: string;
+  historyHref: string;
+  exportBaseHref: string;
+  company: string;
+  periodPhrase: string | null;
+  periodLabel: string | undefined;
+  hasResult: boolean;
+  hasError: boolean;
+  result: ReportRunResult | null;
+  drillTarget: ReportDrillTarget | null;
+  error: string | null;
+  hasPageInfo: boolean;
+  pagerBasePath: string;
+  totalRows: number;
+  currentPage: number;
+  perPage: number;
 }
 
 export async function loadReportRun(
   id: string,
   sp: Record<string, string | undefined>,
 ): Promise<ReportRunData> {
-  const authz = await requirePermission('reports.read')
-  const canCreate = can(authz, 'reports.create')
-  if (!isUuid(id)) notFound()
+  const authz = await requirePermission("reports.read");
+  const canCreate = can(authz, "reports.create");
+  if (!isUuid(id)) notFound();
 
-  const definition = await loadReportDefinition(authz.user.orgId, id)
-  if (!definition) notFound()
+  const definition = await loadReportDefinition(authz.user.orgId, id);
+  if (!definition) notFound();
   // Standard statement definitions are viewed through their rich drill-through
   // pages, not the entity-query runner.
-  if (definition.report_type === 'statement') redirect(statementPageHref(definition.statement))
-  if (!definition.query) notFound()
+  if (definition.report_type === "statement") redirect(statementPageHref(definition.statement));
+  if (!definition.query) notFound();
 
   // Sensitive / optional-module entities carry their own permission and
   // Features switch on top of reports.read — same gate as /api/reports/run.
-  const entityMap = await reportEntityCatalog(authz)
-  const entity = entityMap[(definition.query as { entity?: string }).entity ?? '']
-  await requireReportEntityFeature(authz, definition.query)
-  if (!(await canRunReportEntity(authz, definition.query))) notFound()
+  const entityMap = await reportEntityCatalog(authz);
+  const entity = entityMap[(definition.query as { entity?: string }).entity ?? ""];
+  await requireReportEntityFeature(authz, definition.query);
+  if (!(await canRunReportEntity(authz, definition.query))) notFound();
 
-  const pagination = entity?.pagination
+  const pagination = entity?.pagination;
   const pageNum = pagination
     ? clamp(
-        Number(pickString(sp.page) ?? '1'),
+        Number(pickString(sp.page) ?? "1"),
         1,
         Math.floor(Number.MAX_SAFE_INTEGER / pagination.maxPageSize),
       )
-    : 1
+    : 1;
   const perPage = pagination
     ? clamp(
         Number(pickString(sp.perPage) ?? String(pagination.defaultPageSize)),
         1,
         pagination.maxPageSize,
       )
-    : 0
+    : 0;
 
-  const t = await getTranslations('reports')
-  const locale = await getLocale()
-  const tRunner = await getTranslations('reports.custom.runner')
-  const tc = await getTranslations('common')
+  const t = await getTranslations("reports");
+  const locale = await getLocale();
+  const tRunner = await getTranslations("reports.custom.runner");
+  const tc = await getTranslations("common");
 
   // Built-in definitions localize by slug; custom slugs fall back to stored text.
-  const displayName = definition.kind === 'built_in' && t.has(`builtIns.${definition.slug}.name`)
-    ? t(`builtIns.${definition.slug}.name`)
-    : definition.name
-  const displayDescription = definition.kind === 'built_in' && t.has(`builtIns.${definition.slug}.description`)
-    ? t(`builtIns.${definition.slug}.description`)
-    : definition.description
+  const displayName =
+    definition.kind === "built_in" && t.has(`builtIns.${definition.slug}.name`)
+      ? t(`builtIns.${definition.slug}.name`)
+      : definition.name;
+  const displayDescription =
+    definition.kind === "built_in" && t.has(`builtIns.${definition.slug}.description`)
+      ? t(`builtIns.${definition.slug}.description`)
+      : definition.description;
 
   // The native period picker governs the report's date field exactly like the
   // statement pages: the URL period (default preset when untouched) replaces
@@ -161,42 +169,52 @@ export async function loadReportRun(
   // field. URL bindings such as expiresOnOrBefore are independent controls;
   // feeding those back into period detection would replace the user's cutoff
   // with an implicit fiscal window.
-  const periodField = reportPeriodField(definition.query, entityMap)
-  const asOfField = reportAsOfField(definition.query, entityMap)
-  let query = definition.query
-  let periodPhrase: string | undefined
-  let periodLabel: string | undefined
-  let queryError: Error | null = null
+  const periodField = reportPeriodField(definition.query, entityMap);
+  const asOfField = reportAsOfField(definition.query, entityMap);
+  let query = definition.query;
+  let periodPhrase: string | undefined;
+  let periodLabel: string | undefined;
+  let queryError: Error | null = null;
   try {
-    if (definition.kind === 'built_in') {
-      const builtIn = BUILT_IN_REPORT_DEFINITION_MAP[definition.slug]
-      if (!builtIn) throw new Error(`Unknown built-in report: ${definition.slug}`)
-      query = applyBuiltInUrlFilters({ ...builtIn, query }, sp)
+    if (definition.kind === "built_in") {
+      const builtIn = BUILT_IN_REPORT_DEFINITION_MAP[definition.slug];
+      if (!builtIn) throw new Error(`Unknown built-in report: ${definition.slug}`);
+      query = applyBuiltInUrlFilters({ ...builtIn, query }, sp);
     }
     if (periodField) {
-      const q = parseReportQuery(sp)
-      const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
-      query = applyPeriodOverride(query, periodField, { from: period.from, to: period.to })
-      periodPhrase = t('pnl.dateRange', civilDateParams({ from: period.from, to: period.to }, locale))
-      periodLabel = reportPeriodLabel(period, locale)
+      const q = parseReportQuery(sp);
+      const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to });
+      query = applyPeriodOverride(query, periodField, { from: period.from, to: period.to });
+      periodPhrase = t(
+        "pnl.dateRange",
+        civilDateParams({ from: period.from, to: period.to }, locale),
+      );
+      periodLabel = reportPeriodLabel(period, locale);
     }
     // A point-in-time source reads as of the as-of control's date, today
     // when none is chosen; the cumulative movements are bounded by it alone.
     if (asOfField && !periodField) {
-      const asOf = await resolveReportAsOf(sp)
-      query = { ...query, asOf: asOf.to }
-      periodPhrase = t('balanceSheet.asOf', civilDateParams({ date: asOf.to }, locale))
-      periodLabel = reportPeriodLabel(asOf, locale)
+      const asOf = await resolveReportAsOf(sp);
+      query = { ...query, asOf: asOf.to };
+      periodPhrase = t("balanceSheet.asOf", civilDateParams({ date: asOf.to }, locale));
+      periodLabel = reportPeriodLabel(asOf, locale);
     }
   } catch (err) {
-    queryError = err instanceof Error ? err : new Error('Invalid report filters')
+    queryError = err instanceof Error ? err : new Error("Invalid report filters");
   }
 
   // Payroll reports offer their real pay periods atop the fiscal presets —
   // "one pay period at a time" is THE payroll reporting window.
-  let extraPeriods: ExtraPeriodOption[] | undefined
-  if (entity?.category === 'payroll') {
-    const runs = (await db.execute<{ document_number: string; period_start: string; period_end: string; pay_date: string; schedule: string | null }>(sql`
+  let extraPeriods: ExtraPeriodOption[] | undefined;
+  if (entity?.category === "payroll") {
+    const runs = await db.execute<{
+      document_number: string;
+      period_start: string;
+      period_end: string;
+      pay_date: string;
+      schedule: string | null;
+    }>(
+      sql`
       select d.document_number, r.period_start, r.period_end, r.pay_date, ps.name as schedule
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
@@ -205,34 +223,36 @@ export async function loadReportRun(
          ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
        order by r.period_end desc
        limit 27
-    `, 'objects'))
+    `,
+      "objects",
+    );
     // The label names the worked period; the WINDOW is the run's pay date —
     // payroll plans filter on pay_date, which lands after the period ends.
     extraPeriods = runs.map((run) => ({
       id: run.document_number,
-      label: `${run.document_number} · ${String(run.period_start).slice(0, 10)} → ${String(run.period_end).slice(0, 10)}${run.schedule ? ` (${run.schedule})` : ''}`,
+      label: `${run.document_number} · ${String(run.period_start).slice(0, 10)} → ${String(run.period_end).slice(0, 10)}${run.schedule ? ` (${run.schedule})` : ""}`,
       from: String(run.pay_date).slice(0, 10),
       to: String(run.pay_date).slice(0, 10),
-    }))
+    }));
   }
 
   // Exports mirror every effective URL-backed report filter while deliberately
   // omitting viewer pagination. The export route re-applies the same filter
   // bindings to the full result set.
-  const exportParams = new URLSearchParams()
+  const exportParams = new URLSearchParams();
   for (const [key, value] of Object.entries(sp)) {
-    if (!value || key === 'page' || key === 'perPage' || key === 'format') continue
-    exportParams.set(key, value)
+    if (!value || key === "page" || key === "perPage" || key === "format") continue;
+    exportParams.set(key, value);
   }
-  const exportQs = exportParams.size ? `?${exportParams}` : ''
+  const exportQs = exportParams.size ? `?${exportParams}` : "";
 
   // Native reports land showing data: execute the plan read-only on the
   // server (no report_runs row — scheduled/recorded runs persist their own).
-  let result: ReportRunResult | null = null
-  let error: string | null = null
-  const branding = await orgBranding(authz.user.orgId)
+  let result: ReportRunResult | null = null;
+  let error: string | null = null;
+  const branding = await orgBranding(authz.user.orgId);
   if (queryError) {
-    error = queryError.message
+    error = queryError.message;
   } else {
     try {
       const executed = pagination
@@ -240,22 +260,22 @@ export async function loadReportRun(
             offset: (pageNum - 1) * perPage,
             limit: perPage,
           })
-        : await executeReport(authz.user.orgId, query)
+        : await executeReport(authz.user.orgId, query);
       if (pagination && !executed.pageInfo) {
-        throw new Error('Paged report result is missing page metadata')
+        throw new Error("Paged report result is missing page metadata");
       }
-      result = executed
+      result = executed;
     } catch (err) {
-      console.error('[reports/custom/run] report execution failed', err)
-      error = tRunner('runFailedHelp')
+      console.error("[reports/custom/run] report execution failed", err);
+      error = tRunner("runFailedHelp");
     }
   }
 
   return {
     title: displayName,
     description: displayDescription,
-    backHref: '/reports',
-    backLabel: t('hub.title'),
+    backHref: "/reports",
+    backLabel: t("hub.title"),
     hasPeriodField: Boolean(periodField),
     hasAsOfField: !periodField && Boolean(asOfField),
     asOfPeriodPresets: [...POINT_IN_TIME_PERIOD_PRESETS],
@@ -263,7 +283,7 @@ export async function loadReportRun(
     extraPeriods,
     canCreate,
     editHref: `/reports/custom/builder/${definition.id}`,
-    editLabel: tc('actions.edit'),
+    editLabel: tc("actions.edit"),
     definitionId: definition.id,
     historyHref: `/reports/custom/run/${definition.id}/delivery`,
     exportBaseHref: `/api/reports/definitions/${definition.id}/export${exportQs}`,
@@ -274,7 +294,7 @@ export async function loadReportRun(
     hasError: !result,
     result,
     drillTarget: result
-      ? { kind: 'custom', source: 'definition', id: definition.id, label: displayName }
+      ? { kind: "custom", source: "definition", id: definition.id, label: displayName }
       : null,
     error,
     hasPageInfo: Boolean(result?.pageInfo),
@@ -282,23 +302,23 @@ export async function loadReportRun(
     totalRows: result?.pageInfo?.totalRows ?? 0,
     currentPage: pageNum,
     perPage,
-  }
+  };
 }
 
-const f = ref<ReportRunData>()
+const f = ref<ReportRunData>();
 
 export function reportRunSpec(data: ReportRunData): PageSpec {
   const edit = widget(
-    'link-button',
-    { href: data.editHref, label: data.editLabel, variant: 'outline', size: 'sm' },
-    f('canCreate'),
-  )
+    "link-button",
+    { href: data.editHref, label: data.editLabel, variant: "outline", size: "sm" },
+    f("canCreate"),
+  );
   return statementReportSpec({
-    route: '/reports/custom/run/[id]',
+    route: "/reports/custom/run/[id]",
     header: {
-      title: f('title'),
-      description: f('periodLabel'),
-      back: { href: f('backHref'), label: f('backLabel') },
+      title: f("title"),
+      description: f("periodLabel"),
+      back: { href: f("backHref"), label: f("backLabel") },
     },
     actionsBefore: [edit],
     schedule: { definitionId: data.definitionId, historyHref: data.historyHref },
@@ -306,55 +326,55 @@ export function reportRunSpec(data: ReportRunData): PageSpec {
     filters: [
       {
         controls: { period: true },
-        options: { extraPeriods: f('extraPeriods'), when: f('hasPeriodField') },
+        options: { extraPeriods: f("extraPeriods"), when: f("hasPeriodField") },
       },
       {
         controls: { period: true, asOf: true },
         options: {
           defaultPeriod: POINT_IN_TIME_DEFAULT_PERIOD_PRESET,
-          periodPresets: f('asOfPeriodPresets'),
-          when: f('hasAsOfField'),
+          periodPresets: f("asOfPeriodPresets"),
+          when: f("hasAsOfField"),
         },
       },
       {
         controls: { period: false },
-        options: { extraPeriods: f('extraPeriods'), when: f('noPeriodField') },
+        options: { extraPeriods: f("extraPeriods"), when: f("noPeriodField") },
       },
     ],
     bodyBeforePaper: [
       {
-        ...widgetBlock('result-view', {
+        ...widgetBlock("result-view", {
           company: data.company,
           title: data.title,
           description: data.periodPhrase,
           result: data.result,
           drillTarget: data.drillTarget,
         }),
-        when: f('hasResult'),
+        when: f("hasResult"),
       },
     ],
     paper: {
-      company: f('company'),
-      title: f('title'),
-      periodPhrase: f('periodPhrase'),
-      when: f('hasError'),
+      company: f("company"),
+      title: f("title"),
+      periodPhrase: f("periodPhrase"),
+      when: f("hasError"),
     },
     blocks: [
-      textBlock(f('error'), {
-        className: 'py-12 text-center text-sm text-slate-500 dark:text-slate-400',
+      textBlock(f("error"), {
+        className: "py-12 text-center text-sm text-slate-500 dark:text-slate-400",
       }),
     ],
     bodyAfterPaper: [
       {
         ...pagination({
-          basePath: f('pagerBasePath'),
-          total: f('totalRows'),
-          page: f('currentPage'),
-          perPage: f('perPage'),
+          basePath: f("pagerBasePath"),
+          total: f("totalRows"),
+          page: f("currentPage"),
+          perPage: f("perPage"),
           bare: true,
         }),
-        when: f('hasPageInfo'),
+        when: f("hasPageInfo"),
       },
     ],
-  })
+  });
 }

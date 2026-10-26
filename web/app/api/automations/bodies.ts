@@ -1,13 +1,13 @@
-import { z } from 'zod'
-import { uuidString } from '@openbooks/engine/platform/identifiers'
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
 import {
   automationActions,
   automationConditions,
   automationRules,
   automationTrigger,
-} from '@openbooks/engine/automations/triggers'
+} from "@openbooks/engine/automations/triggers";
 
-const uuid = uuidString('must be a valid id')
+const uuid = uuidString("must be a valid id");
 
 export const createAutomationBody = z.object({
   name: z.string().trim().min(1).max(200),
@@ -17,7 +17,7 @@ export const createAutomationBody = z.object({
   conditions: automationConditions.nullish(),
   actions: automationActions,
   priority: z.number().int().min(0).max(1000).nullish(),
-})
+});
 
 export const patchAutomationBody = z
   .object({
@@ -31,24 +31,24 @@ export const patchAutomationBody = z
     expectedVersion: z.number().int().min(1),
   })
   .refine(
-    (body) => Object.keys(body).some((key) => key !== 'expectedVersion'),
-    'provide at least one automation field to update',
-  )
+    (body) => Object.keys(body).some((key) => key !== "expectedVersion"),
+    "provide at least one automation field to update",
+  );
 
 export const automationStatusBody = z.object({
-  status: z.enum(['enabled', 'disabled']),
-})
+  status: z.enum(["enabled", "disabled"]),
+});
 
 export const runAutomationBody = z.object({
   subjectEntity: z.string().min(1).nullish(),
   subjectId: uuid.nullish(),
-})
+});
 
 export const simulateAutomationBody = z.object({
   subjectEntity: z.string().min(1).nullish(),
   subjectId: uuid.nullish(),
   sampleSize: z.number().int().min(1).max(20).nullish(),
-})
+});
 
 export const actionReasonRouteBody = z.object({
   action: z.string().min(1),
@@ -56,21 +56,20 @@ export const actionReasonRouteBody = z.object({
   label: z.string().trim().min(1),
   requiresComment: z.boolean().nullish(),
   isActive: z.boolean().nullish(),
-})
+});
 
 export const rescindBody = z.object({
-  reason: z.string().trim().min(1, 'reason required').max(2000),
-})
+  reason: z.string().trim().min(1, "reason required").max(2000),
+});
 
 export const correctBody = z.object({
-  reason: z.string().trim().min(1, 'reason required').max(2000),
+  reason: z.string().trim().min(1, "reason required").max(2000),
   correctedFields: z.record(z.string().min(1), z.json()).nullish(),
   prefillPayload: z
     .record(z.string().min(1), z.json())
     .refine(
-      (payload) =>
-        typeof payload.kind === 'string' && payload.kind.trim().length > 0,
-      'prefillPayload.kind is required',
+      (payload) => typeof payload.kind === "string" && payload.kind.trim().length > 0,
+      "prefillPayload.kind is required",
     )
     .nullish(),
-})
+});

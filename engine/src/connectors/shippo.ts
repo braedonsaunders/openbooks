@@ -36,19 +36,36 @@ function auth(ctx: CarrierContext): Record<string, string> {
   };
 }
 
-async function post(ctx: CarrierContext, path: string, body: unknown, describe: string): Promise<unknown> {
-  return callProvider("Shippo", { ...ctx, baseUrl: base(ctx) }, path, {
-    method: "POST",
-    headers: auth(ctx),
-    body: JSON.stringify(body),
-  }, describe);
+async function post(
+  ctx: CarrierContext,
+  path: string,
+  body: unknown,
+  describe: string,
+): Promise<unknown> {
+  return callProvider(
+    "Shippo",
+    { ...ctx, baseUrl: base(ctx) },
+    path,
+    {
+      method: "POST",
+      headers: auth(ctx),
+      body: JSON.stringify(body),
+    },
+    describe,
+  );
 }
 
 async function get(ctx: CarrierContext, path: string, describe: string): Promise<unknown> {
-  return callProvider("Shippo", { ...ctx, baseUrl: base(ctx) }, path, {
-    method: "GET",
-    headers: auth(ctx),
-  }, describe);
+  return callProvider(
+    "Shippo",
+    { ...ctx, baseUrl: base(ctx) },
+    path,
+    {
+      method: "GET",
+      headers: auth(ctx),
+    },
+    describe,
+  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -89,7 +106,9 @@ function mapRate(raw: unknown): CarrierRate {
   return {
     providerRateId: str(raw, "object_id", "rate"),
     carrier: optStr(raw, "provider") ?? "unknown",
-    service: service ? (optStr(service, "name") ?? optStr(service, "token") ?? "unknown") : "unknown",
+    service: service
+      ? (optStr(service, "name") ?? optStr(service, "token") ?? "unknown")
+      : "unknown",
     amount: str(raw, "amount", "rate"),
     currency: optStr(raw, "currency") ?? "USD",
     deliveryDate: null,
@@ -98,13 +117,21 @@ function mapRate(raw: unknown): CarrierRate {
 }
 
 /** Parse a created shipment: its id plus every quoted rate. */
-export function parseShipmentRates(raw: unknown): { providerShipmentId: string; rates: CarrierRate[] } {
+export function parseShipmentRates(raw: unknown): {
+  providerShipmentId: string;
+  rates: CarrierRate[];
+} {
   if (!isRecord(raw)) throw new CarrierError("Shippo shipment is not an object");
   const status = optStr(raw, "status");
   if (status && status !== "SUCCESS" && status !== "QUEUED") {
     const messages = Array.isArray(raw["messages"]) ? raw["messages"] : [];
-    const first = messages.filter(isRecord).map((message) => optStr(message, "text")).find(Boolean);
-    throw new CarrierError(`Shippo rate shopping failed with status ${status}${first ? `: ${first}` : ""}`);
+    const first = messages
+      .filter(isRecord)
+      .map((message) => optStr(message, "text"))
+      .find(Boolean);
+    throw new CarrierError(
+      `Shippo rate shopping failed with status ${status}${first ? `: ${first}` : ""}`,
+    );
   }
   const rates = raw["rates"];
   if (!Array.isArray(rates)) throw new CarrierError("Shippo shipment carries no rates array");
@@ -117,8 +144,13 @@ export function parseBoughtLabel(raw: unknown, providerRateId: string): CarrierB
   const status = optStr(raw, "status");
   if (status !== "SUCCESS" && status !== "QUEUED") {
     const messages = Array.isArray(raw["messages"]) ? raw["messages"] : [];
-    const first = messages.filter(isRecord).map((message) => optStr(message, "text")).find(Boolean);
-    throw new CarrierError(`Shippo label purchase failed with status ${status ?? "unknown"}${first ? `: ${first}` : ""}`);
+    const first = messages
+      .filter(isRecord)
+      .map((message) => optStr(message, "text"))
+      .find(Boolean);
+    throw new CarrierError(
+      `Shippo label purchase failed with status ${status ?? "unknown"}${first ? `: ${first}` : ""}`,
+    );
   }
   return {
     providerShipmentId: optStr(raw, "shipment") ?? "",
@@ -136,12 +168,18 @@ export function parseBoughtLabel(raw: unknown, providerRateId: string): CarrierB
 /** Shippo tracking states onto the hub vocabulary. */
 export function mapTrackerStatus(status: string): string {
   switch (status.toUpperCase()) {
-    case "PRE_TRANSIT": return "pre_transit";
-    case "TRANSIT": return "in_transit";
-    case "DELIVERED": return "delivered";
-    case "RETURNED": return "returned";
-    case "FAILURE": return "exception";
-    default: return "unknown";
+    case "PRE_TRANSIT":
+      return "pre_transit";
+    case "TRANSIT":
+      return "in_transit";
+    case "DELIVERED":
+      return "delivered";
+    case "RETURNED":
+      return "returned";
+    case "FAILURE":
+      return "exception";
+    default:
+      return "unknown";
   }
 }
 
@@ -169,7 +207,10 @@ export function parseAddressValidation(raw: unknown): CarrierAddressSuggestion {
   const messages = Array.isArray(result["messages"]) ? result["messages"] : [];
   return {
     valid: result["is_valid"] === true,
-    messages: messages.filter(isRecord).map((message) => optStr(message, "text") ?? "address error").slice(0, 10),
+    messages: messages
+      .filter(isRecord)
+      .map((message) => optStr(message, "text") ?? "address error")
+      .slice(0, 10),
     suggestion: null,
   };
 }
@@ -209,15 +250,26 @@ export const shippoAdapter: CarrierAdapter = {
     }
     const raw = await post(ctx, "/shipments/", body, "rate shopping");
     const parsed = parseShipmentRates(raw);
-    return [{
-      providerShipmentId: parsed.providerShipmentId,
-      parcelIndexes: req.parcels.map((_, index) => index),
-      rates: parsed.rates,
-    }];
+    return [
+      {
+        providerShipmentId: parsed.providerShipmentId,
+        parcelIndexes: req.parcels.map((_, index) => index),
+        rates: parsed.rates,
+      },
+    ];
   },
 
-  async buyLabel(ctx: CarrierContext, _providerShipmentId: string, providerRateId: string): Promise<CarrierBoughtLabel> {
-    const raw = await post(ctx, "/transactions/", { rate: providerRateId, async: false }, "label purchase");
+  async buyLabel(
+    ctx: CarrierContext,
+    _providerShipmentId: string,
+    providerRateId: string,
+  ): Promise<CarrierBoughtLabel> {
+    const raw = await post(
+      ctx,
+      "/transactions/",
+      { rate: providerRateId, async: false },
+      "label purchase",
+    );
     return parseBoughtLabel(raw, providerRateId);
   },
 
@@ -225,24 +277,40 @@ export const shippoAdapter: CarrierAdapter = {
     ctx: CarrierContext,
     ref: { providerShipmentId: string; providerLabelId: string | null },
   ): Promise<{ accepted: boolean; rawStatus: string }> {
-    if (!ref.providerLabelId) throw new CarrierError("Shippo refund needs the purchased transaction id");
-    const raw = await post(ctx, "/refunds/", { transaction: ref.providerLabelId, async: false }, "label refund");
+    if (!ref.providerLabelId)
+      throw new CarrierError("Shippo refund needs the purchased transaction id");
+    const raw = await post(
+      ctx,
+      "/refunds/",
+      { transaction: ref.providerLabelId, async: false },
+      "label refund",
+    );
     const status = isRecord(raw) ? (optStr(raw, "status") ?? "unknown") : "unknown";
     return { accepted: status !== "ERROR", rawStatus: status };
   },
 
-  async validateAddress(ctx: CarrierContext, address: CarrierAddress): Promise<CarrierAddressSuggestion> {
-    const raw = await post(ctx, "/addresses/", { ...addressPayload(address), validate: true }, "address validation");
+  async validateAddress(
+    ctx: CarrierContext,
+    address: CarrierAddress,
+  ): Promise<CarrierAddressSuggestion> {
+    const raw = await post(
+      ctx,
+      "/addresses/",
+      { ...addressPayload(address), validate: true },
+      "address validation",
+    );
     return parseAddressValidation(raw);
   },
 
   async getTracker(ctx: CarrierContext, ref: CarrierTrackerRef): Promise<CarrierTrackerState> {
     if (ref.carrier && ref.trackingNumber) {
-      return parseTracker(await get(
-        ctx,
-        `/tracks/${encodeURIComponent(ref.carrier)}/${encodeURIComponent(ref.trackingNumber)}/`,
-        "tracker refresh",
-      ));
+      return parseTracker(
+        await get(
+          ctx,
+          `/tracks/${encodeURIComponent(ref.carrier)}/${encodeURIComponent(ref.trackingNumber)}/`,
+          "tracker refresh",
+        ),
+      );
     }
     throw new CarrierError("Shippo tracker refresh needs a carrier plus tracking number");
   },

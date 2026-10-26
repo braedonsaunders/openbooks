@@ -45,12 +45,14 @@ export async function committedPlHistory(input: {
   payDate: string;
   excludeDocumentId: string;
 }): Promise<PlCommittedHistory> {
-  const row = (await input.tx.execute<{
-    dochod: string | null;
-    podstawa: string | null;
-    payer_first_pay: string | null;
-    payer_first_period: string | null;
-  }>(sql`
+  const row = (
+    await input.tx.execute<{
+      dochod: string | null;
+      podstawa: string | null;
+      payer_first_pay: string | null;
+      payer_first_period: string | null;
+    }>(
+      sql`
     with payer as (
       select s.employee_party_id, s.pay_date, r.period_start, s.factors
         from pay_stubs s
@@ -73,7 +75,10 @@ export async function committedPlHistory(input: {
       min(pay_date)::text as payer_first_pay,
       min(period_start)::text as payer_first_period
       from payer
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return {
     dochod: row?.dochod ?? "0",
     podstawaSpoleczne: row?.podstawa ?? "0",
@@ -112,9 +117,9 @@ export function resolvePlYearToDate(input: {
     const podstawa = opening.answers["podstawa_emerytalna_ytd"] ?? "";
     if (dochod === "" || podstawa === "") {
       throw new PayrollPackError(
-        "PL opening year-to-date (pl_otwarcie_roku) is on file without both figures: record the "
-        + "dochód and the emerytalne/rentowe base this payer paid before its payroll ran here "
-        + "(zero when nothing was paid) before calculating.",
+        "PL opening year-to-date (pl_otwarcie_roku) is on file without both figures: record the " +
+          "dochód and the emerytalne/rentowe base this payer paid before its payroll ran here " +
+          "(zero when nothing was paid) before calculating.",
       );
     }
     openingDochod = toUnits(dochod);
@@ -125,21 +130,26 @@ export function resolvePlYearToDate(input: {
   }
   const january = `${input.taxYear}-01-31`;
   const hiredOn = input.hiredOn ? String(input.hiredOn).slice(0, 10) : "";
-  const adoption = [history.payerFirstPeriodStart, input.periodStart ? String(input.periodStart).slice(0, 10) : null]
-    .filter((value): value is string => value !== null && value !== "")
-    .sort()[0] ?? null;
-  const complete = input.payDate <= january
-    || openingOnFile
-    || (history.payerFirstPayDate !== null && history.payerFirstPayDate <= january)
-    || (hiredOn !== "" && adoption !== null && hiredOn >= adoption);
+  const adoption =
+    [
+      history.payerFirstPeriodStart,
+      input.periodStart ? String(input.periodStart).slice(0, 10) : null,
+    ]
+      .filter((value): value is string => value !== null && value !== "")
+      .sort()[0] ?? null;
+  const complete =
+    input.payDate <= january ||
+    openingOnFile ||
+    (history.payerFirstPayDate !== null && history.payerFirstPayDate <= january) ||
+    (hiredOn !== "" && adoption !== null && hiredOn >= adoption);
   if (!complete) {
     throw new PayrollPackError(
-      `PL year-to-date is incomplete for ${input.payDate}: the 120 000 zł PIT threshold and the `
-      + "emerytalne/rentowe annual limit test what this payer paid since 1 January, and its payroll "
-      + "has not run here since then. If the employee joined this payer after its payroll started "
-      + "running here, record the hire date on the employee record; otherwise record what this payer "
-      + "paid before its payroll ran here (dochód and emerytalne/rentowe base, zero when nothing) on "
-      + "the employee's opening year-to-date (pl_otwarcie_roku) before calculating.",
+      `PL year-to-date is incomplete for ${input.payDate}: the 120 000 zł PIT threshold and the ` +
+        "emerytalne/rentowe annual limit test what this payer paid since 1 January, and its payroll " +
+        "has not run here since then. If the employee joined this payer after its payroll started " +
+        "running here, record the hire date on the employee record; otherwise record what this payer " +
+        "paid before its payroll ran here (dochód and emerytalne/rentowe base, zero when nothing) on " +
+        "the employee's opening year-to-date (pl_otwarcie_roku) before calculating.",
     );
   }
   return {

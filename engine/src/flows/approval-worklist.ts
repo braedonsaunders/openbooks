@@ -48,9 +48,9 @@ export async function worklistApprovals(
   userId: string,
   scope: WorklistScope = {},
 ): Promise<UnifiedApproval[]> {
-  return (
-    await worklistGates(orgId, userId, scope.roles, scope.allowedSubsidiaryIds)
-  ).map((gate) => ({ kind: "flow_gate", id: gate.id, gate }));
+  return (await worklistGates(orgId, userId, scope.roles, scope.allowedSubsidiaryIds)).map(
+    (gate) => ({ kind: "flow_gate", id: gate.id, gate }),
+  );
 }
 export async function worklistApprovalsCount(
   orgId: string,
@@ -77,8 +77,7 @@ export async function worklistApprovalsPage(
   scope: WorklistPageScope = {},
   page: WorklistPage,
 ): Promise<WorklistPageResult> {
-  if (scope.includeFlows === false)
-    return { items: [], total: 0, kindCounts: new Map() };
+  if (scope.includeFlows === false) return { items: [], total: 0, kindCounts: new Map() };
   const audience = scope.audience ?? "caller";
   const [rows, counts, kindCounts] = await Promise.all([
     worklistGates(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, {
@@ -123,8 +122,7 @@ export async function worklistGatesAwaitingAnotherApprover(
 ): Promise<string[]> {
   const blocked: string[] = [];
   for (const gate of await worklistGates(orgId, userId, roles, allowedSubsidiaryIds))
-    if ((await gateDecisionCapability(gate.id, userId)).sodBlocked)
-      blocked.push(gate.id);
+    if ((await gateDecisionCapability(gate.id, userId)).sodBlocked) blocked.push(gate.id);
   return blocked;
 }
 export async function worklistApprovalById(
@@ -133,9 +131,11 @@ export async function worklistApprovalById(
   scope: WorklistScope,
   sourceId: string,
 ): Promise<UnifiedApproval | null> {
-    const gate = (await worklistGates(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, {
+  const gate = (
+    await worklistGates(orgId, userId, scope.roles, scope.allowedSubsidiaryIds, {
       prefix: 1,
       gateId: sourceId,
-    }))[0];
-    return gate ? { kind: "flow_gate", id: gate.id, gate } : null;
-  }
+    })
+  )[0];
+  return gate ? { kind: "flow_gate", id: gate.id, gate } : null;
+}

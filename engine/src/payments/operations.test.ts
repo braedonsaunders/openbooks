@@ -79,13 +79,17 @@ test(
             bank: org.accounts.bank,
           },
         });
-        const invoiceControl = await db.execute<{ id: string }>(sql`
+        const invoiceControl = await db.execute<{ id: string }>(
+          sql`
           select id
             from journal_lines
            where entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
-        `, "objects");
+        `,
+          "objects",
+        );
 
-        const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+        const payment = await createPaymentDocument({
+          allowedSubsidiaryIds: null,
           orgId: org.orgId,
           kind: "customer_payment",
           createdBy: actorId,
@@ -167,7 +171,11 @@ test(
             returnReason: "Insufficient funds",
           }),
         (error: unknown) => {
-          assert.equal(postgresFailure(error), null, "refused by the domain guard, not by the database");
+          assert.equal(
+            postgresFailure(error),
+            null,
+            "refused by the domain guard, not by the database",
+          );
           assert.equal(
             (error as Error).message,
             "bank statement line does not belong to the payment run's bank account",
@@ -189,7 +197,8 @@ test(
           settlements: number;
           run_status: string;
           events: number;
-        }>(sql`
+        }>(
+          sql`
           select
             (select status from documents where id = ${seeded.paymentDocumentId}) as document_status,
             (select reversal_entry_id from documents where id = ${seeded.paymentDocumentId}) as document_reversal_entry_id,
@@ -214,7 +223,9 @@ test(
             (select count(*)::int from payment_settlements where payment_instruction_id = ${seeded.instructionId}) as settlements,
             (select status from payment_runs where id = ${seeded.runId}) as run_status,
             (select count(*)::int from payment_events where payment_instruction_id = ${seeded.instructionId}) as events
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.deepEqual(state[0], {
         document_status: "posted",
@@ -273,13 +284,17 @@ test(
             bank: org.accounts.bank,
           },
         });
-        const invoiceControl = await db.execute<{ id: string }>(sql`
+        const invoiceControl = await db.execute<{ id: string }>(
+          sql`
           select id
             from journal_lines
            where entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
-        `, "objects");
+        `,
+          "objects",
+        );
 
-        const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+        const payment = await createPaymentDocument({
+          allowedSubsidiaryIds: null,
           orgId: org.orgId,
           kind: "customer_payment",
           createdBy: actorId,
@@ -382,7 +397,8 @@ test(
           settlements: number;
           run_status: string;
           events: number;
-        }>(sql`
+        }>(
+          sql`
           select
             (select status from documents where id = ${seeded.paymentDocumentId}) as document_status,
             (select reversal_entry_id from documents where id = ${seeded.paymentDocumentId}) as document_reversal_entry_id,
@@ -407,7 +423,9 @@ test(
             (select count(*)::int from payment_settlements where payment_instruction_id = ${seeded.instructionId}) as settlements,
             (select status from payment_runs where id = ${seeded.runId}) as run_status,
             (select count(*)::int from payment_events where payment_instruction_id = ${seeded.instructionId}) as events
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.deepEqual(state[0], {
         document_status: "posted",
@@ -590,7 +608,9 @@ async function generationOutcomeSnapshot(
   orgId: string,
   runId: string,
 ): Promise<GenerationOutcomeSnapshot | undefined> {
-  return (await db.execute<GenerationOutcomeSnapshot>(sql`
+  return (
+    await db.execute<GenerationOutcomeSnapshot>(
+      sql`
     select (select count(*)::int from payment_files pf
              where pf.payment_run_id = ${runId} and pf.org_id = ${orgId}
                and pf.status not in ('superseded', 'voided', 'rejected')) as live_files,
@@ -599,38 +619,40 @@ async function generationOutcomeSnapshot(
                 and e.event_type = 'file_generated') as generated_events,
            (select status from payment_runs r
              where r.id = ${runId} and r.org_id = ${orgId}) as run_status
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
 }
 
-test(
-  "a rolled-back run cannot gain a bank-file artifact",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    try {
-      const actorId = await withBypass(() =>
-        createScratchUser(org.orgId, "Generation Operator", "admin"),
-      );
-      const runId = await withOrgContext(org.orgId, () => seedGeneratableRun(org, actorId));
-      await withOrgContext(org.orgId, () =>
-        rollbackPaymentRun(runId, org.orgId, actorId, "duplicate submission"),
-      );
-      await assert.rejects(
-        withOrgContext(org.orgId, () => generatePaymentFileArtifact(runId, org.orgId, actorId)),
-        (error: Error) =>
-          error instanceof PaymentError
-          && error.message === "approve the payment run before generating its file",
-      );
-      assert.deepEqual(await withOrgContext(org.orgId, () => generationOutcomeSnapshot(org.orgId, runId)), {
+test("a rolled-back run cannot gain a bank-file artifact", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() =>
+      createScratchUser(org.orgId, "Generation Operator", "admin"),
+    );
+    const runId = await withOrgContext(org.orgId, () => seedGeneratableRun(org, actorId));
+    await withOrgContext(org.orgId, () =>
+      rollbackPaymentRun(runId, org.orgId, actorId, "duplicate submission"),
+    );
+    await assert.rejects(
+      withOrgContext(org.orgId, () => generatePaymentFileArtifact(runId, org.orgId, actorId)),
+      (error: Error) =>
+        error instanceof PaymentError &&
+        error.message === "approve the payment run before generating its file",
+    );
+    assert.deepEqual(
+      await withOrgContext(org.orgId, () => generationOutcomeSnapshot(org.orgId, runId)),
+      {
         live_files: 0,
         generated_events: 0,
         run_status: "rolled_back",
-      });
-    } finally {
-      await withBypass(() => dropScratchOrg(org.orgId));
-    }
-  },
-);
+      },
+    );
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test(
   "generation cannot publish an artifact when rollback commits during rendering",
@@ -639,8 +661,12 @@ test(
     const org = await withBypass(() => createScratchOrg());
     let releaseRollback!: () => void;
     let announceRollback!: () => void;
-    const rollbackHeld = new Promise<void>((resolve) => { announceRollback = resolve; });
-    const release = new Promise<void>((resolve) => { releaseRollback = resolve; });
+    const rollbackHeld = new Promise<void>((resolve) => {
+      announceRollback = resolve;
+    });
+    const release = new Promise<void>((resolve) => {
+      releaseRollback = resolve;
+    });
     let rollbackTransaction: Promise<void> | undefined;
     try {
       const actorId = await withBypass(() =>
@@ -666,8 +692,11 @@ test(
       let blockedOnRunRow = false;
       const deadline = Date.now() + 5_000;
       while (Date.now() < deadline && !blockedOnRunRow) {
-        const waiting = await withBypass(async () =>
-          (await db.execute<{ waiting: boolean }>(sql`
+        const waiting = await withBypass(
+          async () =>
+            (
+              await db.execute<{ waiting: boolean }>(
+                sql`
             select exists (
               select 1 from pg_stat_activity
                where datname = current_database()
@@ -675,7 +704,10 @@ test(
                  and wait_event_type = 'Lock'
                  and query like '%update payment_runs set file_created_at%'
             ) as waiting
-          `, "objects"))[0]?.waiting ?? false,
+          `,
+                "objects",
+              )
+            )[0]?.waiting ?? false,
         );
         blockedOnRunRow = waiting;
         if (!blockedOnRunRow) await new Promise((resolve) => setTimeout(resolve, 25));
@@ -685,8 +717,9 @@ test(
       await rollbackTransaction;
       await assert.rejects(
         generation,
-        (error: Error) => error instanceof PaymentError
-          && error.message === "approve the payment run before generating its file",
+        (error: Error) =>
+          error instanceof PaymentError &&
+          error.message === "approve the payment run before generating its file",
       );
       assert.deepEqual(
         await withOrgContext(org.orgId, () => generationOutcomeSnapshot(org.orgId, runId)),
@@ -696,13 +729,18 @@ test(
       releaseRollback();
       await rollbackTransaction?.catch(() => undefined);
       const artifactIds = await withBypass(async () =>
-        (await db.execute<{ id: string }>(sql`
+        (
+          await db.execute<{ id: string }>(
+            sql`
           select id from payment_files where org_id = ${org.orgId}
             and payment_run_id in (
               select id from payment_runs where org_id = ${org.orgId}
                 and run_number like 'GEN-%'
             )
-        `, "objects")).map((row) => row.id),
+        `,
+            "objects",
+          )
+        ).map((row) => row.id),
       );
       for (const artifactId of artifactIds) {
         await withBypass(() => removePaymentFileFixture(org.orgId, artifactId));
@@ -732,11 +770,14 @@ test(
       assert.equal(first.id, second.id);
       artifactId = first.id;
       assert.equal(first.filename, second.filename);
-      assert.deepEqual(await withOrgContext(org.orgId, () => generationOutcomeSnapshot(org.orgId, runId)), {
-        live_files: 1,
-        generated_events: 1,
-        run_status: "generated",
-      });
+      assert.deepEqual(
+        await withOrgContext(org.orgId, () => generationOutcomeSnapshot(org.orgId, runId)),
+        {
+          live_files: 1,
+          generated_events: 1,
+          run_status: "generated",
+        },
+      );
     } finally {
       if (artifactId) {
         const cleanupArtifactId = artifactId;
@@ -747,59 +788,62 @@ test(
   },
 );
 
-test(
-  "delivery recording fails closed when a rollback voided the file",
-  { skip: !DB },
-  async () => {
-    const org = await withBypass(() => createScratchOrg());
-    let seeded: { fileId: string; runId: string } | undefined;
-    try {
-      const generatorId = await withBypass(() =>
-        createScratchUser(org.orgId, "Voided Delivery Generator", "payment_file_generator"),
-      );
-      const approverId = await withBypass(() =>
-        createScratchUser(org.orgId, "Voided Delivery Approver", "payment_file_approver"),
-      );
-      seeded = await withOrgContext(org.orgId, () =>
-        seedApprovedPaymentFile(org, generatorId, approverId),
-      );
-      const seededFileId = seeded.fileId;
-      const seededRunId = seeded.runId;
-      await withOrgContext(org.orgId, () =>
-        rollbackPaymentRun(seededRunId, org.orgId, approverId, "run recalled before dispatch"),
-      );
-      await assert.rejects(
-        withOrgContext(org.orgId, () =>
-          recordPaymentFileDownload(seededFileId, org.orgId, approverId),
-        ),
-        (error: Error) =>
-          error instanceof PaymentError
-          && error.message === "payment file is not approved for delivery",
-      );
-      const state = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          file_status: string;
-          deliveries: number;
-          run_status: string;
-        }>(sql`
+test("delivery recording fails closed when a rollback voided the file", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  let seeded: { fileId: string; runId: string } | undefined;
+  try {
+    const generatorId = await withBypass(() =>
+      createScratchUser(org.orgId, "Voided Delivery Generator", "payment_file_generator"),
+    );
+    const approverId = await withBypass(() =>
+      createScratchUser(org.orgId, "Voided Delivery Approver", "payment_file_approver"),
+    );
+    seeded = await withOrgContext(org.orgId, () =>
+      seedApprovedPaymentFile(org, generatorId, approverId),
+    );
+    const seededFileId = seeded.fileId;
+    const seededRunId = seeded.runId;
+    await withOrgContext(org.orgId, () =>
+      rollbackPaymentRun(seededRunId, org.orgId, approverId, "run recalled before dispatch"),
+    );
+    await assert.rejects(
+      withOrgContext(org.orgId, () =>
+        recordPaymentFileDownload(seededFileId, org.orgId, approverId),
+      ),
+      (error: Error) =>
+        error instanceof PaymentError &&
+        error.message === "payment file is not approved for delivery",
+    );
+    const state = await withOrgContext(
+      org.orgId,
+      async () =>
+        (
+          await db.execute<{
+            file_status: string;
+            deliveries: number;
+            run_status: string;
+          }>(
+            sql`
           select pf.status as file_status,
                  (select count(*)::int from payment_file_deliveries d
                    where d.payment_file_id = pf.id and d.org_id = pf.org_id) as deliveries,
                  (select r.status from payment_runs r where r.id = pf.payment_run_id) as run_status
             from payment_files pf
            where pf.id = ${seededFileId} and pf.org_id = ${org.orgId}
-        `, "objects"))[0]
-      );
-      assert.deepEqual(state, { file_status: "voided", deliveries: 0, run_status: "rolled_back" });
-    } finally {
-      if (seeded) {
-        const cleanupFileId = seeded.fileId;
-        await withBypass(() => removePaymentFileFixture(org.orgId, cleanupFileId));
-      }
-      await withBypass(() => dropScratchOrg(org.orgId));
+        `,
+            "objects",
+          )
+        )[0],
+    );
+    assert.deepEqual(state, { file_status: "voided", deliveries: 0, run_status: "rolled_back" });
+  } finally {
+    if (seeded) {
+      const cleanupFileId = seeded.fileId;
+      await withBypass(() => removePaymentFileFixture(org.orgId, cleanupFileId));
     }
-  },
-);
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
 
 test(
   "SFTP delivery records only the file claim that was approved and published",
@@ -817,54 +861,72 @@ test(
       seeded = await withOrgContext(org.orgId, () =>
         seedApprovedPaymentFile(org, generatorId, approverId),
       );
-      const claim = await withOrgContext(org.orgId, () => claimPaymentFileDelivery({
-        fileId: seeded!.fileId,
-        orgId: org.orgId,
-        userId: approverId,
-        owner: "sftp:primary-bank",
-      }));
-
-      await assert.rejects(
-        withOrgContext(org.orgId, () => recordPaymentFileSftpDelivery({
+      const claim = await withOrgContext(org.orgId, () =>
+        claimPaymentFileDelivery({
           fileId: seeded!.fileId,
           orgId: org.orgId,
           userId: approverId,
-          targetRef: "primary-bank/payments",
-          claimToken: randomUUID(),
-        })),
-        (error: Error) => error instanceof PaymentError
-          && error.message.includes("cannot record the SFTP delivery")
-          && error.message.includes("claim by sftp:primary-bank"),
+          owner: "sftp:primary-bank",
+        }),
       );
-      const afterWrongClaim = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{ file_status: string; deliveries: number }>(sql`
+
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          recordPaymentFileSftpDelivery({
+            fileId: seeded!.fileId,
+            orgId: org.orgId,
+            userId: approverId,
+            targetRef: "primary-bank/payments",
+            claimToken: randomUUID(),
+          }),
+        ),
+        (error: Error) =>
+          error instanceof PaymentError &&
+          error.message.includes("cannot record the SFTP delivery") &&
+          error.message.includes("claim by sftp:primary-bank"),
+      );
+      const afterWrongClaim = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{ file_status: string; deliveries: number }>(
+              sql`
           select pf.status as file_status,
                  (select count(*)::int from payment_file_deliveries d
                    where d.payment_file_id = pf.id and d.org_id = pf.org_id) as deliveries
             from payment_files pf
            where pf.id = ${seeded!.fileId} and pf.org_id = ${org.orgId}
-        `, "objects"))[0],
+        `,
+              "objects",
+            )
+          )[0],
       );
       assert.deepEqual(afterWrongClaim, { file_status: "delivering", deliveries: 0 });
 
-      await withOrgContext(org.orgId, () => recordPaymentFileSftpDelivery({
-        fileId: seeded!.fileId,
-        orgId: org.orgId,
-        userId: approverId,
-        targetRef: "primary-bank/payments",
-        claimToken: claim.token,
-        response: { remoteId: "batch-2048" },
-      }));
-      const recorded = await withOrgContext(org.orgId, async () =>
-        (await db.execute<{
-          file_status: string;
-          claim_token: string | null;
-          run_status: string;
-          delivery_count: number;
-          delivery_target: string | null;
-          remote_id: string | null;
-          delivery_events: number;
-        }>(sql`
+      await withOrgContext(org.orgId, () =>
+        recordPaymentFileSftpDelivery({
+          fileId: seeded!.fileId,
+          orgId: org.orgId,
+          userId: approverId,
+          targetRef: "primary-bank/payments",
+          claimToken: claim.token,
+          response: { remoteId: "batch-2048" },
+        }),
+      );
+      const recorded = await withOrgContext(
+        org.orgId,
+        async () =>
+          (
+            await db.execute<{
+              file_status: string;
+              claim_token: string | null;
+              run_status: string;
+              delivery_count: number;
+              delivery_target: string | null;
+              remote_id: string | null;
+              delivery_events: number;
+            }>(
+              sql`
           select pf.status as file_status, pf.delivery_claim_token as claim_token,
                  r.status as run_status,
                  (select count(*)::int from payment_file_deliveries d
@@ -881,7 +943,10 @@ test(
             from payment_files pf
             join payment_runs r on r.id = pf.payment_run_id and r.org_id = pf.org_id
            where pf.id = ${seeded!.fileId} and pf.org_id = ${org.orgId}
-        `, "objects"))[0],
+        `,
+              "objects",
+            )
+          )[0],
       );
       assert.deepEqual(recorded, {
         file_status: "delivered",
@@ -923,7 +988,10 @@ test("payment registers neutralise payee text a spreadsheet would execute", () =
     ['=HYPERLINK("https://evil.example","Pay")', "-12.50"],
     ["@SUM(A1)", "100.00"],
   ]);
-  assert.equal(csv, `payee,amount\r\n"'=HYPERLINK(""https://evil.example"",""Pay"")",-12.50\r\n'@SUM(A1),100.00\r\n`);
+  assert.equal(
+    csv,
+    `payee,amount\r\n"'=HYPERLINK(""https://evil.example"",""Pay"")",-12.50\r\n'@SUM(A1),100.00\r\n`,
+  );
 });
 
 test("a complete NACHA debit originator parses, trimmed, with the corporate SEC default", () => {
@@ -963,8 +1031,14 @@ test("an over-long odfiRouting is refused rather than truncated to the wrong ins
 });
 
 test("an unrecognised SEC code falls back to CCD instead of reaching the 3-character field", () => {
-  assert.equal(nachaOriginator({ ...NACHA_ORIGINATOR, entryClassCode: "WEB" }).entryClassCode, undefined);
-  assert.equal(nachaOriginator({ ...NACHA_ORIGINATOR, entryClassCode: "PPD" }).entryClassCode, "PPD");
+  assert.equal(
+    nachaOriginator({ ...NACHA_ORIGINATOR, entryClassCode: "WEB" }).entryClassCode,
+    undefined,
+  );
+  assert.equal(
+    nachaOriginator({ ...NACHA_ORIGINATOR, entryClassCode: "PPD" }).entryClassCode,
+    "PPD",
+  );
 });
 
 test("a well-formed routing with a bad check digit is refused, naming the field", () => {
@@ -972,18 +1046,23 @@ test("a well-formed routing with a bad check digit is refused, naming the field"
   // 021000029 fails the ABA mod-10 check digit while 021000021 passes it.
   assert.throws(
     () => nachaOriginator({ ...NACHA_ORIGINATOR, odfiRouting: "021000029" }),
-    (error: Error) => error instanceof PaymentError && error.message.includes("odfiRouting (check digit mismatch)"),
+    (error: Error) =>
+      error instanceof PaymentError && error.message.includes("odfiRouting (check digit mismatch)"),
   );
 });
 
 test("a company id the 10-position field cannot carry is refused, naming the field", () => {
   assert.throws(
     () => nachaOriginator({ ...NACHA_ORIGINATOR, companyId: "112345678901" }),
-    (error: Error) => error instanceof PaymentError && error.message.includes("companyId (1-10 alphanumeric characters)"),
+    (error: Error) =>
+      error instanceof PaymentError &&
+      error.message.includes("companyId (1-10 alphanumeric characters)"),
   );
   assert.throws(
     () => nachaOriginator({ ...NACHA_ORIGINATOR, companyId: "ACME-1" }),
-    (error: Error) => error instanceof PaymentError && error.message.includes("companyId (1-10 alphanumeric characters)"),
+    (error: Error) =>
+      error instanceof PaymentError &&
+      error.message.includes("companyId (1-10 alphanumeric characters)"),
   );
 });
 
@@ -1038,17 +1117,45 @@ test(
       const actorId = await withBypass(() =>
         createScratchUser(org.orgId, "Sloppy operator", "admin"),
       );
-      const cases: Array<{ label: string; kind: "customer_payment" | "vendor_payment"; patch: Record<string, unknown> }> = [
-        { label: "fee junk", kind: "customer_payment", patch: { feeAmount: "abc", feeIncomeAccountId: org.accounts.revenue } },
-        { label: "fee huge", kind: "customer_payment", patch: { feeAmount: "99999999999999999999", feeIncomeAccountId: org.accounts.revenue } },
+      const cases: Array<{
+        label: string;
+        kind: "customer_payment" | "vendor_payment";
+        patch: Record<string, unknown>;
+      }> = [
+        {
+          label: "fee junk",
+          kind: "customer_payment",
+          patch: { feeAmount: "abc", feeIncomeAccountId: org.accounts.revenue },
+        },
+        {
+          label: "fee huge",
+          kind: "customer_payment",
+          patch: { feeAmount: "99999999999999999999", feeIncomeAccountId: org.accounts.revenue },
+        },
         { label: "on-account junk", kind: "customer_payment", patch: { onAccountAmount: "12ab" } },
-        { label: "on-account huge", kind: "customer_payment", patch: { onAccountAmount: "99999999999999999999" } },
-        { label: "discount junk", kind: "vendor_payment", patch: { discountAmount: "abc", discountAccountId: org.accounts.revenue } },
-        { label: "discount huge", kind: "vendor_payment", patch: { discountAmount: "99999999999999999999", discountAccountId: org.accounts.revenue } },
+        {
+          label: "on-account huge",
+          kind: "customer_payment",
+          patch: { onAccountAmount: "99999999999999999999" },
+        },
+        {
+          label: "discount junk",
+          kind: "vendor_payment",
+          patch: { discountAmount: "abc", discountAccountId: org.accounts.revenue },
+        },
+        {
+          label: "discount huge",
+          kind: "vendor_payment",
+          patch: {
+            discountAmount: "99999999999999999999",
+            discountAccountId: org.accounts.revenue,
+          },
+        },
       ];
       for (const c of cases) {
         const payment = await withOrgContext(org.orgId, () =>
-          createPaymentDocument({ allowedSubsidiaryIds: null,
+          createPaymentDocument({
+            allowedSubsidiaryIds: null,
             orgId: org.orgId,
             kind: c.kind,
             createdBy: actorId,
@@ -1061,7 +1168,9 @@ test(
         );
         await assert.rejects(
           withOrgContext(org.orgId, () =>
-            updateDraftPayment(payment.id, c.patch as never, actorId, org.orgId, { allowedSubsidiaryIds: null }),
+            updateDraftPayment(payment.id, c.patch as never, actorId, org.orgId, {
+              allowedSubsidiaryIds: null,
+            }),
           ),
           (e: Error) => e instanceof PaymentError,
           c.label,
@@ -1116,13 +1225,17 @@ test(
             bank: org.accounts.bank,
           },
         });
-        const invoiceControl = await db.execute<{ id: string }>(sql`
+        const invoiceControl = await db.execute<{ id: string }>(
+          sql`
           select id
             from journal_lines
            where entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
-        `, "objects");
+        `,
+          "objects",
+        );
 
-        const payment = await createPaymentDocument({ allowedSubsidiaryIds: null,
+        const payment = await createPaymentDocument({
+          allowedSubsidiaryIds: null,
           orgId: org.orgId,
           kind: "customer_payment",
           createdBy: actorId,
@@ -1147,13 +1260,9 @@ test(
              set status = 'approved', submitted_by = ${actorId}, submitted_at = now()
            where id = ${payment.id} and org_id = ${org.orgId}
         `);
-        await postPaymentWithApplications(
-          payment.id,
-          undefined,
-          actorId,
-          "ui",
-          { deferEffects: true },
-        );
+        await postPaymentWithApplications(payment.id, undefined, actorId, "ui", {
+          deferEffects: true,
+        });
         // Same deferred-effects drain: the boundary-valid retry below must
         // reach the void path, not the effects guard.
         await runPostDocumentEffects(payment.id);
@@ -1192,19 +1301,29 @@ test(
             returnReason: "x".repeat(600),
           }),
         (error: unknown) => {
-          assert.equal(postgresFailure(error), null, "refused by the domain guard, not by the database");
-          assert.ok(error instanceof PaymentError, "a named PaymentError (a 422), not a storage failure");
+          assert.equal(
+            postgresFailure(error),
+            null,
+            "refused by the domain guard, not by the database",
+          );
+          assert.ok(
+            error instanceof PaymentError,
+            "a named PaymentError (a 422), not a storage failure",
+          );
           return true;
         },
       );
 
       const state = await withOrgContext(org.orgId, async () =>
-        db.execute<{ document_status: string; instruction_status: string; settlements: number }>(sql`
+        db.execute<{ document_status: string; instruction_status: string; settlements: number }>(
+          sql`
           select
             (select status from documents where id = ${seeded.paymentDocumentId}) as document_status,
             (select status from payment_instructions where id = ${seeded.instructionId}) as instruction_status,
             (select count(*)::int from payment_settlements where payment_instruction_id = ${seeded.instructionId}) as settlements
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.deepEqual(state[0], {
         document_status: "posted",
@@ -1225,11 +1344,14 @@ test(
         returnReason: "y".repeat(487),
       });
       const after = await withOrgContext(org.orgId, async () =>
-        db.execute<{ document_status: string; instruction_status: string }>(sql`
+        db.execute<{ document_status: string; instruction_status: string }>(
+          sql`
           select
             (select status from documents where id = ${seeded.paymentDocumentId}) as document_status,
             (select status from payment_instructions where id = ${seeded.instructionId}) as instruction_status
-        `, "objects"),
+        `,
+          "objects",
+        ),
       );
       assert.deepEqual(after[0], {
         document_status: "voided",
@@ -1242,21 +1364,51 @@ test(
 );
 
 test("a NACHA debit file keeps 94-byte records for an accented payer and refuses an unspellable one", () => {
-  const render = (partyName: string) => nachaDebit({
-    run: { id: "run", run_number: "COLL-7", scheduled_for: "2026-10-05" },
-    profile: { id: "profile", name: "Debits", settings: {}, secrets: { ...NACHA_ORIGINATOR, companyName: "Béton Québec" } },
-    format: { id: "format", code: "NACHA-DEBIT", rail: "nacha_debit", extension: "ach", contentType: "text/plain; charset=us-ascii", formatterScript: null },
-    payments: [{
-      id: "p1", amount: "125.50", currency: "USD", partyId: "party", partyName,
-      accountNumber: "000123456", routing: { aba: "021000021" }, reference: "INV-1", mandateReference: "MANDATE-1",
-    }],
-    businessDate: "2026-10-05",
-  }, new Date("2026-10-05T12:00:00Z"), "A");
+  const render = (partyName: string) =>
+    nachaDebit(
+      {
+        run: { id: "run", run_number: "COLL-7", scheduled_for: "2026-10-05" },
+        profile: {
+          id: "profile",
+          name: "Debits",
+          settings: {},
+          secrets: { ...NACHA_ORIGINATOR, companyName: "Béton Québec" },
+        },
+        format: {
+          id: "format",
+          code: "NACHA-DEBIT",
+          rail: "nacha_debit",
+          extension: "ach",
+          contentType: "text/plain; charset=us-ascii",
+          formatterScript: null,
+        },
+        payments: [
+          {
+            id: "p1",
+            amount: "125.50",
+            currency: "USD",
+            partyId: "party",
+            partyName,
+            accountNumber: "000123456",
+            routing: { aba: "021000021" },
+            reference: "INV-1",
+            mandateReference: "MANDATE-1",
+          },
+        ],
+        businessDate: "2026-10-05",
+      },
+      new Date("2026-10-05T12:00:00Z"),
+      "A",
+    );
   const lines = render("Société Générale Ltée").content.trimEnd().split("\n");
   for (const line of lines) assert.equal(Buffer.byteLength(line, "utf8"), 94, line);
   assert.equal(lines[1]!.slice(4, 20), "Beton Quebec    ");
   assert.equal(lines[2]!.slice(54, 76), "Societe Generale Ltee ");
-  assert.throws(() => render("株式会社"), (error: unknown) =>
-    error instanceof PaymentError && /NACHA individual name "株式会社" contains "株"/.test(error.message)
-    && /Edit the payee's name/.test(error.message));
+  assert.throws(
+    () => render("株式会社"),
+    (error: unknown) =>
+      error instanceof PaymentError &&
+      /NACHA individual name "株式会社" contains "株"/.test(error.message) &&
+      /Edit the payee's name/.test(error.message),
+  );
 });

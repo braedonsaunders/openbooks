@@ -1,43 +1,57 @@
-import { getMoneyFormatter } from '@/lib/money-server'
-import type { ReactNode } from 'react'
-import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
-import { Badge, EmptyState, PageHeader, TableCell, TableHead } from '@openbooks/ui'
-import { getRecordType, listColumnMeta, recordTypeFeatureKey } from '@openbooks/customization'
-import { SearchInput } from './search-input'
-import { FilterChips, MultiSelectFilter, SearchSelectFilter } from './filter-bar'
-import { DateRangeFilter } from './date-range-filter'
-import { Pagination } from './pagination'
-import { SortTh } from './sortable-th'
-import { ViewsMenu } from './views-menu'
-import { DocTypeBadge } from './doc-type-badge'
-import { docTypeMeta } from './doc-type-badge'
-import { buildListDrawerHref, hasActiveListFilters, parseListParams, pickString } from '../lib/list-params'
-import { allowedSubsidiaryIds } from '../lib/subsidiaries'
-import { loadFieldDefs } from '../lib/custom-fields'
-import { AmbiguousListViewDefaultError, resolveListView } from '../lib/customization/resolve'
-import { displayListViewName } from '../lib/customization/display'
-import { columnDescriptors, documentWhere, type ListColDesc } from '../lib/customization/list-query'
-import { enabledListSource, listOrderClause, listSource } from '../lib/list/sources'
-import { RelatedPartyLink } from './related-party-link'
-import { ListDrawerLink } from './list-drawer-link'
-import { ListDrawerHost } from './list-drawer-host'
-import { statusLabel as sharedStatusLabel } from '../lib/status-label'
-import { listDrawerRoute, type NativeListDrawerData } from '../lib/list/drawer-routes'
-import { resolveListStatusFilter, selectedListStatuses } from '../lib/list-status-filter'
-import { can, resolveAuthzByUserId } from '../lib/authz-core'
-import { FeatureUnavailable } from './feature-unavailable'
-import { createPermission, postPermission } from '../lib/document-kinds'
-import { RecordListBulkTable, type BulkListActions } from './record-list-bulk'
+import { getMoneyFormatter } from "@/lib/money-server";
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { getTranslations } from "next-intl/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import { Badge, EmptyState, PageHeader, TableCell, TableHead } from "@openbooks/ui";
+import { getRecordType, listColumnMeta, recordTypeFeatureKey } from "@openbooks/customization";
+import { SearchInput } from "./search-input";
+import { FilterChips, MultiSelectFilter, SearchSelectFilter } from "./filter-bar";
+import { DateRangeFilter } from "./date-range-filter";
+import { Pagination } from "./pagination";
+import { SortTh } from "./sortable-th";
+import { ViewsMenu } from "./views-menu";
+import { DocTypeBadge } from "./doc-type-badge";
+import { docTypeMeta } from "./doc-type-badge";
+import {
+  buildListDrawerHref,
+  hasActiveListFilters,
+  parseListParams,
+  pickString,
+} from "../lib/list-params";
+import { allowedSubsidiaryIds } from "../lib/subsidiaries";
+import { loadFieldDefs } from "../lib/custom-fields";
+import { AmbiguousListViewDefaultError, resolveListView } from "../lib/customization/resolve";
+import { displayListViewName } from "../lib/customization/display";
+import {
+  columnDescriptors,
+  documentWhere,
+  type ListColDesc,
+} from "../lib/customization/list-query";
+import { enabledListSource, listOrderClause, listSource } from "../lib/list/sources";
+import { RelatedPartyLink } from "./related-party-link";
+import { ListDrawerLink } from "./list-drawer-link";
+import { ListDrawerHost } from "./list-drawer-host";
+import { statusLabel as sharedStatusLabel } from "../lib/status-label";
+import { listDrawerRoute, type NativeListDrawerData } from "../lib/list/drawer-routes";
+import { resolveListStatusFilter, selectedListStatuses } from "../lib/list-status-filter";
+import { can, resolveAuthzByUserId } from "../lib/authz-core";
+import { FeatureUnavailable } from "./feature-unavailable";
+import { createPermission, postPermission } from "../lib/document-kinds";
+import { RecordListBulkTable, type BulkListActions } from "./record-list-bulk";
 
 /**
  * Lists whose documents run the shared submit/post commands, and so offer
  * keyboard row selection with bulk Post and Submit.
  */
-const BULK_LIFECYCLE_RECORD_TYPES = new Set(['vendor_bill', 'vendor_credit', 'customer_invoice', 'customer_credit'])
+const BULK_LIFECYCLE_RECORD_TYPES = new Set([
+  "vendor_bill",
+  "vendor_credit",
+  "customer_invoice",
+  "customer_credit",
+]);
 
 /**
  * The universal record list — one component that renders EVERY documents-backed
@@ -51,20 +65,21 @@ const BULK_LIFECYCLE_RECORD_TYPES = new Set(['vendor_bill', 'vendor_credit', 'cu
  * come from the resolved saved view — so customization works everywhere for free.
  */
 
-const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warning' | 'outline'> = {
-  posted: 'success',
-  approved: 'success',
-  paid: 'success',
-  pending_approval: 'warning',
-  partially_paid: 'warning',
-  draft: 'secondary',
-  calculated: 'warning',
-  committed: 'default',
-  voided: 'outline',
-  reversed: 'outline',
-  cancelled: 'outline',
-  rejected: 'outline',
-}
+const STATUS_VARIANT: Record<string, "default" | "success" | "secondary" | "warning" | "outline"> =
+  {
+    posted: "success",
+    approved: "success",
+    paid: "success",
+    pending_approval: "warning",
+    partially_paid: "warning",
+    draft: "secondary",
+    calculated: "warning",
+    committed: "default",
+    voided: "outline",
+    reversed: "outline",
+    cancelled: "outline",
+    rejected: "outline",
+  };
 
 export async function RecordListView({
   recordType,
@@ -79,57 +94,62 @@ export async function RecordListView({
   emptyDescription,
   emptyAction,
 }: {
-  recordType: string
-  basePath: string
-  orgId: string
-  userId: string
-  canManage: boolean
-  sp: Record<string, string | string[] | undefined>
+  recordType: string;
+  basePath: string;
+  orgId: string;
+  userId: string;
+  canManage: boolean;
+  sp: Record<string, string | string[] | undefined>;
   /** Page-resolved flyout (rendered when e.g. ?doc=/?payment= is set). */
-  drawer?: ReactNode
-  nativeDrawer?: NativeListDrawerData | null
+  drawer?: ReactNode;
+  nativeDrawer?: NativeListDrawerData | null;
   /** Teaching copy for the genuinely-empty list; the filtered-empty state keeps the shared generic. */
-  emptyTitle?: string
-  emptyDescription?: string
+  emptyTitle?: string;
+  emptyDescription?: string;
   /** Action shown in the empty state (usually the New button). */
-  emptyAction?: ReactNode
+  emptyAction?: ReactNode;
 }) {
-  const { money } = await getMoneyFormatter()
-  const meta = getRecordType(recordType)
-  if (!listSource(recordType) || !meta) throw new Error(`no list source registered for record type "${recordType}"`)
+  const { money } = await getMoneyFormatter();
+  const meta = getRecordType(recordType);
+  if (!listSource(recordType) || !meta)
+    throw new Error(`no list source registered for record type "${recordType}"`);
   // A record type whose Features switch is off lists nothing and reads no
   // rows: the body becomes the shared feature-unavailable canvas naming the
   // switch, and the page header's create actions are withdrawn with it.
-  const source = await enabledListSource(orgId, recordType)
+  const source = await enabledListSource(orgId, recordType);
   if (!source) {
-    const feature = recordTypeFeatureKey(recordType)
-    if (!feature) notFound()
-    const authz = await resolveAuthzByUserId(orgId, userId)
+    const feature = recordTypeFeatureKey(recordType);
+    if (!feature) notFound();
+    const authz = await resolveAuthzByUserId(orgId, userId);
     return FeatureUnavailable({
       featureKey: feature,
-      placement: 'section',
-      canManageFeatures: !!authz && can(authz, 'admin.setup.manage'),
-    })
+      placement: "section",
+      canManageFeatures: !!authz && can(authz, "admin.setup.manage"),
+    });
   }
 
-  const t = await getTranslations()
-  const tCommon = await getTranslations('common')
-  const tCustom = await getTranslations('customization')
+  const t = await getTranslations();
+  const tCommon = await getTranslations("common");
+  const tCustom = await getTranslations("customization");
   const label = (key: string) => {
     try {
-      return t(key as never)
+      return t(key as never);
     } catch {
-      return key
+      return key;
     }
-  }
+  };
   const statusLabel = (status: string) =>
-    sharedStatusLabel(status, (key) => tCommon(key as never), (key) => tCommon.has(key as never))
+    sharedStatusLabel(
+      status,
+      (key) => tCommon(key as never),
+      (key) => tCommon.has(key as never),
+    );
 
   // Custom (cf_*) list columns come from the field defs with showInList set.
-  const headerDefs = await loadFieldDefs('documents', recordType)
-  const showInListDefs = headerDefs.filter((d) => d.config.showInList)
+  const headerDefs = await loadFieldDefs("documents", recordType);
+  const showInListDefs = headerDefs.filter((d) => d.config.showInList);
 
-  let resolvedView
+  let resolvedView;
   try {
     resolvedView = await resolveListView({
       orgId,
@@ -137,164 +157,226 @@ export async function RecordListView({
       recordType,
       viewId: pickString(sp.view),
       showInListDefs,
-    })
+    });
   } catch (error) {
     // Next.js error.tsx sanitizes thrown messages to a digest. Catch here so
     // the operator sees the named remedy, the way HRM leave renders refusals.
     if (error instanceof AmbiguousListViewDefaultError) {
       return (
         <>
-          <PageHeader title={tCustom('views.defaultName')} description={error.message} />
+          <PageHeader title={tCustom("views.defaultName")} description={error.message} />
           <EmptyState description={error.message} />
         </>
-      )
+      );
     }
-    throw error
+    throw error;
   }
-  const status = pickString(sp.status)
-  const statusFilter = resolveListStatusFilter(resolvedView.view, source.hideStatusFilter ? undefined : status, source.hideStatusFilter ? [] : source.defaultExcludedStatuses)
-  const view = statusFilter.view
-  const viewName = displayListViewName(resolvedView.row?.name, tCustom('views.defaultName'))
+  const status = pickString(sp.status);
+  const statusFilter = resolveListStatusFilter(
+    resolvedView.view,
+    source.hideStatusFilter ? undefined : status,
+    source.hideStatusFilter ? [] : source.defaultExcludedStatuses,
+  );
+  const view = statusFilter.view;
+  const viewName = displayListViewName(resolvedView.row?.name, tCustom("views.defaultName"));
 
-  const allowedSorts = meta.listColumns.filter((c) => c.sortable && c.sortKey).map((c) => c.sortKey!) as string[]
-  const viewSortKey = view.sort ? listColumnMeta(recordType, view.sort.column)?.sortKey : undefined
+  const allowedSorts = meta.listColumns
+    .filter((c) => c.sortable && c.sortKey)
+    .map((c) => c.sortKey!) as string[];
+  const viewSortKey = view.sort ? listColumnMeta(recordType, view.sort.column)?.sortKey : undefined;
   // Column AND direction move together: a saved view whose stored column has
   // left the registry surrenders its direction with it, rather than pairing
   // the fallback column with a direction chosen for a different one.
-  const viewSort = viewSortKey && allowedSorts.includes(viewSortKey)
-    ? { sortKey: viewSortKey, dir: view.sort!.dir }
-    : undefined
+  const viewSort =
+    viewSortKey && allowedSorts.includes(viewSortKey)
+      ? { sortKey: viewSortKey, dir: view.sort!.dir }
+      : undefined;
   const params = parseListParams(sp, {
-    sort: viewSort?.sortKey ?? (allowedSorts.includes('date') ? 'date' : (allowedSorts[0] ?? 'date')),
-    dir: viewSort?.dir ?? 'desc',
+    sort:
+      viewSort?.sortKey ?? (allowedSorts.includes("date") ? "date" : (allowedSorts[0] ?? "date")),
+    dir: viewSort?.dir ?? "desc",
     perPage: view.perPage ?? 25,
     allowedSorts,
-  })
+  });
 
-  const kindParamKey = source.kindParamKey ?? 'kind'
-  const kind = source.multiKind ? pickString(sp[kindParamKey]) : undefined
-  const from = source.dateRange ? pickString(sp.from) : undefined
-  const to = source.dateRange ? pickString(sp.to) : undefined
-  const extraQuickValues: Record<string, string | undefined> = {}
-  for (const quick of source.quickFilters ?? []) extraQuickValues[quick.filterKey] = pickString(sp[quick.paramKey])
+  const kindParamKey = source.kindParamKey ?? "kind";
+  const kind = source.multiKind ? pickString(sp[kindParamKey]) : undefined;
+  const from = source.dateRange ? pickString(sp.from) : undefined;
+  const to = source.dateRange ? pickString(sp.to) : undefined;
+  const extraQuickValues: Record<string, string | undefined> = {};
+  for (const quick of source.quickFilters ?? [])
+    extraQuickValues[quick.filterKey] = pickString(sp[quick.paramKey]);
 
-  const labels: Record<string, string> = {}
-  for (const c of meta.listColumns) labels[c.key] = label(c.labelKey)
+  const labels: Record<string, string> = {};
+  for (const c of meta.listColumns) labels[c.key] = label(c.labelKey);
 
-  const cols = columnDescriptors(recordType, view, showInListDefs, source.builtInExpr, labels)
+  const cols = columnDescriptors(recordType, view, showInListDefs, source.builtInExpr, labels);
   const selectCols = sql.join(
     cols.filter((c) => c.expr).map((c) => sql`${c.expr} as ${sql.raw(`"${c.key}"`)}`),
     sql`, `,
-  )
-  const joins = source.joins ?? sql``
-  const fromClause = sql`documents d left join parties p on p.id = d.party_id and p.org_id = d.org_id ${joins}`
+  );
+  const joins = source.joins ?? sql``;
+  const fromClause = sql`documents d left join parties p on p.id = d.party_id and p.org_id = d.org_id ${joins}`;
   // Role-based subsidiary visibility (null = unrestricted).
-  const allowedSubs = await allowedSubsidiaryIds(userId, orgId)
-  const baseWhereBuilder = source.where ?? documentWhere
+  const allowedSubs = await allowedSubsidiaryIds(userId, orgId);
+  const baseWhereBuilder = source.where ?? documentWhere;
   // A viewer limited to their own records sees only those, in every count too.
-  const ownerFilter = source.ownerScope ? await source.ownerScope(orgId, userId) : null
+  const ownerFilter = source.ownerScope ? await source.ownerScope(orgId, userId) : null;
   const whereBuilder: typeof baseWhereBuilder = ownerFilter
     ? (...args) => sql`(${baseWhereBuilder(...args)}) and ${ownerFilter}`
-    : baseWhereBuilder
-  const where = whereBuilder(source.kinds, view, { q: params.q, statuses: statusFilter.statuses, kind, from, to, filters: extraQuickValues }, orgId, allowedSubs)
-  const statusCountView = { ...view, filters: view.filters.filter((filter) => filter.key !== 'status') }
-  const statusCountWhere = whereBuilder(source.kinds, statusCountView, { q: params.q, kind, from, to, filters: extraQuickValues }, orgId, allowedSubs)
-  const kindCountView = { ...view, filters: view.filters.filter((filter) => filter.key !== 'transaction_kind') }
-  const kindCountWhere = whereBuilder(source.kinds, kindCountView, { q: params.q, statuses: statusFilter.statuses, from, to, filters: extraQuickValues }, orgId, allowedSubs)
-  const orderExpr = source.sorts[params.sort] ?? sql`d.document_date`
+    : baseWhereBuilder;
+  const where = whereBuilder(
+    source.kinds,
+    view,
+    { q: params.q, statuses: statusFilter.statuses, kind, from, to, filters: extraQuickValues },
+    orgId,
+    allowedSubs,
+  );
+  const statusCountView = {
+    ...view,
+    filters: view.filters.filter((filter) => filter.key !== "status"),
+  };
+  const statusCountWhere = whereBuilder(
+    source.kinds,
+    statusCountView,
+    { q: params.q, kind, from, to, filters: extraQuickValues },
+    orgId,
+    allowedSubs,
+  );
+  const kindCountView = {
+    ...view,
+    filters: view.filters.filter((filter) => filter.key !== "transaction_kind"),
+  };
+  const kindCountWhere = whereBuilder(
+    source.kinds,
+    kindCountView,
+    { q: params.q, statuses: statusFilter.statuses, from, to, filters: extraQuickValues },
+    orgId,
+    allowedSubs,
+  );
+  const orderExpr = source.sorts[params.sort] ?? sql`d.document_date`;
 
   const [rowsRes, statusCounts, totalRow] = await Promise.all([
-    (db.execute(sql`
+    db.execute(
+      sql`
       select d.id, d.kind, d.currency, d.status as "__status", d.document_number as "__number"${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
         from ${fromClause}
        where ${where}
        order by ${listOrderClause(orderExpr, params.dir)}
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
-    `, 'objects')),
-    (db.execute(sql`
+    `,
+      "objects",
+    ),
+    db.execute(
+      sql`
       select d.status, count(*) as n from ${fromClause}
        where ${statusCountWhere}
-       group by d.status`, 'objects')),
-    db.execute<{ n: string }>(sql`
+       group by d.status`,
+      "objects",
+    ),
+    db.execute<{ n: string }>(
+      sql`
       select count(*) as n from ${fromClause}
-       where ${where}`, 'objects'),
-  ])
-  const rows = rowsRes as Record<string, unknown>[]
-  const filteredTotal = Number(totalRow[0]?.n ?? 0)
+       where ${where}`,
+      "objects",
+    ),
+  ]);
+  const rows = rowsRes as Record<string, unknown>[];
+  const filteredTotal = Number(totalRow[0]?.n ?? 0);
   // The genuinely-empty list teaches; a filtered one keeps the shared generic.
   const filtersActive = hasActiveListFilters({
     q: params.q,
     quickValues: { status, kind, from, to, ...extraQuickValues },
     savedViewFilterCount: view.filters.length,
-  })
+  });
 
-  const countByStatus = new Map(statusCounts.map(row => [String(row.status), Number(row.n)]))
-  const statusValues = [...new Set([
-    ...(meta.listFilters.find(filter => filter.key === 'status')?.options ?? []).map(option => option.value),
-    ...countByStatus.keys(),
-  ])]
-  const statusOptions = statusValues.map(value => ({ value, label: statusLabel(value), count: countByStatus.get(value) ?? 0 }))
+  const countByStatus = new Map(statusCounts.map((row) => [String(row.status), Number(row.n)]));
+  const statusValues = [
+    ...new Set([
+      ...(meta.listFilters.find((filter) => filter.key === "status")?.options ?? []).map(
+        (option) => option.value,
+      ),
+      ...countByStatus.keys(),
+    ]),
+  ];
+  const statusOptions = statusValues.map((value) => ({
+    value,
+    label: statusLabel(value),
+    count: countByStatus.get(value) ?? 0,
+  }));
 
-  const extraQuickFilters = await Promise.all((source.quickFilters ?? []).map(async (quick) => {
-    const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
-    const options = quick.loadOptions ? await quick.loadOptions(orgId, allowedSubs, ownerFilter) : (filterMeta?.options ?? []).map((option) => ({
-      value: option.value,
-      label: option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, ' '),
-    }))
-    return {
-      ...quick,
-      label: filterMeta ? label(filterMeta.labelKey) : quick.filterKey.replace(/_/g, ' '),
-      options,
-    }
-  }))
+  const extraQuickFilters = await Promise.all(
+    (source.quickFilters ?? []).map(async (quick) => {
+      const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey);
+      const options = quick.loadOptions
+        ? await quick.loadOptions(orgId, allowedSubs, ownerFilter)
+        : (filterMeta?.options ?? []).map((option) => ({
+            value: option.value,
+            label: option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, " "),
+          }));
+      return {
+        ...quick,
+        label: filterMeta ? label(filterMeta.labelKey) : quick.filterKey.replace(/_/g, " "),
+        options,
+      };
+    }),
+  );
 
   // Optional kind chips for mixed-kind lists (e.g. bills + credits).
-  let kindOptions: { value: string; label: string; count: number }[] = []
+  let kindOptions: { value: string; label: string; count: number }[] = [];
   if (source.multiKind) {
-    const kindCounts = ((await db.execute(sql`
+    const kindCounts = await db.execute(
+      sql`
       select d.kind, count(*) as n from ${fromClause}
        where ${kindCountWhere}
-       group by d.kind`, 'objects')))
-    const countByKind = new Map(kindCounts.map((r) => [r.kind, Number(r.n)]))
+       group by d.kind`,
+      "objects",
+    );
+    const countByKind = new Map(kindCounts.map((r) => [r.kind, Number(r.n)]));
     kindOptions = source.kinds.map((k) => ({
       value: k,
       label: tCommon(`transactionTypes.${docTypeMeta(k).labelKey}` as never),
       count: Number(countByKind.get(k) ?? 0),
-    }))
+    }));
   }
 
   // Bulk lifecycle actions follow the reader's own grants for every kind the
   // list shows; the actions route re-checks each document as it runs.
-  let bulkActions: BulkListActions | null = null
+  let bulkActions: BulkListActions | null = null;
   if (BULK_LIFECYCLE_RECORD_TYPES.has(recordType)) {
-    const authz = await resolveAuthzByUserId(orgId, userId)
+    const authz = await resolveAuthzByUserId(orgId, userId);
     if (authz) {
       const actions = {
         submit: source.kinds.every((kind) => can(authz, createPermission(kind))),
         post: source.kinds.every((kind) => can(authz, postPermission(kind))),
-      }
-      bulkActions = actions.submit || actions.post ? actions : null
+      };
+      bulkActions = actions.submit || actions.post ? actions : null;
     }
   }
 
-  const openHref = (id: string) =>
-    buildListDrawerHref(basePath, sp, source.drawerParam, id)
+  const openHref = (id: string) => buildListDrawerHref(basePath, sp, source.drawerParam, id);
 
   const optionLabel = (columnKey: string, value: string) => {
-    const option = meta.listFilters.find((filter) => filter.key === columnKey)?.options?.find((item) => item.value === value)
-    return option ? (option.labelKey ? label(option.labelKey) : option.value) : value.replace(/_/g, ' ')
-  }
+    const option = meta.listFilters
+      .find((filter) => filter.key === columnKey)
+      ?.options?.find((item) => item.value === value);
+    return option
+      ? option.labelKey
+        ? label(option.labelKey)
+        : option.value
+      : value.replace(/_/g, " ");
+  };
 
   const cell = (row: Record<string, unknown>, c: ListColDesc) => {
-    const v = row[c.key]
+    const v = row[c.key];
     // Entity drill-through columns (party → vendor/customer/employee, funding
     // account → account) declared by the source.
-    const linkFn = source.links?.[c.key]
+    const linkFn = source.links?.[c.key];
     if (linkFn) {
-      const href = linkFn(row)
+      const href = linkFn(row);
       return (
         <TableCell key={c.key}>
-          {href && v && typeof href !== 'string' && href.kind === 'party' ? (
+          {href && v && typeof href !== "string" && href.kind === "party" ? (
             <RelatedPartyLink
               partyId={href.id}
               role={href.role}
@@ -302,95 +384,134 @@ export async function RecordListView({
             >
               {String(v)}
             </RelatedPartyLink>
-          ) : href && v && typeof href === 'string' ? (
-            <Link href={(href)} className="text-teal-700 hover:underline dark:text-teal-300">
+          ) : href && v && typeof href === "string" ? (
+            <Link href={href} className="text-teal-700 hover:underline dark:text-teal-300">
               {String(v)}
             </Link>
           ) : (
-            <span className="text-slate-400">{v != null && v !== '' ? String(v) : '—'}</span>
+            <span className="text-slate-400">{v != null && v !== "" ? String(v) : "—"}</span>
           )}
         </TableCell>
-      )
+      );
     }
     switch (c.kind) {
-      case 'reference':
+      case "reference":
         return (
           <TableCell key={c.key} className="font-mono text-[13px] font-semibold">
             <div className="flex items-center gap-2">
               {source.multiKind ? <DocTypeBadge kind={String(row.kind)} /> : null}
               <ListDrawerLink
-                href={(openHref(String(row.id)))}
+                href={openHref(String(row.id))}
                 className="text-teal-700 hover:underline dark:text-teal-300"
               >
-                {String(v ?? '')}
+                {String(v ?? "")}
               </ListDrawerLink>
             </div>
           </TableCell>
-        )
-      case 'amount': {
+        );
+      case "amount": {
         // Amount cells come from numeric columns (driver strings/numbers);
         // String() round-trips both exactly, so formatting is unchanged.
-        const rowCurrency = row.currency
+        const rowCurrency = row.currency;
         return (
           <TableCell key={c.key} className="text-right tabular-nums">
-            {v == null || v === '' ? <span className="text-slate-400">—</span> : money(String(v), { currency: typeof rowCurrency === 'string' ? rowCurrency : undefined })}
+            {v == null || v === "" ? (
+              <span className="text-slate-400">—</span>
+            ) : (
+              money(String(v), {
+                currency: typeof rowCurrency === "string" ? rowCurrency : undefined,
+              })
+            )}
           </TableCell>
-        )
+        );
       }
-      case 'status':
+      case "status":
         return (
           <TableCell key={c.key}>
-            {v == null || v === ''
-              ? <span className="text-slate-400">—</span>
-              : <Badge variant={STATUS_VARIANT[String(v)] ?? 'secondary'}>{statusLabel(String(v))}</Badge>}
+            {v == null || v === "" ? (
+              <span className="text-slate-400">—</span>
+            ) : (
+              <Badge variant={STATUS_VARIANT[String(v)] ?? "secondary"}>
+                {statusLabel(String(v))}
+              </Badge>
+            )}
           </TableCell>
-        )
-      case 'custom': {
-        const def = showInListDefs.find((d) => d.key === c.defKey)
-        let display: string
-        if (Array.isArray(v)) display = v.join(', ')
-        else if (def?.fieldType === 'boolean') display = v ? tCommon('labels.yes') : tCommon('labels.no')
-        else display = v != null && v !== '' ? String(v) : '—'
-        return <TableCell key={c.key} className="text-slate-700 dark:text-slate-300">{display}</TableCell>
+        );
+      case "custom": {
+        const def = showInListDefs.find((d) => d.key === c.defKey);
+        let display: string;
+        if (Array.isArray(v)) display = v.join(", ");
+        else if (def?.fieldType === "boolean")
+          display = v ? tCommon("labels.yes") : tCommon("labels.no");
+        else display = v != null && v !== "" ? String(v) : "—";
+        return (
+          <TableCell key={c.key} className="text-slate-700 dark:text-slate-300">
+            {display}
+          </TableCell>
+        );
       }
       default:
         return (
-          <TableCell key={c.key} className={v == null || v === '' ? 'text-slate-400' : ''}>
-            {v != null && v !== '' ? optionLabel(c.key, String(v)) : '—'}
+          <TableCell key={c.key} className={v == null || v === "" ? "text-slate-400" : ""}>
+            {v != null && v !== "" ? optionLabel(c.key, String(v)) : "—"}
           </TableCell>
-        )
+        );
     }
-  }
+  };
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <SearchInput placeholder={tCommon('actions.search')} />
+        <SearchInput placeholder={tCommon("actions.search")} />
         {source.multiKind ? (
-          <FilterChips basePath={basePath} currentParams={sp} paramKey={kindParamKey} label={tCommon('labels.type')} options={kindOptions} />
+          <FilterChips
+            basePath={basePath}
+            currentParams={sp}
+            paramKey={kindParamKey}
+            label={tCommon("labels.type")}
+            options={kindOptions}
+          />
         ) : null}
         {source.hideStatusFilter ? null : (
-          <MultiSelectFilter basePath={basePath} currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} selectedValues={selectedListStatuses(statusOptions.map(option => option.value), view.filters, statusFilter.statuses)} />
+          <MultiSelectFilter
+            basePath={basePath}
+            currentParams={sp}
+            paramKey="status"
+            label={tCommon("labels.status")}
+            options={statusOptions}
+            selectedValues={selectedListStatuses(
+              statusOptions.map((option) => option.value),
+              view.filters,
+              statusFilter.statuses,
+            )}
+          />
         )}
-        {extraQuickFilters.map((filter) => filter.options.length ? (
-          filter.searchSelect ? (
-            <SearchSelectFilter key={filter.paramKey} paramKey={filter.paramKey} label={filter.label} options={filter.options} />
-          ) : (
-            <FilterChips
-              key={filter.paramKey}
-              basePath={basePath}
-              currentParams={sp}
-              paramKey={filter.paramKey}
-              label={filter.label}
-              options={filter.options}
-            />
-          )
-        ) : null)}
+        {extraQuickFilters.map((filter) =>
+          filter.options.length ? (
+            filter.searchSelect ? (
+              <SearchSelectFilter
+                key={filter.paramKey}
+                paramKey={filter.paramKey}
+                label={filter.label}
+                options={filter.options}
+              />
+            ) : (
+              <FilterChips
+                key={filter.paramKey}
+                basePath={basePath}
+                currentParams={sp}
+                paramKey={filter.paramKey}
+                label={filter.label}
+                options={filter.options}
+              />
+            )
+          ) : null,
+        )}
         {source.dateRange ? (
           <DateRangeFilter
-            fromLabel={tCommon('labels.from')}
-            toLabel={tCommon('labels.to')}
-            clearLabel={tCommon('actions.clear')}
+            fromLabel={tCommon("labels.from")}
+            toLabel={tCommon("labels.to")}
+            clearLabel={tCommon("actions.clear")}
           />
         ) : null}
         <ViewsMenu
@@ -406,8 +527,12 @@ export async function RecordListView({
       {filteredTotal === 0 ? (
         <div className="mt-4">
           <EmptyState
-            title={filtersActive ? tCommon('empty.title') : (emptyTitle ?? tCommon('empty.title'))}
-            description={filtersActive ? tCommon('empty.description') : (emptyDescription ?? tCommon('empty.description'))}
+            title={filtersActive ? tCommon("empty.title") : (emptyTitle ?? tCommon("empty.title"))}
+            description={
+              filtersActive
+                ? tCommon("empty.description")
+                : (emptyDescription ?? tCommon("empty.description"))
+            }
             action={emptyAction}
           />
         </div>
@@ -423,41 +548,53 @@ export async function RecordListView({
                   column={c.sortKey}
                   sort={params.sort}
                   dir={params.dir}
-                  align={c.kind === 'amount' ? 'right' : undefined}
+                  align={c.kind === "amount" ? "right" : undefined}
                 >
                   {c.label}
                 </SortTh>
               ) : (
                 <TableHead
                   key={c.key}
-                  className={c.kind === 'amount' ? 'text-right' : undefined}
+                  className={c.kind === "amount" ? "text-right" : undefined}
                   style={c.width ? { width: c.width } : undefined}
                 >
                   {c.label}
                 </TableHead>
               ),
-            )
+            );
             return (
               <RecordListBulkTable
                 header={headerCells}
                 actions={bulkActions}
                 rows={rows.map((row) => ({
                   id: String(row.id),
-                  number: String(row.__number ?? ''),
-                  status: String(row.__status ?? ''),
+                  number: String(row.__number ?? ""),
+                  status: String(row.__status ?? ""),
                   cells: <>{cols.map((c) => cell(row, c))}</>,
                 }))}
               />
-            )
+            );
           })()}
           <div className="mt-3">
-            <Pagination basePath={basePath} currentParams={sp} total={filteredTotal} page={params.page} perPage={params.perPage} />
+            <Pagination
+              basePath={basePath}
+              currentParams={sp}
+              total={filteredTotal}
+              page={params.page}
+              perPage={params.perPage}
+            />
           </div>
         </div>
       )}
-      {listDrawerRoute(recordType)?.path === basePath ? <ListDrawerHost source={recordType}
-        initial={nativeDrawer} initialId={pickString(sp[source.drawerParam])} initialForm={pickString(sp.form)} /> : null}
+      {listDrawerRoute(recordType)?.path === basePath ? (
+        <ListDrawerHost
+          source={recordType}
+          initial={nativeDrawer}
+          initialId={pickString(sp[source.drawerParam])}
+          initialForm={pickString(sp.form)}
+        />
+      ) : null}
       {drawer}
     </>
-  )
+  );
 }

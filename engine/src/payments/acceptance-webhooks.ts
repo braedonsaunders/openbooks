@@ -29,16 +29,24 @@ export async function handleProviderWebhook(
 ): Promise<ProviderWebhookResult | null> {
   // bypass: connector-token — an inbound provider webhook is verified against every organization's signing secret.
   const configs = await withBypassContext(async () =>
-    db.execute<ProviderConfigRow & { org_id: string }>(sql`
+    db.execute<ProviderConfigRow & { org_id: string }>(
+      sql`
       select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
              publishable_key, settings, surcharge_rule_id, secrets, org_id
         from psp_provider_configs
        where provider = ${provider} and is_enabled and acceptance_enabled
-    `, "objects"));
+    `,
+      "objects",
+    ),
+  );
   const adapter = ACCEPTANCE_ADAPTERS[provider];
   const verified: { orgId: string; events: WebhookEvent[] }[] = [];
   for (const config of configs) {
-    const delivery = adapter.verifyWebhookDelivery(headers, rawBody, configSecrets(config, config.org_id));
+    const delivery = adapter.verifyWebhookDelivery(
+      headers,
+      rawBody,
+      configSecrets(config, config.org_id),
+    );
     if (delivery.signatureValid) verified.push({ orgId: config.org_id, events: delivery.events });
   }
   if (verified.length === 0) return null;
@@ -61,13 +69,14 @@ export async function handleProviderWebhook(
             "openbooks.external_ref": event.externalRef,
             "openbooks.webhook_status": event.status,
           },
-          () => withOrg(candidate.orgId, async () => {
-            // Settlement reads and retains the primary book before posting a
-            // receipt. Hold the shared setup fence across the event so its
-            // book/config reads agree with the posting kernel's transaction.
-            await lockLedgerSetupFence(db, candidate.orgId, "shared");
-            return processWebhookEvent(candidate.orgId, provider, event);
-          }),
+          () =>
+            withOrg(candidate.orgId, async () => {
+              // Settlement reads and retains the primary book before posting a
+              // receipt. Hold the shared setup fence across the event so its
+              // book/config reads agree with the posting kernel's transaction.
+              await lockLedgerSetupFence(db, candidate.orgId, "shared");
+              return processWebhookEvent(candidate.orgId, provider, event);
+            }),
         );
       } catch (error) {
         // A tenant transaction failure rolls back only this event. Keep going
@@ -113,7 +122,8 @@ export async function handleProviderWebhook(
     const eventResult = failure ?? handled ?? unresolved;
     if (eventResult) eventResults.push(eventResult);
   }
-  const primary = eventResults.find((result) => result.status !== "unknown_attempt") ?? eventResults[0];
+  const primary =
+    eventResults.find((result) => result.status !== "unknown_attempt") ?? eventResults[0];
   const result: ProviderWebhookResult = {
     signatureValid: true,
     orgId: primary?.orgId ?? verified[0]!.orgId,
@@ -198,13 +208,19 @@ export async function consumePendingClawback(
   } | null;
   status: string;
 } | null> {
-  const consumed = (await db.execute<{ event_payload: Record<string, unknown> | null; event_status: string }>(sql`
+  const consumed = await db.execute<{
+    event_payload: Record<string, unknown> | null;
+    event_status: string;
+  }>(
+    sql`
     update payment_pending_clawbacks
        set consumed_at = now(), consumed_attempt_id = ${attemptId}
      where org_id = ${orgId} and provider = ${provider} and intent_ref = ${intentRef}
        and consumed_at is null
      returning event_payload, event_status
-  `, "objects"));
+  `,
+    "objects",
+  );
   const row = consumed[0];
   if (!row) return null;
   const detail = ((row.event_payload ?? {}).normalized ?? {}) as Record<string, unknown>;
@@ -214,7 +230,11 @@ export async function consumePendingClawback(
         ? detail.providerEventId
         : `${provider}:${intentRef}:parked`,
     refundedAmount: typeof detail.refundedAmount === "string" ? detail.refundedAmount : null,
-    refundAmountBasis: detail.refundAmountBasis === "cumulative" || (detail.refundAmountBasis === undefined && provider === "stripe") ? "cumulative" : "incremental",
+    refundAmountBasis:
+      detail.refundAmountBasis === "cumulative" ||
+      (detail.refundAmountBasis === undefined && provider === "stripe")
+        ? "cumulative"
+        : "incremental",
     providerRefundId: typeof detail.providerRefundId === "string" ? detail.providerRefundId : null,
     refundCurrency: typeof detail.refundCurrency === "string" ? detail.refundCurrency : null,
     providerRef: typeof detail.providerRef === "string" ? detail.providerRef : null,
@@ -268,7 +288,7 @@ export async function processWebhookEvent(
     surcharge_amount: string;
     currency: string;
   };
-  let attempt = (await db.execute<ResolvedAttempt>(sql`
+  let attempt = await db.execute<ResolvedAttempt>(sql`
     select a.id, a.link_id, a.status,
            coalesce(a.amount, l.amount) as amount,
            coalesce(a.surcharge_amount, l.surcharge_amount, 0) as surcharge_amount,
@@ -282,9 +302,9 @@ export async function processWebhookEvent(
             or (${intentRef}::text is not null
                 and a.event_payload->>'paymentIntent' = ${intentRef}))
      order by a.created_at desc limit 1
-  `));
+  `);
   if (!attempt.rows[0] && event.linkToken) {
-    attempt = (await db.execute<ResolvedAttempt>(sql`
+    attempt = await db.execute<ResolvedAttempt>(sql`
       select a.id, a.link_id, a.status,
              coalesce(a.amount, l.amount) as amount,
              coalesce(a.surcharge_amount, l.surcharge_amount, 0) as surcharge_amount,
@@ -295,12 +315,15 @@ export async function processWebhookEvent(
          and l.token_hash = ${paymentLinkTokenHash(event.linkToken)}
          and a.status = 'initiated'
        order by a.created_at desc limit 1
-    `));
+    `);
   }
   const found = attempt.rows[0];
   if (event.refundObservation) {
     if (!found) return "unknown_attempt";
-    const payload = isJsonRecord(event.raw.data) && isJsonRecord(event.raw.data.object) ? event.raw.data.object : {};
+    const payload =
+      isJsonRecord(event.raw.data) && isJsonRecord(event.raw.data.object)
+        ? event.raw.data.object
+        : {};
     await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'payment_attempts', ${found.id}, 'update',
         ${JSON.stringify({ mode: "provider_refund_observation", provider, providerEventId: event.providerEventId ?? null, refundId: payload.id ?? null, status: payload.status ?? null })}::jsonb, null)`);
@@ -312,7 +335,13 @@ export async function processWebhookEvent(
     // the refund-first logic below. Disputed events ride along: autopay
     // records the dispute against its collection, and a null outcome falls
     // through to the payment automation below.
-    if (event.status === "succeeded" || event.status === "processing" || event.status === "failed" || event.status === "refunded" || event.status === "disputed") {
+    if (
+      event.status === "succeeded" ||
+      event.status === "processing" ||
+      event.status === "failed" ||
+      event.status === "refunded" ||
+      event.status === "disputed"
+    ) {
       const { settleCollectionAttemptEvent } = await import("./autopay-settlement.ts");
       const collectionOutcome = await settleCollectionAttemptEvent(orgId, provider, event);
       if (collectionOutcome !== null) return collectionOutcome;
@@ -359,7 +388,7 @@ export async function processWebhookEvent(
     return "unknown_attempt";
   }
 
-  await lockPaymentAttempt(orgId,found.id);
+  await lockPaymentAttempt(orgId, found.id);
   if (event.status === "succeeded") {
     const hasPaidAmount = event.paidAmount != null;
     const hasPaidCurrency = event.paidCurrency != null;
@@ -389,10 +418,7 @@ export async function processWebhookEvent(
       );
     }
     if (hasPaidAmount && hasPaidCurrency) {
-      if (
-        cmp(event.paidAmount!, expectedAmount) !== 0 ||
-        reportedCurrency !== expectedCurrency
-      ) {
+      if (cmp(event.paidAmount!, expectedAmount) !== 0 || reportedCurrency !== expectedCurrency) {
         return recordSettlementDiscrepancy(
           orgId,
           found.id,
@@ -423,7 +449,12 @@ export async function processWebhookEvent(
   // 'disputed' persists as refunded: attempts track collection state, and the
   // dispute lifecycle lives in payment_disputes — the attempt CHECK admits no
   // dispute state.
-  const rowStatus = event.status === "processing" ? "initiated" : event.status === "disputed" ? "refunded" : event.status;
+  const rowStatus =
+    event.status === "processing"
+      ? "initiated"
+      : event.status === "disputed"
+        ? "refunded"
+        : event.status;
 
   // Atomic claim: exactly one concurrent delivery transitions the attempt out
   // of its current state; every later delivery sees a non-claimable row and
@@ -445,17 +476,20 @@ export async function processWebhookEvent(
   const claimableFrom = CLAIMABLE_FROM[event.status];
   let claim: { rows: { id: string }[] };
   try {
-    claim = (await db.execute<{ id: string }>(sql`
+    claim = await db.execute<{ id: string }>(sql`
       update payment_attempts
          set status = ${rowStatus},
              external_ref = ${event.externalRef},
              event_payload = coalesce(event_payload, '{}'::jsonb) || ${JSON.stringify(merge)}::jsonb,
              updated_at = now()
        where id = ${found.id} and org_id = ${orgId}
-         and (status in (${sql.join(claimableFrom.map((s) => sql`${s}`), sql`, `)})
+         and (status in (${sql.join(
+           claimableFrom.map((s) => sql`${s}`),
+           sql`, `,
+         )})
               ${event.status === "succeeded" ? sql`or (status in ('succeeded', 'refunded') and journal_entry_id is null)` : sql``})
        returning id
-    `));
+    `);
   } catch (err) {
     // Re-keying to the provider object id hit an already-processed delivery.
     if ((err as { code?: string }).code === "23505") return "duplicate";
@@ -522,11 +556,16 @@ export async function peekPendingClawback(
   provider: AcceptanceProvider,
   intentRef: string,
 ): Promise<boolean> {
-  const row = (await db.execute<{ id: string }>(sql`
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`
     select id from payment_pending_clawbacks
      where org_id = ${orgId} and provider = ${provider} and intent_ref = ${intentRef}
        and consumed_at is null
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return !!row;
 }
 
@@ -547,9 +586,8 @@ export async function runReturnAutomation(
   attemptId: string,
   event: WebhookEvent,
 ): Promise<string> {
-  const { processProviderRefundEvent, processProviderDisputeEvent } = await import(
-    "./psp-refund-automation.ts"
-  );
+  const { processProviderRefundEvent, processProviderDisputeEvent } =
+    await import("./psp-refund-automation.ts");
   const prefix = event.status === "disputed" ? "disputed" : "refunded";
   if (event.status === "disputed" && event.disputeDetail) {
     const outcome = await processProviderDisputeEvent(orgId, {
@@ -597,9 +635,8 @@ export async function replayParkedReturn(
     status: string;
   },
 ): Promise<void> {
-  const { processProviderRefundEvent, processProviderDisputeEvent } = await import(
-    "./psp-refund-automation.ts"
-  );
+  const { processProviderRefundEvent, processProviderDisputeEvent } =
+    await import("./psp-refund-automation.ts");
   if (parked.status === "disputed" && parked.dispute) {
     await processProviderDisputeEvent(orgId, {
       provider,

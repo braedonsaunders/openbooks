@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { Badge, Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
-import { confirmDialog } from '@/lib/confirm'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Badge, Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from "@openbooks/ui";
+import { confirmDialog } from "@/lib/confirm";
+import { readApiErrorMessage } from "@/lib/api-error";
 import {
   EMPLOYEE_SELF_SERVICE_BASELINE,
   PERMISSION_GROUPS,
@@ -15,64 +15,64 @@ import {
   roleHasSelfServiceBaseline,
   withSelfServiceBaseline,
   type CataloguePermission,
-} from '@/lib/permissions'
-import type { SubsidiaryRestriction } from '@openbooks/schema'
+} from "@/lib/permissions";
+import type { SubsidiaryRestriction } from "@openbooks/schema";
 
 export type RoleRow = {
-  id: string
-  key: string
-  name: string
-  description: string | null
-  isBuiltIn: boolean
-  permissions: string[]
-  subsidiaryRestriction: SubsidiaryRestriction | { mode: 'invalid' }
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  isBuiltIn: boolean;
+  permissions: string[];
+  subsidiaryRestriction: SubsidiaryRestriction | { mode: "invalid" };
   /** Concurrency token: the stored version this row was read at. */
-  updatedAt: string
-}
+  updatedAt: string;
+};
 
 /** Same members, order-insensitive. */
 function samePermissionSet(a: readonly string[], b: readonly string[]): boolean {
-  const left = new Set(a)
-  const right = new Set(b)
-  return left.size === right.size && [...left].every((key) => right.has(key))
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((key) => right.has(key));
 }
 
 /** Depth-first subsidiary tree flattened for pickers (subsidiaryOptions()). */
-export type SubsidiaryPickerOption = { id: string; name: string; depth: number }
+export type SubsidiaryPickerOption = { id: string; name: string; depth: number };
 
 export function NewRoleButton({ subsidiaries }: { subsidiaries: SubsidiaryPickerOption[] | null }) {
-  const t = useTranslations('admin.roles')
-  const [open, setOpen] = useState(false)
+  const t = useTranslations("admin.roles");
+  const [open, setOpen] = useState(false);
   return (
     <>
-      <Button onClick={() => setOpen(true)}>{t('newRole')}</Button>
+      <Button onClick={() => setOpen(true)}>{t("newRole")}</Button>
       {open ? (
         <RoleDrawer role={null} subsidiaries={subsidiaries} onClose={() => setOpen(false)} />
       ) : null}
     </>
-  )
+  );
 }
 
 export function EditRoleButton({
   role,
   subsidiaries,
 }: {
-  role: RoleRow
-  subsidiaries: SubsidiaryPickerOption[] | null
+  role: RoleRow;
+  subsidiaries: SubsidiaryPickerOption[] | null;
 }) {
-  const tCommon = useTranslations('common')
-  const [open, setOpen] = useState(false)
+  const tCommon = useTranslations("common");
+  const [open, setOpen] = useState(false);
   // The version this button last saved, held until the refreshed row
   // arrives. Reopening before the page refresh lands shows what was
   // persisted, never the pre-save snapshot (which a second save would
   // otherwise write back over the change).
-  const [saved, setSaved] = useState<{ from: string; row: RoleRow } | null>(null)
-  const current = saved && saved.from === role.updatedAt ? saved.row : role
-  const locked = role.isBuiltIn && role.key === 'admin'
+  const [saved, setSaved] = useState<{ from: string; row: RoleRow } | null>(null);
+  const current = saved && saved.from === role.updatedAt ? saved.row : role;
+  const locked = role.isBuiltIn && role.key === "admin";
   return (
     <>
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        {locked ? tCommon('actions.view') : tCommon('actions.edit')}
+        {locked ? tCommon("actions.view") : tCommon("actions.edit")}
       </Button>
       {open ? (
         <RoleDrawer
@@ -84,7 +84,7 @@ export function EditRoleButton({
         />
       ) : null}
     </>
-  )
+  );
 }
 
 /**
@@ -98,69 +98,110 @@ function RoleDrawer({
   onSaved,
   onClose,
 }: {
-  role: RoleRow | null
+  role: RoleRow | null;
   /** null = single-subsidiary org: the whole subsidiary-access section is hidden. */
-  subsidiaries: SubsidiaryPickerOption[] | null
+  subsidiaries: SubsidiaryPickerOption[] | null;
   /** Receives the persisted row after a successful edit. */
-  onSaved?: (row: RoleRow) => void
-  onClose: () => void
+  onSaved?: (row: RoleRow) => void;
+  onClose: () => void;
 }) {
-  const t = useTranslations('admin.roles')
-  const tCommon = useTranslations('common')
+  const t = useTranslations("admin.roles");
+  const tCommon = useTranslations("common");
   // Permission group/label keys in PERMISSION_GROUPS are relative to `admin`.
-  const tAdmin = useTranslations('admin')
-  const isEdit = role !== null
-  const locked = isEdit && role.isBuiltIn && role.key === 'admin'
-  const fieldsLocked = isEdit && role.isBuiltIn
-  const [name, setName] = useState(role?.name ?? '')
-  const [key, setKey] = useState(role?.key ?? '')
-  const [keyTouched, setKeyTouched] = useState(isEdit)
-  const [description, setDescription] = useState(role?.description ?? '')
+  const tAdmin = useTranslations("admin");
+  const isEdit = role !== null;
+  const locked = isEdit && role.isBuiltIn && role.key === "admin";
+  const fieldsLocked = isEdit && role.isBuiltIn;
+  const [name, setName] = useState(role?.name ?? "");
+  const [key, setKey] = useState(role?.key ?? "");
+  const [keyTouched, setKeyTouched] = useState(isEdit);
+  const [description, setDescription] = useState(role?.description ?? "");
   // New roles start with the employee self-service baseline on; edits open
   // with the stored set untouched.
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(role ? role.permissions : withSelfServiceBaseline([])),
-  )
+  );
   // The toggle reflects effective coverage, not just the three ticked
   // boxes: a role holding `*` covers the baseline however its boxes read,
   // so unchecking the toggle there cannot switch it off.
-  const baselineOn = roleHasSelfServiceBaseline([...selected])
+  const baselineOn = roleHasSelfServiceBaseline([...selected]);
   function toggleBaseline() {
     setSelected((prev) => {
       if (roleHasSelfServiceBaseline([...prev])) {
-        const next = new Set(prev)
-        for (const key of EMPLOYEE_SELF_SERVICE_BASELINE) next.delete(key)
-        return next
+        const next = new Set(prev);
+        for (const key of EMPLOYEE_SELF_SERVICE_BASELINE) next.delete(key);
+        return next;
       }
-      return new Set(withSelfServiceBaseline([...prev]))
-    })
+      return new Set(withSelfServiceBaseline([...prev]));
+    });
   }
-  const restriction = role?.subsidiaryRestriction ?? { mode: 'all' as const }
-  const [subMode, setSubMode] = useState<SubsidiaryRestriction['mode'] | 'invalid'>(restriction.mode)
+  const restriction = role?.subsidiaryRestriction ?? { mode: "all" as const };
+  const [subMode, setSubMode] = useState<SubsidiaryRestriction["mode"] | "invalid">(
+    restriction.mode,
+  );
   const [subtreeId, setSubtreeId] = useState(
-    restriction.mode === 'subtree' ? restriction.subsidiaryId : '',
-  )
+    restriction.mode === "subtree" ? restriction.subsidiaryId : "",
+  );
   const [subList, setSubList] = useState<Set<string>>(
-    new Set(restriction.mode === 'list' ? restriction.subsidiaryIds : []),
-  )
-  const [busy, setBusy] = useState(false)
-  const router = useRouter()
+    new Set(restriction.mode === "list" ? restriction.subsidiaryIds : []),
+  );
+  const [busy, setBusy] = useState(false);
+  const router = useRouter();
 
-  const [extensionPermissions, setExtensionPermissions] = useState<{ extensionKey: string; key: string; label: string }[]>([])
+  const [extensionPermissions, setExtensionPermissions] = useState<
+    { extensionKey: string; key: string; label: string }[]
+  >([]);
   useEffect(() => {
-    const controller = new AbortController()
-    fetch('/api/admin/roles', { signal: controller.signal }).then(async (response) => {
-      if (!response.ok) throw new Error(t('drawer.permissionsLoadFailed'))
-      const payload = await response.json()
-      setExtensionPermissions(payload.permissions)
-    }).catch((error: unknown) => { if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : t('drawer.permissionsLoadFailed')) })
-    return () => controller.abort()
-  }, [t])
-  const permissionGroups = useMemo(() => [
-    ...PERMISSION_GROUPS.map((group) => ({ ...group, label: tAdmin(group.labelKey), permissions: group.permissions.map((permission) => ({ ...permission, label: tAdmin(permission.labelKey) })) })),
-    ...[...new Set(extensionPermissions.map((permission) => permission.extensionKey))].map((extensionKey) => ({ key: `extension:${extensionKey}`, label: extensionKey, permissions: extensionPermissions.filter((permission) => permission.extensionKey === extensionKey) })),
-    { key: 'inactive-extensions', label: t('drawer.inactivePermissions'), permissions: (role?.permissions ?? []).filter((key) => !key.includes('*') && !PERMISSION_GROUPS.some((group) => group.permissions.some((permission) => permission.key === key)) && !extensionPermissions.some((permission) => permission.key === key)).map((key) => ({ key, label: key })) },
-  ].filter((group) => group.permissions.length > 0), [extensionPermissions, role?.permissions, t, tAdmin])
+    const controller = new AbortController();
+    fetch("/api/admin/roles", { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(t("drawer.permissionsLoadFailed"));
+        const payload = await response.json();
+        setExtensionPermissions(payload.permissions);
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted)
+          toast.error(error instanceof Error ? error.message : t("drawer.permissionsLoadFailed"));
+      });
+    return () => controller.abort();
+  }, [t]);
+  const permissionGroups = useMemo(
+    () =>
+      [
+        ...PERMISSION_GROUPS.map((group) => ({
+          ...group,
+          label: tAdmin(group.labelKey),
+          permissions: group.permissions.map((permission) => ({
+            ...permission,
+            label: tAdmin(permission.labelKey),
+          })),
+        })),
+        ...[...new Set(extensionPermissions.map((permission) => permission.extensionKey))].map(
+          (extensionKey) => ({
+            key: `extension:${extensionKey}`,
+            label: extensionKey,
+            permissions: extensionPermissions.filter(
+              (permission) => permission.extensionKey === extensionKey,
+            ),
+          }),
+        ),
+        {
+          key: "inactive-extensions",
+          label: t("drawer.inactivePermissions"),
+          permissions: (role?.permissions ?? [])
+            .filter(
+              (key) =>
+                !key.includes("*") &&
+                !PERMISSION_GROUPS.some((group) =>
+                  group.permissions.some((permission) => permission.key === key),
+                ) &&
+                !extensionPermissions.some((permission) => permission.key === key),
+            )
+            .map((key) => ({ key, label: key })),
+        },
+      ].filter((group) => group.permissions.length > 0),
+    [extensionPermissions, role?.permissions, t, tAdmin],
+  );
   const selectedCount = useMemo(
     () =>
       permissionGroups.reduce(
@@ -168,89 +209,100 @@ function RoleDrawer({
         0,
       ),
     [selected, permissionGroups],
-  )
+  );
 
   // Declared permission dependencies (PERMISSION_IMPLICATIONS): what each
   // grant already includes, and which selected grants already include a
   // permission that is not ticked — so a grant never looks inert or missing.
-  const implicationLabel = (implication: { key: CataloguePermission; scope: 'all' | 'own' }) => {
-    const label = tAdmin(permissionLabelKey(implication.key))
-    return implication.scope === 'own' ? t('drawer.ownScope', { permission: label }) : label
-  }
+  const implicationLabel = (implication: { key: CataloguePermission; scope: "all" | "own" }) => {
+    const label = tAdmin(permissionLabelKey(implication.key));
+    return implication.scope === "own" ? t("drawer.ownScope", { permission: label }) : label;
+  };
   function impliesText(permKey: string): string | null {
-    const implications = PERMISSION_IMPLICATIONS[permKey as CataloguePermission]
-    if (!implications?.length) return null
-    return t('drawer.includes', { permissions: implications.map(implicationLabel).join(', ') })
+    const implications = PERMISSION_IMPLICATIONS[permKey as CataloguePermission];
+    if (!implications?.length) return null;
+    return t("drawer.includes", { permissions: implications.map(implicationLabel).join(", ") });
   }
   function includedByText(permKey: string): string | null {
     const sources = [...selected].flatMap((key) =>
       (PERMISSION_IMPLICATIONS[key as CataloguePermission] ?? [])
         .filter((implication) => implication.key === permKey)
-        .map((implication) => ({ key: key as CataloguePermission, scope: implication.scope })))
-    if (sources.length === 0) return null
-    return t('drawer.includedBy', {
-      permissions: sources.map((source) => source.scope === 'own'
-        ? t('drawer.ownScope', { permission: tAdmin(permissionLabelKey(source.key)) })
-        : tAdmin(permissionLabelKey(source.key))).join(', '),
-    })
+        .map((implication) => ({ key: key as CataloguePermission, scope: implication.scope })),
+    );
+    if (sources.length === 0) return null;
+    return t("drawer.includedBy", {
+      permissions: sources
+        .map((source) =>
+          source.scope === "own"
+            ? t("drawer.ownScope", { permission: tAdmin(permissionLabelKey(source.key)) })
+            : tAdmin(permissionLabelKey(source.key)),
+        )
+        .join(", "),
+    });
   }
 
   function togglePermission(permKey: string) {
     setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(permKey)) next.delete(permKey)
-      else next.add(permKey)
-      return next
-    })
+      const next = new Set(prev);
+      if (next.has(permKey)) next.delete(permKey);
+      else next.add(permKey);
+      return next;
+    });
   }
 
   function toggleGroup(groupKey: string) {
-    const group = permissionGroups.find((g) => g.key === groupKey)
-    if (!group) return
+    const group = permissionGroups.find((g) => g.key === groupKey);
+    if (!group) return;
     setSelected((prev) => {
-      const next = new Set(prev)
-      const allOn = group.permissions.every((p) => next.has(p.key))
+      const next = new Set(prev);
+      const allOn = group.permissions.every((p) => next.has(p.key));
       for (const p of group.permissions) {
-        if (allOn) next.delete(p.key)
-        else next.add(p.key)
+        if (allOn) next.delete(p.key);
+        else next.add(p.key);
       }
-      return next
-    })
+      return next;
+    });
   }
 
   /** The restriction the form currently describes, or a validation error. */
   function buildRestriction(): SubsidiaryRestriction | { error: string } {
-    if (subMode === 'invalid') return { error: t('drawer.subsidiaryRequired') }
-    if (subMode === 'subtree') {
-      if (!subtreeId) return { error: t('drawer.subsidiaryRequired') }
-      return { mode: 'subtree', subsidiaryId: subtreeId }
+    if (subMode === "invalid") return { error: t("drawer.subsidiaryRequired") };
+    if (subMode === "subtree") {
+      if (!subtreeId) return { error: t("drawer.subsidiaryRequired") };
+      return { mode: "subtree", subsidiaryId: subtreeId };
     }
-    if (subMode === 'list') {
-      if (subList.size === 0) return { error: t('drawer.subsidiaryListRequired') }
-      return { mode: 'list', subsidiaryIds: [...subList] }
+    if (subMode === "list") {
+      if (subList.size === 0) return { error: t("drawer.subsidiaryListRequired") };
+      return { mode: "list", subsidiaryIds: [...subList] };
     }
-    return { mode: 'all' }
+    return { mode: "all" };
   }
 
   async function save() {
     if (!isEdit && !name.trim()) {
-      toast.error(t('drawer.nameRequired'))
-      return
+      toast.error(t("drawer.nameRequired"));
+      return;
     }
     // Only multi-subsidiary orgs (subsidiaries != null) send a restriction.
-    let subsidiaryRestriction: SubsidiaryRestriction | undefined
+    let subsidiaryRestriction: SubsidiaryRestriction | undefined;
     if (subsidiaries) {
-      const built = buildRestriction()
-      if ('error' in built) {
-        toast.error(built.error)
-        return
+      const built = buildRestriction();
+      if ("error" in built) {
+        toast.error(built.error);
+        return;
       }
-      subsidiaryRestriction = built
+      subsidiaryRestriction = built;
     }
-    setBusy(true)
+    setBusy(true);
     const payload = isEdit
       ? role.isBuiltIn
-        ? { id: role.id, permissions: [...selected], subsidiaryRestriction, expectedUpdatedAt: role.updatedAt, selfServiceBaseline: baselineOn }
+        ? {
+            id: role.id,
+            permissions: [...selected],
+            subsidiaryRestriction,
+            expectedUpdatedAt: role.updatedAt,
+            selfServiceBaseline: baselineOn,
+          }
         : {
             id: role.id,
             name: name.trim(),
@@ -267,19 +319,19 @@ function RoleDrawer({
           permissions: [...selected],
           subsidiaryRestriction,
           selfServiceBaseline: baselineOn,
-        }
-    const res = await fetch('/api/admin/roles', {
-      method: isEdit ? 'PATCH' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
+        };
+    const res = await fetch("/api/admin/roles", {
+      method: isEdit ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-    })
-    setBusy(false)
+    });
+    setBusy(false);
     // The refusal reads through the shared helper so message, remedy and
     // code render instead of a bare fallback; the success body parses after
     // the ok check.
     if (!res.ok) {
-      toast.error(await readApiErrorMessage(res, t('drawer.saveFailed')))
-      return
+      toast.error(await readApiErrorMessage(res, t("drawer.saveFailed")));
+      return;
     }
     if (isEdit) {
       // Success is what the server stored, not what was sent: a response
@@ -288,16 +340,22 @@ function RoleDrawer({
       // With the baseline toggled on the server unions any missing keys
       // (e.g. a role covered only through `hrm.*`), so confirmation reads
       // against the intended set, not the raw ticked boxes.
-      const intended = baselineOn ? withSelfServiceBaseline([...selected]) : [...selected]
-      const data = (await res.json().catch(() => null)) as { role?: { permissions?: unknown; updatedAt?: unknown } } | null
-      const storedPermissions: unknown = data?.role?.permissions
-      const storedVersion: unknown = data?.role?.updatedAt
+      const intended = baselineOn ? withSelfServiceBaseline([...selected]) : [...selected];
+      const data = (await res.json().catch(() => null)) as {
+        role?: { permissions?: unknown; updatedAt?: unknown };
+      } | null;
+      const storedPermissions: unknown = data?.role?.permissions;
+      const storedVersion: unknown = data?.role?.updatedAt;
       const persisted = Array.isArray(storedPermissions)
-        ? storedPermissions.filter((key): key is string => typeof key === 'string')
-        : null
-      if (!persisted || typeof storedVersion !== 'string' || !samePermissionSet(persisted, intended)) {
-        toast.error(t('drawer.saveNotConfirmed'))
-        return
+        ? storedPermissions.filter((key): key is string => typeof key === "string")
+        : null;
+      if (
+        !persisted ||
+        typeof storedVersion !== "string" ||
+        !samePermissionSet(persisted, intended)
+      ) {
+        toast.error(t("drawer.saveNotConfirmed"));
+        return;
       }
       onSaved?.({
         ...role,
@@ -306,37 +364,37 @@ function RoleDrawer({
         permissions: persisted,
         subsidiaryRestriction: subsidiaryRestriction ?? role.subsidiaryRestriction,
         updatedAt: storedVersion,
-      })
+      });
     }
-    toast.success(isEdit ? t('drawer.updated') : t('drawer.created'))
-    onClose()
-    router.refresh()
+    toast.success(isEdit ? t("drawer.updated") : t("drawer.created"));
+    onClose();
+    router.refresh();
   }
 
   async function remove() {
-    if (!isEdit || role.isBuiltIn) return
+    if (!isEdit || role.isBuiltIn) return;
     const ok = await confirmDialog({
-      message: t('drawer.deleteConfirm', { name: role.name }),
-      tone: 'danger',
-      confirmLabel: t('drawer.deleteRole'),
-    })
-    if (!ok) return
-    setBusy(true)
-    const res = await fetch('/api/admin/roles', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      message: t("drawer.deleteConfirm", { name: role.name }),
+      tone: "danger",
+      confirmLabel: t("drawer.deleteRole"),
+    });
+    if (!ok) return;
+    setBusy(true);
+    const res = await fetch("/api/admin/roles", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: role.id }),
-    })
-    setBusy(false)
+    });
+    setBusy(false);
     // The refusal reads through the shared helper so message, remedy and
     // code render instead of a bare fallback.
     if (!res.ok) {
-      toast.error(await readApiErrorMessage(res, t('drawer.deleteFailed')))
-      return
+      toast.error(await readApiErrorMessage(res, t("drawer.deleteFailed")));
+      return;
     }
-    toast.success(t('drawer.deleted'))
-    onClose()
-    router.refresh()
+    toast.success(t("drawer.deleted"));
+    onClose();
+    router.refresh();
   }
 
   return (
@@ -348,32 +406,32 @@ function RoleDrawer({
         isEdit ? (
           <span className="inline-flex items-center gap-2">
             {role.name}
-            {role.isBuiltIn ? <Badge variant="secondary">{t('builtIn')}</Badge> : null}
+            {role.isBuiltIn ? <Badge variant="secondary">{t("builtIn")}</Badge> : null}
           </span>
         ) : (
-          t('drawer.newTitle')
+          t("drawer.newTitle")
         )
       }
       description={
         locked
-          ? t('drawer.lockedDescription')
+          ? t("drawer.lockedDescription")
           : fieldsLocked
-            ? t('drawer.builtInDescription')
-            : t('drawer.newDescription')
+            ? t("drawer.builtInDescription")
+            : t("drawer.newDescription")
       }
       headerActions={
         <>
           {isEdit && !role.isBuiltIn ? (
             <Button variant="destructive" disabled={busy} onClick={remove} className="mr-auto">
-              {t('drawer.deleteRole')}
+              {t("drawer.deleteRole")}
             </Button>
           ) : null}
           <Button variant="outline" disabled={busy} onClick={onClose}>
-            {locked ? tCommon('actions.close') : tCommon('actions.cancel')}
+            {locked ? tCommon("actions.close") : tCommon("actions.cancel")}
           </Button>
           {!locked ? (
             <Button disabled={busy} onClick={save}>
-              {isEdit ? t('drawer.saveChanges') : t('drawer.createRole')}
+              {isEdit ? t("drawer.saveChanges") : t("drawer.createRole")}
             </Button>
           ) : null}
         </>
@@ -382,56 +440,56 @@ function RoleDrawer({
       <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="role-name">{tCommon('labels.name')}</Label>
+            <Label htmlFor="role-name">{tCommon("labels.name")}</Label>
             <Input
               id="role-name"
               value={name}
               disabled={fieldsLocked}
               onChange={(e) => {
-                setName(e.target.value)
+                setName(e.target.value);
                 if (!keyTouched) {
                   setKey(
                     e.target.value
                       .toLowerCase()
-                      .replace(/[^a-z0-9]+/g, '_')
-                      .replace(/^_+|_+$/g, '')
+                      .replace(/[^a-z0-9]+/g, "_")
+                      .replace(/^_+|_+$/g, "")
                       .slice(0, 64),
-                  )
+                  );
                 }
               }}
-              placeholder={t('drawer.namePlaceholder')}
+              placeholder={t("drawer.namePlaceholder")}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="role-key">{t('table.key')}</Label>
+            <Label htmlFor="role-key">{t("table.key")}</Label>
             <Input
               id="role-key"
               value={key}
               disabled={isEdit}
               onChange={(e) => {
-                setKeyTouched(true)
-                setKey(e.target.value)
+                setKeyTouched(true);
+                setKey(e.target.value);
               }}
-              placeholder={t('drawer.keyPlaceholder')}
+              placeholder={t("drawer.keyPlaceholder")}
               className="font-mono"
             />
           </div>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="role-description">{tCommon('labels.description')}</Label>
+          <Label htmlFor="role-description">{tCommon("labels.description")}</Label>
           <Textarea
             id="role-description"
             value={description}
             disabled={fieldsLocked}
             onChange={(e) => setDescription(e.target.value)}
             rows={2}
-            placeholder={t('drawer.descriptionPlaceholder')}
+            placeholder={t("drawer.descriptionPlaceholder")}
           />
         </div>
 
         {!locked ? (
           <fieldset className="rounded-lg border border-slate-200 dark:border-slate-800">
-            <legend className="sr-only">{t('drawer.selfServiceTitle')}</legend>
+            <legend className="sr-only">{t("drawer.selfServiceTitle")}</legend>
             <label className="flex cursor-pointer items-start gap-2.5 px-3 py-2">
               <input
                 type="checkbox"
@@ -441,16 +499,19 @@ function RoleDrawer({
               />
               <span className="min-w-0">
                 <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
-                  {t('drawer.selfServiceTitle')}
+                  {t("drawer.selfServiceTitle")}
                 </span>
                 <span className="block text-[11px] text-slate-500 dark:text-slate-400">
-                  {t('drawer.selfServiceDescription')}
+                  {t("drawer.selfServiceDescription")}
                 </span>
               </span>
             </label>
             {!baselineOn ? (
-              <p role="status" className="px-3 pb-2 pl-9 text-[11px] text-amber-700 dark:text-amber-300">
-                {t('drawer.selfServiceOffWarning')}
+              <p
+                role="status"
+                className="px-3 pb-2 pl-9 text-[11px] text-amber-700 dark:text-amber-300"
+              >
+                {t("drawer.selfServiceOffWarning")}
               </p>
             ) : null}
           </fieldset>
@@ -459,15 +520,15 @@ function RoleDrawer({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {t('drawer.permissionsHeading')}
+              {t("drawer.permissionsHeading")}
             </h3>
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {t('drawer.selectedCount', { count: selectedCount })}
+              {t("drawer.selectedCount", { count: selectedCount })}
             </span>
           </div>
           {permissionGroups.map((group) => {
-            const allOn = group.permissions.every((p) => selected.has(p.key))
-            const someOn = group.permissions.some((p) => selected.has(p.key))
+            const allOn = group.permissions.every((p) => selected.has(p.key));
+            const someOn = group.permissions.some((p) => selected.has(p.key));
             return (
               <fieldset
                 key={group.key}
@@ -479,7 +540,7 @@ function RoleDrawer({
                     type="checkbox"
                     checked={allOn}
                     ref={(el) => {
-                      if (el) el.indeterminate = !allOn && someOn
+                      if (el) el.indeterminate = !allOn && someOn;
                     }}
                     disabled={locked}
                     onChange={() => toggleGroup(group.key)}
@@ -510,50 +571,58 @@ function RoleDrawer({
                           {perm.key}
                         </span>
                         {impliesText(perm.key) ? (
-                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">{impliesText(perm.key)}</span>
+                          <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                            {impliesText(perm.key)}
+                          </span>
                         ) : null}
                         {!selected.has(perm.key) && includedByText(perm.key) ? (
-                          <span className="block text-[11px] text-teal-700 dark:text-teal-400">{includedByText(perm.key)}</span>
+                          <span className="block text-[11px] text-teal-700 dark:text-teal-400">
+                            {includedByText(perm.key)}
+                          </span>
                         ) : null}
                       </span>
                     </label>
                   ))}
                 </div>
               </fieldset>
-            )
+            );
           })}
         </div>
 
         {subsidiaries ? (
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-              {t('drawer.subsidiaryHeading')}
+              {t("drawer.subsidiaryHeading")}
             </h3>
             <Select
-              value={subMode === 'invalid' ? '' : subMode}
+              value={subMode === "invalid" ? "" : subMode}
               disabled={locked}
-              onChange={(e) => setSubMode(e.target.value as SubsidiaryRestriction['mode'])}
+              onChange={(e) => setSubMode(e.target.value as SubsidiaryRestriction["mode"])}
             >
-              {subMode === 'invalid' ? <option value="" disabled>{t('drawer.subsidiaryRequired')}</option> : null}
-              <option value="all">{t('drawer.subsidiaryModeAll')}</option>
-              <option value="subtree">{t('drawer.subsidiaryModeSubtree')}</option>
-              <option value="list">{t('drawer.subsidiaryModeList')}</option>
+              {subMode === "invalid" ? (
+                <option value="" disabled>
+                  {t("drawer.subsidiaryRequired")}
+                </option>
+              ) : null}
+              <option value="all">{t("drawer.subsidiaryModeAll")}</option>
+              <option value="subtree">{t("drawer.subsidiaryModeSubtree")}</option>
+              <option value="list">{t("drawer.subsidiaryModeList")}</option>
             </Select>
-            {subMode === 'subtree' ? (
+            {subMode === "subtree" ? (
               <SearchSelect
                 value={subtreeId}
                 onChange={setSubtreeId}
                 options={subsidiaries.map((s) => ({
                   value: s.id,
-                  label: `${'— '.repeat(s.depth)}${s.name}`,
+                  label: `${"— ".repeat(s.depth)}${s.name}`,
                 }))}
-                placeholder={t('drawer.subsidiaryPlaceholder')}
-                searchPlaceholder={t('drawer.subsidiarySearchPlaceholder')}
-                sheetTitle={t('drawer.subsidiaryHeading')}
-                ariaLabel={t('drawer.subsidiaryHeading')}
+                placeholder={t("drawer.subsidiaryPlaceholder")}
+                searchPlaceholder={t("drawer.subsidiarySearchPlaceholder")}
+                sheetTitle={t("drawer.subsidiaryHeading")}
+                ariaLabel={t("drawer.subsidiaryHeading")}
               />
             ) : null}
-            {subMode === 'list' ? (
+            {subMode === "list" ? (
               <div className="rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
                 {subsidiaries.map((s) => (
                   <label key={s.id} className="flex cursor-pointer items-center gap-2.5 py-1.5">
@@ -563,10 +632,10 @@ function RoleDrawer({
                       disabled={locked}
                       onChange={(e) =>
                         setSubList((prev) => {
-                          const next = new Set(prev)
-                          if (e.target.checked) next.add(s.id)
-                          else next.delete(s.id)
-                          return next
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(s.id);
+                          else next.delete(s.id);
+                          return next;
                         })
                       }
                       className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-800"
@@ -585,5 +654,5 @@ function RoleDrawer({
         ) : null}
       </div>
     </Drawer>
-  )
+  );
 }

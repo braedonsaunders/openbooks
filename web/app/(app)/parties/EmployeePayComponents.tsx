@@ -1,57 +1,63 @@
-'use client'
+"use client";
 
-import { useCallback, useEffect, useState } from 'react'
-import { useFormatter, useTranslations } from 'next-intl'
-import { Trash2 } from 'lucide-react'
-import { toast } from 'sonner'
-import { Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
-import { DrawerSublist, SublistAddButton, SublistLoadError, SublistLoading, useSublistRows } from '../../../components/drawer-sublist'
-import { useBusinessToday } from '../../../components/business-date-provider'
-import { PagedTable } from '../../../components/paged-table'
-import { canonicalDecimal } from '../../../lib/exact-decimal'
-import { confirmDialog } from '@/lib/confirm'
-import { refusalMessageFromBody } from '@/lib/api-error'
-import type { AssignmentRunApplicability } from '@openbooks/engine/payroll/assigned-components'
-import { DateField } from '@/components/date-field'
+import { useCallback, useEffect, useState } from "react";
+import { useFormatter, useTranslations } from "next-intl";
+import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Badge, Button, Drawer, Input, Label, Select } from "@openbooks/ui";
+import {
+  DrawerSublist,
+  SublistAddButton,
+  SublistLoadError,
+  SublistLoading,
+  useSublistRows,
+} from "../../../components/drawer-sublist";
+import { useBusinessToday } from "../../../components/business-date-provider";
+import { PagedTable } from "../../../components/paged-table";
+import { canonicalDecimal } from "../../../lib/exact-decimal";
+import { confirmDialog } from "@/lib/confirm";
+import { refusalMessageFromBody } from "@/lib/api-error";
+import type { AssignmentRunApplicability } from "@openbooks/engine/payroll/assigned-components";
+import { DateField } from "@/components/date-field";
 
 interface AssignmentRow {
-  id: string
-  employeePartyId: string
-  employmentId: string | null
-  componentId: string
-  componentCode: string
-  componentName: string
-  componentKind: string
-  componentBasis: string
-  value: string | null
-  runApplicability: AssignmentRunApplicability
-  componentValue: string | null
-  effectiveFrom: string
-  effectiveTo: string | null
-  isCurrent: boolean
+  id: string;
+  employeePartyId: string;
+  employmentId: string | null;
+  componentId: string;
+  componentCode: string;
+  componentName: string;
+  componentKind: string;
+  componentBasis: string;
+  value: string | null;
+  runApplicability: AssignmentRunApplicability;
+  componentValue: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  isCurrent: boolean;
 }
 
 interface ComponentOption {
-  id: string
-  code: string
-  name: string
-  kind: string
-  basis: string
-  value: string | null
-  paymentKind: string
-  country: string | null
+  id: string;
+  code: string;
+  name: string;
+  kind: string;
+  basis: string;
+  value: string | null;
+  paymentKind: string;
+  country: string | null;
 }
 
 interface EmploymentOption {
-  id: string
-  serviceStart: string | null
-  subsidiaryName: string | null
+  id: string;
+  serviceStart: string | null;
+  subsidiaryName: string | null;
 }
 
 interface AssignmentsResponse {
-  assignments: AssignmentRow[]
-  components: ComponentOption[]
-  employments: EmploymentOption[]
+  assignments: AssignmentRow[];
+  components: ComponentOption[];
+  employments: EmploymentOption[];
 }
 
 /**
@@ -66,290 +72,359 @@ export function EmployeePayComponents({
   readOnly = false,
   onDirtyChange,
 }: {
-  partyId: string
-  readOnly?: boolean
-  onDirtyChange?: (dirty: boolean) => void
+  partyId: string;
+  readOnly?: boolean;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
-  const t = useTranslations('parties.drawer.payComponents')
-  const tc = useTranslations('common')
-  const format = useFormatter()
-  const today = useBusinessToday()
-  const [data, setData] = useState<AssignmentsResponse | null>(null)
-  const [loadError, setLoadError] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const t = useTranslations("parties.drawer.payComponents");
+  const tc = useTranslations("common");
+  const format = useFormatter();
+  const today = useBusinessToday();
+  const [data, setData] = useState<AssignmentsResponse | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [busy, setBusy] = useState(false);
   // A refused save/end/delete stays visible on the record until the next
   // mutation attempt — a toast alone once let a refused change read as a
   // silent no-op. The detail is the server's refusal text when present.
-  const [actionError, setActionError] = useState<string | null>(null)
-  const [componentId, setComponentId] = useState('')
-  const [runApplicability, setRunApplicability] = useState<AssignmentRunApplicability>('standard_runs')
-  const [value, setValue] = useState('')
-  const [employmentId, setEmploymentId] = useState('')
-  const [effectiveFrom, setEffectiveFrom] = useState(today)
-  const [effectiveTo, setEffectiveTo] = useState('')
-  const [dirty, setDirty] = useState(false)
-  const [adding, setAdding] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [componentId, setComponentId] = useState("");
+  const [runApplicability, setRunApplicability] =
+    useState<AssignmentRunApplicability>("standard_runs");
+  const [value, setValue] = useState("");
+  const [employmentId, setEmploymentId] = useState("");
+  const [effectiveFrom, setEffectiveFrom] = useState(today);
+  const [effectiveTo, setEffectiveTo] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    onDirtyChange?.(dirty)
-  })
+    onDirtyChange?.(dirty);
+  });
 
-  const load = useCallback((signal?: AbortSignal) => {
-    fetch(`/api/payroll/employee-components?employee=${encodeURIComponent(partyId)}`, { signal })
-      .then((response) => {
-        if (!response.ok) throw new Error('load failed')
-        return (response.json() as Promise<Partial<AssignmentsResponse>>).then((next) => {
-          // A drifted payload must read as empty, never crash the drawer.
-          setData({
-            assignments: Array.isArray(next.assignments) ? (next.assignments as AssignmentRow[]) : [],
-            components: Array.isArray(next.components) ? (next.components as ComponentOption[]) : [],
-            employments: Array.isArray(next.employments) ? (next.employments as EmploymentOption[]) : [],
-          })
+  const load = useCallback(
+    (signal?: AbortSignal) => {
+      fetch(`/api/payroll/employee-components?employee=${encodeURIComponent(partyId)}`, { signal })
+        .then((response) => {
+          if (!response.ok) throw new Error("load failed");
+          return (response.json() as Promise<Partial<AssignmentsResponse>>).then((next) => {
+            // A drifted payload must read as empty, never crash the drawer.
+            setData({
+              assignments: Array.isArray(next.assignments)
+                ? (next.assignments as AssignmentRow[])
+                : [],
+              components: Array.isArray(next.components)
+                ? (next.components as ComponentOption[])
+                : [],
+              employments: Array.isArray(next.employments)
+                ? (next.employments as EmploymentOption[])
+                : [],
+            });
+          });
         })
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        setLoadError(true)
-        setData(null)
-      })
-  }, [partyId])
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          setLoadError(true);
+          setData(null);
+        });
+    },
+    [partyId],
+  );
 
   // Reset when the employee changes, during render (same committed values, no
   // extra render — and no one-commit flash of a stale error banner).
-  const [prevPartyId, setPrevPartyId] = useState(partyId)
+  const [prevPartyId, setPrevPartyId] = useState(partyId);
   if (prevPartyId !== partyId) {
-    setRunApplicability('standard_runs')
-    setPrevPartyId(partyId)
-    setData(null)
-    setLoadError(false)
-    setActionError(null)
-    setDirty(false)
+    setRunApplicability("standard_runs");
+    setPrevPartyId(partyId);
+    setData(null);
+    setLoadError(false);
+    setActionError(null);
+    setDirty(false);
   }
 
   useEffect(() => {
-    const controller = new AbortController()
-    void load(controller.signal)
-    return () => controller.abort()
-  }, [load])
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load]);
 
-  const selectedComponent = (data?.components ?? []).find((c) => c.id === componentId) ?? null
+  const selectedComponent = (data?.components ?? []).find((c) => c.id === componentId) ?? null;
 
   function markDirty() {
-    setDirty(true)
+    setDirty(true);
   }
 
   async function mutate(payload: Record<string, unknown>, successMessage: string) {
-    setBusy(true)
-    setActionError(null)
+    setBusy(true);
+    setActionError(null);
     try {
-      const response = await fetch('/api/payroll/employee-components', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/payroll/employee-components", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      })
+      });
       // The refusal reads through the shared helper so message, remedy and
       // code render instead of the bare `error` field.
       if (!response.ok) {
-        let detail: string | null = null
+        let detail: string | null = null;
         try {
-          detail = refusalMessageFromBody(await response.json(), { fallback: t('saveFailed') })
+          detail = refusalMessageFromBody(await response.json(), { fallback: t("saveFailed") });
         } catch {
-          detail = null
+          detail = null;
         }
-        setActionError(detail ?? t('saveFailed'))
-        throw new Error('mutation failed')
+        setActionError(detail ?? t("saveFailed"));
+        throw new Error("mutation failed");
       }
-      setLoadError(false)
-      await load()
-      setDirty(false)
-      toast.success(successMessage)
-      return true
+      setLoadError(false);
+      await load();
+      setDirty(false);
+      toast.success(successMessage);
+      return true;
     } catch {
       // A transport failure reaches here with no server detail pinned yet —
       // still leave the generic refusal on the record, not only the toast.
-      setActionError((current) => current ?? t('saveFailed'))
-      toast.error(t('saveFailed'))
-      return false
+      setActionError((current) => current ?? t("saveFailed"));
+      toast.error(t("saveFailed"));
+      return false;
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
   }
 
   async function addAssignment() {
     if (!componentId) {
-      toast.error(t('componentRequired'))
-      return
+      toast.error(t("componentRequired"));
+      return;
     }
     // Keep the override as decimal text all the way to the API. Converting
     // a valid numeric(19,4) value through Number can round it before the exact
     // boundary validator gets a chance to persist it.
-    const trimmed = value.trim()
-    const canonical = trimmed === '' ? null : canonicalDecimal(trimmed, 4)
-    if (trimmed !== '' && canonical === null) {
-      toast.error(t('valueRequired'))
-      return
+    const trimmed = value.trim();
+    const canonical = trimmed === "" ? null : canonicalDecimal(trimmed, 4);
+    if (trimmed !== "" && canonical === null) {
+      toast.error(t("valueRequired"));
+      return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
-      toast.error(t('effectiveFromRequired'))
-      return
+      toast.error(t("effectiveFromRequired"));
+      return;
     }
-    if (effectiveTo !== '' && !/^\d{4}-\d{2}-\d{2}$/.test(effectiveTo)) {
-      toast.error(t('effectiveToInvalid'))
-      return
+    if (effectiveTo !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(effectiveTo)) {
+      toast.error(t("effectiveToInvalid"));
+      return;
     }
-    const saved = await mutate({
-      action: 'save-assignment',
-      employeePartyId: partyId,
-      employmentId: employmentId === '' ? null : employmentId,
-      componentId,
-      runApplicability,
-      value: canonical,
-      effectiveFrom,
-      effectiveTo: effectiveTo === '' ? null : effectiveTo,
-    }, t('saved'))
+    const saved = await mutate(
+      {
+        action: "save-assignment",
+        employeePartyId: partyId,
+        employmentId: employmentId === "" ? null : employmentId,
+        componentId,
+        runApplicability,
+        value: canonical,
+        effectiveFrom,
+        effectiveTo: effectiveTo === "" ? null : effectiveTo,
+      },
+      t("saved"),
+    );
     if (saved) {
-      setRunApplicability('standard_runs')
-      setValue('')
-      setEffectiveTo('')
-      setAdding(false)
+      setRunApplicability("standard_runs");
+      setValue("");
+      setEffectiveTo("");
+      setAdding(false);
     }
   }
 
-  const formatDate = (value: string) => format.dateTime(new Date(`${value}T12:00:00Z`), {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  })
+  const formatDate = (value: string) =>
+    format.dateTime(new Date(`${value}T12:00:00Z`), {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    });
 
-  const kindLabel = (kind: string) => kind === 'earning' ? t('earning') : kind === 'deduction' ? t('deduction') : t('employerContribution')
-  const basisLabel = (basis: string) => basis === 'per_hour' ? t('ratePerHour') : basis === 'percent_of_gross' ? t('percentOfGross') : t('amountPerPeriod')
+  const kindLabel = (kind: string) =>
+    kind === "earning"
+      ? t("earning")
+      : kind === "deduction"
+        ? t("deduction")
+        : t("employerContribution");
+  const basisLabel = (basis: string) =>
+    basis === "per_hour"
+      ? t("ratePerHour")
+      : basis === "percent_of_gross"
+        ? t("percentOfGross")
+        : t("amountPerPeriod");
 
   const assignmentText = (row: AssignmentRow) =>
-    `${row.componentCode} ${row.componentName} ${kindLabel(row.componentKind)} ${row.value ?? row.componentValue ?? ''} ${row.effectiveFrom} ${row.effectiveTo ?? ''}`
-  const list = useSublistRows(data?.assignments ?? [], assignmentText)
+    `${row.componentCode} ${row.componentName} ${kindLabel(row.componentKind)} ${row.value ?? row.componentValue ?? ""} ${row.effectiveFrom} ${row.effectiveTo ?? ""}`;
+  const list = useSublistRows(data?.assignments ?? [], assignmentText);
   const refusal = actionError ? (
-    <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
-      {t('saveFailed')}{actionError === t('saveFailed') ? null : `: ${actionError}`}
+    <p
+      role="alert"
+      className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300"
+    >
+      {t("saveFailed")}
+      {actionError === t("saveFailed") ? null : `: ${actionError}`}
     </p>
-  ) : null
+  ) : null;
 
   function closeDraft() {
-    if (busy) return
-    setAdding(false)
-    setComponentId('')
-    setValue('')
-    setEmploymentId('')
-    setRunApplicability('standard_runs')
-    setEffectiveFrom(today)
-    setEffectiveTo('')
-    setDirty(false)
+    if (busy) return;
+    setAdding(false);
+    setComponentId("");
+    setValue("");
+    setEmploymentId("");
+    setRunApplicability("standard_runs");
+    setEffectiveFrom(today);
+    setEffectiveTo("");
+    setDirty(false);
   }
 
   return (
     <DrawerSublist
-      title={t('title')}
-      description={t('hint')}
-      action={readOnly ? undefined : <SublistAddButton label={t('add')} disabled={busy || data === null} onClick={() => { setActionError(null); setAdding(true) }} />}
+      title={t("title")}
+      description={t("hint")}
+      action={
+        readOnly ? undefined : (
+          <SublistAddButton
+            label={t("add")}
+            disabled={busy || data === null}
+            onClick={() => {
+              setActionError(null);
+              setAdding(true);
+            }}
+          />
+        )
+      }
       alert={adding ? null : refusal}
       // Read mode renders values with no editors: the payroll tab's contract
       // counts every input, including a table filter.
-      search={!readOnly && data?.assignments.length ? { value: list.query, onChange: list.setQuery, placeholder: t('search') } : undefined}
+      search={
+        !readOnly && data?.assignments.length
+          ? { value: list.query, onChange: list.setQuery, placeholder: t("search") }
+          : undefined
+      }
     >
       {loadError ? (
-        <SublistLoadError message={tc('feedback.loadFailed')} onRetry={() => { setLoadError(false); void load() }} />
+        <SublistLoadError
+          message={tc("feedback.loadFailed")}
+          onRetry={() => {
+            setLoadError(false);
+            void load();
+          }}
+        />
       ) : data === null ? (
         <SublistLoading />
       ) : (
         <PagedTable
           rows={list.filtered}
           rowKey={(row) => row.id}
-          rowClassName={(row) => row.isCurrent ? 'bg-teal-50/80 dark:bg-teal-950/30' : undefined}
+          rowClassName={(row) => (row.isCurrent ? "bg-teal-50/80 dark:bg-teal-950/30" : undefined)}
           pageSize={10}
-          empty={<p className="py-6 text-center text-sm text-slate-400">{t('empty')}</p>}
+          empty={<p className="py-6 text-center text-sm text-slate-400">{t("empty")}</p>}
           columns={[
             {
-              key: 'component',
-              header: t('component'),
+              key: "component",
+              header: t("component"),
               search: (row) => `${row.componentCode} ${row.componentName}`,
               cell: (row) => (
                 <span className="inline-flex items-center gap-2">
                   <span className="font-medium tabular-nums">{row.componentCode}</span>
                   <span className="text-slate-500 dark:text-slate-400">{row.componentName}</span>
-                  {row.isCurrent ? <Badge variant="success">{t('current')}</Badge> : null}
+                  {row.isCurrent ? <Badge variant="success">{t("current")}</Badge> : null}
                 </span>
               ),
             },
             {
-              key: 'kind',
-              header: t('kind'),
+              key: "kind",
+              header: t("kind"),
               search: (row) => kindLabel(row.componentKind),
               cell: (row) => kindLabel(row.componentKind),
             },
             {
-              key: 'value',
-              header: t('value'),
-              align: 'right',
-              search: (row) => row.value ?? row.componentValue ?? '',
+              key: "value",
+              header: t("value"),
+              align: "right",
+              search: (row) => row.value ?? row.componentValue ?? "",
               cell: (row) => (
                 <span className="tabular-nums">
-                  {row.value ?? row.componentValue ?? '—'}
-                  {row.value == null && row.componentValue != null ? ` (${t('defaultValue')})` : null}
+                  {row.value ?? row.componentValue ?? "—"}
+                  {row.value == null && row.componentValue != null
+                    ? ` (${t("defaultValue")})`
+                    : null}
                 </span>
               ),
             },
             {
-              key: 'runApplicability',
-              header: t('runApplicability'),
+              key: "runApplicability",
+              header: t("runApplicability"),
               search: (row) => row.runApplicability,
-              cell: (row) => row.runApplicability === 'regular_only' ? t('regularOnly') : row.runApplicability === 'standard_runs' ? t('standardRuns') : row.runApplicability === 'periodic_and_final' ? t('periodicAndFinal') : t('unknownApplicability'),
+              cell: (row) =>
+                row.runApplicability === "regular_only"
+                  ? t("regularOnly")
+                  : row.runApplicability === "standard_runs"
+                    ? t("standardRuns")
+                    : row.runApplicability === "periodic_and_final"
+                      ? t("periodicAndFinal")
+                      : t("unknownApplicability"),
             },
             {
-              key: 'from',
-              header: t('effectiveFrom'),
+              key: "from",
+              header: t("effectiveFrom"),
               search: (row) => row.effectiveFrom,
               cell: (row) => <span className="tabular-nums">{formatDate(row.effectiveFrom)}</span>,
             },
             {
-              key: 'to',
-              header: t('effectiveTo'),
-              search: (row) => row.effectiveTo ?? '',
-              cell: (row) => <span className="tabular-nums">{row.effectiveTo ? formatDate(row.effectiveTo) : '—'}</span>,
-            },
-            ...(readOnly ? [] : [{
-              key: 'actions',
-              header: tc('labels.actions'),
-              align: 'right' as const,
-              cell: (row: AssignmentRow) => (
-                <div className="flex justify-end gap-1">
-                  {row.isCurrent ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={busy}
-                      onClick={async () => {
-                        if (!(await confirmDialog(t('confirmEnd')))) return
-                        void mutate({ action: 'end-assignment', id: row.id, effectiveTo: today }, t('ended'))
-                      }}
-                    >
-                      {t('endToday')}
-                    </Button>
-                  ) : null}
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={busy}
-                    aria-label={t('delete')}
-                    onClick={async () => {
-                      if (!(await confirmDialog(t('confirmDelete')))) return
-                      void mutate({ action: 'delete-assignment', id: row.id }, t('deleted'))
-                    }}
-                  >
-                    <Trash2 size={14} aria-hidden />
-                  </Button>
-                </div>
+              key: "to",
+              header: t("effectiveTo"),
+              search: (row) => row.effectiveTo ?? "",
+              cell: (row) => (
+                <span className="tabular-nums">
+                  {row.effectiveTo ? formatDate(row.effectiveTo) : "—"}
+                </span>
               ),
-            }]),
+            },
+            ...(readOnly
+              ? []
+              : [
+                  {
+                    key: "actions",
+                    header: tc("labels.actions"),
+                    align: "right" as const,
+                    cell: (row: AssignmentRow) => (
+                      <div className="flex justify-end gap-1">
+                        {row.isCurrent ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={async () => {
+                              if (!(await confirmDialog(t("confirmEnd")))) return;
+                              void mutate(
+                                { action: "end-assignment", id: row.id, effectiveTo: today },
+                                t("ended"),
+                              );
+                            }}
+                          >
+                            {t("endToday")}
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busy}
+                          aria-label={t("delete")}
+                          onClick={async () => {
+                            if (!(await confirmDialog(t("confirmDelete")))) return;
+                            void mutate({ action: "delete-assignment", id: row.id }, t("deleted"));
+                          }}
+                        >
+                          <Trash2 size={14} aria-hidden />
+                        </Button>
+                      </div>
+                    ),
+                  },
+                ]),
           ]}
         />
       )}
@@ -358,92 +433,119 @@ export function EmployeePayComponents({
         onClose={closeDraft}
         stacked
         size="md"
-        title={t('add')}
-        description={t('hint')}
-        footer={(
+        title={t("add")}
+        description={t("hint")}
+        footer={
           <>
-            <Button variant="outline" disabled={busy} onClick={closeDraft}>{tc('actions.cancel')}</Button>
-            <Button onClick={() => void addAssignment()} disabled={busy || data === null}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
+            <Button variant="outline" disabled={busy} onClick={closeDraft}>
+              {tc("actions.cancel")}
+            </Button>
+            <Button onClick={() => void addAssignment()} disabled={busy || data === null}>
+              {busy ? tc("actions.saving") : tc("actions.save")}
+            </Button>
           </>
-        )}
+        }
       >
         <div className="space-y-4" inert={busy}>
           {refusal}
           <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <Label htmlFor="employee-pay-component">{t('component')}</Label>
-            <Select
-              id="employee-pay-component"
-              value={componentId}
-              onChange={(event) => { setComponentId(event.target.value); markDirty() }}
-            >
-              <option value="">{t('chooseComponent')}</option>
-              {(data?.components ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.code} · {c.name} ({kindLabel(c.kind)}, {basisLabel(c.basis)})
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="employee-pay-value">
-              {selectedComponent ? basisLabel(selectedComponent.basis) : t('value')}
-            </Label>
-            <Input
-              id="employee-pay-value"
-              type="number"
-              min="0"
-              step="0.0001"
-              placeholder={t('useDefault')}
-              value={value}
-              onChange={(event) => { setValue(event.target.value); markDirty() }}
-            />
-          </div>
-          {(data?.employments.length ?? 0) > 1 ? (
             <div>
-              <Label htmlFor="employee-pay-employment">{t('employment')}</Label>
+              <Label htmlFor="employee-pay-component">{t("component")}</Label>
               <Select
-                id="employee-pay-employment"
-                  value={employmentId}
-                onChange={(event) => { setEmploymentId(event.target.value); markDirty() }}
+                id="employee-pay-component"
+                value={componentId}
+                onChange={(event) => {
+                  setComponentId(event.target.value);
+                  markDirty();
+                }}
               >
-                <option value="">{t('allEmployments')}</option>
-                {(data?.employments ?? []).map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.serviceStart ? formatDate(e.serviceStart) : e.id.slice(0, 8)}{e.subsidiaryName ? ` · ${e.subsidiaryName}` : ''}
+                <option value="">{t("chooseComponent")}</option>
+                {(data?.components ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.code} · {c.name} ({kindLabel(c.kind)}, {basisLabel(c.basis)})
                   </option>
                 ))}
               </Select>
             </div>
-          ) : null}
-          <div>
-            <Label htmlFor="employee-pay-run-applicability">{t('runApplicability')}</Label>
-            <Select id="employee-pay-run-applicability" value={runApplicability}
-              disabled={busy} onChange={(event) => { setRunApplicability(event.target.value as AssignmentRunApplicability); markDirty() }}>
-              <option value="standard_runs">{t('standardRuns')}</option>
-              <option value="regular_only">{t('regularOnly')}</option>
-              <option value="periodic_and_final">{t('periodicAndFinal')}</option>
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="employee-pay-effective-from">{t('effectiveFrom')}</Label>
-            <DateField
-              id="employee-pay-effective-from"
-              value={effectiveFrom}
-              onChange={(value) => { setEffectiveFrom(value); markDirty() }}
-            />
-          </div>
-          <div>
-            <Label htmlFor="employee-pay-effective-to">{t('effectiveTo')}</Label>
-            <DateField
-              id="employee-pay-effective-to"
-              value={effectiveTo}
-              onChange={(value) => { setEffectiveTo(value); markDirty() }}
-            />
-          </div>
+            <div>
+              <Label htmlFor="employee-pay-value">
+                {selectedComponent ? basisLabel(selectedComponent.basis) : t("value")}
+              </Label>
+              <Input
+                id="employee-pay-value"
+                type="number"
+                min="0"
+                step="0.0001"
+                placeholder={t("useDefault")}
+                value={value}
+                onChange={(event) => {
+                  setValue(event.target.value);
+                  markDirty();
+                }}
+              />
+            </div>
+            {(data?.employments.length ?? 0) > 1 ? (
+              <div>
+                <Label htmlFor="employee-pay-employment">{t("employment")}</Label>
+                <Select
+                  id="employee-pay-employment"
+                  value={employmentId}
+                  onChange={(event) => {
+                    setEmploymentId(event.target.value);
+                    markDirty();
+                  }}
+                >
+                  <option value="">{t("allEmployments")}</option>
+                  {(data?.employments ?? []).map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.serviceStart ? formatDate(e.serviceStart) : e.id.slice(0, 8)}
+                      {e.subsidiaryName ? ` · ${e.subsidiaryName}` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
+            <div>
+              <Label htmlFor="employee-pay-run-applicability">{t("runApplicability")}</Label>
+              <Select
+                id="employee-pay-run-applicability"
+                value={runApplicability}
+                disabled={busy}
+                onChange={(event) => {
+                  setRunApplicability(event.target.value as AssignmentRunApplicability);
+                  markDirty();
+                }}
+              >
+                <option value="standard_runs">{t("standardRuns")}</option>
+                <option value="regular_only">{t("regularOnly")}</option>
+                <option value="periodic_and_final">{t("periodicAndFinal")}</option>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="employee-pay-effective-from">{t("effectiveFrom")}</Label>
+              <DateField
+                id="employee-pay-effective-from"
+                value={effectiveFrom}
+                onChange={(value) => {
+                  setEffectiveFrom(value);
+                  markDirty();
+                }}
+              />
+            </div>
+            <div>
+              <Label htmlFor="employee-pay-effective-to">{t("effectiveTo")}</Label>
+              <DateField
+                id="employee-pay-effective-to"
+                value={effectiveTo}
+                onChange={(value) => {
+                  setEffectiveTo(value);
+                  markDirty();
+                }}
+              />
+            </div>
           </div>
         </div>
       </Drawer>
     </DrawerSublist>
-  )
+  );
 }

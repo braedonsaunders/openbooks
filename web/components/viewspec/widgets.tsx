@@ -1,33 +1,33 @@
-import { CORE_WIDGETS } from './widgets-core'
-import { PAYROLL_WIDGETS } from './widgets-payroll'
-import { BANKING_WIDGETS } from './widgets-banking'
-import { REPORTING_WIDGETS } from './widgets-reporting'
-import { ASSETS_TAX_WIDGETS } from './widgets-assets-tax'
-import { COMMERCE_WIDGETS } from './widgets-commerce'
-import { PLATFORM_WIDGETS } from './widgets-platform'
-import { SETUP_WIDGETS } from './widgets-setup'
-import { AGENTS_WIDGETS } from './widgets-agents'
-import { HOME_WIDGETS } from './widgets-home'
-import { HRM_WIDGETS } from './widgets-hrm'
-import { HRM_CONTINUOUS_WIDGETS } from './widgets-hrm-continuous'
-import { HRM_DOCUMENT_WIDGETS } from './widgets-hrm-documents'
-import { HRM_PROCESS_WIDGETS } from './widgets-hrm-processes'
-import { HRM_FIELD_TIME_WIDGETS } from './widgets-hrm-field-time'
-import { PERSONA_WIDGETS } from './widgets-home-persona'
-import { OPERATIONS_WIDGETS } from './widgets-operations'
-import { RECORDS_WIDGETS } from './widgets-records'
-import { CONTROLS_WIDGETS } from './widgets-controls'
-import { WAREHOUSE_WIDGETS } from './widgets-warehouse'
-import { NONPROFIT_WIDGETS } from './widgets-nonprofit'
-import { RESOURCING_BOARD_WIDGETS } from './widgets-resourcing-board'
-import { RESOURCING_DEMAND_WIDGETS } from './widgets-resourcing-demand'
-import { RESOURCING_REQUEST_WIDGETS } from './widgets-resourcing-requests'
-import { RESOURCING_RETAINER_WIDGETS } from './widgets-resourcing-retainers'
-import { SCHEDULING_WIDGETS } from './widgets-scheduling'
-import { RESOURCING_COCKPIT_WIDGETS } from './widgets-resourcing-cockpit'
-import { AMORTIZATION_WIDGETS } from './widgets-amortization'
-import { EQUITY_WIDGETS } from './widgets-equity'
-import type { WidgetRenderer } from './widget-props'
+import { CORE_WIDGETS } from "./widgets-core";
+import { PAYROLL_WIDGETS } from "./widgets-payroll";
+import { BANKING_WIDGETS } from "./widgets-banking";
+import { REPORTING_WIDGETS } from "./widgets-reporting";
+import { ASSETS_TAX_WIDGETS } from "./widgets-assets-tax";
+import { COMMERCE_WIDGETS } from "./widgets-commerce";
+import { PLATFORM_WIDGETS } from "./widgets-platform";
+import { SETUP_WIDGETS } from "./widgets-setup";
+import { AGENTS_WIDGETS } from "./widgets-agents";
+import { HOME_WIDGETS } from "./widgets-home";
+import { HRM_WIDGETS } from "./widgets-hrm";
+import { HRM_CONTINUOUS_WIDGETS } from "./widgets-hrm-continuous";
+import { HRM_DOCUMENT_WIDGETS } from "./widgets-hrm-documents";
+import { HRM_PROCESS_WIDGETS } from "./widgets-hrm-processes";
+import { HRM_FIELD_TIME_WIDGETS } from "./widgets-hrm-field-time";
+import { PERSONA_WIDGETS } from "./widgets-home-persona";
+import { OPERATIONS_WIDGETS } from "./widgets-operations";
+import { RECORDS_WIDGETS } from "./widgets-records";
+import { CONTROLS_WIDGETS } from "./widgets-controls";
+import { WAREHOUSE_WIDGETS } from "./widgets-warehouse";
+import { NONPROFIT_WIDGETS } from "./widgets-nonprofit";
+import { RESOURCING_BOARD_WIDGETS } from "./widgets-resourcing-board";
+import { RESOURCING_DEMAND_WIDGETS } from "./widgets-resourcing-demand";
+import { RESOURCING_REQUEST_WIDGETS } from "./widgets-resourcing-requests";
+import { RESOURCING_RETAINER_WIDGETS } from "./widgets-resourcing-retainers";
+import { SCHEDULING_WIDGETS } from "./widgets-scheduling";
+import { RESOURCING_COCKPIT_WIDGETS } from "./widgets-resourcing-cockpit";
+import { AMORTIZATION_WIDGETS } from "./widgets-amortization";
+import { EQUITY_WIDGETS } from "./widgets-equity";
+import type { WidgetRenderer } from "./widget-props";
 
 /**
  * Widget registry — the closed set of interactive components a spec may place
@@ -78,4 +78,4 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ...RESOURCING_COCKPIT_WIDGETS,
   ...AMORTIZATION_WIDGETS,
   ...EQUITY_WIDGETS,
-}
+};

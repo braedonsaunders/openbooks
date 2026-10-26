@@ -18,7 +18,13 @@ import { db } from "../../platform/db.ts";
 import { fromUnits, toUnits } from "../../money/money.ts";
 import { computeRevaluation, runRevaluation } from "../../close/fx-revaluation.ts";
 import { postDocument } from "../../ledger/posting-document.ts";
-import { capture, deps, periodFor, setSpotRate, type DraftDocumentInput } from "../ledger-helpers.ts";
+import {
+  capture,
+  deps,
+  periodFor,
+  setSpotRate,
+  type DraftDocumentInput,
+} from "../ledger-helpers.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 
 /**
@@ -37,7 +43,10 @@ function rateScaledBy1e10(rate: string): string {
  * post it through the production kernel. The immutability guard is part of the
  * accounting data-integrity boundary exercised by these cases.
  */
-async function postConformanceDocument(ctx: CaseContext, input: DraftDocumentInput): Promise<string> {
+async function postConformanceDocument(
+  ctx: CaseContext,
+  input: DraftDocumentInput,
+): Promise<string> {
   const ledger = ctx.ledger!;
   const documentId = randomUUID();
   const date = input.date ?? ledger.date;
@@ -126,7 +135,8 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
 
   {
     id: "fx-monetary-item-retranslated-at-closing-rate",
-    title: "Monetary items are retranslated at the closing rate and the difference goes to profit or loss",
+    title:
+      "Monetary items are retranslated at the closing rate and the difference goes to profit or loss",
     citations: [
       {
         standard: "IAS 21",
@@ -267,7 +277,12 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
         date: "2026-07-15",
         lines: [
           { accountId: ctx.roles.bank, quantity: "1", unitPrice: "10000", amount: "10000" },
-          { accountId: ctx.roles.loanPayable, quantity: "1", unitPrice: "-10000", amount: "-10000" },
+          {
+            accountId: ctx.roles.loanPayable,
+            quantity: "1",
+            unitPrice: "-10000",
+            amount: "-10000",
+          },
         ],
       });
 
@@ -290,7 +305,8 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
 
   {
     id: "fx-retranslation-arithmetic",
-    title: "Retranslation restates the foreign balance and offsets the whole movement to profit or loss",
+    title:
+      "Retranslation restates the foreign balance and offsets the whole movement to profit or loss",
     citations: [
       {
         standard: "IAS 21",
@@ -437,26 +453,44 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
       // ten-decimal rates come from.
       await setSpotRate(ledger, "CAD", "USD", "2026-07-22", "0.70");
       let entryId = "";
-      const invoice = await capture(ctx, "multi-line USD invoice at ten-decimal inverse rate", async () => {
-        entryId = await postConformanceDocument(ctx, {
-          kind: "customer_invoice",
-          number: "CONF-FX-6",
-          partyId: ledger.customerId,
-          currency: "USD",
-          fxRate: "1.4285714286",
-          date: "2026-07-22",
-          lines: [
-            { accountId: ctx.roles.revenue, quantity: "1", unitPrice: "1234.56", amount: "1234.56" },
-            { accountId: ctx.roles.revenue, quantity: "1", unitPrice: "765.44", amount: "765.44" },
-          ],
-        });
-      });
-      const rates = await db.execute<{ fx_rate: string }>(sql`
+      const invoice = await capture(
+        ctx,
+        "multi-line USD invoice at ten-decimal inverse rate",
+        async () => {
+          entryId = await postConformanceDocument(ctx, {
+            kind: "customer_invoice",
+            number: "CONF-FX-6",
+            partyId: ledger.customerId,
+            currency: "USD",
+            fxRate: "1.4285714286",
+            date: "2026-07-22",
+            lines: [
+              {
+                accountId: ctx.roles.revenue,
+                quantity: "1",
+                unitPrice: "1234.56",
+                amount: "1234.56",
+              },
+              {
+                accountId: ctx.roles.revenue,
+                quantity: "1",
+                unitPrice: "765.44",
+                amount: "765.44",
+              },
+            ],
+          });
+        },
+      );
+      const rates = await db.execute<{ fx_rate: string }>(
+        sql`
         select distinct fx_rate::text as fx_rate
           from journal_lines
-         where org_id = ${ledger.orgId} and entry_id = ${entryId}`, "objects");
-      const applied =
-        [...new Set(rates.map((row) => rateScaledBy1e10(row.fx_rate)))].sort().join(",");
+         where org_id = ${ledger.orgId} and entry_id = ${entryId}`,
+        "objects",
+      );
+      const applied = [...new Set(rates.map((row) => rateScaledBy1e10(row.fx_rate)))]
+        .sort()
+        .join(",");
       return { entries: [invoice], values: { fxRateAppliedE10: applied } };
     },
   },
@@ -512,26 +546,29 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
         values (${taxCodeId}, ${ledger.orgId}, 'CONF-FX-VAT', 'Statutory Output Tax', ${ctx.roles.taxPayable})`);
 
       let entryId = "";
-      const invoice = await capture(ctx, "taxed multi-line USD invoice at ten-decimal inverse rate", async () => {
-        // Tax calculation evidence is immutably bound while the document is
-        // still a draft (kernel guard), so this fixture builds its own draft —
-        // lines, evidence, and approval lifecycle included. The amounts are
-        // chosen so the per-line translations MISS zero by one ledger unit:
-        // the absorption rule must run, and must run onto a revenue line.
-        await db.execute(sql`
+      const invoice = await capture(
+        ctx,
+        "taxed multi-line USD invoice at ten-decimal inverse rate",
+        async () => {
+          // Tax calculation evidence is immutably bound while the document is
+          // still a draft (kernel guard), so this fixture builds its own draft —
+          // lines, evidence, and approval lifecycle included. The amounts are
+          // chosen so the per-line translations MISS zero by one ledger unit:
+          // the absorption rule must run, and must run onto a revenue line.
+          await db.execute(sql`
           insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id,
                                  document_date, posting_date, currency, fx_rate, status,
                                  subtotal, tax_total, total, is_final_invoice, custom, extra_dims)
           values (${documentId}, ${ledger.orgId}, 'customer_invoice', 'CONF-FX-7', ${ledger.customerId},
                   ${ledger.subsidiaryId}, '2026-07-23', '2026-07-23', 'USD', '1.2345679012', 'draft',
                   '100.00', '0', '100.00', false, '{}'::jsonb, '{}'::jsonb)`);
-        const taxableLines = [
-          { id: lineIds[0]!, amount: "33.33", tax: "1.6665" },
-          { id: lineIds[1]!, amount: "33.33", tax: "1.6665" },
-          { id: lineIds[2]!, amount: "33.34", tax: "1.6670" },
-        ];
-        for (const [index, line] of taxableLines.entries()) {
-          await db.execute(sql`
+          const taxableLines = [
+            { id: lineIds[0]!, amount: "33.33", tax: "1.6665" },
+            { id: lineIds[1]!, amount: "33.33", tax: "1.6665" },
+            { id: lineIds[2]!, amount: "33.34", tax: "1.6670" },
+          ];
+          for (const [index, line] of taxableLines.entries()) {
+            await db.execute(sql`
             insert into document_lines (id, org_id, document_id, line_number, item_id, account_id,
                                         quantity, unit_price, amount, tax_amount, is_billable,
                                         quantity_fulfilled, quantity_billed, stock_location_id,
@@ -539,26 +576,31 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
             values (${line.id}, ${ledger.orgId}, ${documentId}, ${index + 1}, null, ${ctx.roles.revenue},
                     '1', ${line.amount}, ${line.amount}, ${line.tax}, false, '0', '0', null,
                     '{}'::jsonb, false, '{}'::jsonb)`);
-          await db.execute(sql`
+            await db.execute(sql`
             insert into document_line_tax_components
               (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
                tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
                collected_account_id)
             values (${ledger.orgId}, ${line.id}, ${taxCodeId}, 1, '5', ${line.amount},
                     ${line.tax}, ${line.tax}, '0', 'standard', ${ctx.roles.taxPayable})`);
-        }
-        await db.execute(sql`
+          }
+          await db.execute(sql`
           update documents
              set status = 'approved', tax_total = '5.00', total = subtotal + '5.00'
            where org_id = ${ledger.orgId} and id = ${documentId}`);
-        entryId = await postDocument(documentId, deps(ctx));
-      });
-      const rates = await db.execute<{ fx_rate: string }>(sql`
+          entryId = await postDocument(documentId, deps(ctx));
+        },
+      );
+      const rates = await db.execute<{ fx_rate: string }>(
+        sql`
         select distinct fx_rate::text as fx_rate
           from journal_lines
-         where org_id = ${ledger.orgId} and entry_id = ${entryId}`, "objects");
-      const applied =
-        [...new Set(rates.map((row) => rateScaledBy1e10(row.fx_rate)))].sort().join(",");
+         where org_id = ${ledger.orgId} and entry_id = ${entryId}`,
+        "objects",
+      );
+      const applied = [...new Set(rates.map((row) => rateScaledBy1e10(row.fx_rate)))]
+        .sort()
+        .join(",");
       return { entries: [invoice], values: { fxRateAppliedE10: applied } };
     },
   },

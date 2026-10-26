@@ -5,7 +5,10 @@ import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
-import { intercompanySideAccounts, loadActiveIntercompanyPairs } from "../organization/intercompany-accounts.ts";
+import {
+  intercompanySideAccounts,
+  loadActiveIntercompanyPairs,
+} from "../organization/intercompany-accounts.ts";
 import { IntercompanyError } from "./errors.ts";
 
 /**
@@ -44,7 +47,13 @@ export interface ReconciliationRow {
   difference: string;
 }
 
-type BalanceRow = { subsidiary_id: string; account_id: string; currency: string; txn: string; base: string };
+type BalanceRow = {
+  subsidiary_id: string;
+  account_id: string;
+  currency: string;
+  txn: string;
+  base: string;
+};
 
 export async function intercompanyReconciliation(
   orgId: string,
@@ -52,22 +61,55 @@ export async function intercompanyReconciliation(
   input: { asOfDate: string; bookId?: string | null },
   runner: SqlExecutor = db,
 ): Promise<ReconciliationRow[]> {
-  if (!isIsoCalendarDate(input.asOfDate)) throw new IntercompanyError("the reconciliation date must be a valid calendar date (YYYY-MM-DD)");
+  if (!isIsoCalendarDate(input.asOfDate))
+    throw new IntercompanyError(
+      "the reconciliation date must be a valid calendar date (YYYY-MM-DD)",
+    );
   const bookId = input.bookId ?? (await activePostingPrimaryBookId(orgId, runner));
-  if (!bookId) throw new IntercompanyError("there is no active primary accounting book; set one in Setup → Accounting → Accounting books");
-  const pairs = (await loadActiveIntercompanyPairs(runner, orgId)).filter((pair) =>
-    allowedSubsidiaryIds === null || (allowedSubsidiaryIds.has(pair.fromSubsidiaryId) && allowedSubsidiaryIds.has(pair.toSubsidiaryId)));
+  if (!bookId)
+    throw new IntercompanyError(
+      "there is no active primary accounting book; set one in Setup → Accounting → Accounting books",
+    );
+  const pairs = (await loadActiveIntercompanyPairs(runner, orgId)).filter(
+    (pair) =>
+      allowedSubsidiaryIds === null ||
+      (allowedSubsidiaryIds.has(pair.fromSubsidiaryId) &&
+        allowedSubsidiaryIds.has(pair.toSubsidiaryId)),
+  );
   if (pairs.length === 0) return [];
-  const keys: { subsidiaryId: string; accountId: string; pairId: string; role: "receivable" | "payable" | "position" }[] = [];
+  const keys: {
+    subsidiaryId: string;
+    accountId: string;
+    pairId: string;
+    role: "receivable" | "payable" | "position";
+  }[] = [];
   for (const pair of pairs) {
     for (const subsidiaryId of [pair.fromSubsidiaryId, pair.toSubsidiaryId]) {
       const side = intercompanySideAccounts(pair, subsidiaryId)!;
-      keys.push({ subsidiaryId, accountId: side.positionAccountId, pairId: pair.id, role: "position" });
-      if (side.receivableAccountId) keys.push({ subsidiaryId, accountId: side.receivableAccountId, pairId: pair.id, role: "receivable" });
-      if (side.payableAccountId) keys.push({ subsidiaryId, accountId: side.payableAccountId, pairId: pair.id, role: "payable" });
+      keys.push({
+        subsidiaryId,
+        accountId: side.positionAccountId,
+        pairId: pair.id,
+        role: "position",
+      });
+      if (side.receivableAccountId)
+        keys.push({
+          subsidiaryId,
+          accountId: side.receivableAccountId,
+          pairId: pair.id,
+          role: "receivable",
+        });
+      if (side.payableAccountId)
+        keys.push({
+          subsidiaryId,
+          accountId: side.payableAccountId,
+          pairId: pair.id,
+          role: "payable",
+        });
     }
   }
-  const balances = await runner.execute<BalanceRow>(sql`
+  const balances = await runner.execute<BalanceRow>(
+    sql`
     select jl.subsidiary_id, jl.account_id, jl.currency,
            sum(jl.txn_amount)::text as txn, sum(jl.amount)::text as base
       from journal_lines jl
@@ -80,21 +122,39 @@ export async function intercompanyReconciliation(
        and exists (
          select 1 from unnest(${uuidArray(keys.map((k) => k.subsidiaryId))}::uuid[], ${uuidArray(keys.map((k) => k.accountId))}::uuid[]) as k(sub, acct)
           where k.sub = jl.subsidiary_id and k.acct = jl.account_id)
-     group by jl.subsidiary_id, jl.account_id, jl.currency`, "objects");
-  const subs = await runner.execute<{ id: string; name: string; base_currency: string }>(sql`
-    select id, name, base_currency from subsidiaries where org_id = ${orgId}`, "objects");
+     group by jl.subsidiary_id, jl.account_id, jl.currency`,
+    "objects",
+  );
+  const subs = await runner.execute<{ id: string; name: string; base_currency: string }>(
+    sql`
+    select id, name, base_currency from subsidiaries where org_id = ${orgId}`,
+    "objects",
+  );
   const subById = new Map(subs.map((sub) => [sub.id, sub]));
   const rows: ReconciliationRow[] = [];
   for (const pair of pairs) {
     const pairKeys = keys.filter((key) => key.pairId === pair.id);
-    const currencies = [...new Set(balances
-      .filter((b) => pairKeys.some((k) => k.subsidiaryId === b.subsidiary_id && k.accountId === b.account_id))
-      .map((b) => b.currency))].sort();
+    const currencies = [
+      ...new Set(
+        balances
+          .filter((b) =>
+            pairKeys.some(
+              (k) => k.subsidiaryId === b.subsidiary_id && k.accountId === b.account_id,
+            ),
+          )
+          .map((b) => b.currency),
+      ),
+    ].sort();
     for (const currency of currencies) {
       const side = (subsidiaryId: string): ReconciliationSide => {
         const totals = { receivable: 0n, payable: 0n, position: 0n, functional: 0n };
         for (const key of pairKeys.filter((k) => k.subsidiaryId === subsidiaryId)) {
-          const balance = balances.find((b) => b.subsidiary_id === subsidiaryId && b.account_id === key.accountId && b.currency === currency);
+          const balance = balances.find(
+            (b) =>
+              b.subsidiary_id === subsidiaryId &&
+              b.account_id === key.accountId &&
+              b.currency === currency,
+          );
           if (!balance) continue;
           totals[key.role] += toUnits(balance.txn);
           totals.functional += toUnits(balance.base);
@@ -113,7 +173,13 @@ export async function intercompanyReconciliation(
       };
       const from = side(pair.fromSubsidiaryId);
       const to = side(pair.toSubsidiaryId);
-      rows.push({ pairId: pair.id, currency, from, to, difference: fromUnits(toUnits(from.net) + toUnits(to.net)) });
+      rows.push({
+        pairId: pair.id,
+        currency,
+        from,
+        to,
+        difference: fromUnits(toUnits(from.net) + toUnits(to.net)),
+      });
     }
   }
   return rows;
@@ -125,9 +191,17 @@ export async function unreconciledIntercompanyCount(
   input: { asOfDate: string; bookId?: string | null; subsidiaryIds?: readonly string[] | null },
   runner: SqlExecutor = db,
 ): Promise<number> {
-  const scope = input.subsidiaryIds && input.subsidiaryIds.length > 0 ? new Set(input.subsidiaryIds) : null;
-  const rows = await intercompanyReconciliation(orgId, null, { asOfDate: input.asOfDate, bookId: input.bookId }, runner);
-  return rows.filter((row) =>
-    toUnits(row.difference) !== 0n
-    && (scope === null || scope.has(row.from.subsidiaryId) || scope.has(row.to.subsidiaryId))).length;
+  const scope =
+    input.subsidiaryIds && input.subsidiaryIds.length > 0 ? new Set(input.subsidiaryIds) : null;
+  const rows = await intercompanyReconciliation(
+    orgId,
+    null,
+    { asOfDate: input.asOfDate, bookId: input.bookId },
+    runner,
+  );
+  return rows.filter(
+    (row) =>
+      toUnits(row.difference) !== 0n &&
+      (scope === null || scope.has(row.from.subsidiaryId) || scope.has(row.to.subsidiaryId)),
+  ).length;
 }

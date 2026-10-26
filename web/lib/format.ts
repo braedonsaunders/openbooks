@@ -1,9 +1,9 @@
-import type { FiscalPeriodRef } from '@openbooks/reports'
-import { fiscalPeriodLabel } from './fiscal-period-label'
-import { createMoneyFormatter } from './money-format'
-import { periodPresetName, periodToDateLabel } from './period-label-catalog'
+import type { FiscalPeriodRef } from "@openbooks/reports";
+import { fiscalPeriodLabel } from "./fiscal-period-label";
+import { createMoneyFormatter } from "./money-format";
+import { periodPresetName, periodToDateLabel } from "./period-label-catalog";
 
-export { fiscalPeriodLabel }
+export { fiscalPeriodLabel };
 
 export function dateTime(v: string | Date | null | undefined, locale = "en-CA"): string {
   if (!v) return "";
@@ -85,7 +85,12 @@ export function countLabel(value: number, locale: string): string {
  * Viewer-facing decimal with trimmed trailing zeros (1.7500 → 1.75)
  * for setup and preview tables (F2-14b). Display only, like countLabel.
  */
-export function decimalLabel(value: number, locale: string, minimumFractionDigits: number, maximumFractionDigits: number): string {
+export function decimalLabel(
+  value: number,
+  locale: string,
+  minimumFractionDigits: number,
+  maximumFractionDigits: number,
+): string {
   return value.toLocaleString(locale, { minimumFractionDigits, maximumFractionDigits });
 }
 
@@ -107,8 +112,14 @@ export function formatCount(value: number, locale: string): string {
  * hardcodes the English placement (`13%` vs the French `13 %` vs the Turkish
  * `%13`), so every bare `${rate}%` goes through here instead.
  */
-export function formatPercent01(fraction: number, locale: string, maximumFractionDigits = 0): string {
-  return new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits }).format(fraction);
+export function formatPercent01(
+  fraction: number,
+  locale: string,
+  maximumFractionDigits = 0,
+): string {
+  return new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits }).format(
+    fraction,
+  );
 }
 
 /**
@@ -145,9 +156,10 @@ export function viewerDate(
   timeZone: string,
   options: Intl.DateTimeFormatOptions = { dateStyle: "medium" },
 ): string {
-  return new Intl.DateTimeFormat(locale, { ...options, timeZone: options.timeZone ?? timeZone }).format(
-    typeof value === "string" ? new Date(value) : value,
-  );
+  return new Intl.DateTimeFormat(locale, {
+    ...options,
+    timeZone: options.timeZone ?? timeZone,
+  }).format(typeof value === "string" ? new Date(value) : value);
 }
 
 export function viewerDateTime(
@@ -156,50 +168,62 @@ export function viewerDateTime(
   timeZone: string,
   options: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" },
 ): string {
-  return new Intl.DateTimeFormat(locale, { ...options, timeZone: options.timeZone ?? timeZone }).format(
-    typeof value === "string" ? new Date(value) : value,
-  );
+  return new Intl.DateTimeFormat(locale, {
+    ...options,
+    timeZone: options.timeZone ?? timeZone,
+  }).format(typeof value === "string" ? new Date(value) : value);
 }
 
-export function viewerNumber(value: number, locale: string, options?: Intl.NumberFormatOptions): string {
+export function viewerNumber(
+  value: number,
+  locale: string,
+  options?: Intl.NumberFormatOptions,
+): string {
   return new Intl.NumberFormat(locale, options).format(value);
 }
 
 /** Localize an already rounded exact decimal as a percentage without
  * converting its digits through IEEE-754. */
 export function formatExactPercent(value: string, locale: string, fractionDigits = 1): string {
-  const fixed = fixedDecimal(value, fractionDigits)
-  const negative = fixed.startsWith('-')
-  const [whole = '0', fraction = ''] = fixed.replace(/^-/, '').split('.')
+  const fixed = fixedDecimal(value, fractionDigits);
+  const negative = fixed.startsWith("-");
+  const [whole = "0", fraction = ""] = fixed.replace(/^-/, "").split(".");
   const templateFormatter = new Intl.NumberFormat(locale, {
-    style: 'percent',
+    style: "percent",
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
-  })
-  const template = templateFormatter.formatToParts(negative ? -1 : 1)
+  });
+  const template = templateFormatter.formatToParts(negative ? -1 : 1);
   const isNumberPart = (part: Intl.NumberFormatPart) =>
-    part.type === 'integer' || part.type === 'group' || part.type === 'decimal' || part.type === 'fraction'
-  const first = template.findIndex(isNumberPart)
-  const last = template.findLastIndex(isNumberPart)
-  if (first < 0 || last < first) throw new Error('percent formatter did not produce a numeric value')
+    part.type === "integer" ||
+    part.type === "group" ||
+    part.type === "decimal" ||
+    part.type === "fraction";
+  const first = template.findIndex(isNumberPart);
+  const last = template.findLastIndex(isNumberPart);
+  if (first < 0 || last < first)
+    throw new Error("percent formatter did not produce a numeric value");
 
-  const integerParts = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).formatToParts(BigInt(whole))
-  const decimal = template.find((part) => part.type === 'decimal')?.value
-  const fractionParts = fractionDigits > 0
-    ? [
-        ...(decimal ? [{ type: 'decimal' as const, value: decimal }] : []),
-        ...[...fraction].map((digit) => ({
-          type: 'fraction' as const,
-          value: new Intl.NumberFormat(locale, { useGrouping: false }).format(Number(digit)),
-        })),
-      ]
-    : []
+  const integerParts = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).formatToParts(
+    BigInt(whole),
+  );
+  const decimal = template.find((part) => part.type === "decimal")?.value;
+  const fractionParts =
+    fractionDigits > 0
+      ? [
+          ...(decimal ? [{ type: "decimal" as const, value: decimal }] : []),
+          ...[...fraction].map((digit) => ({
+            type: "fraction" as const,
+            value: new Intl.NumberFormat(locale, { useGrouping: false }).format(Number(digit)),
+          })),
+        ]
+      : [];
   return [
     ...template.slice(0, first).map((part) => part.value),
     ...integerParts.map((part) => part.value),
     ...fractionParts.map((part) => part.value),
     ...template.slice(last + 1).map((part) => part.value),
-  ].join('')
+  ].join("");
 }
 
 /**
@@ -209,11 +233,11 @@ export function formatExactPercent(value: string, locale: string, fractionDigits
  * names, query parameters) are never built from the result.
  */
 export function civilDateParams<T extends Record<string, unknown>>(values: T, locale: string): T {
-  const localized: Record<string, unknown> = { ...values }
+  const localized: Record<string, unknown> = { ...values };
   for (const [key, value] of Object.entries(values)) {
-    if (isIsoCalendarDate(value)) localized[key] = formatCivilDate(value, locale)
+    if (isIsoCalendarDate(value)) localized[key] = formatCivilDate(value, locale);
   }
-  return localized as T
+  return localized as T;
 }
 
 /**
@@ -227,32 +251,44 @@ export function civilDateParams<T extends Record<string, unknown>>(values: T, lo
  * titles and export labels present the window through this one rule.
  */
 export function reportPeriodLabel(
-  period: { presetId?: string; from: string; to: string; label: string; fiscalPeriod?: FiscalPeriodRef; windowName?: string; toDate?: boolean; presetNamed?: boolean },
+  period: {
+    presetId?: string;
+    from: string;
+    to: string;
+    label: string;
+    fiscalPeriod?: FiscalPeriodRef;
+    windowName?: string;
+    toDate?: boolean;
+    presetNamed?: boolean;
+  },
   locale: string,
 ): string {
-  if (period.presetId === 'custom') {
-    const from = formatCivilDate(period.from, locale)
-    return period.from === period.to ? from : `${from} – ${formatCivilDate(period.to, locale)}`
+  if (period.presetId === "custom") {
+    const from = formatCivilDate(period.from, locale);
+    return period.from === period.to ? from : `${from} – ${formatCivilDate(period.to, locale)}`;
   }
   if (period.fiscalPeriod) {
-    const window = fiscalPeriodLabel(period.fiscalPeriod, locale)
+    const window = fiscalPeriodLabel(period.fiscalPeriod, locale);
     // A window that stops before its period ends is that period to date.
-    return period.to < period.fiscalPeriod.to ? periodToDateLabel(window, locale) : window
+    return period.to < period.fiscalPeriod.to ? periodToDateLabel(window, locale) : window;
   }
   // A window qualified to the business day reads its qualifier from the catalog.
-  if (period.toDate && period.windowName) return periodToDateLabel(windowLabel(period.windowName, locale), locale)
+  if (period.toDate && period.windowName)
+    return periodToDateLabel(windowLabel(period.windowName, locale), locale);
   // A single day reads as that day.
-  if (period.from === period.to && isIsoCalendarDate(period.label)) return formatCivilDate(period.label, locale)
+  if (period.from === period.to && isIsoCalendarDate(period.label))
+    return formatCivilDate(period.label, locale);
   // Rolling and trailing windows are named by their preset in the catalog.
-  if (period.presetNamed && period.presetId) return periodPresetName(period.presetId, locale)
-  return windowLabel(period.label, locale)
+  if (period.presetNamed && period.presetId) return periodPresetName(period.presetId, locale);
+  return windowLabel(period.label, locale);
 }
 
 /** A window name in the viewer's locale: a calendar month (`2026-05`) reads as its month; fiscal notation (FY 2026, Q1 FY 2026) is kept. */
 function windowLabel(label: string, locale: string): string {
-  return /^\d{4}-\d{2}$/.test(label) ? monthYearLabel(new Date(`${label}-15T12:00:00Z`), locale, "numeric") : label
+  return /^\d{4}-\d{2}$/.test(label)
+    ? monthYearLabel(new Date(`${label}-15T12:00:00Z`), locale, "numeric")
+    : label;
 }
-
 
 /**
  * A report translator whose civil-date message values read as localized
@@ -263,7 +299,7 @@ export function civilDateTranslator(
   t: (key: string, values?: Record<string, string | number>) => string,
   locale: string,
 ): (key: string, values?: Record<string, string | number>) => string {
-  return (key, values) => t(key, values && civilDateParams(values, locale))
+  return (key, values) => t(key, values && civilDateParams(values, locale));
 }
 
 /**
@@ -278,5 +314,5 @@ export function formatCivilDate(isoDate: string, locale: string): string {
     timeZone: "UTC",
   });
 }
-import { fixedDecimal } from '@openbooks/engine/money/decimal'
-import { isIsoCalendarDate } from '@openbooks/engine/platform/iso-date'
+import { fixedDecimal } from "@openbooks/engine/money/decimal";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/iso-date";

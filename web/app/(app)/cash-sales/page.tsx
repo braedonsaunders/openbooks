@@ -1,12 +1,12 @@
-import { getTranslations } from 'next-intl/server'
-import { ModuleView } from '../../../components/viewspec/module-view'
-import { loadCashSales, cashSalesSpec } from './view'
+import { getTranslations } from "next-intl/server";
+import { ModuleView } from "../../../components/viewspec/module-view";
+import { loadCashSales, cashSalesSpec } from "./view";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
-  const t = await getTranslations('ar')
-  return { title: t('list.cashTitle') }
+  const t = await getTranslations("ar");
+  return { title: t("list.cashTitle") };
 }
 
 /**
@@ -19,9 +19,9 @@ export async function generateMetadata() {
 export default async function CashSales({
   searchParams,
 }: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams
-  const data = await loadCashSales(sp)
-  return <ModuleView spec={cashSalesSpec(data)} data={data} searchParams={sp} trusted />
+  const sp = await searchParams;
+  const data = await loadCashSales(sp);
+  return <ModuleView spec={cashSalesSpec(data)} data={data} searchParams={sp} trusted />;
 }

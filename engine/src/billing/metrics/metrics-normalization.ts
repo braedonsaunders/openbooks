@@ -48,5 +48,7 @@ export interface NormalizationHashPayload {
  * differently.
  */
 export function normalizationInputsHash(payload: NormalizationHashPayload): string {
-  return createHash("sha256").update(canonicalNormalizationJson({ v: 1, ...payload })).digest("hex");
+  return createHash("sha256")
+    .update(canonicalNormalizationJson({ v: 1, ...payload }))
+    .digest("hex");
 }

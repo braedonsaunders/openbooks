@@ -45,7 +45,9 @@ export function saveState(state: Record<string, unknown>): void {
 
 export function loadState<T extends Record<string, unknown>>(into: T): void {
   if (!existsSync(STATE_PATH)) {
-    throw new Error("no saved workflow state — run the seed test first (or delete a stale DB without its state file)");
+    throw new Error(
+      "no saved workflow state — run the seed test first (or delete a stale DB without its state file)",
+    );
   }
   Object.assign(into, JSON.parse(readFileSync(STATE_PATH, "utf8")) as Record<string, unknown>);
 }
@@ -113,7 +115,11 @@ export async function api(
 ) {
   const res = await request.fetch(`${baseURL}${path}`, {
     method,
-    headers: { Origin: new URL(baseURL).origin, "Content-Type": "application/json", ...withIdempotencyKey(method, headers) },
+    headers: {
+      Origin: new URL(baseURL).origin,
+      "Content-Type": "application/json",
+      ...withIdempotencyKey(method, headers),
+    },
     data: body === undefined ? undefined : body,
   });
   const text = await res.text();
@@ -156,11 +162,15 @@ function tick(command: string, args: string[]): Record<string, unknown> {
   if (!process.env.OPENBOOKS_DB_URL) {
     throw new Error("OPENBOOKS_DB_URL is required for scheduler ticks");
   }
-  const output = execFileSync("npx", ["tsx", "e2e/workflows/support/scheduler-tick.mts", command, ...args], {
-    encoding: "utf8",
-    timeout: 120_000,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const output = execFileSync(
+    "npx",
+    ["tsx", "e2e/workflows/support/scheduler-tick.mts", command, ...args],
+    {
+      encoding: "utf8",
+      timeout: 120_000,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
   const line = output
     .split("\n")
     .map((l) => l.trim())
@@ -204,14 +214,18 @@ export async function readDunningLog(orgId: string): Promise<DunningLogRow[]> {
 
 /** Staged deliveries for fired dunning rungs (second corroborating record). */
 export async function readDunningOutbox(orgId: string): Promise<{ subject: string; to: string }[]> {
-  return ((tick("dunning-outbox", [orgId]) as { outbox: { subject: string; to: string }[] }).outbox ?? []) as {
+  return ((tick("dunning-outbox", [orgId]) as { outbox: { subject: string; to: string }[] })
+    .outbox ?? []) as {
     subject: string;
     to: string;
   }[];
 }
 
 /** Obligation ids keyed by contract (invoice) number (observation probe). */
-export async function resolveObligationIds(orgId: string, contracts: string[]): Promise<Map<string, string>> {
+export async function resolveObligationIds(
+  orgId: string,
+  contracts: string[],
+): Promise<Map<string, string>> {
   const { obligations } = tick("obligations", [orgId, contracts.join(",")]) as {
     obligations: Record<string, string>;
   };
@@ -241,7 +255,9 @@ export async function reportRows(page: Page): Promise<string[][]> {
     const table = document.querySelectorAll("table")[0];
     if (!table) return [];
     return [...table.querySelectorAll("tr")].map((tr) =>
-      [...tr.querySelectorAll("th,td")].map((c) => (c.textContent ?? "").trim().replace(/\s+/g, " ")),
+      [...tr.querySelectorAll("th,td")].map((c) =>
+        (c.textContent ?? "").trim().replace(/\s+/g, " "),
+      ),
     );
   });
 }
@@ -261,7 +277,11 @@ export async function openDrawer(page: Page, drawerUrl: string) {
 }
 
 /** Submit then post a document drawer (two-step approval lifecycle). */
-export async function uiSubmitAndPost(page: Page, drawerUrl: string, expectedBadge: "Open" | "Posted"): Promise<void> {
+export async function uiSubmitAndPost(
+  page: Page,
+  drawerUrl: string,
+  expectedBadge: "Open" | "Posted",
+): Promise<void> {
   await openDrawer(page, drawerUrl);
   const drawer = page.locator('[role="dialog"]').first();
   await drawer.getByRole("button", { name: "Actions", exact: true }).click();
@@ -295,7 +315,10 @@ export async function apiPostReceipt(
   baseURL: string,
   payId: string,
 ): Promise<void> {
-  const current = ok(await api(request, baseURL, "GET", `/api/payments/${payId}`), "receipt pre-post fetch");
+  const current = ok(
+    await api(request, baseURL, "GET", `/api/payments/${payId}`),
+    "receipt pre-post fetch",
+  );
   const posted = ok(
     await api(request, baseURL, "POST", "/api/payments/post-with-applications", {
       documentId: payId,

@@ -1,4 +1,4 @@
-import { crmOpportunityScope } from '../../crm-scope'
+import { crmOpportunityScope } from "../../crm-scope";
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
@@ -12,7 +12,7 @@ import { dateOrFalse, pushCustomFieldFilter, uuidOrFalse } from "../list-query";
 export const OPPORTUNITY_BASE_JOINS = sql`
   join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
   left join parties p on p.id = o.party_id and p.org_id = o.org_id
-  left join users u on u.id = o.owner_user_id`
+  left join users u on u.id = o.owner_user_id`;
 
 export const OPPORTUNITY_BUILT_IN_EXPR: Record<string, SQL> = {
   opportunity_number: sql`o.opportunity_number`,
@@ -25,7 +25,7 @@ export const OPPORTUNITY_BUILT_IN_EXPR: Record<string, SQL> = {
   forecast_category: sql`o.forecast_category`,
   probability: sql`o.probability`,
   weighted_amount: sql`o.weighted_amount`,
-}
+};
 
 export const OPPORTUNITY_SORTS: Record<string, SQL> = {
   number: sql`o.opportunity_number`,
@@ -38,57 +38,67 @@ export const OPPORTUNITY_SORTS: Record<string, SQL> = {
   category: sql`o.forecast_category`,
   probability: sql`o.probability`,
   weighted: sql`o.weighted_amount`,
-}
+};
 
 const opportunitySingle = (value: unknown) =>
-  Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '')
+  Array.isArray(value) ? String(value[0] ?? "") : String(value ?? "");
 
 function opportunityFilterPredicate(clause: FilterClause): SQL | null {
-  const { key, operator, value } = clause
+  const { key, operator, value } = clause;
   const inList = (col: SQL): SQL | null => {
-    const values = (Array.isArray(value) ? value : [String(value ?? '')]).map(String).filter(Boolean)
-    if (values.length === 0) return operator === 'in' ? sql`false` : sql`true`
-    const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
-    return operator === 'in' ? sql`${col} in (${list})` : sql`${col} not in (${list})`
-  }
+    const values = (Array.isArray(value) ? value : [String(value ?? "")])
+      .map(String)
+      .filter(Boolean);
+    if (values.length === 0) return operator === "in" ? sql`false` : sql`true`;
+    const list = sql.join(
+      values.map((item) => sql`${item}`),
+      sql`, `,
+    );
+    return operator === "in" ? sql`${col} in (${list})` : sql`${col} not in (${list})`;
+  };
   const ref = (col: SQL): SQL | null => {
-    const refused = uuidOrFalse(opportunitySingle(value))
-    if (refused) return refused
-    if (operator === 'eq') return sql`${col} = ${opportunitySingle(value)}`
-    if (operator === 'ne') return sql`${col} <> ${opportunitySingle(value)}`
-    return null
-  }
+    const refused = uuidOrFalse(opportunitySingle(value));
+    if (refused) return refused;
+    if (operator === "eq") return sql`${col} = ${opportunitySingle(value)}`;
+    if (operator === "ne") return sql`${col} <> ${opportunitySingle(value)}`;
+    return null;
+  };
   const select = (col: SQL): SQL | null => {
-    if (operator === 'eq') return sql`${col} = ${opportunitySingle(value)}`
-    if (operator === 'ne') return sql`${col} <> ${opportunitySingle(value)}`
-    if (operator === 'in' || operator === 'not_in') return inList(col)
-    return null
-  }
+    if (operator === "eq") return sql`${col} = ${opportunitySingle(value)}`;
+    if (operator === "ne") return sql`${col} <> ${opportunitySingle(value)}`;
+    if (operator === "in" || operator === "not_in") return inList(col);
+    return null;
+  };
   switch (key) {
-    case 'status_id': return ref(sql`o.status_id`)
-    case 'owner_user_id': return ref(sql`o.owner_user_id`)
-    case 'party_id': return ref(sql`o.party_id`)
-    case 'forecast_category': return select(sql`o.forecast_category`)
-    case 'expected_close_date': {
-      const refused = dateOrFalse(opportunitySingle(value))
-      if (refused) return refused
-      if (operator === 'eq') return sql`o.expected_close_date = ${opportunitySingle(value)}`
-      if (operator === 'gte') return sql`o.expected_close_date >= ${opportunitySingle(value)}`
-      if (operator === 'lte') return sql`o.expected_close_date <= ${opportunitySingle(value)}`
-      if (operator === 'between') {
-        const refusedTo = dateOrFalse(opportunitySingle(clause.to))
-        if (refusedTo) return refusedTo
-        return sql`o.expected_close_date between ${opportunitySingle(value)} and ${opportunitySingle(clause.to)}`
+    case "status_id":
+      return ref(sql`o.status_id`);
+    case "owner_user_id":
+      return ref(sql`o.owner_user_id`);
+    case "party_id":
+      return ref(sql`o.party_id`);
+    case "forecast_category":
+      return select(sql`o.forecast_category`);
+    case "expected_close_date": {
+      const refused = dateOrFalse(opportunitySingle(value));
+      if (refused) return refused;
+      if (operator === "eq") return sql`o.expected_close_date = ${opportunitySingle(value)}`;
+      if (operator === "gte") return sql`o.expected_close_date >= ${opportunitySingle(value)}`;
+      if (operator === "lte") return sql`o.expected_close_date <= ${opportunitySingle(value)}`;
+      if (operator === "between") {
+        const refusedTo = dateOrFalse(opportunitySingle(clause.to));
+        if (refusedTo) return refusedTo;
+        return sql`o.expected_close_date between ${opportunitySingle(value)} and ${opportunitySingle(clause.to)}`;
       }
-      return null
+      return null;
     }
-    case 'title':
-      if (operator === 'eq') return sql`o.title = ${opportunitySingle(value)}`
-      if (operator === 'contains') return sql`o.title ilike ${`%${opportunitySingle(value)}%`}`
-      if (operator === 'is_set') return sql`o.title <> ''`
-      if (operator === 'is_not_set') return sql`o.title = ''`
-      return null
-    default: return null
+    case "title":
+      if (operator === "eq") return sql`o.title = ${opportunitySingle(value)}`;
+      if (operator === "contains") return sql`o.title ilike ${`%${opportunitySingle(value)}%`}`;
+      if (operator === "is_set") return sql`o.title <> ''`;
+      if (operator === "is_not_set") return sql`o.title = ''`;
+      return null;
+    default:
+      return null;
   }
 }
 
@@ -98,27 +108,30 @@ export function opportunityWhere(
   orgId: string,
   allowedSubsidiaryIds?: Set<string> | null,
 ): SQL {
-  const parts: SQL[] = [sql`o.org_id = ${orgId}`]
-  if (!adhoc.showInactive) parts.push(sql`and o.is_active`)
-  parts.push(crmOpportunityScope(allowedSubsidiaryIds))
+  const parts: SQL[] = [sql`o.org_id = ${orgId}`];
+  if (!adhoc.showInactive) parts.push(sql`and o.is_active`);
+  parts.push(crmOpportunityScope(allowedSubsidiaryIds));
   for (const filter of view.filters) {
-    if (pushCustomFieldFilter(parts, filter, "o")) continue
-    const predicate = opportunityFilterPredicate(filter)
-    if (predicate) parts.push(sql`and ${predicate}`)
+    if (pushCustomFieldFilter(parts, filter, "o")) continue;
+    const predicate = opportunityFilterPredicate(filter);
+    if (predicate) parts.push(sql`and ${predicate}`);
   }
-  const quick = adhoc.filters ?? {}
+  const quick = adhoc.filters ?? {};
   if (quick.status_id) {
-    const refused = uuidOrFalse(quick.status_id)
-    parts.push(refused ? sql`and ${refused}` : sql`and o.status_id = ${quick.status_id}`)
+    const refused = uuidOrFalse(quick.status_id);
+    parts.push(refused ? sql`and ${refused}` : sql`and o.status_id = ${quick.status_id}`);
   }
   if (quick.owner_user_id) {
-    const refused = uuidOrFalse(quick.owner_user_id)
-    parts.push(refused ? sql`and ${refused}` : sql`and o.owner_user_id = ${quick.owner_user_id}`)
+    const refused = uuidOrFalse(quick.owner_user_id);
+    parts.push(refused ? sql`and ${refused}` : sql`and o.owner_user_id = ${quick.owner_user_id}`);
   }
-  if (quick.forecast_category) parts.push(sql`and o.forecast_category = ${quick.forecast_category}`)
+  if (quick.forecast_category)
+    parts.push(sql`and o.forecast_category = ${quick.forecast_category}`);
   if (adhoc.q) {
-    const query = `%${adhoc.q}%`
-    parts.push(sql`and (o.title ilike ${query} or o.opportunity_number ilike ${query} or p.display_name ilike ${query})`)
+    const query = `%${adhoc.q}%`;
+    parts.push(
+      sql`and (o.title ilike ${query} or o.opportunity_number ilike ${query} or p.display_name ilike ${query})`,
+    );
   }
-  return sql.join(parts, sql` `)
+  return sql.join(parts, sql` `);
 }

@@ -178,8 +178,8 @@ export function statutoryRateSlotIn(
   const slot = rates.slots.find((declared) => declared.key === slotKey);
   if (!slot) {
     throw new PayrollPackError(
-      `the ${rates.country} payroll pack declares no "${slotKey}" statutory rate — it declares `
-      + (rates.slots.map((declared) => declared.key).join(", ") || "none"),
+      `the ${rates.country} payroll pack declares no "${slotKey}" statutory rate — it declares ` +
+        (rates.slots.map((declared) => declared.key).join(", ") || "none"),
     );
   }
   return slot;
@@ -221,8 +221,8 @@ export function canonicalStatutoryRateValues(
   for (const key of Object.keys(values)) {
     if (!slot.fields.some((field) => field.key === key)) {
       throw new PayrollPackError(
-        `"${slot.key}" declares no "${key}" value — it declares `
-        + slot.fields.map((field) => field.key).join(", "),
+        `"${slot.key}" declares no "${key}" value — it declares ` +
+          slot.fields.map((field) => field.key).join(", "),
       );
     }
   }
@@ -256,8 +256,8 @@ export function canonicalStatutoryRateValues(
     }
     if (compareRate(canonical, field.min) < 0 || compareRate(canonical, field.max) > 0) {
       throw new PayrollPackError(
-        `${slot.label}: ${field.label} must be between ${field.min} and ${field.max} `
-        + `(${field.kind === "percent" ? "a percent" : field.kind === "rate" ? "a decimal rate" : "an amount"})`,
+        `${slot.label}: ${field.label} must be between ${field.min} and ${field.max} ` +
+          `(${field.kind === "percent" ? "a percent" : field.kind === "rate" ? "a decimal rate" : "an amount"})`,
       );
     }
     clean[field.key] = canonical;
@@ -303,8 +303,10 @@ export function statutoryRateProblem(input: {
   const hasRegion = input.region != null && input.region !== "";
   if (slot.scope === "org") {
     if (hasRegion) {
-      return `${slot.label} is declared org-wide by the ${country} pack — it carries no `
-        + "region. Remove the region, or declare the slot per region in the pack.";
+      return (
+        `${slot.label} is declared org-wide by the ${country} pack — it carries no ` +
+        "region. Remove the region, or declare the slot per region in the pack."
+      );
     }
   } else {
     if (!hasRegion) {
@@ -316,16 +318,22 @@ export function statutoryRateProblem(input: {
   const hasSubRegion = input.subRegion != null && input.subRegion !== "";
   if (slot.scope === "sub_region") {
     if (!hasSubRegion) {
-      return `${slot.label} varies by taxing jurisdiction inside the ${regions.label}`
-        + " — name the jurisdiction it applies to";
+      return (
+        `${slot.label} varies by taxing jurisdiction inside the ${regions.label}` +
+        " — name the jurisdiction it applies to"
+      );
     }
   } else if (hasSubRegion) {
-    return `${slot.label} is not assigned per sub-jurisdiction by the ${country} pack — `
-      + "remove it, or declare the slot at sub_region scope.";
+    return (
+      `${slot.label} is not assigned per sub-jurisdiction by the ${country} pack — ` +
+      "remove it, or declare the slot at sub_region scope."
+    );
   }
   if (slot.scope !== "filing_account" && input.filingAccountId) {
-    return `${slot.label} is not assigned per filing account by the ${country} pack — `
-      + "it applies to every account. Remove the account, or declare the slot per account.";
+    return (
+      `${slot.label} is not assigned per filing account by the ${country} pack — ` +
+      "it applies to every account. Remove the account, or declare the slot per account."
+    );
   }
   if (input.filingAccountId) {
     const account = input.account;
@@ -334,8 +342,10 @@ export function statutoryRateProblem(input: {
       return `the named filing account files under ${account.country}, not ${country}`;
     }
     if (slot.programType && account.programType !== slot.programType) {
-      return `${slot.label} is held by a ${slot.programType} account — the named account is a `
-        + `${account.programType} account`;
+      return (
+        `${slot.label} is held by a ${slot.programType} account — the named account is a ` +
+        `${account.programType} account`
+      );
     }
     if (hasRegion && account.stateCode != null && account.stateCode !== input.region) {
       return `the named account is registered for ${account.stateCode}, not ${input.region}`;
@@ -354,8 +364,10 @@ function regionProblem(
     return `unknown ${country} ${regions.label} "${region}"`;
   }
   if (slot.regions && !slot.regions.includes(region)) {
-    return `${slot.label} is not levied in ${region} — the ${country} pack declares it for `
-      + slot.regions.join(", ");
+    return (
+      `${slot.label} is not levied in ${region} — the ${country} pack declares it for ` +
+      slot.regions.join(", ")
+    );
   }
   return null;
 }
@@ -403,15 +415,28 @@ export interface StatutoryRateScopePoint {
   filingAccountId: string | null;
 }
 
-function statutoryRateSlotFenceKey(point: Pick<StatutoryRateScopePoint,
-  "orgId" | "country" | "rateKey" | "taxYear">): string {
-  return JSON.stringify(["payroll-statutory-rate-slot", point.orgId, point.country, point.rateKey, point.taxYear]);
+function statutoryRateSlotFenceKey(
+  point: Pick<StatutoryRateScopePoint, "orgId" | "country" | "rateKey" | "taxYear">,
+): string {
+  return JSON.stringify([
+    "payroll-statutory-rate-slot",
+    point.orgId,
+    point.country,
+    point.rateKey,
+    point.taxYear,
+  ]);
 }
 
 function statutoryRateScopePointKey(point: StatutoryRateScopePoint): string {
   return JSON.stringify([
-    "payroll-statutory-rate-point", point.orgId, point.country, point.rateKey, point.taxYear,
-    point.region, point.subRegion, point.filingAccountId,
+    "payroll-statutory-rate-point",
+    point.orgId,
+    point.country,
+    point.rateKey,
+    point.taxYear,
+    point.region,
+    point.subRegion,
+    point.filingAccountId,
   ]);
 }
 
@@ -450,14 +475,17 @@ export async function lockStatutoryRatesForPayRun(
   taxYear: number,
   packs: readonly PayrollPackRates[],
 ): Promise<void> {
-  const packsByCountry = [...new Map(packs.map((pack) => [pack.country, pack])).values()]
-    .sort((a, b) => a.country.localeCompare(b.country));
-  const slotPoints = packsByCountry.flatMap((pack) => pack.slots.map((slot) => ({
-    orgId,
-    country: pack.country,
-    rateKey: slot.key,
-    taxYear,
-  })));
+  const packsByCountry = [...new Map(packs.map((pack) => [pack.country, pack])).values()].sort(
+    (a, b) => a.country.localeCompare(b.country),
+  );
+  const slotPoints = packsByCountry.flatMap((pack) =>
+    pack.slots.map((slot) => ({
+      orgId,
+      country: pack.country,
+      rateKey: slot.key,
+      taxYear,
+    })),
+  );
   await takeStatutoryRateAdvisoryLocks(tx, slotPoints.map(statutoryRateSlotFenceKey));
   if (packsByCountry.length === 0) return;
 
@@ -468,23 +496,31 @@ export async function lockStatutoryRatesForPayRun(
     region: string | null;
     sub_region: string | null;
     filing_account_id: string | null;
-  }>(sql`
+  }>(
+    sql`
     select country, rate_key, region, sub_region, filing_account_id
       from payroll_statutory_rates
      where org_id = ${orgId} and tax_year = ${taxYear}
        and country = any(${sql.param(countries)}::text[]) and superseded_on is null
      order by country, rate_key, region nulls first, sub_region nulls first,
               filing_account_id nulls first
-  `, "objects");
-  await takeStatutoryRateAdvisoryLocks(tx, rows.map((row) => statutoryRateScopePointKey({
-    orgId,
-    country: row.country,
-    rateKey: row.rate_key,
-    taxYear,
-    region: row.region,
-    subRegion: row.sub_region,
-    filingAccountId: row.filing_account_id,
-  })));
+  `,
+    "objects",
+  );
+  await takeStatutoryRateAdvisoryLocks(
+    tx,
+    rows.map((row) =>
+      statutoryRateScopePointKey({
+        orgId,
+        country: row.country,
+        rateKey: row.rate_key,
+        taxYear,
+        region: row.region,
+        subRegion: row.sub_region,
+        filingAccountId: row.filing_account_id,
+      }),
+    ),
+  );
 }
 
 /**
@@ -508,7 +544,8 @@ export async function listStatutoryRates(
   // Null disables the current-only clause, following the nullable-filter
   // pattern of the country and year lines above.
   const currentOnly = filter.includeSuperseded === true ? null : true;
-  const rows = (await db.execute<Record<string, unknown>>(sql`
+  const rows = await db.execute<Record<string, unknown>>(
+    sql`
     select r.id, r.country, r.rate_key, r.region, r.sub_region, r.filing_account_id,
            r.tax_year, r.rate_values, r.source_citation, r.reason,
            r.superseded_on::text as superseded_on,
@@ -524,7 +561,9 @@ export async function listStatutoryRates(
      order by r.country, r.rate_key, r.tax_year desc,
               r.region nulls first, r.sub_region nulls first, fa.account_number nulls first,
               r.superseded_on nulls first
-  `, "objects"));
+  `,
+    "objects",
+  );
   return rows.map((row) => ({
     id: String(row.id),
     country: String(row.country),
@@ -573,26 +612,36 @@ export function rateScopePointProblem(
   const hasAccount = account != null;
   if (slot.scope === "org") {
     if (hasRegion) {
-      return `${slot.label} is declared org-wide — it carries no region, so a rate saved `
-        + `for ${region} would never resolve. Remove the region, or declare the slot per region in the pack.`;
+      return (
+        `${slot.label} is declared org-wide — it carries no region, so a rate saved ` +
+        `for ${region} would never resolve. Remove the region, or declare the slot per region in the pack.`
+      );
     }
   } else if (!hasRegion) {
-    return `${slot.label} varies by region — name the region it applies to, or the saved rate `
-      + "would never resolve for any employee.";
+    return (
+      `${slot.label} varies by region — name the region it applies to, or the saved rate ` +
+      "would never resolve for any employee."
+    );
   }
   if (slot.scope === "sub_region") {
     if (!hasSubRegion) {
-      return `${slot.label} varies by taxing jurisdiction inside the region — name the jurisdiction `
-        + "it applies to, or the saved rate would never resolve for any employee.";
+      return (
+        `${slot.label} varies by taxing jurisdiction inside the region — name the jurisdiction ` +
+        "it applies to, or the saved rate would never resolve for any employee."
+      );
     }
   } else if (hasSubRegion) {
-    return `${slot.label} is not assigned per sub-jurisdiction — the saved rate would carry `
-      + `${subRegion} where no read looks for it and would never resolve. Remove it, or declare `
-      + "the slot at sub_region scope in the pack.";
+    return (
+      `${slot.label} is not assigned per sub-jurisdiction — the saved rate would carry ` +
+      `${subRegion} where no read looks for it and would never resolve. Remove it, or declare ` +
+      "the slot at sub_region scope in the pack."
+    );
   }
   if (slot.scope !== "filing_account" && hasAccount) {
-    return `${slot.label} is not assigned per filing account — it applies to every account, so a rate `
-      + "saved against one account would never resolve. Remove the account, or declare the slot per account.";
+    return (
+      `${slot.label} is not assigned per filing account — it applies to every account, so a rate ` +
+      "saved against one account would never resolve. Remove the account, or declare the slot per account."
+    );
   }
   return null;
 }
@@ -635,18 +684,19 @@ export async function upsertStatutoryRate(input: {
 }): Promise<{ id: string; values: Record<string, string> }> {
   const slot = statutoryRateSlotIn(input.rates, input.rateKey);
   const country = input.rates.country;
-  const sourceCitation = typeof input.sourceCitation === "string" ? input.sourceCitation.trim() : "";
+  const sourceCitation =
+    typeof input.sourceCitation === "string" ? input.sourceCitation.trim() : "";
   if (!sourceCitation) {
     throw new PayrollPackError(
-      `${slot.label} cannot be saved without the published source the figures were taken from — `
-      + `enter the source citation in Payroll Setup → Statutory rates`,
+      `${slot.label} cannot be saved without the published source the figures were taken from — ` +
+        `enter the source citation in Payroll Setup → Statutory rates`,
     );
   }
   const reason = typeof input.reason === "string" ? input.reason.trim() : "";
   if (!reason) {
     throw new PayrollPackError(
-      `${slot.label} cannot be saved without the reason it is being recorded — `
-      + `enter the reason in Payroll Setup → Statutory rates`,
+      `${slot.label} cannot be saved without the reason it is being recorded — ` +
+        `enter the reason in Payroll Setup → Statutory rates`,
     );
   }
   const values = canonicalStatutoryRateValues(slot, input.values);
@@ -654,15 +704,23 @@ export async function upsertStatutoryRate(input: {
   const subRegion = input.subRegion == null || input.subRegion === "" ? null : input.subRegion;
   const filingAccountId = input.filingAccountId === "" ? null : input.filingAccountId;
   const scopeProblem = rateScopePointProblem(slot, {
-    region, subRegion, filingAccountId,
+    region,
+    subRegion,
+    filingAccountId,
   });
   if (scopeProblem) throw new PayrollPackError(scopeProblem);
   return await inDbTransaction(async (tx) => {
     await lockStatutoryRatePoint(tx, {
-      orgId: input.orgId, country, rateKey: input.rateKey, taxYear: input.taxYear,
-      region, subRegion, filingAccountId,
+      orgId: input.orgId,
+      country,
+      rateKey: input.rateKey,
+      taxYear: input.taxYear,
+      region,
+      subRegion,
+      filingAccountId,
     });
-    const existing = (await tx.execute<{ id: string; rate_values: Record<string, string> }>(sql`
+    const existing = await tx.execute<{ id: string; rate_values: Record<string, string> }>(
+      sql`
       select id, rate_values from payroll_statutory_rates
        where org_id = ${input.orgId} and country = ${country}
          and rate_key = ${input.rateKey} and tax_year = ${input.taxYear}
@@ -671,7 +729,9 @@ export async function upsertStatutoryRate(input: {
          and filing_account_id is not distinct from ${filingAccountId}
          and superseded_on is null
        for update
-    `, "objects"));
+    `,
+      "objects",
+    );
     const before = existing[0];
     const id = randomUUID();
     if (before) {
@@ -687,18 +747,24 @@ export async function upsertStatutoryRate(input: {
          where org_id = ${input.orgId} and id = ${before.id} and superseded_on is null`);
       if ((stamped.rowCount ?? 0) !== 1) {
         throw new PayrollPackError(
-          `the ${country} "${input.rateKey}" rate for tax year ${input.taxYear} was not saved — `
-          + "the update matched no row, so nothing was written",
+          `the ${country} "${input.rateKey}" rate for tax year ${input.taxYear} was not saved — ` +
+            "the update matched no row, so nothing was written",
         );
       }
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${input.orgId}, 'payroll_statutory_rates', ${before.id}, 'supersede',
                 ${JSON.stringify({
-                  country: country, rateKey: input.rateKey, region, subRegion,
-                  filingAccountId, taxYear: input.taxYear,
-                  before: before.rate_values, after: values,
-                  sourceCitation, reason,
+                  country: country,
+                  rateKey: input.rateKey,
+                  region,
+                  subRegion,
+                  filingAccountId,
+                  taxYear: input.taxYear,
+                  before: before.rate_values,
+                  after: values,
+                  sourceCitation,
+                  reason,
                 })}::jsonb, ${input.actorId})`);
     }
     await tx.execute(sql`
@@ -712,10 +778,16 @@ export async function upsertStatutoryRate(input: {
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${input.orgId}, 'payroll_statutory_rates', ${id}, 'insert',
               ${JSON.stringify({
-                country: country, rateKey: input.rateKey, region, subRegion,
-                filingAccountId, taxYear: input.taxYear,
-                before: before?.rate_values ?? null, after: values,
-                sourceCitation, reason,
+                country: country,
+                rateKey: input.rateKey,
+                region,
+                subRegion,
+                filingAccountId,
+                taxYear: input.taxYear,
+                before: before?.rate_values ?? null,
+                after: values,
+                sourceCitation,
+                reason,
               })}::jsonb, ${input.actorId})`);
     return { id, values };
   });
@@ -735,25 +807,44 @@ export async function deleteStatutoryRate(
   id: string,
 ): Promise<boolean> {
   return await inDbTransaction(async (tx) => {
-    const candidate = (await tx.execute<{
-      id: string; country: string; rate_key: string; tax_year: number;
-      region: string | null; sub_region: string | null; filing_account_id: string | null;
-    }>(sql`
+    const candidate = (
+      await tx.execute<{
+        id: string;
+        country: string;
+        rate_key: string;
+        tax_year: number;
+        region: string | null;
+        sub_region: string | null;
+        filing_account_id: string | null;
+      }>(
+        sql`
       select id, country, rate_key, tax_year, region, sub_region, filing_account_id
         from payroll_statutory_rates
        where org_id = ${orgId} and id = ${id}
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!candidate) return false;
     await lockStatutoryRatePoint(tx, {
-      orgId, country: candidate.country, rateKey: candidate.rate_key,
-      taxYear: candidate.tax_year, region: candidate.region,
-      subRegion: candidate.sub_region, filingAccountId: candidate.filing_account_id,
+      orgId,
+      country: candidate.country,
+      rateKey: candidate.rate_key,
+      taxYear: candidate.tax_year,
+      region: candidate.region,
+      subRegion: candidate.sub_region,
+      filingAccountId: candidate.filing_account_id,
     });
-    const row = (await tx.execute<{ id: string; superseded_on: string | null }>(sql`
+    const row = (
+      await tx.execute<{ id: string; superseded_on: string | null }>(
+        sql`
       select id, superseded_on::text as superseded_on from payroll_statutory_rates
        where org_id = ${orgId} and id = ${id}
        for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!row) return false;
     if (row.superseded_on != null) return true;
     const stamped = await tx.execute<never>(sql`
@@ -848,9 +939,7 @@ export async function resolveStatutoryRates(
   const country = pack.country;
   const rows = await listStatutoryRates(
     orgId,
-    asOf == null
-      ? { country, taxYear }
-      : { country, taxYear, includeSuperseded: true, asOf },
+    asOf == null ? { country, taxYear } : { country, taxYear, includeSuperseded: true, asOf },
   );
   return buildResolution({ country, taxYear, pack, rows, asOf });
 }
@@ -889,35 +978,54 @@ export function buildResolution(input: {
     const region = slot.scope === "org" ? null : (at.region ?? null);
     const subRegion = slot.scope === "sub_region" ? (at.subRegion ?? null) : null;
     const accountId = at.filingAccountId ?? null;
-    const scoped = rows.filter((row) =>
-      row.rateKey === slotKey && row.taxYear === taxYear
-      && (row.region ?? null) === region
-      && (row.subRegion ?? null) === subRegion
-      // The as-of window is enforced here, not only in the SQL: the pure
-      // half answers correctly for any caller-handed row set, so a row
-      // superseded on or before the date never answers for it.
-      && (asOf == null || row.supersededOn == null || row.supersededOn > asOf));
+    const scoped = rows.filter(
+      (row) =>
+        row.rateKey === slotKey &&
+        row.taxYear === taxYear &&
+        (row.region ?? null) === region &&
+        (row.subRegion ?? null) === subRegion &&
+        // The as-of window is enforced here, not only in the SQL: the pure
+        // half answers correctly for any caller-handed row set, so a row
+        // superseded on or before the date never answers for it.
+        (asOf == null || row.supersededOn == null || row.supersededOn > asOf),
+    );
     if (accountId && slot.scope === "filing_account") {
       const mine = inForce(scoped.filter((row) => row.filingAccountId === accountId));
       if (mine) {
         return {
-          slotKey, scope: slot.scope, region, subRegion, filingAccountId: accountId,
-          taxYear, values: mine.values, source: "account", supersededOn: mine.supersededOn,
+          slotKey,
+          scope: slot.scope,
+          region,
+          subRegion,
+          filingAccountId: accountId,
+          taxYear,
+          values: mine.values,
+          source: "account",
+          supersededOn: mine.supersededOn,
         };
       }
     }
     const wide = inForce(scoped.filter((row) => row.filingAccountId == null));
     if (wide) {
       return {
-        slotKey, scope: slot.scope, region, subRegion, filingAccountId: null, taxYear,
-        values: wide.values, source: slot.scope === "org" ? "org" : "region",
+        slotKey,
+        scope: slot.scope,
+        region,
+        subRegion,
+        filingAccountId: null,
+        taxYear,
+        values: wide.values,
+        source: slot.scope === "org" ? "org" : "region",
         supersededOn: wide.supersededOn,
       };
     }
     return null;
   };
   return {
-    country, taxYear, slots: pack.slots, rows,
+    country,
+    taxYear,
+    slots: pack.slots,
+    rows,
     resolve,
     values: (slotKey, at) => resolve(slotKey, at)?.values ?? null,
   };
@@ -980,7 +1088,9 @@ export function unconfiguredStatutoryRates(
         region ? region : null,
         subRegion ? subRegion : null,
         accountId ? "the assigned filing account" : null,
-      ].filter(Boolean).join(" · ");
+      ]
+        .filter(Boolean)
+        .join(" · ");
       found.push({
         country: resolution.country,
         slotKey: slot.key,
@@ -991,8 +1101,8 @@ export function unconfiguredStatutoryRates(
         filingAccountId: accountId,
         employees: point.employees ?? [],
         message:
-          `no ${slot.label} is configured for ${where || resolution.country} in `
-          + `${resolution.taxYear} — nothing is being accrued for it`,
+          `no ${slot.label} is configured for ${where || resolution.country} in ` +
+          `${resolution.taxYear} — nothing is being accrued for it`,
       });
     }
   }

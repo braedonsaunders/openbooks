@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
-  verifyAccountMonths,
-  verifyProjectAccountMonths,
-} from "./verification.ts";
+import { verifyAccountMonths, verifyProjectAccountMonths } from "./verification.ts";
 
 test("account-month verification uses identical exact aggregation for every connector", () => {
   const result = verifyAccountMonths(

@@ -1,1 +1,1 @@
-export * from '@openbooks/engine/sales/order-cycle-math'
+export * from "@openbooks/engine/sales/order-cycle-math";

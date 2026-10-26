@@ -86,15 +86,15 @@ test("every pack's rollover scaffold declares at least one file to generate", ()
   for (const country of SCAFFOLDS_WITH_NO_FILES) {
     assert.ok(
       empty.includes(country),
-      `${country} is allow-listed as declaring no scaffold files but now declares some — `
-      + "delete it from SCAFFOLDS_WITH_NO_FILES; the list may only shrink",
+      `${country} is allow-listed as declaring no scaffold files but now declares some — ` +
+        "delete it from SCAFFOLDS_WITH_NO_FILES; the list may only shrink",
     );
   }
   assert.deepEqual(
     empty.filter((country) => !SCAFFOLDS_WITH_NO_FILES.has(country)),
     [],
-    "a pack whose scaffold declares no files cannot scaffold anything: the generator prints its "
-    + "steps, writes no year module, no conformance stub and no barrel, and reports success",
+    "a pack whose scaffold declares no files cannot scaffold anything: the generator prints its " +
+      "steps, writes no year module, no conformance stub and no barrel, and reports success",
   );
 });
 
@@ -120,8 +120,8 @@ test("every declared scaffold path lives in a directory that exists", () => {
   for (const country of SCAFFOLD_PATHS_IN_MISSING_DIRECTORIES) {
     assert.ok(
       offenders.includes(country),
-      `${country} is allow-listed for a scaffold path in a missing directory but all of its paths `
-      + "now resolve — delete it from SCAFFOLD_PATHS_IN_MISSING_DIRECTORIES; the list may only shrink",
+      `${country} is allow-listed for a scaffold path in a missing directory but all of its paths ` +
+        "now resolve — delete it from SCAFFOLD_PATHS_IN_MISSING_DIRECTORIES; the list may only shrink",
     );
   }
   assert.deepEqual(
@@ -149,15 +149,15 @@ test("every declared scaffold file names a PER-YEAR module, not one fixed file",
   for (const country of SCAFFOLD_PATHS_WITHOUT_A_YEAR) {
     assert.ok(
       offenders.includes(country),
-      `${country} is allow-listed for a scaffold path with no {year} but all of its paths now carry `
-      + "one — delete it from SCAFFOLD_PATHS_WITHOUT_A_YEAR; the list may only shrink",
+      `${country} is allow-listed for a scaffold path with no {year} but all of its paths now carry ` +
+        "one — delete it from SCAFFOLD_PATHS_WITHOUT_A_YEAR; the list may only shrink",
     );
   }
   assert.deepEqual(
     yearless.filter((entry) => !SCAFFOLD_PATHS_WITHOUT_A_YEAR.has(entry.country)),
     [],
-    "a scaffold path without {year} cannot scaffold a year: the generator refuses to overwrite the "
-    + "one file it names and reports success having written nothing",
+    "a scaffold path without {year} cannot scaffold a year: the generator refuses to overwrite the " +
+      "one file it names and reports success having written nothing",
   );
 });
 
@@ -174,13 +174,17 @@ test("a declared barrel names the module pattern it rewrites itself from", () =>
       const pattern = new RegExp(barrel.modulePattern);
       const sampleYear = 2026;
       const matchesSomeDeclaredFile = (declared.scaffold?.files ?? []).some((file) => {
-        const filename = file.path.replace(/\{year\}/g, String(sampleYear)).split("/").pop() ?? "";
+        const filename =
+          file.path
+            .replace(/\{year\}/g, String(sampleYear))
+            .split("/")
+            .pop() ?? "";
         return pattern.test(filename);
       });
       assert.ok(
         matchesSomeDeclaredFile,
-        `${declared.country}: barrel ${barrel.path} has a module pattern (${barrel.modulePattern}) `
-        + "that matches none of the files the same scaffold generates, so it would be rewritten empty",
+        `${declared.country}: barrel ${barrel.path} has a module pattern (${barrel.modulePattern}) ` +
+          "that matches none of the files the same scaffold generates, so it would be rewritten empty",
       );
     }
   }

@@ -1,6 +1,9 @@
 import { entityMappingMetadata } from "./entity-mapping-contract.ts";
 import { dynamicsAttachmentProvider } from "./attachment-providers.ts";
-import { syncTransactionAttachments, type AttachmentSyncOptions } from "./transaction-attachments.ts";
+import {
+  syncTransactionAttachments,
+  type AttachmentSyncOptions,
+} from "./transaction-attachments.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { DynamicsClient } from "../connectors/dynamics.ts";
 import { formatMoney, fromUnits, roundDiv, toUnits } from "../money/money.ts";
@@ -8,8 +11,13 @@ import type { Rate } from "../money/brands.ts";
 import { buildNativeFromBC, type BCBuildOpts, type BCDoc } from "./dynamics-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
-  EntityStream, MigrationSource, NativeChanges, SourceAccountMonthRow,
-  SourceEntity, SourceOpenItem, SourceTrialBalanceRow,
+  EntityStream,
+  MigrationSource,
+  NativeChanges,
+  SourceAccountMonthRow,
+  SourceEntity,
+  SourceOpenItem,
+  SourceTrialBalanceRow,
 } from "./source.ts";
 import { allModules, fiscalYearsForEndingRule, monthlySourcePeriods } from "./periods.ts";
 
@@ -43,10 +51,35 @@ const BC_CATEGORY_TYPE: Record<string, string> = {
   Expense: "expense",
 };
 
-interface BCAccount { id: string; number?: string; displayName?: string; category?: string; subCategory?: string; accountType?: string; blocked?: boolean }
-interface BCParty { id: string; number?: string; displayName?: string; blocked?: boolean }
-interface BCItem { id: string; number?: string; displayName?: string; type?: string; blocked?: boolean }
-interface BCGLEntry { id: string; postingDate?: string; accountId?: string; debitAmount?: number; creditAmount?: number }
+interface BCAccount {
+  id: string;
+  number?: string;
+  displayName?: string;
+  category?: string;
+  subCategory?: string;
+  accountType?: string;
+  blocked?: boolean;
+}
+interface BCParty {
+  id: string;
+  number?: string;
+  displayName?: string;
+  blocked?: boolean;
+}
+interface BCItem {
+  id: string;
+  number?: string;
+  displayName?: string;
+  type?: string;
+  blocked?: boolean;
+}
+interface BCGLEntry {
+  id: string;
+  postingDate?: string;
+  accountId?: string;
+  debitAmount?: number;
+  creditAmount?: number;
+}
 /** Business Central v2.0 `currencyExchangeRates` resource (Microsoft Learn:
  * `currencyCode`, `startingDate`, `exchangeRateAmount`,
  * `relationalCurrencyCode`, `relationalExchangeRateAmount`). The effective
@@ -75,7 +108,8 @@ export function dividePositiveDecimals(numer: string, denom: string, places = 10
   };
   const n = parse(numer);
   const d = parse(denom);
-  if (n.digits <= 0n || d.digits <= 0n) throw new Error("exchange-rate division needs positive amounts");
+  if (n.digits <= 0n || d.digits <= 0n)
+    throw new Error("exchange-rate division needs positive amounts");
   const scaled = roundDiv(
     n.digits * 10n ** BigInt(d.scale + places),
     d.digits * 10n ** BigInt(n.scale),
@@ -106,7 +140,8 @@ export function bcFxRateFor(
     arr.push({ start, rate: row });
     byCode.set(code, arr);
   }
-  for (const arr of byCode.values()) arr.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
+  for (const arr of byCode.values())
+    arr.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));
   return (currencyCode: string, date: string): string | null => {
     const cands = byCode.get(currencyCode.trim().toUpperCase()) ?? [];
     let best: BCFxRate | null = null;
@@ -117,7 +152,10 @@ export function bcFxRateFor(
     if (!best) return null;
     if ((best.relationalCurrencyCode ?? "").trim().toUpperCase() !== base) return null;
     try {
-      return dividePositiveDecimals(String(best.exchangeRateAmount ?? ""), String(best.relationalExchangeRateAmount ?? 1));
+      return dividePositiveDecimals(
+        String(best.exchangeRateAmount ?? ""),
+        String(best.relationalExchangeRateAmount ?? 1),
+      );
     } catch {
       return null;
     }
@@ -133,12 +171,24 @@ const TXN_ENTITIES: { path: string; entity: string; expand: string }[] = [
 
 export class DynamicsSource implements MigrationSource {
   readonly name = "dynamics";
-  readonly entityMappingMetadata = entityMappingMetadata(['accounting_periods', 'accounts', 'tax_codes', 'parties', 'items', 'files'], ['customers', 'vendors'], { 'accounts': ['number', 'name', 'type', 'isActive'], 'parties': ['displayName', 'kind', 'isActive'], 'items': ['code', 'name', 'kind', 'isActive'], 'tax_codes': ['code', 'name', 'ratePercent', 'appliesTo'] });
+  readonly entityMappingMetadata = entityMappingMetadata(
+    ["accounting_periods", "accounts", "tax_codes", "parties", "items", "files"],
+    ["customers", "vendors"],
+    {
+      accounts: ["number", "name", "type", "isActive"],
+      parties: ["displayName", "kind", "isActive"],
+      items: ["code", "name", "kind", "isActive"],
+      tax_codes: ["code", "name", "ratePercent", "appliesTo"],
+    },
+  );
   readonly refKey = "bcId";
   readonly baseCurrency: string;
   private readonly orgId: string;
 
-  constructor(private client: DynamicsClient, opts: { orgId: string; baseCurrency?: string }) {
+  constructor(
+    private client: DynamicsClient,
+    opts: { orgId: string; baseCurrency?: string },
+  ) {
     this.orgId = opts.orgId;
     this.baseCurrency = opts.baseCurrency ?? "USD";
   }
@@ -149,7 +199,10 @@ export class DynamicsSource implements MigrationSource {
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {
     const info = await this.client.list<{ displayName?: string }>("companyInformation");
-    return { ok: true, detail: info[0]?.displayName ? `Connected to ${info[0].displayName}` : "Connected" };
+    return {
+      ok: true,
+      detail: info[0]?.displayName ? `Connected to ${info[0].displayName}` : "Connected",
+    };
   }
 
   // --- master data ----------------------------------------------------------------
@@ -179,14 +232,22 @@ export class DynamicsSource implements MigrationSource {
       // reconciler keys on; everything else maps by category.
       const sub = odataDecode(a.subCategory);
       const type =
-        sub === "Accounts Receivable" ? "asset_receivable" :
-        sub === "Accounts Payable" ? "liability_payable" :
-        BC_CATEGORY_TYPE[odataDecode(a.category)] ?? null;
+        sub === "Accounts Receivable"
+          ? "asset_receivable"
+          : sub === "Accounts Payable"
+            ? "liability_payable"
+            : (BC_CATEGORY_TYPE[odataDecode(a.category)] ?? null);
       if (!type) continue;
       out.push({
         sourceRef: a.id,
         naturalKey: a.number ?? null,
-        fields: { number: a.number ?? null, name: a.displayName ?? a.number ?? a.id, type, isActive: !a.blocked, isSummary: false },
+        fields: {
+          number: a.number ?? null,
+          name: a.displayName ?? a.number ?? a.id,
+          type,
+          isActive: !a.blocked,
+          isSummary: false,
+        },
       });
     }
     return out;
@@ -195,10 +256,17 @@ export class DynamicsSource implements MigrationSource {
   private async taxCodes(): Promise<SourceEntity[]> {
     // BC tax is jurisdiction-specific (VAT posting setup / tax areas). The line
     // `taxCode` string is the stable per-line key; expose the distinct set.
-    const groups = await this.client.list<{ id: string; code?: string; displayName?: string }>("taxGroups");
+    const groups = await this.client.list<{ id: string; code?: string; displayName?: string }>(
+      "taxGroups",
+    );
     return groups.map((g) => ({
       sourceRef: g.code ?? g.id,
-      fields: { code: g.code ?? g.id, name: g.displayName ?? g.code ?? g.id, ratePercent: "0", appliesTo: "both" },
+      fields: {
+        code: g.code ?? g.id,
+        name: g.displayName ?? g.code ?? g.id,
+        ratePercent: "0",
+        appliesTo: "both",
+      },
     }));
   }
 
@@ -209,11 +277,17 @@ export class DynamicsSource implements MigrationSource {
       this.client.list<BCParty>("customers", this.sinceParams(since)),
       this.client.list<BCParty>("vendors", this.sinceParams(since)),
     ]);
-    const mk = (entity: string) => (p: BCParty): SourceEntity => ({
-      mappingEntities: [entity],
-      sourceRef: p.id,
-      fields: { displayName: String(p.displayName ?? p.number ?? p.id).slice(0, 500), kind: "company", isActive: !p.blocked },
-    });
+    const mk =
+      (entity: string) =>
+      (p: BCParty): SourceEntity => ({
+        mappingEntities: [entity],
+        sourceRef: p.id,
+        fields: {
+          displayName: String(p.displayName ?? p.number ?? p.id).slice(0, 500),
+          kind: "company",
+          isActive: !p.blocked,
+        },
+      });
     return [...customers.map(mk("customers")), ...vendors.map(mk("vendors"))];
   }
 
@@ -244,7 +318,9 @@ export class DynamicsSource implements MigrationSource {
     );
   }
 
-  async controlAccounts(): Promise<Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>> {
+  async controlAccounts(): Promise<
+    Partial<Record<"ar" | "ap" | "bank" | "taxCollected" | "taxPaid", string>>
+  > {
     const rows = await this.client.list<BCAccount>("accounts");
     const sub = (a: BCAccount) => odataDecode(a.subCategory);
     const name = (a: BCAccount) => (a.displayName ?? "").toLowerCase();
@@ -265,8 +341,12 @@ export class DynamicsSource implements MigrationSource {
     // the largest income / expense (incl. COGS) movement as that doc's line
     // account; the GL trueup closes any account-distribution residual.
     const bcAccounts = await this.client.list<BCAccount>("accounts");
-    const catByBcId = new Map(bcAccounts.map((a) => [a.id, BC_CATEGORY_TYPE[odataDecode(a.category)] ?? ""]));
-    const glAll = await this.client.list<BCGLEntry & { documentNumber?: string }>("generalLedgerEntries");
+    const catByBcId = new Map(
+      bcAccounts.map((a) => [a.id, BC_CATEGORY_TYPE[odataDecode(a.category)] ?? ""]),
+    );
+    const glAll = await this.client.list<BCGLEntry & { documentNumber?: string }>(
+      "generalLedgerEntries",
+    );
     const docIncomeAccount = new Map<string, string>();
     const docExpenseAccount = new Map<string, string>();
     const incMag = new Map<string, bigint>();
@@ -279,9 +359,15 @@ export class DynamicsSource implements MigrationSource {
       const movement = toUnits(String(e.creditAmount ?? 0)) - toUnits(String(e.debitAmount ?? 0));
       const mag = movement < 0n ? -movement : movement;
       if (cat === "income" || cat === "income_other") {
-        if (mag > (incMag.get(e.documentNumber) ?? 0n)) { incMag.set(e.documentNumber, mag); docIncomeAccount.set(e.documentNumber, obId); }
+        if (mag > (incMag.get(e.documentNumber) ?? 0n)) {
+          incMag.set(e.documentNumber, mag);
+          docIncomeAccount.set(e.documentNumber, obId);
+        }
       } else if (cat === "expense" || cat === "cogs" || cat === "expense_other") {
-        if (mag > (expMag.get(e.documentNumber) ?? 0n)) { expMag.set(e.documentNumber, mag); docExpenseAccount.set(e.documentNumber, obId); }
+        if (mag > (expMag.get(e.documentNumber) ?? 0n)) {
+          expMag.set(e.documentNumber, mag);
+          docExpenseAccount.set(e.documentNumber, obId);
+        }
       }
     }
     // Document resources state `currencyCode` but no rate: resolve dated
@@ -290,7 +376,13 @@ export class DynamicsSource implements MigrationSource {
       this.baseCurrency,
       await this.client.list<BCFxRate>("currencyExchangeRates"),
     );
-    const opts: BCBuildOpts = { fxRateFor, itemSalesAccount: new Map(), itemPurchaseAccount: new Map(), docIncomeAccount, docExpenseAccount };
+    const opts: BCBuildOpts = {
+      fxRateFor,
+      itemSalesAccount: new Map(),
+      itemPurchaseAccount: new Map(),
+      docIncomeAccount,
+      docExpenseAccount,
+    };
     const filter = DynamicsClient.modifiedSince(since);
 
     // Bank accounts + per-document bank movement — BC's standard API exposes no
@@ -299,7 +391,13 @@ export class DynamicsSource implements MigrationSource {
     const bankObIds = new Set<string>();
     for (const a of bcAccounts) {
       const obId = ctx.accountByRef.get(a.id)?.id;
-      if (obId && /\b(cash|bank|chequ|checking)\b/i.test(`${odataDecode(a.subCategory)} ${a.displayName ?? ""}`)) bankObIds.add(obId);
+      if (
+        obId &&
+        /\b(cash|bank|chequ|checking)\b/i.test(
+          `${odataDecode(a.subCategory)} ${a.displayName ?? ""}`,
+        )
+      )
+        bankObIds.add(obId);
     }
     const docBank = new Map<string, string>();
     const bankMag = new Map<string, bigint>();
@@ -309,24 +407,38 @@ export class DynamicsSource implements MigrationSource {
       if (!obId || !bankObIds.has(obId)) continue;
       const movement = toUnits(String(e.debitAmount ?? 0)) - toUnits(String(e.creditAmount ?? 0));
       const mag = movement < 0n ? -movement : movement;
-      if (mag > (bankMag.get(e.documentNumber) ?? 0n)) { bankMag.set(e.documentNumber, mag); docBank.set(e.documentNumber, obId); }
+      if (mag > (bankMag.get(e.documentNumber) ?? 0n)) {
+        bankMag.set(e.documentNumber, mag);
+        docBank.set(e.documentNumber, obId);
+      }
     }
 
     const documents: NativeDocument[] = [];
     const unbuildable: { ref: string; reason: string }[] = [];
     const applications: NativeChanges["applications"] = [];
     let maxWrite: Date | null = null;
-    const track = (v?: string) => { if (v) { const d = new Date(v); if (!maxWrite || d > maxWrite) maxWrite = d; } };
+    const track = (v?: string) => {
+      if (v) {
+        const d = new Date(v);
+        if (!maxWrite || d > maxWrite) maxWrite = d;
+      }
+    };
 
     for (const { path, entity, expand } of TXN_ENTITIES) {
-      const rows = await this.client.list<BCDoc & { salesInvoiceLines?: unknown[]; [k: string]: unknown }>(path, {
-        ...filter, $expand: expand,
+      const rows = await this.client.list<
+        BCDoc & { salesInvoiceLines?: unknown[]; [k: string]: unknown }
+      >(path, {
+        ...filter,
+        $expand: expand,
       });
       for (const t of rows) {
         track(t.lastModifiedDateTime);
         const lines = (t[expand] as BCDoc["lines"]) ?? t.lines ?? [];
         const built = buildNativeFromBC(ctx, entity, { ...t, lines }, opts);
-        if ("skip" in built) { unbuildable.push({ ref: `${entity}:${t.id}`, reason: built.skip }); continue; }
+        if ("skip" in built) {
+          unbuildable.push({ ref: `${entity}:${t.id}`, reason: built.skip });
+          continue;
+        }
         documents.push(built);
 
         // Reconstruct the settlement BC baked into the invoice GL: a payment for
@@ -342,13 +454,22 @@ export class DynamicsSource implements MigrationSource {
         // so reconstruction is gated on the field being present: purchase
         // settlement rides the vendor-payment journal legs below, and a
         // missing field must never invent a full payment via `?? 0`.
-        const isSales = entity === "salesInvoice", isPurch = entity === "purchaseInvoice";
+        const isSales = entity === "salesInvoice",
+          isPurch = entity === "purchaseInvoice";
         const remaining = t.remainingAmount;
-        if ((isSales || isPurch) && t.number && typeof remaining === "number" && Number.isFinite(remaining)) {
+        if (
+          (isSales || isPurch) &&
+          t.number &&
+          typeof remaining === "number" &&
+          Number.isFinite(remaining)
+        ) {
           // Settle against OUR posted AR (per-line ex-tax + tax) rather than BC's
           // rounded document total, so the invoice closes to the exact penny.
           const arTotal = (lines ?? []).reduce(
-            (total, line) => total + toUnits(String(line.amountExcludingTax ?? 0)) + toUnits(String(line.totalTaxAmount ?? 0)),
+            (total, line) =>
+              total +
+              toUnits(String(line.amountExcludingTax ?? 0)) +
+              toUnits(String(line.totalTaxAmount ?? 0)),
             0n,
           );
           const settled = arTotal - toUnits(String(remaining));
@@ -356,14 +477,33 @@ export class DynamicsSource implements MigrationSource {
           if (settled > 0n && bank) {
             const settledAmount = formatMoney(fromUnits(settled), 2);
             documents.push({
-              sourceRef: `${entity}Payment:${t.id}`, kind: isSales ? "customer_payment" : "vendor_payment",
-              posting: true, partyId: built.partyId, controlAccountId: null,
+              sourceRef: `${entity}Payment:${t.id}`,
+              kind: isSales ? "customer_payment" : "vendor_payment",
+              posting: true,
+              partyId: built.partyId,
+              controlAccountId: null,
               // The settled delta is denominated in the invoice's currency,
               // exactly like the invoice it settles.
-              currency: built.currency, fxRate: built.fxRate,
-              documentDate: built.documentDate, dueDate: null,
-              memo: `Settlement of ${t.number}`, referenceNumber: `PAY-${t.number}`,
-              lines: [{ accountId: bank, itemId: null, amount: settledAmount, taxAmount: "0", taxOverridden: false, taxCodeId: null, departmentId: null, projectId: null, description: "Payment", lineNumber: 1 }],
+              currency: built.currency,
+              fxRate: built.fxRate,
+              documentDate: built.documentDate,
+              dueDate: null,
+              memo: `Settlement of ${t.number}`,
+              referenceNumber: `PAY-${t.number}`,
+              lines: [
+                {
+                  accountId: bank,
+                  itemId: null,
+                  amount: settledAmount,
+                  taxAmount: "0",
+                  taxOverridden: false,
+                  taxCodeId: null,
+                  departmentId: null,
+                  projectId: null,
+                  description: "Payment",
+                  lineNumber: 1,
+                },
+              ],
             });
             // Both legs come from this one invoice object, so the settled
             // delta shares its currencyCode (blank = LCY = base). No v2.0
@@ -385,7 +525,10 @@ export class DynamicsSource implements MigrationSource {
 
     // Payments (customer + vendor) — one journal-line entity each; the bank
     // account is the payment journal's balancing account.
-    for (const [path, entity] of [["customerPayments", "customerPayment"], ["vendorPayments", "vendorPayment"]] as const) {
+    for (const [path, entity] of [
+      ["customerPayments", "customerPayment"],
+      ["vendorPayments", "vendorPayment"],
+    ] as const) {
       const rows = await this.client.list<BCDoc>(path, filter);
       for (const p of rows) {
         track(p.lastModifiedDateTime);
@@ -404,7 +547,14 @@ export class DynamicsSource implements MigrationSource {
           applications.push({
             paymentRef: `${entity}:${p.id}`,
             appliedRef: `${invEntity}:${p.appliesToInvoiceId}`,
-            amount: formatMoney(fromUnits(toUnits(String(p.amount)) < 0n ? -toUnits(String(p.amount)) : toUnits(String(p.amount))), 2),
+            amount: formatMoney(
+              fromUnits(
+                toUnits(String(p.amount)) < 0n
+                  ? -toUnits(String(p.amount))
+                  : toUnits(String(p.amount)),
+              ),
+              2,
+            ),
             currency: p.currencyCode?.trim() || this.baseCurrency,
             rate: null,
           });
@@ -412,7 +562,13 @@ export class DynamicsSource implements MigrationSource {
       }
     }
 
-    return { documents, applications, deletedRefs: [], syncedThrough: maxWrite ?? since ?? new Date(0), unbuildable };
+    return {
+      documents,
+      applications,
+      deletedRefs: [],
+      syncedThrough: maxWrite ?? since ?? new Date(0),
+      unbuildable,
+    };
   }
 
   // --- verification (generalLedgerEntries = posted GL) ----------------------------------
@@ -430,7 +586,10 @@ export class DynamicsSource implements MigrationSource {
       const mv = toUnits(String(e.debitAmount ?? 0)) - toUnits(String(e.creditAmount ?? 0));
       byAccount.set(e.accountId, (byAccount.get(e.accountId) ?? 0n) + mv);
     }
-    return [...byAccount.entries()].map(([accountRef, bal]) => ({ accountRef, balance: fromUnits(bal) }));
+    return [...byAccount.entries()].map(([accountRef, bal]) => ({
+      accountRef,
+      balance: fromUnits(bal),
+    }));
   }
 
   async monthlyActivity(): Promise<SourceAccountMonthRow[]> {
@@ -449,10 +608,15 @@ export class DynamicsSource implements MigrationSource {
 
   async openItems(): Promise<SourceOpenItem[]> {
     const out: SourceOpenItem[] = [];
-    const sales = await this.client.list<{ id: string; remainingAmount?: number; status?: string }>("salesInvoices");
+    const sales = await this.client.list<{ id: string; remainingAmount?: number; status?: string }>(
+      "salesInvoices",
+    );
     for (const r of sales) {
       if (r.status === "Draft" || r.status === "Canceled") continue;
-      out.push({ ref: `salesInvoice:${r.id}`, unpaid: formatMoney(String(r.remainingAmount ?? 0), 2) });
+      out.push({
+        ref: `salesInvoice:${r.id}`,
+        unpaid: formatMoney(String(r.remainingAmount ?? 0), 2),
+      });
     }
     // Purchase open-item truth: the v2.0 `purchaseInvoice` resource exposes NO
     // `remainingAmount` (Microsoft Learn, §Properties), so per-bill remaining
@@ -462,13 +626,24 @@ export class DynamicsSource implements MigrationSource {
     // A Paid bill with no journal evidence reads 0 against our open balance
     // and fails honestly instead of inventing agreement.
     const applied = new Map<string, bigint>();
-    const journals = await this.client.list<{ id: string; appliesToInvoiceId?: string; amount?: number }>("vendorPayments");
+    const journals = await this.client.list<{
+      id: string;
+      appliesToInvoiceId?: string;
+      amount?: number;
+    }>("vendorPayments");
     for (const p of journals) {
       if (!p.appliesToInvoiceId) continue;
       const magnitude = toUnits(String(p.amount ?? 0));
-      applied.set(p.appliesToInvoiceId, (applied.get(p.appliesToInvoiceId) ?? 0n) + (magnitude < 0n ? -magnitude : magnitude));
+      applied.set(
+        p.appliesToInvoiceId,
+        (applied.get(p.appliesToInvoiceId) ?? 0n) + (magnitude < 0n ? -magnitude : magnitude),
+      );
     }
-    const bills = await this.client.list<{ id: string; status?: string; totalAmountIncludingTax?: number }>("purchaseInvoices");
+    const bills = await this.client.list<{
+      id: string;
+      status?: string;
+      totalAmountIncludingTax?: number;
+    }>("purchaseInvoices");
     for (const r of bills) {
       if (r.status === "Draft" || r.status === "Canceled") continue;
       if (r.status === "Paid") {
@@ -476,7 +651,10 @@ export class DynamicsSource implements MigrationSource {
         continue;
       }
       const unpaid = toUnits(String(r.totalAmountIncludingTax ?? 0)) - (applied.get(r.id) ?? 0n);
-      out.push({ ref: `purchaseInvoice:${r.id}`, unpaid: formatMoney(fromUnits(unpaid < 0n ? 0n : unpaid), 2) });
+      out.push({
+        ref: `purchaseInvoice:${r.id}`,
+        unpaid: formatMoney(fromUnits(unpaid < 0n ? 0n : unpaid), 2),
+      });
     }
     return out;
   }

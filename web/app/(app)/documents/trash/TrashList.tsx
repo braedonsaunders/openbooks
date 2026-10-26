@@ -1,96 +1,94 @@
-'use client'
+"use client";
 
-import { PagedTable } from '../../../../components/paged-table'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import {
-  File as FileIcon,
-  Folder as FolderIcon,
-  Loader2,
-  RotateCcw,
-  Trash2,
-} from 'lucide-react'
-import { Badge, Button } from '@openbooks/ui'
-import { confirmDialog } from '../../../../lib/confirm'
-import { refusalMessageFromBody } from '../../../../lib/api-error'
+import { PagedTable } from "../../../../components/paged-table";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { File as FileIcon, Folder as FolderIcon, Loader2, RotateCcw, Trash2 } from "lucide-react";
+import { Badge, Button } from "@openbooks/ui";
+import { confirmDialog } from "../../../../lib/confirm";
+import { refusalMessageFromBody } from "../../../../lib/api-error";
 
 export interface TrashRow {
-  kind: 'folder' | 'file'
-  id: string
-  name: string
-  fileTypeLabel: string | null
-  folderName: string | null
-  modifiedLabel: string
+  kind: "folder" | "file";
+  id: string;
+  name: string;
+  fileTypeLabel: string | null;
+  folderName: string | null;
+  modifiedLabel: string;
 }
 
 /** Named purge/restore refusals the file-cabinet routes return, mapped to catalog keys. */
 const TRASH_REFUSAL_KEYS = {
-  retained_evidence_cannot_be_purged: 'purgeRetained',
-  'has attached files': 'purgeAttached',
-  system: 'purgeSystem',
-  'not found': 'alreadyGone',
-} as const
+  retained_evidence_cannot_be_purged: "purgeRetained",
+  "has attached files": "purgeAttached",
+  system: "purgeSystem",
+  "not found": "alreadyGone",
+} as const;
 
 export function TrashList({ items }: { items: TrashRow[] }) {
-  const t = useTranslations('documents.trash')
-  const router = useRouter()
-  const [busy, setBusy] = useState<string | null>(null)
+  const t = useTranslations("documents.trash");
+  const router = useRouter();
+  const [busy, setBusy] = useState<string | null>(null);
 
   function base(row: TrashRow) {
-    return `/api/file-cabinet/${row.kind === 'folder' ? 'folders' : 'files'}/${row.id}`
+    return `/api/file-cabinet/${row.kind === "folder" ? "folders" : "files"}/${row.id}`;
   }
 
   async function restore(row: TrashRow) {
-    setBusy(row.id)
+    setBusy(row.id);
     try {
-      const res = await fetch(`${base(row)}/restore`, { method: 'POST' })
+      const res = await fetch(`${base(row)}/restore`, { method: "POST" });
       if (res.ok) {
-        toast.success(t('restored'))
-        router.refresh()
+        toast.success(t("restored"));
+        router.refresh();
       } else {
-        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
         // Mapped codes keep their copy; anything else reads through the
         // shared helper so message, remedy and code render instead of the
         // generic fallback.
-        const key =
-          err.error &&
-          TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS]
-        toast.error(key ? t(key) : (refusalMessageFromBody(err, { fallback: t('restoreFailed') }) ?? t('restoreFailed')))
+        const key = err.error && TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS];
+        toast.error(
+          key
+            ? t(key)
+            : (refusalMessageFromBody(err, { fallback: t("restoreFailed") }) ?? t("restoreFailed")),
+        );
       }
     } catch {
-      toast.error(t('restoreFailed'))
+      toast.error(t("restoreFailed"));
     } finally {
-      setBusy(null)
+      setBusy(null);
     }
   }
 
   async function purge(row: TrashRow) {
     const ok = await confirmDialog({
-      title: t('purgeConfirm.title'),
-      message: t('purgeConfirm.body'),
-      tone: 'danger',
-    })
-    if (!ok) return
-    setBusy(row.id)
+      title: t("purgeConfirm.title"),
+      message: t("purgeConfirm.body"),
+      tone: "danger",
+    });
+    if (!ok) return;
+    setBusy(row.id);
     try {
-      const res = await fetch(`${base(row)}?purge=1`, { method: 'DELETE' })
+      const res = await fetch(`${base(row)}?purge=1`, { method: "DELETE" });
       if (res.ok) {
-        toast.success(t('purged'))
-        router.refresh()
+        toast.success(t("purged"));
+        router.refresh();
       } else {
-        const err = (await res.json().catch(() => ({}))) as { error?: string }
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
         // Mapped codes keep their copy (see restore above).
-        const key =
-          err.error &&
-          TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS]
-        toast.error(key ? t(key) : (refusalMessageFromBody(err, { fallback: t('purgeFailed') }) ?? t('purgeFailed')))
+        const key = err.error && TRASH_REFUSAL_KEYS[err.error as keyof typeof TRASH_REFUSAL_KEYS];
+        toast.error(
+          key
+            ? t(key)
+            : (refusalMessageFromBody(err, { fallback: t("purgeFailed") }) ?? t("purgeFailed")),
+        );
       }
     } catch {
-      toast.error(t('purgeFailed'))
+      toast.error(t("purgeFailed"));
     } finally {
-      setBusy(null)
+      setBusy(null);
     }
   }
 
@@ -102,15 +100,15 @@ export function TrashList({ items }: { items: TrashRow[] }) {
       empty=""
       searchable
       emptyAsRow
-      rowClassName={() => 'group'}
+      rowClassName={() => "group"}
       columns={[
         {
-          key: 'column_0',
-          header: <>{t('title')}</>,
+          key: "column_0",
+          header: <>{t("title")}</>,
           cell: (row) => (
             <>
               <div className="flex items-center gap-2">
-                {row.kind === 'folder' ? (
+                {row.kind === "folder" ? (
                   <FolderIcon className="h-4 w-4 shrink-0 text-teal-500" />
                 ) : (
                   <FileIcon className="h-4 w-4 shrink-0 text-slate-400" />
@@ -118,35 +116,30 @@ export function TrashList({ items }: { items: TrashRow[] }) {
                 <span className="truncate font-medium text-slate-800 dark:text-slate-100">
                   {row.name}
                 </span>
-                {row.kind === 'folder' ? (
-                  <Badge variant="secondary">{t('folderLabel')}</Badge>
+                {row.kind === "folder" ? (
+                  <Badge variant="secondary">{t("folderLabel")}</Badge>
                 ) : row.fileTypeLabel ? (
                   <Badge variant="secondary">{row.fileTypeLabel}</Badge>
                 ) : null}
                 {row.folderName ? (
                   <span className="truncate text-xs text-slate-400">
-                    {t('inLocation', { location: row.folderName })}
+                    {t("inLocation", { location: row.folderName })}
                   </span>
                 ) : null}
-                <span className="ml-auto shrink-0 text-xs text-slate-400">
-                  {row.modifiedLabel}
-                </span>
+                <span className="ml-auto shrink-0 text-xs text-slate-400">{row.modifiedLabel}</span>
               </div>
             </>
           ),
           search: (row) =>
             Object.values(row)
-              .filter(
-                (value) =>
-                  typeof value === 'string' || typeof value === 'number',
-              )
-              .join(' '),
+              .filter((value) => typeof value === "string" || typeof value === "number")
+              .join(" "),
         },
         {
-          key: 'column_1',
+          key: "column_1",
           header: <></>,
-          headerClassName: 'w-40 text-right',
-          className: 'text-right',
+          headerClassName: "w-40 text-right",
+          className: "text-right",
           cell: (row) => (
             <>
               <div className="flex items-center justify-end gap-1">
@@ -161,14 +154,14 @@ export function TrashList({ items }: { items: TrashRow[] }) {
                   ) : (
                     <RotateCcw className="h-3.5 w-3.5" />
                   )}
-                  {t('restore')}
+                  {t("restore")}
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-rose-500 hover:text-rose-600"
                   disabled={busy === row.id}
-                  aria-label={t('deleteForever')}
+                  aria-label={t("deleteForever")}
                   onClick={() => void purge(row)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -178,13 +171,10 @@ export function TrashList({ items }: { items: TrashRow[] }) {
           ),
           search: (row) =>
             Object.values(row)
-              .filter(
-                (value) =>
-                  typeof value === 'string' || typeof value === 'number',
-              )
-              .join(' '),
+              .filter((value) => typeof value === "string" || typeof value === "number")
+              .join(" "),
         },
       ]}
     />
-  )
+  );
 }

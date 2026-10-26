@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
-import { stubModules } from '../../testing/stub-modules.ts'
+import { stubModules } from "../../testing/stub-modules.ts";
 
 // Route-level proof for the provider-FX observation id on payment posting:
 // the real POST handler must refuse a junk settlementFxRateId with the field
@@ -10,9 +10,16 @@ import { stubModules } from '../../testing/stub-modules.ts'
 // body parsing and reaching the document lookup). Only the auth boundary is
 // stubbed, in the real Authz shape with an unrestricted scope; parsing, the
 // document lookup, and the database are real.
-stubModules({ navigation: false, intl: false, authz: false, features: false, extra: {
-    '../../../../lib/authz': 'const key = Symbol.for(\'openbooks.posting-fx-gate\')\n          export async function getAuthz() { return globalThis[key] ?? null }\n          export function can() { return true }\n          export function guardSubsidiaryScope() { return null }',
-  } });
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../lib/authz":
+      "const key = Symbol.for('openbooks.posting-fx-gate')\n          export async function getAuthz() { return globalThis[key] ?? null }\n          export function can() { return true }\n          export function guardSubsidiaryScope() { return null }",
+  },
+});
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -24,12 +31,8 @@ registerHooks({
 });
 
 const gateKey = Symbol.for("openbooks.posting-fx-gate");
-const { withBypassContext: withBypass } = await import(
-  "@openbooks/engine/platform/db"
-);
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { withBypassContext: withBypass } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("../../app/api/payments/post-with-applications/route.ts");
 
 function gateFor(orgId: string): void {
@@ -80,7 +83,10 @@ test("payment posting keeps the provider FX observation id optional", async () =
     // Absent and explicit-null ids both pass body parsing and reach the
     // document lookup, which refuses the unknown document — never a 400.
     for (const settlementFxRateId of [undefined, null]) {
-      const response = await post({ documentId: randomUUID(), allocations: [allocation(settlementFxRateId!)] });
+      const response = await post({
+        documentId: randomUUID(),
+        allocations: [allocation(settlementFxRateId!)],
+      });
       assert.equal(response.status, 404, `expected lookup 404, got ${response.status}`);
     }
   } finally {

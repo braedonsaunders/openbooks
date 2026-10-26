@@ -63,47 +63,52 @@ const { loadAgentsLibrary } = await import("./view.ts");
 hooks.deregister();
 
 const { withBypassContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { CONTINUOUS_CLOSE_AGENT_KEYS } = await import("../../../../../../lib/setup/agents.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-test("a setup manager sees every pack with detectors and install state", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    loaderState.user = { orgId: org.orgId, id: "00000000-0000-0000-0000-000000000001" };
-    loaderState.permissions = new Set(["admin.setup.manage"]);
-    const data = await withBypassContext(() => loadAgentsLibrary());
-    assert.deepEqual(
-      data.packs.map((pack) => pack.agentKey).sort(),
-      [...CONTINUOUS_CLOSE_AGENT_KEYS].sort(),
-    );
-    assert.equal(data.packs[0]?.featureEnabled, true);
-    for (const pack of data.packs) {
-      assert.ok(pack.name.startsWith("admin:setup.agents.packs."));
-      assert.ok(pack.reads.startsWith("admin:setup.agents.packs."));
-      assert.ok(pack.detectors.length > 0, `${pack.agentKey} must list its checks`);
-      assert.ok(pack.permissions.length > 0, `${pack.agentKey} must name required permissions`);
-      assert.equal(pack.installed, false, `${pack.agentKey} must default to uninstalled`);
-      assert.ok(pack.installPolicy.agentKey === pack.agentKey);
-      for (const detector of pack.detectors) {
-        assert.equal(typeof detector.detectorKey, "string");
-        assert.ok(detector.title.startsWith("admin:ai.agents.detectors."));
+test(
+  "a setup manager sees every pack with detectors and install state",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      loaderState.user = { orgId: org.orgId, id: "00000000-0000-0000-0000-000000000001" };
+      loaderState.permissions = new Set(["admin.setup.manage"]);
+      const data = await withBypassContext(() => loadAgentsLibrary());
+      assert.deepEqual(
+        data.packs.map((pack) => pack.agentKey).sort(),
+        [...CONTINUOUS_CLOSE_AGENT_KEYS].sort(),
+      );
+      assert.equal(data.packs[0]?.featureEnabled, true);
+      for (const pack of data.packs) {
+        assert.ok(pack.name.startsWith("admin:setup.agents.packs."));
+        assert.ok(pack.reads.startsWith("admin:setup.agents.packs."));
+        assert.ok(pack.detectors.length > 0, `${pack.agentKey} must list its checks`);
+        assert.ok(pack.permissions.length > 0, `${pack.agentKey} must name required permissions`);
+        assert.equal(pack.installed, false, `${pack.agentKey} must default to uninstalled`);
+        assert.ok(pack.installPolicy.agentKey === pack.agentKey);
+        for (const detector of pack.detectors) {
+          assert.equal(typeof detector.detectorKey, "string");
+          assert.ok(detector.title.startsWith("admin:ai.agents.detectors."));
+        }
       }
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+  },
+);
 
 test("without the setup key the library redirects", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     loaderState.user = { orgId: org.orgId, id: "00000000-0000-0000-0000-000000000002" };
     loaderState.permissions = new Set(["assistant.use"]);
-    await assert.rejects(withBypassContext(() => loadAgentsLibrary()), /NEXT_REDIRECT:\// );
+    await assert.rejects(
+      withBypassContext(() => loadAgentsLibrary()),
+      /NEXT_REDIRECT:\//,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

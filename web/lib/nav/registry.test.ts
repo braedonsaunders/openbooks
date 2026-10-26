@@ -1,229 +1,285 @@
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import test from 'node:test'
-import { hiddenNavModules, type FeatureState } from '../features'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
+import { hiddenNavModules, type FeatureState } from "../features";
 import {
   DEFAULT_NAV_ORDER,
   MODULE_BY_KEY,
   NAV_GROUPS,
   NAV_MODULES,
   defaultNavConfig,
-} from './registry'
+} from "./registry";
 
-test('default navigation is a complete version-two workspace configuration', () => {
-  const config = defaultNavConfig()
-  assert.equal(config.version, 2)
+test("default navigation is a complete version-two workspace configuration", () => {
+  const config = defaultNavConfig();
+  assert.equal(config.version, 2);
   assert.deepEqual(
     config.groups.map((group) => group.id),
     NAV_GROUPS.map((group) => group.key),
-  )
+  );
   // Supporting work that lives inside its native module (local-only) never
   // seeds the workspace menu; every other module keeps its default place.
-  const seeded = config.groups.flatMap((group) => group.items).map((item) => (item.kind === 'module' ? item.moduleKey : ''))
+  const seeded = config.groups
+    .flatMap((group) => group.items)
+    .map((item) => (item.kind === "module" ? item.moduleKey : ""));
   assert.deepEqual(
     seeded,
-    NAV_GROUPS.flatMap((group) => DEFAULT_NAV_ORDER[group.key]).filter((key) => !MODULE_BY_KEY.get(key)?.localOnly),
-  )
-  const localOnly = NAV_MODULES.filter((module) => module.localOnly).map((module) => module.key).sort()
-  assert.deepEqual(localOnly, ['hrm-change-requests', 'hrm-compensation-plans', 'hrm-processes', 'payroll-anomalies', 'payroll-separations'])
-  assert.ok(localOnly.every((key) => !seeded.includes(key)), 'local-only modules stay inside their native modules')
-})
+    NAV_GROUPS.flatMap((group) => DEFAULT_NAV_ORDER[group.key]).filter(
+      (key) => !MODULE_BY_KEY.get(key)?.localOnly,
+    ),
+  );
+  const localOnly = NAV_MODULES.filter((module) => module.localOnly)
+    .map((module) => module.key)
+    .sort();
+  assert.deepEqual(localOnly, [
+    "hrm-change-requests",
+    "hrm-compensation-plans",
+    "hrm-processes",
+    "payroll-anomalies",
+    "payroll-separations",
+  ]);
+  assert.ok(
+    localOnly.every((key) => !seeded.includes(key)),
+    "local-only modules stay inside their native modules",
+  );
+});
 
-test('default workspaces follow the approved journey-oriented information architecture', () => {
+test("default workspaces follow the approved journey-oriented information architecture", () => {
   assert.deepEqual(
     NAV_GROUPS.map((group) => [group.key, group.label]),
     [
-      ['my-work', 'My Work'],
-      ['customers', 'Customers'],
-      ['purchasing', 'Purchasing'],
-      ['operations', 'Operations'],
-      ['hrm', 'People'],
-      ['banking', 'Banking'],
-      ['accounting', 'Accounting'],
-      ['insights', 'Insights'],
-      ['settings', 'Settings'],
+      ["my-work", "My Work"],
+      ["customers", "Customers"],
+      ["purchasing", "Purchasing"],
+      ["operations", "Operations"],
+      ["hrm", "People"],
+      ["banking", "Banking"],
+      ["accounting", "Accounting"],
+      ["insights", "Insights"],
+      ["settings", "Settings"],
     ],
-  )
+  );
   assert.deepEqual(DEFAULT_NAV_ORDER.customers, [
-    'customers', 'crm-activities', 'crm-opportunities', 'crm-forecasts',
-    'crm-sales', 'crm-sales-representatives', 'crm-sales-teams', 'crm-sales-quotas', 'crm-sales-territories',
-    'pre-billing', 'ar-invoices', 'cash-sales', 'pos', 'sales-orders', 'estimates', 'receipts', 'channels', 'collections', 'ar',
+    "customers",
+    "crm-activities",
+    "crm-opportunities",
+    "crm-forecasts",
+    "crm-sales",
+    "crm-sales-representatives",
+    "crm-sales-teams",
+    "crm-sales-quotas",
+    "crm-sales-territories",
+    "pre-billing",
+    "ar-invoices",
+    "cash-sales",
+    "pos",
+    "sales-orders",
+    "estimates",
+    "receipts",
+    "channels",
+    "collections",
+    "ar",
     // Modules the canonical order does not place explicitly follow it, in declaration order.
-    'stored-value',
-  ])
-  for (const key of ['employees', 'hrm', 'payroll']) {
-    assert.ok(DEFAULT_NAV_ORDER.hrm.includes(key))
-    assert.ok(!DEFAULT_NAV_ORDER.operations.includes(key))
+    "stored-value",
+  ]);
+  for (const key of ["employees", "hrm", "payroll"]) {
+    assert.ok(DEFAULT_NAV_ORDER.hrm.includes(key));
+    assert.ok(!DEFAULT_NAV_ORDER.operations.includes(key));
   }
-  assert.ok(DEFAULT_NAV_ORDER['my-work'].includes('me'))
-  assert.ok(!DEFAULT_NAV_ORDER.operations.includes('me'))
-  assert.ok(DEFAULT_NAV_ORDER.operations.includes('inventory'))
-  assert.ok(DEFAULT_NAV_ORDER.operations.includes('projects'))
-  assert.equal(
-    NAV_MODULES.find((module) => module.key === 'continuous-close')?.group,
-    'my-work',
-  )
-  assert.equal(DEFAULT_NAV_ORDER.accounting.includes('continuous-close'), false)
-  assert.deepEqual(
-    DEFAULT_NAV_ORDER.accounting.slice(2, 5),
-    ['revenue', 'assets', 'leases'],
-  )
-  assert.deepEqual(
-    DEFAULT_NAV_ORDER.accounting.slice(5, 7),
-    ['tax-depreciation', 'budgets'],
-  )
+  assert.ok(DEFAULT_NAV_ORDER["my-work"].includes("me"));
+  assert.ok(!DEFAULT_NAV_ORDER.operations.includes("me"));
+  assert.ok(DEFAULT_NAV_ORDER.operations.includes("inventory"));
+  assert.ok(DEFAULT_NAV_ORDER.operations.includes("projects"));
+  assert.equal(NAV_MODULES.find((module) => module.key === "continuous-close")?.group, "my-work");
+  assert.equal(DEFAULT_NAV_ORDER.accounting.includes("continuous-close"), false);
+  assert.deepEqual(DEFAULT_NAV_ORDER.accounting.slice(2, 5), ["revenue", "assets", "leases"]);
+  assert.deepEqual(DEFAULT_NAV_ORDER.accounting.slice(5, 7), ["tax-depreciation", "budgets"]);
   assert.deepEqual(DEFAULT_NAV_ORDER.accounting.slice(10, 13), [
-    'accounting-changes',
-    'provisions',
-    'nonprofit',
-  ])
+    "accounting-changes",
+    "provisions",
+    "nonprofit",
+  ]);
   assert.deepEqual(
-    NAV_MODULES.find((module) => module.key === 'tax-depreciation'),
+    NAV_MODULES.find((module) => module.key === "tax-depreciation"),
     {
-      key: 'tax-depreciation',
-      href: '/assets?tab=tax-depreciation',
-      label: 'Tax Depreciation',
-      iconKey: 'journal',
-      group: 'accounting',
-      subgroup: 'assets',
-      requiredPermission: 'assets.read',
+      key: "tax-depreciation",
+      href: "/assets?tab=tax-depreciation",
+      label: "Tax Depreciation",
+      iconKey: "journal",
+      group: "accounting",
+      subgroup: "assets",
+      requiredPermission: "assets.read",
     },
-  )
+  );
   assert.deepEqual(
-    NAV_MODULES.find((module) => module.key === 'leases'),
+    NAV_MODULES.find((module) => module.key === "leases"),
     {
-      key: 'leases',
-      href: '/assets/leases',
-      label: 'Lessee Leases',
-      iconKey: 'key',
-      group: 'accounting',
-      subgroup: 'assets',
-      requiredPermission: 'assets.read',
+      key: "leases",
+      href: "/assets/leases",
+      label: "Lessee Leases",
+      iconKey: "key",
+      group: "accounting",
+      subgroup: "assets",
+      requiredPermission: "assets.read",
     },
-  )
+  );
   assert.deepEqual(
-    NAV_MODULES.find((module) => module.key === 'accounting-changes'),
+    NAV_MODULES.find((module) => module.key === "accounting-changes"),
     {
-      key: 'accounting-changes',
-      href: '/accounting/changes',
-      label: 'Accounting events',
-      iconKey: 'git-branch',
-      group: 'accounting',
-      subgroup: 'close',
-      requiredPermission: 'gl.read',
+      key: "accounting-changes",
+      href: "/accounting/changes",
+      label: "Accounting events",
+      iconKey: "git-branch",
+      group: "accounting",
+      subgroup: "close",
+      requiredPermission: "gl.read",
     },
-  )
+  );
   assert.deepEqual(
-    NAV_MODULES.find((module) => module.key === 'nonprofit'),
+    NAV_MODULES.find((module) => module.key === "nonprofit"),
     {
-      key: 'nonprofit',
-      href: '/nonprofit',
-      label: 'Nonprofit',
-      iconKey: 'landmark',
-      group: 'accounting',
-      requiredPermission: 'funds.read',
-      featureKey: 'nonprofit',
+      key: "nonprofit",
+      href: "/nonprofit",
+      label: "Nonprofit",
+      iconKey: "landmark",
+      group: "accounting",
+      requiredPermission: "funds.read",
+      featureKey: "nonprofit",
     },
-  )
-})
+  );
+});
 
-test('default mobile navigation pins exactly four high-frequency destinations', () => {
+test("default mobile navigation pins exactly four high-frequency destinations", () => {
   const pinned = defaultNavConfig()
     .groups.flatMap((group) => group.items)
     .filter((item) => item.mobile)
-    .map((item) => (item.kind === 'module' ? item.moduleKey : ''))
-  assert.deepEqual(pinned, ['dashboard', 'approvals', 'ar', 'ap'])
-})
+    .map((item) => (item.kind === "module" ? item.moduleKey : ""));
+  assert.deepEqual(pinned, ["dashboard", "approvals", "ar", "ap"]);
+});
 
-test('applications for payment is not exposed as a top-level navigation module', () => {
-  assert.equal(NAV_MODULES.some((candidate) => candidate.key === 'construction-billing'), false)
-})
+test("applications for payment is not exposed as a top-level navigation module", () => {
+  assert.equal(
+    NAV_MODULES.some((candidate) => candidate.key === "construction-billing"),
+    false,
+  );
+});
 
-test('nonprofit hides while its governing key is off', () => {
-  const entry = NAV_MODULES.find((module) => module.key === 'nonprofit')!
-  assert.equal(entry.featureKey, 'nonprofit')
-  assert.ok(hiddenNavModules({} as FeatureState).has(entry.key))
-  assert.ok(!hiddenNavModules({ nonprofit: true } as FeatureState).has(entry.key))
-})
+test("nonprofit hides while its governing key is off", () => {
+  const entry = NAV_MODULES.find((module) => module.key === "nonprofit")!;
+  assert.equal(entry.featureKey, "nonprofit");
+  assert.ok(hiddenNavModules({} as FeatureState).has(entry.key));
+  assert.ok(!hiddenNavModules({ nonprofit: true } as FeatureState).has(entry.key));
+});
 
-test('installed apps are absent from default navigation until explicitly placed', () => {
-  const appItems = defaultNavConfig().groups.flatMap((group) => group.items).filter((item) => item.kind === 'app')
-  assert.deepEqual(appItems, [])
-})
+test("installed apps are absent from default navigation until explicitly placed", () => {
+  const appItems = defaultNavConfig()
+    .groups.flatMap((group) => group.items)
+    .filter((item) => item.kind === "app");
+  assert.deepEqual(appItems, []);
+});
 
-test('every module belongs to a declared workspace and has a unique stable key', () => {
-  const groupKeys = new Set(NAV_GROUPS.map((group) => group.key))
-  const moduleKeys = NAV_MODULES.map((module) => module.key)
-  const orderedKeys = NAV_GROUPS.flatMap((group) => DEFAULT_NAV_ORDER[group.key])
-  assert.equal(new Set(moduleKeys).size, NAV_MODULES.length)
-  assert.deepEqual([...orderedKeys].sort(), [...moduleKeys].sort())
+test("every module belongs to a declared workspace and has a unique stable key", () => {
+  const groupKeys = new Set(NAV_GROUPS.map((group) => group.key));
+  const moduleKeys = NAV_MODULES.map((module) => module.key);
+  const orderedKeys = NAV_GROUPS.flatMap((group) => DEFAULT_NAV_ORDER[group.key]);
+  assert.equal(new Set(moduleKeys).size, NAV_MODULES.length);
+  assert.deepEqual([...orderedKeys].sort(), [...moduleKeys].sort());
   for (const module of NAV_MODULES) {
-    assert.ok(groupKeys.has(module.group), module.key)
+    assert.ok(groupKeys.has(module.group), module.key);
     if (module.menuParent) {
-      const parent = NAV_MODULES.find((candidate) => candidate.key === module.menuParent)
-      assert.ok(parent, `${module.key}: menu parent must be registered`)
-      assert.notEqual(parent.key, module.key)
-      assert.equal(parent.group, module.group, `${module.key}: parent owns the same workspace`)
-      assert.equal(parent.menuParent, undefined, `${module.key}: main menu parents are entry points`)
+      const parent = NAV_MODULES.find((candidate) => candidate.key === module.menuParent);
+      assert.ok(parent, `${module.key}: menu parent must be registered`);
+      assert.notEqual(parent.key, module.key);
+      assert.equal(parent.group, module.group, `${module.key}: parent owns the same workspace`);
+      assert.equal(
+        parent.menuParent,
+        undefined,
+        `${module.key}: main menu parents are entry points`,
+      );
     }
   }
   for (const group of NAV_GROUPS) {
     for (const moduleKey of DEFAULT_NAV_ORDER[group.key]) {
-      assert.equal(NAV_MODULES.find((module) => module.key === moduleKey)?.group, group.key, moduleKey)
+      assert.equal(
+        NAV_MODULES.find((module) => module.key === moduleKey)?.group,
+        group.key,
+        moduleKey,
+      );
     }
   }
-})
+});
 
-test('native record targets are deterministic data contracts', () => {
+test("native record targets are deterministic data contracts", () => {
   for (const module of NAV_MODULES) {
-    const target = module.recordTarget
-    if (!target) continue
-    assert.ok(module.requiredPermission, `${module.key}: record targets require an authorization boundary`)
-    if (target.kind === 'query') {
-      assert.match(target.param, /^[a-z][A-Za-z]*$/, module.key)
-    } else if (target.kind === 'nested') {
-      assert.match(target.segment, /^[a-z][a-z-]*$/, module.key)
+    const target = module.recordTarget;
+    if (!target) continue;
+    assert.ok(
+      module.requiredPermission,
+      `${module.key}: record targets require an authorization boundary`,
+    );
+    if (target.kind === "query") {
+      assert.match(target.param, /^[a-z][A-Za-z]*$/, module.key);
+    } else if (target.kind === "nested") {
+      assert.match(target.segment, /^[a-z][a-z-]*$/, module.key);
     } else {
-      assert.equal(module.key, 'projects')
+      assert.equal(module.key, "projects");
     }
   }
-})
+});
 
-test('every module and group carries a translated label', () => {
+test("every module and group carries a translated label", () => {
   // A module added without its `nav.modules` entry renders a raw key in the
   // sidebar and throws MISSING_MESSAGE on the server for every page that
   // resolves the nav — which is every page. The registry and the catalog are
   // edited in different files, so nothing but this connects them.
   const nav = JSON.parse(
-    readFileSync(join(import.meta.dirname, '..', '..', 'messages', 'en', 'nav.json'), 'utf8'),
-  ) as { modules: Record<string, string>; groups?: Record<string, string> }
+    readFileSync(join(import.meta.dirname, "..", "..", "messages", "en", "nav.json"), "utf8"),
+  ) as { modules: Record<string, string>; groups?: Record<string, string> };
 
-  const missing = NAV_MODULES.filter((module) => !nav.modules[module.key]).map((module) => module.key)
-  assert.deepEqual(missing, [], 'these modules have no nav.modules label')
+  const missing = NAV_MODULES.filter((module) => !nav.modules[module.key]).map(
+    (module) => module.key,
+  );
+  assert.deepEqual(missing, [], "these modules have no nav.modules label");
 
   // The reverse too: a label for a module that no longer exists is dead copy
   // translators keep paying for.
-  const keys = new Set(NAV_MODULES.map((module) => module.key))
-  const orphaned = Object.keys(nav.modules).filter((key) => !keys.has(key))
-  assert.deepEqual(orphaned, [], 'these nav.modules labels name no module')
-})
+  const keys = new Set(NAV_MODULES.map((module) => module.key));
+  const orphaned = Object.keys(nav.modules).filter((key) => !keys.has(key));
+  assert.deepEqual(orphaned, [], "these nav.modules labels name no module");
+});
 
-test('timesheets stay in the menu while field time is off; the clock is a My Work destination for time.clock', () => {
-  const officeOrg = {} as FeatureState
-  assert.equal(hiddenNavModules(officeOrg).has('timesheets'), false, 'weekly timesheets belong to time tracking, not field time')
-  assert.equal(hiddenNavModules(officeOrg).has('time-clock'), true, 'office orgs never see a clock')
-  assert.equal(hiddenNavModules({ fieldTime: true } as FeatureState).has('time-clock'), false)
-  const clock = NAV_MODULES.find((module) => module.key === 'time-clock')!
-  assert.equal(clock.href, '/time/clock')
-  assert.equal(clock.group, 'my-work')
-  assert.equal(clock.requiredPermission, 'time.clock', 'clocking in does not require reading other people\'s time')
-  assert.ok(DEFAULT_NAV_ORDER['my-work'].includes('time-clock'))
-  const crew = NAV_MODULES.find((module) => module.key === 'time-crew')!
-  assert.deepEqual(crew.requiredPermissionsAny, ['time.read', 'time.crew.enter'], 'crew entry is reachable with its own catalogue grant')
-})
+test("timesheets stay in the menu while field time is off; the clock is a My Work destination for time.clock", () => {
+  const officeOrg = {} as FeatureState;
+  assert.equal(
+    hiddenNavModules(officeOrg).has("timesheets"),
+    false,
+    "weekly timesheets belong to time tracking, not field time",
+  );
+  assert.equal(
+    hiddenNavModules(officeOrg).has("time-clock"),
+    true,
+    "office orgs never see a clock",
+  );
+  assert.equal(hiddenNavModules({ fieldTime: true } as FeatureState).has("time-clock"), false);
+  const clock = NAV_MODULES.find((module) => module.key === "time-clock")!;
+  assert.equal(clock.href, "/time/clock");
+  assert.equal(clock.group, "my-work");
+  assert.equal(
+    clock.requiredPermission,
+    "time.clock",
+    "clocking in does not require reading other people's time",
+  );
+  assert.ok(DEFAULT_NAV_ORDER["my-work"].includes("time-clock"));
+  const crew = NAV_MODULES.find((module) => module.key === "time-crew")!;
+  assert.deepEqual(
+    crew.requiredPermissionsAny,
+    ["time.read", "time.crew.enter"],
+    "crew entry is reachable with its own catalogue grant",
+  );
+});
 
-
-test('every native navigation destination has a nonempty display label', () => {
-  for (const module of NAV_MODULES) assert.ok(typeof module.label === 'string' && module.label.trim().length > 0, module.href)
-})
+test("every native navigation destination has a nonempty display label", () => {
+  for (const module of NAV_MODULES)
+    assert.ok(typeof module.label === "string" && module.label.trim().length > 0, module.href);
+});

@@ -9,7 +9,11 @@ import test from "node:test";
 
 // jsdom first: the drawer reads browser globals at render.
 const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
-await bootJsdomEnvironment({ url: "http://localhost:4800/assets/leases?lease=lease-a", matchMediaMatches: false, resizeObserver: false });
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/assets/leases?lease=lease-a",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
 const script = { bodies: [] as Record<string, unknown>[] };
 Object.assign(globalThis, {
@@ -19,10 +23,12 @@ Object.assign(globalThis, {
 
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return globalThis.__leaseChangeRouter}export function usePathname(){return '/assets/leases'}export function useSearchParams(){return new URLSearchParams()}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return globalThis.__leaseChangeRouter}export function usePathname(){return '/assets/leases'}export function useSearchParams(){return new URLSearchParams()}",
+});
 registerHooks({
   resolve(specifier, context, next) {
-
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -94,12 +100,7 @@ function Page({ payload }: { payload: Payload }) {
     <BusinessDateProvider today="2026-09-17">
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
-          <LeaseDrawer
-            payload={payload as never}
-            accounts={[]}
-            subsidiaries={[]}
-            canManage
-          />
+          <LeaseDrawer payload={payload as never} accounts={[]} subsidiaries={[]} canManage />
         </MoneyProvider>
       </NextIntlClientProvider>
     </BusinessDateProvider>
@@ -110,7 +111,9 @@ async function mount(payload: Payload) {
   script.bodies = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
     if (url.includes("/api/leases/") && url.endsWith("/changes") && init?.method === "POST") {
       script.bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
       return Response.json({ ok: true, id: "change-1" });

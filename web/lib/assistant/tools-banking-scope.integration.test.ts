@@ -1,96 +1,110 @@
-import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import test from 'node:test';
-import type { SessionUser } from '../auth';
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import type { SessionUser } from "../auth";
 
-const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
-const { executeAssistantTool } = await import('./registry');
+const { sql } = await import("drizzle-orm");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { executeAssistantTool } = await import("./registry");
 
-test('banking assistant reads hide reconciliation data outside the caller subsidiary', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypassContext(() => createScratchOrg());
-  const hidden = randomUUID();
-  const hiddenAccount = randomUUID();
-  const statementId = randomUUID();
-  const statementLineId = randomUUID();
-  const reconciliationId = randomUUID();
-  const feedId = randomUUID();
-  const userId = randomUUID();
-  const user: SessionUser = {
-    id: userId,
-    orgId: org.orgId,
-    name: 'Banking scope reader',
-    email: 'banking-scope@scratch.test',
-    roles: [{ key: 'ordinary-role', name: 'Ordinary role' }],
-    isSuperAdmin: false,
-    envKind: 'production',
-    productionOrgId: org.orgId,
-    homeOrgId: org.orgId,
-    homeUserId: userId,
-  };
-  try {
-    await withBypassContext(async () => {
-      await db.execute(sql`
+test(
+  "banking assistant reads hide reconciliation data outside the caller subsidiary",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const hidden = randomUUID();
+    const hiddenAccount = randomUUID();
+    const statementId = randomUUID();
+    const statementLineId = randomUUID();
+    const reconciliationId = randomUUID();
+    const feedId = randomUUID();
+    const userId = randomUUID();
+    const user: SessionUser = {
+      id: userId,
+      orgId: org.orgId,
+      name: "Banking scope reader",
+      email: "banking-scope@scratch.test",
+      roles: [{ key: "ordinary-role", name: "Ordinary role" }],
+      isSuperAdmin: false,
+      envKind: "production",
+      productionOrgId: org.orgId,
+      homeOrgId: org.orgId,
+      homeUserId: userId,
+    };
+    try {
+      await withBypassContext(async () => {
+        await db.execute(sql`
         update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,bankFeeds}', 'true'::jsonb)
         where id = ${org.orgId}
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
         values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden bank entity','CAD','CA',true,false)
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into accounts(id,org_id,number,name,type,is_active,reconcilable,currency_restriction,subsidiary_id)
         values (${hiddenAccount},${org.orgId},'9900','Hidden cash','asset_bank',true,true,'CAD',${hidden})
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into bank_statements(id,org_id,account_id,source,statement_date,closing_balance,raw_file_ref)
         values (${statementId},${org.orgId},${hiddenAccount},'scope-fixture','2026-07-31','1250','scope-fixture.raw')
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into bank_statement_lines(
           id,org_id,statement_id,line_number,posted_on,amount,currency,description,match_status,account_id
         ) values (
           ${statementLineId},${org.orgId},${statementId},1,'2026-07-15','1250','CAD','Hidden transfer','unmatched',${hiddenAccount}
         )
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into reconciliations(
           id,org_id,account_id,through_date,statement_balance,status,currency
         ) values (
           ${reconciliationId},${org.orgId},${hiddenAccount},'2026-07-31','1250','in_progress','CAD'
         )
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into bank_feed_connections(id, org_id, name, provider, account_id)
         values (${feedId}, ${org.orgId}, 'Hidden feed', 'manual', ${hiddenAccount})
       `);
-    });
-    const authz = {
-      user,
-      permissions: new Set(['assistant.use', 'banking.read', 'banking.reconcile', 'admin.setup.manage']),
-      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
-    };
-    await withOrgContext(org.orgId, async () => {
-      const reconciliations = await executeAssistantTool(authz, 'list_bank_reconciliations', {});
-      assert.equal(reconciliations.ok, true, JSON.stringify(reconciliations));
-      assert.ok(reconciliations.ok);
-      assert.deepEqual((reconciliations.data as { reconciliations: unknown[] }).reconciliations, []);
+      });
+      const authz = {
+        user,
+        permissions: new Set([
+          "assistant.use",
+          "banking.read",
+          "banking.reconcile",
+          "admin.setup.manage",
+        ]),
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      };
+      await withOrgContext(org.orgId, async () => {
+        const reconciliations = await executeAssistantTool(authz, "list_bank_reconciliations", {});
+        assert.equal(reconciliations.ok, true, JSON.stringify(reconciliations));
+        assert.ok(reconciliations.ok);
+        assert.deepEqual(
+          (reconciliations.data as { reconciliations: unknown[] }).reconciliations,
+          [],
+        );
 
-      const reconciliation = await executeAssistantTool(authz, 'get_bank_reconciliation', { reconciliationId });
-      assert.deepEqual(reconciliation, { ok: false, error: 'reconciliation_not_found' });
+        const reconciliation = await executeAssistantTool(authz, "get_bank_reconciliation", {
+          reconciliationId,
+        });
+        assert.deepEqual(reconciliation, { ok: false, error: "reconciliation_not_found" });
 
-      const unmatched = await executeAssistantTool(authz, 'list_unmatched_bank_lines', {});
-      assert.equal(unmatched.ok, true, JSON.stringify(unmatched));
-      assert.ok(unmatched.ok);
-      assert.deepEqual((unmatched.data as { lines: unknown[] }).lines, []);
+        const unmatched = await executeAssistantTool(authz, "list_unmatched_bank_lines", {});
+        assert.equal(unmatched.ok, true, JSON.stringify(unmatched));
+        assert.ok(unmatched.ok);
+        assert.deepEqual((unmatched.data as { lines: unknown[] }).lines, []);
 
-      const bankFeeds = await executeAssistantTool(authz, 'list_bank_feeds', {});
-      assert.equal(bankFeeds.ok, true, JSON.stringify(bankFeeds));
-      assert.ok(bankFeeds.ok);
-      assert.deepEqual((bankFeeds.data as { connections: unknown[] }).connections, []);
-    });
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
+        const bankFeeds = await executeAssistantTool(authz, "list_bank_feeds", {});
+        assert.equal(bankFeeds.ok, true, JSON.stringify(bankFeeds));
+        assert.ok(bankFeeds.ok);
+        assert.deepEqual((bankFeeds.data as { connections: unknown[] }).connections, []);
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

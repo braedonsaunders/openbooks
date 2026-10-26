@@ -19,15 +19,26 @@ async function setup(
 ): Promise<void> {
   const org = await createScratchOrg();
   try {
-    const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Map tester", "admin"));
+    const actor = await withOrgContext(org.orgId, () =>
+      createScratchUser(org.orgId, "Map tester", "admin"),
+    );
     await withOrgContext(org.orgId, async () => {
-      const result = await db.execute<never>(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ salesChannels: opts.feature !== false })}::jsonb, true) where id = ${org.orgId}`);
+      const result = await db.execute<never>(
+        sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features','{}'::jsonb) || ${JSON.stringify({ salesChannels: opts.feature !== false })}::jsonb, true) where id = ${org.orgId}`,
+      );
       assert.equal(result.rowCount, 1);
     });
-    const channelId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+    const channelId = (
+      await withOrgContext(org.orgId, () =>
+        db.execute<{ id: string }>(
+          sql`
       insert into sales_channels (org_id, kind, name, status, currency, external_account, settings, created_by, updated_by)
       values (${org.orgId}, 'shopify', 'Maple Shop', 'active', 'USD', 'maple.myshopify.com', '{}'::jsonb, ${actor}, ${actor})
-      returning id`, "objects")))[0]!.id;
+      returning id`,
+          "objects",
+        ),
+      )
+    )[0]!.id;
     await run(org, actor, channelId);
   } finally {
     await dropScratchOrgReporting(org.orgId);
@@ -37,7 +48,15 @@ async function setup(
 test("an unmapped role refuses naming the channel, role, key, and date", DB, async () => {
   await setup(async (org, _actor, channelId) => {
     await assert.rejects(
-      withOrgContext(org.orgId, () => resolveAccountMap(org.orgId, channelId, "gateway_clearing", "shopify_payments", "2026-09-14")),
+      withOrgContext(org.orgId, () =>
+        resolveAccountMap(
+          org.orgId,
+          channelId,
+          "gateway_clearing",
+          "shopify_payments",
+          "2026-09-14",
+        ),
+      ),
       (error: unknown) => {
         assert.ok(error instanceof CommerceError);
         assert.equal(error.code, "channel_map_unmapped");
@@ -67,9 +86,24 @@ test("effective dating returns the row in force on the date", DB, async () => {
       effectiveFrom: "2026-06-01",
     });
     assert.notEqual(second.id, first.id);
-    assert.equal(await withOrgContext(org.orgId, () => resolveAccountMap(org.orgId, channelId, "revenue", "", "2026-03-01")), org.accounts.revenue);
-    assert.equal(await withOrgContext(org.orgId, () => resolveAccountMap(org.orgId, channelId, "revenue", "", "2026-05-31")), org.accounts.revenue);
-    assert.equal(await withOrgContext(org.orgId, () => resolveAccountMap(org.orgId, channelId, "revenue", "", "2026-06-01")), org.accounts.bank);
+    assert.equal(
+      await withOrgContext(org.orgId, () =>
+        resolveAccountMap(org.orgId, channelId, "revenue", "", "2026-03-01"),
+      ),
+      org.accounts.revenue,
+    );
+    assert.equal(
+      await withOrgContext(org.orgId, () =>
+        resolveAccountMap(org.orgId, channelId, "revenue", "", "2026-05-31"),
+      ),
+      org.accounts.revenue,
+    );
+    assert.equal(
+      await withOrgContext(org.orgId, () =>
+        resolveAccountMap(org.orgId, channelId, "revenue", "", "2026-06-01"),
+      ),
+      org.accounts.bank,
+    );
     // The prior open row closes the day before the successor starts.
     const rows = await withOrgContext(org.orgId, () => listAccountMaps(org.orgId, channelId));
     assert.deepEqual(
@@ -92,8 +126,18 @@ test("effective dating returns the row in force on the date", DB, async () => {
       accountId: org.accounts.taxOutput,
       effectiveFrom: "2026-01-01",
     });
-    assert.equal(await withOrgContext(org.orgId, () => resolveAccountMap(org.orgId, channelId, "sales_tax_liability", "CA-ON", "2026-09-14")), org.accounts.taxOutput);
-    await assert.rejects(withOrgContext(org.orgId, () => resolveAccountMap(org.orgId, channelId, "sales_tax_liability", "CA-QC", "2026-09-14")), /CA-QC/);
+    assert.equal(
+      await withOrgContext(org.orgId, () =>
+        resolveAccountMap(org.orgId, channelId, "sales_tax_liability", "CA-ON", "2026-09-14"),
+      ),
+      org.accounts.taxOutput,
+    );
+    await assert.rejects(
+      withOrgContext(org.orgId, () =>
+        resolveAccountMap(org.orgId, channelId, "sales_tax_liability", "CA-QC", "2026-09-14"),
+      ),
+      /CA-QC/,
+    );
     // A backdated map at or before the open row refuses instead of overlapping it.
     await assert.rejects(
       upsertAccountMap(org.orgId, actor, {
@@ -117,38 +161,69 @@ test("storage arbitrates the overlap the engine cannot see", DB, async () => {
     });
     // A concurrent writer slipping past the row lock meets the EXCLUDE constraint, not a silent second open row.
     await assert.rejects(
-      withOrgContext(org.orgId, () => db.execute(sql`
+      withOrgContext(org.orgId, () =>
+        db.execute(sql`
         insert into sales_channel_account_maps (org_id, channel_id, role, key, account_id, effective_from, created_by, updated_by)
-        values (${org.orgId}, ${channelId}, 'discount', '', ${org.accounts.bank}, '2026-03-01', ${actor}, ${actor})`)),
+        values (${org.orgId}, ${channelId}, 'discount', '', ${org.accounts.bank}, '2026-03-01', ${actor}, ${actor})`),
+      ),
       (error: unknown) => {
-        const cause = error instanceof Error && "cause" in error
-          ? String((error as { cause?: unknown }).cause)
-          : String(error);
+        const cause =
+          error instanceof Error && "cause" in error
+            ? String((error as { cause?: unknown }).cause)
+            : String(error);
         return cause.includes('exclusion constraint "sales_channel_account_maps_no_overlap"');
       },
     );
-    assert.equal((await withOrgContext(org.orgId, () => listAccountMaps(org.orgId, channelId))).filter((row) => row.role === "discount").length, 1);
+    assert.equal(
+      (await withOrgContext(org.orgId, () => listAccountMaps(org.orgId, channelId))).filter(
+        (row) => row.role === "discount",
+      ).length,
+      1,
+    );
   });
 });
 
 test("maps refuse without the feature, the account, or the role", DB, async () => {
+  await setup(
+    async (org, actor, channelId) => {
+      await assert.rejects(
+        upsertAccountMap(org.orgId, actor, {
+          channelId,
+          role: "revenue",
+          accountId: org.accounts.revenue,
+          effectiveFrom: "2026-01-01",
+        }),
+        (error: unknown) => error instanceof CommerceError && error.code === "feature_off",
+      );
+    },
+    { feature: false },
+  );
   await setup(async (org, actor, channelId) => {
     await assert.rejects(
-      upsertAccountMap(org.orgId, actor, { channelId, role: "revenue", accountId: org.accounts.revenue, effectiveFrom: "2026-01-01" }),
-      (error: unknown) => error instanceof CommerceError && error.code === "feature_off",
-    );
-  }, { feature: false });
-  await setup(async (org, actor, channelId) => {
-    await assert.rejects(
-      upsertAccountMap(org.orgId, actor, { channelId, role: "nope", accountId: org.accounts.revenue, effectiveFrom: "2026-01-01" }),
+      upsertAccountMap(org.orgId, actor, {
+        channelId,
+        role: "nope",
+        accountId: org.accounts.revenue,
+        effectiveFrom: "2026-01-01",
+      }),
       /not a channel posting role/,
     );
     await assert.rejects(
-      upsertAccountMap(org.orgId, actor, { channelId, role: "revenue", accountId: "00000000-0000-0000-0000-000000000000", effectiveFrom: "2026-01-01" }),
+      upsertAccountMap(org.orgId, actor, {
+        channelId,
+        role: "revenue",
+        accountId: "00000000-0000-0000-0000-000000000000",
+        effectiveFrom: "2026-01-01",
+      }),
       /does not belong to this organization/,
     );
     await assert.rejects(
-      upsertAccountMap(org.orgId, actor, { channelId, role: "revenue", accountId: org.accounts.revenue, effectiveFrom: "next Friday" }),
+      upsertAccountMap(org.orgId, actor, {
+        channelId,
+        role: "revenue",
+        accountId: org.accounts.revenue,
+        effectiveFrom: "next Friday",
+      }),
       /not a calendar date/,
     );
   });

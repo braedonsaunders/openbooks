@@ -1,4 +1,4 @@
-import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
+import { resolveEngineSpecifier } from "../../../testing/engine-resolve-hooks.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -12,7 +12,6 @@ import test from "node:test";
 // scratch org: same-labeled figures tie by construction, not by hope.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-
     // Worktree node_modules is a symlink to the main checkout's install, so
     // bare @openbooks self-imports would resolve to MAIN-checkout code (a
     // second db pool without the test bypass). Pin them to this checkout —
@@ -28,7 +27,8 @@ registerHooks({
 const { sql } = await import("drizzle-orm");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { toUnits } = await import("@openbooks/engine/money/money");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { withSimClock: pinClock } = await import("@openbooks/engine/testing/platform/clock");
 const { arPosition } = await import("@/lib/cash/ar-position.ts");
 const { apPosition } = await import("@/lib/cash/ap-position.ts");
@@ -43,10 +43,16 @@ const TODAY = "2026-07-15";
 function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
   return {
     user: {
-      id: userId, email: `${userId}@test`, name: "Forecast Watcher", orgId,
+      id: userId,
+      email: `${userId}@test`,
+      name: "Forecast Watcher",
+      orgId,
       roles: [{ key: "staff", name: "staff" }],
-      envKind: "sandbox", productionOrgId: orgId, isSuperAdmin: false,
-      homeUserId: userId, homeOrgId: orgId,
+      envKind: "sandbox",
+      productionOrgId: orgId,
+      isSuperAdmin: false,
+      homeUserId: userId,
+      homeOrgId: orgId,
     },
     permissions: new Set(permissions),
     allowedSubsidiaryIds: null,
@@ -56,7 +62,14 @@ function authzFor(orgId: string, userId: string, permissions: string[]): Authz {
 /** Posted invoice/bill with one open control line — what openItems reads. */
 async function postedOpenItem(
   org: ScratchOrg,
-  opts: { side: "ar" | "ap"; amount: string; postingDate?: string; period?: string; dueDate: string; docNo: string },
+  opts: {
+    side: "ar" | "ap";
+    amount: string;
+    postingDate?: string;
+    period?: string;
+    dueDate: string;
+    docNo: string;
+  },
 ): Promise<void> {
   const isAr = opts.side === "ar";
   const doc = randomUUID();
@@ -74,8 +87,12 @@ async function postedOpenItem(
   await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,party_id,due_date,is_open_item)
     values(${line},${org.orgId},${entry},1,${control},${org.subsidiaryId},${controlAmount},'CAD',${controlAmount},'1',${party},${opts.dueDate},true),
     (${randomUUID()},${org.orgId},${entry},2,${offset},${org.subsidiaryId},-${controlAmount}::numeric,'CAD',-${controlAmount}::numeric,'1',null,${opts.dueDate},false)`);
-  await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
-  await db.execute(sql`update documents set status='posted',posted_entry_id=${entry},posting_period_id=${opts.period ?? org.periodId} where id=${doc}`);
+  await db.execute(
+    sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`,
+  );
+  await db.execute(
+    sql`update documents set status='posted',posted_entry_id=${entry},posting_period_id=${opts.period ?? org.periodId} where id=${doc}`,
+  );
 }
 
 test("30-day forecast tiles tie the cockpit positions item for item", { skip: !DB }, async () => {
@@ -83,30 +100,80 @@ test("30-day forecast tiles tie the cockpit positions item for item", { skip: !D
   try {
     const may = randomUUID();
     await withBypass(async () => {
-      const cal = (await db.execute<{ fiscal_calendar_id: string }>(sql`
-        select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and starts_on='2026-07-01'`, "objects"))[0]!.fiscal_calendar_id;
+      const cal = (
+        await db.execute<{ fiscal_calendar_id: string }>(
+          sql`
+        select fiscal_calendar_id from accounting_periods where org_id=${org.orgId} and starts_on='2026-07-01'`,
+          "objects",
+        )
+      )[0]!.fiscal_calendar_id;
       await db.execute(sql`insert into accounting_periods(id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
         values(${may},${org.orgId},2026,5,'2026-05','2026-05-01','2026-05-31',false,${cal})`);
     });
     // Overdue May invoice/bill: no settlement history, so the item forecasts
     // at its due date, pushed past the as-of as overdue — in window.
-    await withBypass(() => postedOpenItem(org, { side: "ar", amount: "1000", postingDate: "2026-05-20", period: may, dueDate: "2026-05-27", docNo: "INV-OLD" }));
-    await withBypass(() => postedOpenItem(org, { side: "ap", amount: "700", postingDate: "2026-05-20", period: may, dueDate: "2026-05-27", docNo: "BILL-OLD" }));
+    await withBypass(() =>
+      postedOpenItem(org, {
+        side: "ar",
+        amount: "1000",
+        postingDate: "2026-05-20",
+        period: may,
+        dueDate: "2026-05-27",
+        docNo: "INV-OLD",
+      }),
+    );
+    await withBypass(() =>
+      postedOpenItem(org, {
+        side: "ap",
+        amount: "700",
+        postingDate: "2026-05-20",
+        period: may,
+        dueDate: "2026-05-27",
+        docNo: "BILL-OLD",
+      }),
+    );
     // Far-term documents predict past the +30d cut-off and must not count.
-    await withBypass(() => postedOpenItem(org, { side: "ar", amount: "500", dueDate: "2026-09-13", docNo: "INV-FAR" }));
-    await withBypass(() => postedOpenItem(org, { side: "ap", amount: "300", dueDate: "2026-09-13", docNo: "BILL-FAR" }));
+    await withBypass(() =>
+      postedOpenItem(org, { side: "ar", amount: "500", dueDate: "2026-09-13", docNo: "INV-FAR" }),
+    );
+    await withBypass(() =>
+      postedOpenItem(org, { side: "ap", amount: "300", dueDate: "2026-09-13", docNo: "BILL-FAR" }),
+    );
 
     const actor = await withBypass(() => createScratchUser(org.orgId, "Forecast Reader", "admin"));
-    const authz = authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "ar.read", "ap.read"]);
+    const authz = authzFor(org.orgId, actor as unknown as string, [
+      "dashboard.read",
+      "ar.read",
+      "ap.read",
+    ]);
     assert.equal(canSeeWidget(authz, "kpi-expected-receipts-30d"), true);
     assert.equal(canSeeWidget(authz, "kpi-bills-due-30d"), true);
-    assert.equal(canSeeWidget(authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "ap.read"]), "kpi-expected-receipts-30d"), false);
-    const ids = ["kpi-expected-receipts-30d", "kpi-bills-due-30d", "kpi-open-receivables", "kpi-open-payables"];
+    assert.equal(
+      canSeeWidget(
+        authzFor(org.orgId, actor as unknown as string, ["dashboard.read", "ap.read"]),
+        "kpi-expected-receipts-30d",
+      ),
+      false,
+    );
+    const ids = [
+      "kpi-expected-receipts-30d",
+      "kpi-bills-due-30d",
+      "kpi-open-receivables",
+      "kpi-open-payables",
+    ];
     const metrics = await pinClock(TODAY, () =>
       withOrgContext(org.orgId, () => loadDashboardMetrics(authz, ids)),
     );
-    assert.equal(toUnits(metrics.expectedReceipts30d ?? "0"), toUnits("1000"), "only the in-window invoice predicts");
-    assert.equal(toUnits(metrics.expectedPayments30d ?? "0"), toUnits("700"), "only the in-window bill predicts");
+    assert.equal(
+      toUnits(metrics.expectedReceipts30d ?? "0"),
+      toUnits("1000"),
+      "only the in-window invoice predicts",
+    );
+    assert.equal(
+      toUnits(metrics.expectedPayments30d ?? "0"),
+      toUnits("700"),
+      "only the in-window bill predicts",
+    );
     // No settlement history anywhere: no average is invented, so the hints are null.
     assert.equal(metrics.receivablesDso, null);
     assert.equal(metrics.payablesDpo, null);
@@ -114,13 +181,23 @@ test("30-day forecast tiles tie the cockpit positions item for item", { skip: !D
     // The tie: the cockpits' own readers on the same org and scope.
     const settings = { weeklyCap: "0", restrictToSafe: false };
     const [ar, ap] = await pinClock(TODAY, () =>
-      withOrgContext(org.orgId, () => Promise.all([
-        arPosition(org.orgId, 5, settings, undefined, null),
-        apPosition(org.orgId, 5, settings, undefined, null),
-      ])),
+      withOrgContext(org.orgId, () =>
+        Promise.all([
+          arPosition(org.orgId, 5, settings, undefined, null),
+          apPosition(org.orgId, 5, settings, undefined, null),
+        ]),
+      ),
     );
-    assert.equal(toUnits(metrics.expectedReceipts30d ?? "0"), toUnits(ar.expectedNext30), "receipts tie the AR cockpit");
-    assert.equal(toUnits(metrics.expectedPayments30d ?? "0"), toUnits(ap.dueNext30), "payments tie the AP cockpit");
+    assert.equal(
+      toUnits(metrics.expectedReceipts30d ?? "0"),
+      toUnits(ar.expectedNext30),
+      "receipts tie the AR cockpit",
+    );
+    assert.equal(
+      toUnits(metrics.expectedPayments30d ?? "0"),
+      toUnits(ap.dueNext30),
+      "payments tie the AP cockpit",
+    );
     assert.equal(metrics.receivablesDso, ar.dso, "DSO hint quotes the cockpit average");
     assert.equal(metrics.payablesDpo, ap.dpo, "DPO hint quotes the cockpit average");
   } finally {

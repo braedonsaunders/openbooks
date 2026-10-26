@@ -1,12 +1,12 @@
-import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
-import test from 'node:test'
-import { sql } from 'drizzle-orm'
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
+import test from "node:test";
+import { sql } from "drizzle-orm";
 
-const stateKey = Symbol.for('openbooks.custom-record-draft-scope-test')
-const state: { authz: unknown } = { authz: null }
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+const stateKey = Symbol.for("openbooks.custom-record-draft-scope-test");
+const state: { authz: unknown } = { authz: null };
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockAuthz = `
   import { NextResponse } from 'next/server';
@@ -15,91 +15,95 @@ const mockAuthz = `
     if (!state.authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
     return state.authz;
   }
-`
+`;
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
-      return { url: 'mock:custom-record-draft-scope-authz', shortCircuit: true }
+    if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("/api/records/")) {
+      return { url: "mock:custom-record-draft-scope-authz", shortCircuit: true };
     }
     // The route factory authenticates through the `@/lib/authz` alias, which
     // the relative-only condition above never matches: without this edge the
     // factory loads the real cookie session instead of the test session.
-    if (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route')) {
-      return { url: 'mock:custom-record-draft-scope-authz', shortCircuit: true }
+    if (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")) {
+      return { url: "mock:custom-record-draft-scope-authz", shortCircuit: true };
     }
-    if (context.parentURL?.startsWith('mock:') && (specifier.startsWith('@openbooks/') || specifier === 'next/server')) {
-      return nextResolve(specifier, { ...context, parentURL: import.meta.url })
+    if (
+      context.parentURL?.startsWith("mock:") &&
+      (specifier.startsWith("@openbooks/") || specifier === "next/server")
+    ) {
+      return nextResolve(specifier, { ...context, parentURL: import.meta.url });
     }
-    return nextResolve(specifier, context)
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    if (url === 'mock:custom-record-draft-scope-authz') {
-      return { format: 'module', source: mockAuthz, shortCircuit: true }
+    if (url === "mock:custom-record-draft-scope-authz") {
+      return { format: "module", source: mockAuthz, shortCircuit: true };
     }
-    return nextLoad(url, context)
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?custom-record-draft-scope-test'
-const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/testing/fixtures',
-)
+const routeUrl = "./route.ts?custom-record-draft-scope-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
-test(
-  'restricted custom-record drafts default subsidiary_id to the only allowed subsidiary',
-  async () => {
-    const typeKey = `draft-${randomUUID().replaceAll('-', '').slice(0, 10)}`
-    const { org, actorId } = await withBypass(async () => {
-      const created = await createScratchOrg()
-      const actor = (await seedFlowActors(created.orgId)).adminId
-      const customTypeId = randomUUID()
-      const fields = [{
-        id: 'main',
-        title: 'Details',
+test("restricted custom-record drafts default subsidiary_id to the only allowed subsidiary", async () => {
+  const typeKey = `draft-${randomUUID().replaceAll("-", "").slice(0, 10)}`;
+  const { org, actorId } = await withBypass(async () => {
+    const created = await createScratchOrg();
+    const actor = (await seedFlowActors(created.orgId)).adminId;
+    const customTypeId = randomUUID();
+    const fields = [
+      {
+        id: "main",
+        title: "Details",
         fields: [
-          { id: 'subsidiary_id', type: 'text', label: 'Subsidiary' },
-          { id: 'title', type: 'text', label: 'Title' },
+          { id: "subsidiary_id", type: "text", label: "Subsidiary" },
+          { id: "title", type: "text", label: "Title" },
         ],
-      }]
-      await db.execute(sql`
+      },
+    ];
+    await db.execute(sql`
         insert into custom_record_types
           (id, org_id, key, name, plural_name, fields, status, created_by, updated_by)
         values
           (${customTypeId}, ${created.orgId}, ${typeKey}, 'Draft Scope', 'Draft Scopes',
            ${JSON.stringify(fields)}::jsonb, 'published', ${actor}, ${actor})
-      `)
-      return { org: created, actorId: actor }
-    })
+      `);
+    return { org: created, actorId: actor };
+  });
 
-    state.authz = {
-      user: {
-        id: actorId,
-        orgId: org.orgId,
-        name: 'Scoped Admin',
-        roles: [{ key: 'admin', name: 'Admin' }],
-      },
-      permissions: new Set(['records.create']),
-      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
-    }
-    try {
-      await withOrgContext(org.orgId, async () => {
-        const response = await POST(
-          new Request(`http://localhost/api/records/${typeKey}/draft`, { method: 'POST' }),
-          { params: Promise.resolve({ typeKey }) },
-        )
-        assert.equal(response.status, 200)
-        const body = await response.json() as { id: string }
-        const row = await db.execute<{ data: { subsidiary_id?: string } }>(sql`
+  state.authz = {
+    user: {
+      id: actorId,
+      orgId: org.orgId,
+      name: "Scoped Admin",
+      roles: [{ key: "admin", name: "Admin" }],
+    },
+    permissions: new Set(["records.create"]),
+    allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+  };
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const response = await POST(
+        new Request(`http://localhost/api/records/${typeKey}/draft`, { method: "POST" }),
+        { params: Promise.resolve({ typeKey }) },
+      );
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as { id: string };
+      const row = await db.execute<{ data: { subsidiary_id?: string } }>(
+        sql`
           select data from custom_records where id = ${body.id} and org_id = ${org.orgId}
-        `, 'objects')
-        assert.equal(row[0]?.data.subsidiary_id, org.subsidiaryId)
-      })
-    } finally {
-      state.authz = null
-      await withBypass(() => dropScratchOrg(org.orgId))
-    }
-  },
-)
+        `,
+        "objects",
+      );
+      assert.equal(row[0]?.data.subsidiary_id, org.subsidiaryId);
+    });
+  } finally {
+    state.authz = null;
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});

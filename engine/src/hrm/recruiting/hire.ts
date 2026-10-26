@@ -64,10 +64,16 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
     );
   }
   return withOrgTransaction(orgId, async () => {
-    const locked = (await db.execute<{ id: string }>(sql`
+    const locked = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from hrm_offers where org_id = ${orgId} and id = ${offerId} for update
-    `, "objects"))[0];
-    if (!locked) throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
+    `,
+        "objects",
+      )
+    )[0];
+    if (!locked)
+      throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
     const offer = await loadOfferForHire(db, orgId, offerId);
     const application = await loadApplication(db, orgId, offer.applicationId);
     if (!application) {
@@ -96,7 +102,10 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
       );
     }
     if (offer.status !== "sent") {
-      throw new RecruitingError("BAD_STATE", `a ${offer.status} offer cannot be accepted — only sent offers accept`);
+      throw new RecruitingError(
+        "BAD_STATE",
+        `a ${offer.status} offer cannot be accepted — only sent offers accept`,
+      );
     }
     // An offer in the e-sign lifecycle must be signed before hire — refuse
     // an unsigned one BY NAME. An offer that never entered signing hires on
@@ -109,10 +118,17 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
     // recheck the erasure marker under the lock. Hiring an anonymized
     // shell would mint an employee with no identity, so refuse and name
     // the re-entry remedy.
-    const candidateLock = (await db.execute<{ id: string }>(sql`
+    const candidateLock = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from hrm_candidates where org_id = ${orgId} and id = ${application.candidateId} for update
-    `, "objects"))[0];
-    const candidate = candidateLock ? await loadCandidate(db, orgId, application.candidateId) : null;
+    `,
+        "objects",
+      )
+    )[0];
+    const candidate = candidateLock
+      ? await loadCandidate(db, orgId, application.candidateId)
+      : null;
     if (!candidate) {
       throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization");
     }
@@ -133,14 +149,26 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
       );
     }
     if (effectivePositionId) {
-      await assertPositionVacantForHire(db, orgId, actorId, effectivePositionId, offer.proposedStartOn);
+      await assertPositionVacantForHire(
+        db,
+        orgId,
+        actorId,
+        effectivePositionId,
+        offer.proposedStartOn,
+      );
     }
     if (!requisition.pipelineTemplateId) {
-      throw new RecruitingError("REFUSED", "the requisition names no pipeline — re-open it onto a live funnel before hiring");
+      throw new RecruitingError(
+        "REFUSED",
+        "the requisition names no pipeline — re-open it onto a live funnel before hiring",
+      );
     }
     const template = await loadPipelineTemplate(db, orgId, requisition.pipelineTemplateId);
     if (!template) {
-      throw new RecruitingError("REFUSED", "the requisition's pipeline is gone — re-open the requisition onto a live funnel before hiring");
+      throw new RecruitingError(
+        "REFUSED",
+        "the requisition's pipeline is gone — re-open the requisition onto a live funnel before hiring",
+      );
     }
     const hired = hiredStage(template);
 
@@ -149,57 +177,107 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
     let workerPartyId = candidate.partyId;
     if (!workerPartyId) {
       workerPartyId = randomUUID();
-      const created = (await db.execute<{ id: string }>(sql`
+      const created = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into parties (id, org_id, kind, display_name, email, phone, is_active, custom, created_by, updated_by)
         values (${workerPartyId}, ${orgId}, 'person', ${candidate.displayName},
                 ${candidate.email}, ${candidate.phone}, true, '{}'::jsonb, ${actorId}, ${actorId})
         returning id
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!created) {
-        throw new RecruitingError("REFUSED", "the employee party was not stored — no row was written; retry the hire");
+        throw new RecruitingError(
+          "REFUSED",
+          "the employee party was not stored — no row was written; retry the hire",
+        );
       }
-      await linkCandidateParty(db, { orgId, actorId, candidateId: candidate.id, partyId: workerPartyId });
+      await linkCandidateParty(db, {
+        orgId,
+        actorId,
+        candidateId: candidate.id,
+        partyId: workerPartyId,
+      });
     }
 
-    const worker = (await db.execute<{ kind: string; isActive: boolean }>(sql`
+    const worker = (
+      await db.execute<{ kind: string; isActive: boolean }>(
+        sql`
       select kind, is_active as "isActive" from parties
        where org_id = ${orgId} and id = ${workerPartyId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!worker || !worker.isActive || !isNaturalPersonPartyKind(worker.kind)) {
-      throw new RecruitingError("REFUSED", "The candidate must name an active natural person with kind person or employee before hiring.");
+      throw new RecruitingError(
+        "REFUSED",
+        "The candidate must name an active natural person with kind person or employee before hiring.",
+      );
     }
-    const employeeRole = (await db.execute<{ id: string; isActive: boolean }>(sql`
+    const employeeRole = (
+      await db.execute<{ id: string; isActive: boolean }>(
+        sql`
       select id, is_active as "isActive" from employee_roles
        where org_id = ${orgId} and party_id = ${workerPartyId} for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (employeeRole && !employeeRole.isActive) {
-      throw new RecruitingError("REFUSED", "The candidate's employee role is inactive. Reactivate it on the employee record before hiring.");
+      throw new RecruitingError(
+        "REFUSED",
+        "The candidate's employee role is inactive. Reactivate it on the employee record before hiring.",
+      );
     }
     if (!employeeRole) {
-      const createdRole = (await db.execute<{ id: string }>(sql`
+      const createdRole = (
+        await db.execute<{ id: string }>(
+          sql`
         insert into employee_roles (org_id, party_id, created_by, updated_by)
         values (${orgId}, ${workerPartyId}, ${actorId}, ${actorId}) returning id
-      `, "objects"))[0];
-      if (!createdRole) throw new RecruitingError("REFUSED", "The employee role was not stored. Retry the hire.");
-      const audit = await db.execute(sql`
+      `,
+          "objects",
+        )
+      )[0];
+      if (!createdRole)
+        throw new RecruitingError("REFUSED", "The employee role was not stored. Retry the hire.");
+      const audit = await db.execute(
+        sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'employee_roles', ${createdRole.id}, 'insert',
           ${JSON.stringify({ before: null, after: { partyId: workerPartyId, isActive: true }, reason: `Hire for requisition ${requisition.requisitionNumber}: ${offer.jobTitle}` })}::jsonb,
           ${actorId}) returning id
-      `, "objects");
-      if (audit.length !== 1) throw new RecruitingError("REFUSED", "The employee role could not be audited. Nothing was stored; retry the hire.");
+      `,
+        "objects",
+      );
+      if (audit.length !== 1)
+        throw new RecruitingError(
+          "REFUSED",
+          "The employee role could not be audited. Nothing was stored; retry the hire.",
+        );
     }
 
     // The reserved employment identity the hire change requires
     // (version-less, revision 1 — the approval applies the first version).
     const employmentId = randomUUID();
-    const reserved = (await db.execute<{ id: string }>(sql`
+    const reserved = (
+      await db.execute<{ id: string }>(
+        sql`
       insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
       values (${employmentId}, ${orgId}, ${workerPartyId}, ${offer.employerSubsidiaryId}, 1)
       returning id
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!reserved) {
-      throw new RecruitingError("REFUSED", "the reserved employment was not stored — no row was written; retry the hire");
+      throw new RecruitingError(
+        "REFUSED",
+        "the reserved employment was not stored — no row was written; retry the hire",
+      );
     }
     // (1b) The payroll profile, when one already exists unlinked: the hire
     // names the employment the pay run reads, so a profile created earlier
@@ -209,13 +287,18 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
     // fabricated when none exists: schedule, country and province are
     // operator configuration the offer never carries, and inventing them
     // would be silently-wrong payroll setup.
-    const prelinked = (await db.execute<{ id: string }>(sql`
+    const prelinked = (
+      await db.execute<{ id: string }>(
+        sql`
       update employee_payroll_profiles
          set employment_id = ${employmentId}, updated_by = ${actorId},
              updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond')
        where org_id = ${orgId} and employee_party_id = ${workerPartyId} and employment_id is null
        returning id
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (prelinked) {
       await db.execute(sql`insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'employee_payroll_profiles', ${prelinked.id}, 'update',
@@ -252,15 +335,23 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
 
     // (3) The hire evidence: offer link, hired application, requisition fill.
     // An accepted offer is never signable again: revoke the link here.
-    const acceptedOffer = (await db.execute<{ id: string }>(sql`
+    const acceptedOffer = (
+      await db.execute<{ id: string }>(
+        sql`
       update hrm_offers
          set status = 'accepted', responded_at = now(), approved_change_id = ${submitted.id},
              signing_token_hash = null, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId} and status = 'sent'
       returning id
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!acceptedOffer) {
-      throw new RecruitingError("REFUSED", "the offer changed while hiring — the hire is refused rather than recorded twice");
+      throw new RecruitingError(
+        "REFUSED",
+        "the offer changed while hiring — the hire is refused rather than recorded twice",
+      );
     }
     await appendApplicationEvent(db, {
       orgId,
@@ -311,7 +402,11 @@ type HireOfferRow = {
   expiresOn: string | null;
 };
 
-async function loadOfferForHire(exec: SqlExecutor, orgId: string, offerId: string): Promise<HireOfferRow> {
+async function loadOfferForHire(
+  exec: SqlExecutor,
+  orgId: string,
+  offerId: string,
+): Promise<HireOfferRow> {
   const offer = await loadOffer(exec, orgId, offerId);
   if (!offer) {
     throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
@@ -342,12 +437,17 @@ async function loadRequisitionForHire(
   orgId: string,
   requisitionId: string,
 ): Promise<HireRequisitionRow> {
-  const row = (await exec.execute<HireRequisitionRow>(sql`
+  const row = (
+    await exec.execute<HireRequisitionRow>(
+      sql`
     select id, requisition_number as "requisitionNumber", position_id as "positionId",
            status, revision, pipeline_template_id as "pipelineTemplateId"
       from hrm_requisitions
      where org_id = ${orgId} and id = ${requisitionId} for update
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!row) {
     throw new RecruitingError("NOT_FOUND", "requisition is not visible in this organization");
   }

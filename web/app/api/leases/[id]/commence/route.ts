@@ -12,13 +12,10 @@ export const POST = defineRoute({
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = await params;
-    if (!isUuid(id))
-      return NextResponse.json({ error: "invalid lease" }, { status: 422 });
+    if (!isUuid(id)) return NextResponse.json({ error: "invalid lease" }, { status: 422 });
 
     try {
-      return NextResponse.json(
-        await commenceLease(gate.user.orgId, id, gate.user.id),
-      );
+      return NextResponse.json(await commenceLease(gate.user.orgId, id, gate.user.id));
     } catch (e) {
       if (e instanceof LeaseError) {
         return apiErrorResponse(e, { safeStatus: 422 });

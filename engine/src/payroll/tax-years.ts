@@ -166,13 +166,16 @@ export function payrollDraftTaxYears(
   const scoped = support.editions.filter((edition) =>
     region && support.regionsWithOwnTables.includes(region)
       ? edition.region === region
-      : edition.region == null);
+      : edition.region == null,
+  );
   const published = new Set(
     scoped.filter((edition) => edition.status === "published").map((edition) => edition.year),
   );
-  return [...new Set(
-    scoped
-      .filter((edition) => edition.status === "draft" && !published.has(edition.year))
-      .map((edition) => edition.year),
-  )].sort((a, b) => a - b);
+  return [
+    ...new Set(
+      scoped
+        .filter((edition) => edition.status === "draft" && !published.has(edition.year))
+        .map((edition) => edition.year),
+    ),
+  ].sort((a, b) => a - b);
 }

@@ -3,11 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
-import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrg,
-} from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { createAutomation } from "./services.ts";
 import { executeAutomation, AutomationExecuteError } from "./execute.ts";
 import { simulateAutomation } from "./simulator.ts";
@@ -89,73 +85,115 @@ async function setupWorld(): Promise<{
   const employmentA = await seedEmployment(org.orgId, org.subsidiaryId);
   const employmentB = await seedEmployment(org.orgId, subB);
   const recipeId = await seedRecipe(org.orgId, actorId);
-  return { orgId: org.orgId, subA: org.subsidiaryId, subB, actorId, employmentA, employmentB, recipeId };
+  return {
+    orgId: org.orgId,
+    subA: org.subsidiaryId,
+    subB,
+    actorId,
+    employmentA,
+    employmentB,
+    recipeId,
+  };
 }
 
 async function goneMessage(fn: () => Promise<unknown>): Promise<string> {
   try {
     await fn();
   } catch (error) {
-    assert.ok(error instanceof AutomationExecuteError, `expected AutomationExecuteError, got ${String(error)}`);
+    assert.ok(
+      error instanceof AutomationExecuteError,
+      `expected AutomationExecuteError, got ${String(error)}`,
+    );
     return (error as Error).message;
   }
   throw new Error("expected the gone-refusal");
 }
 
-test("live runs against an out-of-scope employment refuse exactly like a deleted subject", { skip: !DB }, async () => {
-  const w = await withBypassContext(() => setupWorld());
-  try {
-    const scopeA = new Set([w.subA]);
-    const outOfScope = await goneMessage(() => executeAutomation({
-      orgId: w.orgId, actorId: w.actorId, automationId: w.recipeId,
-      subjectEntity: "employment", subjectId: w.employmentB,
-      triggerPayload: { kind: "manual" }, allowedSubsidiaryIds: scopeA,
-    }));
-    const missing = await goneMessage(() => executeAutomation({
-      orgId: w.orgId, actorId: w.actorId, automationId: w.recipeId,
-      subjectEntity: "employment", subjectId: randomUUID(),
-      triggerPayload: { kind: "manual" }, allowedSubsidiaryIds: scopeA,
-    }));
-    assert.equal(outOfScope, missing);
-    // The in-scope employment runs.
-    const run = await executeAutomation({
-      orgId: w.orgId, actorId: w.actorId, automationId: w.recipeId,
-      subjectEntity: "employment", subjectId: w.employmentA,
-      triggerPayload: { kind: "manual" }, allowedSubsidiaryIds: scopeA,
-    });
-    assert.equal(run.status, "succeeded");
-  } finally {
-    await withBypassContext(() => dropScratchOrg(w.orgId));
-  }
-});
+test(
+  "live runs against an out-of-scope employment refuse exactly like a deleted subject",
+  { skip: !DB },
+  async () => {
+    const w = await withBypassContext(() => setupWorld());
+    try {
+      const scopeA = new Set([w.subA]);
+      const outOfScope = await goneMessage(() =>
+        executeAutomation({
+          orgId: w.orgId,
+          actorId: w.actorId,
+          automationId: w.recipeId,
+          subjectEntity: "employment",
+          subjectId: w.employmentB,
+          triggerPayload: { kind: "manual" },
+          allowedSubsidiaryIds: scopeA,
+        }),
+      );
+      const missing = await goneMessage(() =>
+        executeAutomation({
+          orgId: w.orgId,
+          actorId: w.actorId,
+          automationId: w.recipeId,
+          subjectEntity: "employment",
+          subjectId: randomUUID(),
+          triggerPayload: { kind: "manual" },
+          allowedSubsidiaryIds: scopeA,
+        }),
+      );
+      assert.equal(outOfScope, missing);
+      // The in-scope employment runs.
+      const run = await executeAutomation({
+        orgId: w.orgId,
+        actorId: w.actorId,
+        automationId: w.recipeId,
+        subjectEntity: "employment",
+        subjectId: w.employmentA,
+        triggerPayload: { kind: "manual" },
+        allowedSubsidiaryIds: scopeA,
+      });
+      assert.equal(run.status, "succeeded");
+    } finally {
+      await withBypassContext(() => dropScratchOrg(w.orgId));
+    }
+  },
+);
 
-test("explicit-subject simulations match a deleted subject step for step", { skip: !DB }, async () => {
-  const w = await withBypassContext(() => setupWorld());
-  try {
-    const scopeA = new Set([w.subA]);
-    const base = {
-      orgId: w.orgId, actorId: w.actorId, automationId: w.recipeId,
-      subjectEntity: "employment", allowedSubsidiaryIds: scopeA,
-    };
-    const outOfScope = await simulateAutomation({ ...base, subjectId: w.employmentB });
-    const missing = await simulateAutomation({ ...base, subjectId: randomUUID() });
-    // The envelope echoes the requested id; the uniform part is the
-    // outcome: same status, same subject-less steps.
-    assert.equal(outOfScope.length, 1);
-    assert.equal(missing.length, 1);
-    assert.equal(outOfScope[0]!.status, missing[0]!.status);
-    assert.deepEqual(outOfScope[0]!.steps, missing[0]!.steps);
-  } finally {
-    await withBypassContext(() => dropScratchOrg(w.orgId));
-  }
-});
+test(
+  "explicit-subject simulations match a deleted subject step for step",
+  { skip: !DB },
+  async () => {
+    const w = await withBypassContext(() => setupWorld());
+    try {
+      const scopeA = new Set([w.subA]);
+      const base = {
+        orgId: w.orgId,
+        actorId: w.actorId,
+        automationId: w.recipeId,
+        subjectEntity: "employment",
+        allowedSubsidiaryIds: scopeA,
+      };
+      const outOfScope = await simulateAutomation({ ...base, subjectId: w.employmentB });
+      const missing = await simulateAutomation({ ...base, subjectId: randomUUID() });
+      // The envelope echoes the requested id; the uniform part is the
+      // outcome: same status, same subject-less steps.
+      assert.equal(outOfScope.length, 1);
+      assert.equal(missing.length, 1);
+      assert.equal(outOfScope[0]!.status, missing[0]!.status);
+      assert.deepEqual(outOfScope[0]!.steps, missing[0]!.steps);
+    } finally {
+      await withBypassContext(() => dropScratchOrg(w.orgId));
+    }
+  },
+);
 
 test("entity sampling never enumerates out-of-scope subjects", { skip: !DB }, async () => {
   const w = await withBypassContext(() => setupWorld());
   try {
     const sampled = await simulateAutomation({
-      orgId: w.orgId, actorId: w.actorId, automationId: w.recipeId,
-      subjectEntity: "employment", sampleSize: 10, allowedSubsidiaryIds: new Set([w.subA]),
+      orgId: w.orgId,
+      actorId: w.actorId,
+      automationId: w.recipeId,
+      subjectEntity: "employment",
+      sampleSize: 10,
+      allowedSubsidiaryIds: new Set([w.subA]),
     });
     const ids = sampled.map((s) => s.subjectId);
     assert.ok(ids.includes(w.employmentA), "in-scope employment is sampled");

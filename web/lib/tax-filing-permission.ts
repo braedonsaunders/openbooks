@@ -4,4 +4,4 @@
  * actions exactly when the routes allow them. Lives outside the route files:
  * a Next route module may export only its handlers.
  */
-export const TAX_FILING_WRITE_PERMISSION = 'compliance.file' as const
+export const TAX_FILING_WRITE_PERMISSION = "compliance.file" as const;

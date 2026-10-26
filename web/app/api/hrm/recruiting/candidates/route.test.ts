@@ -80,8 +80,9 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmRecruitingCandidatesNextResponse =
-  NextResponse;
+(
+  globalThis as typeof globalThis & Record<string, unknown>
+).openbooksHrmRecruitingCandidatesNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
@@ -96,24 +97,27 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", "mock:authz"],
 ]);
 
-  const hooks = registerHooks({
-    resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
-      if (mocked) return { url: mocked, shortCircuit: true };
-      return nextResolve(specifier);
-    },
-    load(url, _context, nextLoad) {
-      const source = mockSources.get(url);
-      if (source !== undefined) return { format: "module", source, shortCircuit: true };
-      return nextLoad(url);
-    },
-  });
-  const collectionUrl = "./route.ts?hrm-recruiting-candidates-collection";
-  const collectionRoute: typeof import("./route.ts") | undefined = (await import(collectionUrl)) as typeof import("./route.ts");
-  const itemUrl = "./[id]/route.ts?hrm-recruiting-candidates-item";
-  const itemRoute: typeof import("./[id]/route.ts") | undefined = (await import(itemUrl)) as typeof import("./[id]/route.ts");
-  test.after(() => hooks.deregister());
-
+const hooks = registerHooks({
+  resolve(specifier, _context, nextResolve) {
+    const mocked = mockUrls.get(specifier);
+    if (mocked) return { url: mocked, shortCircuit: true };
+    return nextResolve(specifier);
+  },
+  load(url, _context, nextLoad) {
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url);
+  },
+});
+const collectionUrl = "./route.ts?hrm-recruiting-candidates-collection";
+const collectionRoute: typeof import("./route.ts") | undefined = (await import(
+  collectionUrl
+)) as typeof import("./route.ts");
+const itemUrl = "./[id]/route.ts?hrm-recruiting-candidates-item";
+const itemRoute: typeof import("./[id]/route.ts") | undefined = (await import(
+  itemUrl
+)) as typeof import("./[id]/route.ts");
+test.after(() => hooks.deregister());
 
 const CANDIDATE_ID = "00000000-0000-4000-8000-000000000031";
 
@@ -136,9 +140,16 @@ function jsonRequest(url: string, method: string, body: unknown): Request {
 test("a missing feature flag 404s before the service runs", async () => {
   reset();
   routeState.featureOn = false;
-  assert.equal((await collectionRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", {}))).status, 404);
   assert.equal(
-    (await itemRoute!.GET(new Request("http://openbooks.test/x"), { params: Promise.resolve({ id: CANDIDATE_ID }) })).status,
+    (await collectionRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", {}))).status,
+    404,
+  );
+  assert.equal(
+    (
+      await itemRoute!.GET(new Request("http://openbooks.test/x"), {
+        params: Promise.resolve({ id: CANDIDATE_ID }),
+      })
+    ).status,
     404,
   );
   assert.deepEqual(routeState.calls, []);
@@ -147,9 +158,16 @@ test("a missing feature flag 404s before the service runs", async () => {
 test("an unauthenticated caller never reaches the service", async () => {
   reset();
   routeState.gate = { status: 401 };
-  assert.equal((await collectionRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", {}))).status, 401);
   assert.equal(
-    (await itemRoute!.GET(new Request("http://openbooks.test/x"), { params: Promise.resolve({ id: CANDIDATE_ID }) })).status,
+    (await collectionRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", {}))).status,
+    401,
+  );
+  assert.equal(
+    (
+      await itemRoute!.GET(new Request("http://openbooks.test/x"), {
+        params: Promise.resolve({ id: CANDIDATE_ID }),
+      })
+    ).status,
     401,
   );
   assert.deepEqual(routeState.calls, []);
@@ -159,8 +177,22 @@ test("create validates the body through the real parser before the service runs"
   reset();
   const url = "http://openbooks.test/api/hrm/recruiting/candidates";
   assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", {}))).status, 400);
-  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { displayName: "Ada", source: "newspaper" }))).status, 400);
-  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { displayName: "Ada", mergeInto: "nope" }))).status, 400);
+  assert.equal(
+    (
+      await collectionRoute!.POST(
+        jsonRequest(url, "POST", { displayName: "Ada", source: "newspaper" }),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await collectionRoute!.POST(
+        jsonRequest(url, "POST", { displayName: "Ada", mergeInto: "nope" }),
+      )
+    ).status,
+    400,
+  );
   assert.deepEqual(routeState.calls, []);
 });
 
@@ -176,13 +208,20 @@ test("create forwards org, actor, and body, then 201s", async () => {
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { candidate: { id: "candidate-1" }, mergedInto: null });
   assert.equal(routeState.calls[0]!.fn, "create");
-  assert.deepEqual((routeState.calls[0]!.args as Record<string, unknown>).displayName, "Ada Candidate");
+  assert.deepEqual(
+    (routeState.calls[0]!.args as Record<string, unknown>).displayName,
+    "Ada Candidate",
+  );
 });
 
 test("item GET validates the id and resolves the drawer", async () => {
   reset();
   assert.equal(
-    (await itemRoute!.GET(new Request("http://openbooks.test/x"), { params: Promise.resolve({ id: "nope" }) })).status,
+    (
+      await itemRoute!.GET(new Request("http://openbooks.test/x"), {
+        params: Promise.resolve({ id: "nope" }),
+      })
+    ).status,
     400,
   );
   const response = await itemRoute!.GET(new Request("http://openbooks.test/x"), {
@@ -197,7 +236,10 @@ test("a service refusal delegates to the shared mapping with the error intact", 
   const refusal = new Error("a candidate with this email already exists (Ada)");
   routeState.serviceThrow = refusal;
   const response = await collectionRoute!.POST(
-    jsonRequest("http://openbooks.test/api/hrm/recruiting/candidates", "POST", { displayName: "Ada Clone", email: "ada@example.test" }),
+    jsonRequest("http://openbooks.test/api/hrm/recruiting/candidates", "POST", {
+      displayName: "Ada Clone",
+      email: "ada@example.test",
+    }),
   );
   assert.equal(response.status, 409);
   assert.equal(routeState.mapped[0]!.error, refusal);

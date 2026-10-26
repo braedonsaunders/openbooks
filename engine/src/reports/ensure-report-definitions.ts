@@ -1,8 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  STANDARD_STATEMENT_DEFINITIONS,
-  validateCustomQuery,
-} from "@openbooks/reports";
+import { STANDARD_STATEMENT_DEFINITIONS, validateCustomQuery } from "@openbooks/reports";
 import { SEEDED_CATALOG_REPORTS } from "./catalog-reports.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
@@ -40,11 +37,20 @@ export async function ensureReportDefinitions(orgId: string): Promise<void> {
   // Validate the complete catalog before writing, then refresh each family in
   // one statement. Per-definition round trips otherwise delay every catalog
   // destination over a remote database connection.
-  const queries = SEEDED_CATALOG_REPORTS.map((def) => ({ ...def, query: validateCustomQuery(def.query) }));
+  const queries = SEEDED_CATALOG_REPORTS.map((def) => ({
+    ...def,
+    query: validateCustomQuery(def.query),
+  }));
   if (queries.length > 0) {
     await db.execute(sql`
       insert into report_definitions (org_id, kind, slug, name, description, query)
-      values ${sql.join(queries.map((def) => sql`(${orgId}, 'built_in', ${def.slug}, ${def.name}, ${def.description}, ${JSON.stringify(def.query)}::jsonb)`), sql`, `)}
+      values ${sql.join(
+        queries.map(
+          (def) =>
+            sql`(${orgId}, 'built_in', ${def.slug}, ${def.name}, ${def.description}, ${JSON.stringify(def.query)}::jsonb)`,
+        ),
+        sql`, `,
+      )}
       on conflict (org_id, slug) do update set
         name = excluded.name,
         description = excluded.description,
@@ -56,7 +62,13 @@ export async function ensureReportDefinitions(orgId: string): Promise<void> {
   if (STANDARD_STATEMENT_DEFINITIONS.length > 0) {
     await db.execute(sql`
       insert into report_definitions (org_id, kind, report_type, system, slug, name, description, query, statement)
-      values ${sql.join(STANDARD_STATEMENT_DEFINITIONS.map((def) => sql`(${orgId}, 'built_in', 'statement', true, ${def.slug}, ${def.name}, ${def.description}, null, ${JSON.stringify({ kind: def.statementKind, params: def.params ?? {} })}::jsonb)`), sql`, `)}
+      values ${sql.join(
+        STANDARD_STATEMENT_DEFINITIONS.map(
+          (def) =>
+            sql`(${orgId}, 'built_in', 'statement', true, ${def.slug}, ${def.name}, ${def.description}, null, ${JSON.stringify({ kind: def.statementKind, params: def.params ?? {} })}::jsonb)`,
+        ),
+        sql`, `,
+      )}
       on conflict (org_id, slug) do update set
         report_type = 'statement',
         system = true,
@@ -68,14 +80,21 @@ export async function ensureReportDefinitions(orgId: string): Promise<void> {
       where report_definitions.kind = 'built_in' and report_definitions.updated_by is null
         and report_definitions.org_id = ${orgId}`);
   }
-  const boardPackageFeatures = ["nonprofit", "fundAccounting", "functionalExpenses", "grantManagement"] as const;
+  const boardPackageFeatures = [
+    "nonprofit",
+    "fundAccounting",
+    "functionalExpenses",
+    "grantManagement",
+  ] as const;
   let boardPackageAvailable = true;
   for (const featureKey of boardPackageFeatures) {
     if (!(await orgFeatureEnabled(orgId, featureKey, db))) boardPackageAvailable = false;
   }
   if (boardPackageAvailable) {
     await withOrgTransaction(orgId, async () => {
-      await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`nonprofit-board-package:${orgId}`}, 0))`);
+      await db.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`nonprofit-board-package:${orgId}`}, 0))`,
+      );
       await db.execute(sql`
         insert into close_reporting_packages (org_id, name, description, reports, is_default, is_active)
         select ${orgId}, 'Nonprofit board package',

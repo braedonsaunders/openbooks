@@ -6,12 +6,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
-import {
-  db,
-  withOrg,
-  withTransactionSavepoint,
-  type SqlExecutor,
-} from "../platform/db.ts";
+import { db, withOrg, withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
 import {
   loadSubsidiaryContext,
   restrictionAdmits,
@@ -42,10 +37,7 @@ import {
   type AccretionPeriod,
   type PeriodRate,
 } from "../money/present-value.ts";
-import {
-  orgReportingFramework,
-  type ReportingFramework,
-} from "../platform/reporting-framework.ts";
+import { orgReportingFramework, type ReportingFramework } from "../platform/reporting-framework.ts";
 
 /**
  * Lessee lease accounting — ASC 842 / IFRS 16 — plus the lessor classification
@@ -118,8 +110,7 @@ function exactMoney(value: unknown, label: string): string {
 /** Persist-time annual discount rate: exact decimal at numeric(19,10). Fail closed. */
 function persistLeaseAnnualDiscountRate(value: unknown): string {
   const exact = canonicalDecimal(value, 10);
-  if (exact === null)
-    throw new LeaseError("annual discount rate must be an exact decimal");
+  if (exact === null) throw new LeaseError("annual discount rate must be an exact decimal");
   try {
     return normalizeDecimal(exact, 10);
   } catch {
@@ -169,9 +160,7 @@ export interface LeaseClassification {
 function assertClassificationMonths(value: unknown, label: string): void {
   if (value == null) return;
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-    throw new LeaseError(
-      `${label} must be a non-negative whole number of months`,
-    );
+    throw new LeaseError(`${label} must be a non-negative whole number of months`);
   }
 }
 
@@ -197,16 +186,10 @@ function assertClassificationPercent(value: unknown, label: string): void {
 function assertClassificationInputs(inputs: LeaseClassificationInputs): void {
   assertClassificationMonths(inputs.leaseTermMonths, "lease term months");
   assertClassificationMonths(inputs.economicLifeMonths, "economic life months");
-  assertClassificationPercent(
-    inputs.termThresholdPercent,
-    "term threshold percent",
-  );
+  assertClassificationPercent(inputs.termThresholdPercent, "term threshold percent");
   assertClassificationDecimal(inputs.pvOfPayments, "present value of payments");
   assertClassificationDecimal(inputs.fairValue, "fair value");
-  assertClassificationPercent(
-    inputs.pvThresholdPercent,
-    "present-value threshold percent",
-  );
+  assertClassificationPercent(inputs.pvThresholdPercent, "present-value threshold percent");
 }
 
 export function classifyLease(
@@ -231,11 +214,7 @@ export function classifyLease(
     const rhs = BigInt(inputs.economicLifeMonths) * toUnits(threshold);
     if (lhs >= rhs) criteria.push("term-major-part-of-life");
   }
-  if (
-    inputs.pvOfPayments != null &&
-    inputs.fairValue != null &&
-    cmp(inputs.fairValue, "0") > 0
-  ) {
+  if (inputs.pvOfPayments != null && inputs.fairValue != null && cmp(inputs.fairValue, "0") > 0) {
     const threshold = inputs.pvThresholdPercent ?? "90";
     // pv/fv ≥ threshold%  ⇔  pv × 100 × 10^4 ≥ fv × threshold×10^4 (cross-multiplied)
     const lhs = toUnits(inputs.pvOfPayments) * 100n * 10_000n;
@@ -300,9 +279,7 @@ function advanceAccretion(args: {
     const paid = index === 0 && args.firstPaid ? 0n : payment;
     const remaining = opening - paid;
     if (remaining < 0n)
-      throw new LeaseError(
-        "advance lease payment exceeds the measured liability",
-      );
+      throw new LeaseError("advance lease payment exceeds the measured liability");
     let interest = periodInterest(remaining, args.rate);
     if (index === args.periods - 2) {
       const closingInterest = payment - remaining;
@@ -317,9 +294,7 @@ function advanceAccretion(args: {
     }
     balance = remaining + interest;
     if (index === args.periods - 1 && balance !== 0n) {
-      throw new LeaseError(
-        "advance lease schedule does not retire the liability to zero",
-      );
+      throw new LeaseError("advance lease schedule does not retire the liability to zero");
     }
     result.push({
       sequence: index + 1,
@@ -368,9 +343,7 @@ export function measureLesseeLease(args: {
     throw new LeaseError("periods per year must be a positive whole number");
   }
   if (!Number.isSafeInteger(args.periods) || args.periods < 1) {
-    throw new LeaseError(
-      "lease term must be a positive whole number of periods",
-    );
+    throw new LeaseError("lease term must be a positive whole number of periods");
   }
   // 100-year supported horizon in the caller's own frequency (division first
   // so a huge period count cannot overflow into unsafe-integer range).
@@ -379,17 +352,11 @@ export function measureLesseeLease(args: {
       "lease term exceeds the supported 100-year horizon for its payment frequency",
     );
   }
-  const rate: PeriodRate = periodRateFromAnnualPercent(
-    args.annualRatePercent,
-    args.periodsPerYear,
-  );
+  const rate: PeriodRate = periodRateFromAnnualPercent(args.annualRatePercent, args.periodsPerYear);
   const payment = exactMoney(args.payment, "Payment amount");
-  if (cmp(payment, "0") <= 0)
-    throw new LeaseError("Payment amount must be positive");
+  if (cmp(payment, "0") <= 0) throw new LeaseError("Payment amount must be positive");
   const initialPayment =
-    args.timing === "advance" && args.openingLiability === undefined
-      ? payment
-      : "0.0000";
+    args.timing === "advance" && args.openingLiability === undefined ? payment : "0.0000";
   const adjustments = [
     args.initialDirectCosts ?? "0",
     args.prepayments ?? "0",
@@ -397,10 +364,7 @@ export function measureLesseeLease(args: {
   ].map((amount) => exactMoney(amount, "Right-of-use cost adjustment"));
   if (adjustments.some((amount) => cmp(amount, "0") < 0))
     throw new LeaseError("Right-of-use cost adjustments must be non-negative");
-  if (
-    args.openingLiability !== undefined &&
-    adjustments.some((amount) => !isZero(amount))
-  ) {
+  if (args.openingLiability !== undefined && adjustments.some((amount) => !isZero(amount))) {
     throw new LeaseError(
       "opening right-of-use carrying amount must already include costs, prepayments and incentives",
     );
@@ -417,22 +381,13 @@ export function measureLesseeLease(args: {
           }),
           neg(initialPayment),
         );
-  if (cmp(liability, "0") < 0)
-    throw new LeaseError("Opening liability must be non-negative");
+  if (cmp(liability, "0") < 0) throw new LeaseError("Opening liability must be non-negative");
   const rouAsset =
     args.openingRouAsset !== undefined
       ? exactMoney(args.openingRouAsset, "Opening right-of-use carrying amount")
-      : sum([
-          liability,
-          initialPayment,
-          adjustments[0]!,
-          adjustments[1]!,
-          neg(adjustments[2]!),
-        ]);
+      : sum([liability, initialPayment, adjustments[0]!, adjustments[1]!, neg(adjustments[2]!)]);
   if (cmp(rouAsset, "0") < 0)
-    throw new LeaseError(
-      "Opening right-of-use carrying amount must be non-negative",
-    );
+    throw new LeaseError("Opening right-of-use carrying amount must be non-negative");
   const accretion =
     args.timing === "advance"
       ? advanceAccretion({
@@ -461,10 +416,9 @@ export function measureLesseeLease(args: {
     }));
   } else {
     const totalPayments = sum(accretion.map((line) => line.payment));
-    const costs = apportion(
-      toUnits(totalPayments),
-      new Array<bigint>(args.periods).fill(1n),
-    ).map(fromUnits);
+    const costs = apportion(toUnits(totalPayments), new Array<bigint>(args.periods).fill(1n)).map(
+      fromUnits,
+    );
     // Continue-from-opening: the carried ROU generally differs from the
     // stated liability (unamortised costs in the outgoing system), so the
     // cost-minus-interest shape is level-shifted by the apportioned
@@ -475,17 +429,11 @@ export function measureLesseeLease(args: {
     const shift =
       cmp(rouDelta, "0") === 0
         ? null
-        : apportion(
-            toUnits(rouDelta),
-            new Array<bigint>(args.periods).fill(1n),
-          ).map(fromUnits);
+        : apportion(toUnits(rouDelta), new Array<bigint>(args.periods).fill(1n)).map(fromUnits);
     schedule = accretion.map((line, i) => ({
       ...line,
       singleCost: shift ? add(costs[i]!, shift[i]!) : costs[i]!,
-      rouAdjustment: add(
-        shift ? add(costs[i]!, shift[i]!) : costs[i]!,
-        neg(line.interest),
-      ),
+      rouAdjustment: add(shift ? add(costs[i]!, shift[i]!) : costs[i]!, neg(line.interest)),
     }));
     // Invariant: the ROU adjustments must consume the asset exactly.
     const consumed = sum(schedule.map((l) => l.rouAdjustment!));
@@ -502,8 +450,7 @@ export function measureLesseeLease(args: {
 // Lessor arithmetic (pure)
 // ---------------------------------------------------------------------------
 
-export type LessorClassification =
-  "sales_type" | "direct_financing" | "operating";
+export type LessorClassification = "sales_type" | "direct_financing" | "operating";
 
 /**
  * Lessor classification (ASC 842-30-25-1 / IFRS 16.61-63): any
@@ -534,10 +481,7 @@ export function classifyLessorLease(
     cmp(inputs.fairValue, "0") > 0
   ) {
     const threshold = inputs.pvThresholdPercent ?? "90";
-    const combined = add(
-      inputs.pvOfPayments,
-      inputs.thirdPartyResidualGuaranteePv,
-    );
+    const combined = add(inputs.pvOfPayments, inputs.thirdPartyResidualGuaranteePv);
     const lhs = toUnits(combined) * 100n * 10_000n;
     const rhs = toUnits(inputs.fairValue) * toUnits(threshold);
     if (lhs >= rhs) {
@@ -606,9 +550,7 @@ export function lessorCommencement(args: {
   ];
   const residual = lines.reduce((a, l) => add(a, l.amount), "0");
   if (!isZero(residual))
-    throw new LeaseError(
-      `direct-financing commencement does not balance (${residual})`,
-    );
+    throw new LeaseError(`direct-financing commencement does not balance (${residual})`);
   return {
     sellingProfit: "0.0000",
     deferredProfit: fromUnits(toUnits(profit)),
@@ -631,24 +573,19 @@ export interface LessorLevelledPeriod {
  * the cumulative accrual (a rent receivable when billing lags, deferred rent
  * when billing leads) returns to exactly zero at the end of the term.
  */
-export function lessorStraightLineSchedule(
-  billedPayments: string[],
-): LessorLevelledPeriod[] {
+export function lessorStraightLineSchedule(billedPayments: string[]): LessorLevelledPeriod[] {
   if (billedPayments.length === 0) throw new LeaseError("no payments to level");
   const total = billedPayments.reduce((a, p) => a + toUnits(p), 0n);
-  const incomes = apportion(
-    total,
-    new Array<bigint>(billedPayments.length).fill(1n),
-  ).map(fromUnits);
+  const incomes = apportion(total, new Array<bigint>(billedPayments.length).fill(1n)).map(
+    fromUnits,
+  );
   let cumulative = "0";
   return billedPayments.map((billed, i) => {
     const income = incomes[i]!;
     const accrualDelta = add(income, neg(billed));
     cumulative = add(cumulative, accrualDelta);
     if (i === billedPayments.length - 1 && !isZero(cumulative)) {
-      throw new LeaseError(
-        `levelled schedule does not return to zero (residual ${cumulative})`,
-      );
+      throw new LeaseError(`levelled schedule does not return to zero (residual ${cumulative})`);
     }
     return {
       sequence: i + 1,
@@ -694,9 +631,7 @@ export function salesTypeCommencement(args: {
     });
   const residual = lines.reduce((a, l) => add(a, l.amount), "0");
   if (!isZero(residual))
-    throw new LeaseError(
-      `sales-type commencement does not balance (${residual})`,
-    );
+    throw new LeaseError(`sales-type commencement does not balance (${residual})`);
   return { sellingProfit: profit, lines };
 }
 
@@ -716,9 +651,7 @@ const PERIODS_PER_YEAR: Record<string, number> = {
 };
 
 /** Payment timing is a contractual fact, never a suggested workaround. */
-export function assertLeaseTimingSupported(
-  timing: "arrears" | "advance",
-): void {
+export function assertLeaseTimingSupported(timing: "arrears" | "advance"): void {
   if (timing !== "advance" && timing !== "arrears") {
     throw new LeaseError(
       "payment timing must be advance or arrears, matching the signed agreement",
@@ -740,9 +673,7 @@ export const MAX_LEASE_TERM_MONTHS = 1200;
  *  0001–9999) — no local parser. */
 export function assertLeaseCommencementOn(value: unknown): void {
   if (!isIsoCalendarDate(value)) {
-    throw new LeaseError(
-      "commencement date must be a calendar date (YYYY-MM-DD)",
-    );
+    throw new LeaseError("commencement date must be a calendar date (YYYY-MM-DD)");
   }
 }
 
@@ -759,18 +690,12 @@ export function assertLeaseTermWithinHorizon(
   paymentFrequency: unknown,
 ): number {
   const frequencyMonths =
-    typeof paymentFrequency === "string"
-      ? FREQUENCY_MONTHS[paymentFrequency]
-      : undefined;
+    typeof paymentFrequency === "string" ? FREQUENCY_MONTHS[paymentFrequency] : undefined;
   if (!frequencyMonths) {
-    throw new LeaseError(
-      "payment frequency must be one of monthly, quarterly, annual",
-    );
+    throw new LeaseError("payment frequency must be one of monthly, quarterly, annual");
   }
   if (!Number.isSafeInteger(termPeriods) || (termPeriods as number) < 1) {
-    throw new LeaseError(
-      "lease term must be a positive whole number of periods",
-    );
+    throw new LeaseError("lease term must be a positive whole number of periods");
   }
   // Division first: termPeriods is only known to be a safe integer, and
   // termPeriods × frequencyMonths can overflow into unsafe-integer range.
@@ -831,10 +756,7 @@ export function assertOpeningAsOfOnPeriodBoundary(args: {
       `opening balances as-of ${args.asOf} fall past the end of the lease term — no periods remain to continue`,
     );
   }
-  const clean =
-    args.paymentTiming === "advance"
-      ? firstStart > args.asOf
-      : firstStart >= args.asOf;
+  const clean = args.paymentTiming === "advance" ? firstStart > args.asOf : firstStart >= args.asOf;
   if (!clean) {
     throw new LeaseError(
       args.paymentTiming === "advance"
@@ -898,7 +820,9 @@ async function validateLeaseReferences(
   let context: Awaited<ReturnType<typeof loadSubsidiaryContext>>;
   try {
     await assertLeaseAccountsPostable(tx, orgId, accountIds);
-    await tx.execute(sql`select id from subsidiaries where org_id = ${orgId} order by id for share`);
+    await tx.execute(
+      sql`select id from subsidiaries where org_id = ${orgId} order by id for share`,
+    );
     context = await loadSubsidiaryContext(tx, orgId);
     const subsidiary = context.byId.get(input.subsidiaryId);
     if (!subsidiary || !subsidiary.isActive || subsidiary.isElimination) {
@@ -917,26 +841,36 @@ async function validateLeaseReferences(
   ] as const;
   for (const dimension of dimensions) {
     if (!dimension.id) continue;
-    const row = (await tx.execute<{
-      id: string;
-      is_active: boolean;
-      subsidiary_id: string | null;
-      subsidiary_include_children: boolean;
-    }>(sql`
+    const row = (
+      await tx.execute<{
+        id: string;
+        is_active: boolean;
+        subsidiary_id: string | null;
+        subsidiary_include_children: boolean;
+      }>(
+        sql`
       select id, is_active, subsidiary_id, subsidiary_include_children
         from ${sql.raw(dimension.table)}
        where org_id = ${orgId} and id = ${dimension.id}
-       for share`, "objects"))[0];
+       for share`,
+        "objects",
+      )
+    )[0];
     if (!row || !row.is_active) {
       throw new LeaseError(`Choose an active ${dimension.label} from this organization.`);
     }
-    if (row.subsidiary_id && !restrictionAdmits(
-      context,
-      row.subsidiary_id,
-      row.subsidiary_include_children,
-      input.subsidiaryId,
-    )) {
-      throw new LeaseError(`The selected ${dimension.label} is restricted to another legal entity.`);
+    if (
+      row.subsidiary_id &&
+      !restrictionAdmits(
+        context,
+        row.subsidiary_id,
+        row.subsidiary_include_children,
+        input.subsidiaryId,
+      )
+    ) {
+      throw new LeaseError(
+        `The selected ${dimension.label} is restricted to another legal entity.`,
+      );
     }
   }
 
@@ -988,10 +922,7 @@ export async function createLeaseAgreement(
     // apportion weights, and schedule rows all scale with the period count).
     // The term gate is shared with commencement (legacy stored terms) and
     // runs before classification because the schedule's term feeds it.
-    const frequencyMonths = assertLeaseTermWithinHorizon(
-      input.termPeriods,
-      input.paymentFrequency,
-    );
+    const frequencyMonths = assertLeaseTermWithinHorizon(input.termPeriods, input.paymentFrequency);
     assertLeaseCommencementOn(input.commencementOn);
     // The lease term is a fact of the agreed schedule, not a claim of the
     // caller: derive it from the contractual periods (mirroring the change
@@ -1011,8 +942,7 @@ export async function createLeaseAgreement(
       if (
         !shortTermExemptionEligible({
           leaseTermMonths: months,
-          purchaseOptionReasonablyCertain:
-            classificationInputs.purchaseOptionReasonablyCertain,
+          purchaseOptionReasonablyCertain: classificationInputs.purchaseOptionReasonablyCertain,
         })
       ) {
         throw new LeaseError(
@@ -1035,9 +965,7 @@ export async function createLeaseAgreement(
       }
       assertLeaseCommencementOn(openingBalances.asOf);
       if (openingBalances.asOf < input.commencementOn) {
-        throw new LeaseError(
-          "opening balances as-of date cannot precede the commencement date",
-        );
+        throw new LeaseError("opening balances as-of date cannot precede the commencement date");
       }
       // Fail fast: a mid-period cutover can never commence (see
       // assertOpeningAsOfOnPeriodBoundary), so refuse it here with the same
@@ -1054,18 +982,13 @@ export async function createLeaseAgreement(
       ? exactMoney(openingBalances.liability, "Opening liability")
       : null;
     const openingRouCarrying = openingBalances
-      ? exactMoney(
-          openingBalances.rouCarrying,
-          "Opening right-of-use carrying amount",
-        )
+      ? exactMoney(openingBalances.rouCarrying, "Opening right-of-use carrying amount")
       : null;
     if (openingLiability !== null && cmp(openingLiability, "0") < 0) {
       throw new LeaseError("Opening liability must be non-negative");
     }
     if (openingRouCarrying !== null && cmp(openingRouCarrying, "0") < 0) {
-      throw new LeaseError(
-        "Opening right-of-use carrying amount must be non-negative",
-      );
+      throw new LeaseError("Opening right-of-use carrying amount must be non-negative");
     }
 
     const paymentAmount = exactMoney(input.paymentAmount, "Payment amount");
@@ -1075,40 +998,25 @@ export async function createLeaseAgreement(
     // payment_amount is numeric(19,4): fifteen whole digits. The format check
     // admits any magnitude, so a pasted 20-digit amount died in Postgres with a
     // storage error. Fail closed with the same named refusal.
-    if (
-      paymentAmount.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "")
-        .length > 15
-    ) {
-      throw new LeaseError(
-        "Payment amount exceeds the supported ledger magnitude",
-      );
+    if (paymentAmount.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) {
+      throw new LeaseError("Payment amount exceeds the supported ledger magnitude");
     }
     const annualDiscountRatePercent = persistLeaseAnnualDiscountRate(
       input.annualDiscountRatePercent,
     );
     // annual_discount_rate_percent is numeric(19,10): nine whole digits.
     if (
-      annualDiscountRatePercent
-        .replace(/^[+-]/, "")
-        .split(".")[0]!
-        .replace(/^0+/, "").length > 9
+      annualDiscountRatePercent.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 9
     ) {
-      throw new LeaseError(
-        "annual discount rate exceeds the supported ledger magnitude",
-      );
+      throw new LeaseError("annual discount rate exceeds the supported ledger magnitude");
     }
     if (cmp(annualDiscountRatePercent, "0") < 0) {
       throw new LeaseError("annual discount rate must be non-negative");
     }
-    const initialDirectCosts = exactMoney(
-      input.initialDirectCosts ?? "0",
-      "Initial direct costs",
-    );
+    const initialDirectCosts = exactMoney(input.initialDirectCosts ?? "0", "Initial direct costs");
     const prepayments = exactMoney(input.prepayments ?? "0", "Prepayments");
     const incentives = exactMoney(input.incentives ?? "0", "Incentives");
-    if (
-      [initialDirectCosts, prepayments, incentives].some((v) => cmp(v, "0") < 0)
-    )
+    if ([initialDirectCosts, prepayments, incentives].some((v) => cmp(v, "0") < 0))
       throw new LeaseError("cost adjustments must be non-negative");
     if ([initialDirectCosts, prepayments, incentives].some((v) => !isZero(v))) {
       if (openingBalances || input.exemption)
@@ -1120,21 +1028,22 @@ export async function createLeaseAgreement(
           "select the account holding previously recorded costs, prepayments and incentives",
         );
     }
-    if (
-      input.exemption &&
-      input.paymentTiming === "advance" &&
-      !input.costClearingAccountId
-    ) {
+    if (input.exemption && input.paymentTiming === "advance" && !input.costClearingAccountId) {
       throw new LeaseError(
         "select a prepaid lease expense clearing account for exempt advance payments",
       );
     }
-    const binding = (await db.execute<{ book_id: string; currency: string }>(sql`
+    const binding = (
+      await db.execute<{ book_id: string; currency: string }>(
+        sql`
     select b.id as book_id,s.base_currency as currency from accounting_books b
     join subsidiaries s on s.org_id=b.org_id and s.id=${input.subsidiaryId}
     where b.org_id=${orgId} and b.is_primary and b.is_active and b.posts_gl
       and s.is_active and not s.is_elimination for share of b,s
-  `, "objects"))[0];
+  `,
+        "objects",
+      )
+    )[0];
     if (!binding)
       throw new LeaseError(
         "lease requires an active legal entity and an active primary posting book",
@@ -1142,7 +1051,8 @@ export async function createLeaseAgreement(
     await validateLeaseReferences(db, orgId, input);
     const leaseId = randomUUID();
     try {
-      const inserted = await db.execute<{ id: string }>(sql`
+      const inserted = await db.execute<{ id: string }>(
+        sql`
     insert into lease_agreements
       (id, org_id, subsidiary_id, book_id, currency, lease_number, description, status, commencement_on, term_periods,
        payment_frequency, payment_timing, payment_amount, annual_discount_rate_percent,
@@ -1164,17 +1074,25 @@ export async function createLeaseAgreement(
             ${input.accounts.amortizationExpense}, ${input.accounts.leaseExpense}, ${input.accounts.payment},
             ${input.departmentId ?? null}, ${input.projectId ?? null}, ${input.locationId ?? null},
             '{}'::jsonb, ${actorId}, ${actorId})
-    returning id`, "objects");
+    returning id`,
+        "objects",
+      );
       if (inserted.length !== 1 || inserted[0]?.id !== leaseId) {
         throw new LeaseError("The lease agreement was not saved; no lease was created.");
       }
     } catch (error) {
       const detail = databaseErrorDetail(error);
       if (detail.code === "23505" && detail.constraint === "lease_agreements_org_number") {
-        throw new LeaseError("This lease number is already used in this organization; choose a different lease number.", { cause: error });
+        throw new LeaseError(
+          "This lease number is already used in this organization; choose a different lease number.",
+          { cause: error },
+        );
       }
       if (detail.code === "23503") {
-        throw new LeaseError("A referenced lease account or dimension is no longer available; refresh and select it again.", { cause: error });
+        throw new LeaseError(
+          "A referenced lease account or dimension is no longer available; refresh and select it again.",
+          { cause: error },
+        );
       }
       throw error;
     }
@@ -1225,7 +1143,8 @@ export async function leaseRow(
   leaseId: string,
   runner: SqlExecutor,
 ): Promise<LeaseRow> {
-  const r = await runner.execute<LeaseRow>(sql`
+  const r = await runner.execute<LeaseRow>(
+    sql`
     select id, subsidiary_id, book_id, currency, lease_number, status, commencement_on::text as commencement_on, term_periods,
            payment_frequency, payment_timing, payment_amount::text as payment_amount,
            annual_discount_rate_percent::text as annual_discount_rate_percent,
@@ -1239,7 +1158,9 @@ export async function leaseRow(
            department_id, project_id, location_id, commencement_entry_id,
            revision, initial_direct_costs::text, prepayments::text, incentives::text,
            cost_clearing_account_id, last_change_id
-      from lease_agreements where org_id = ${orgId} and id = ${leaseId} for update`, "objects");
+      from lease_agreements where org_id = ${orgId} and id = ${leaseId} for update`,
+    "objects",
+  );
   const row = r[0];
   if (!row) throw new ScopeNotFoundError();
   return row;
@@ -1260,17 +1181,19 @@ async function postingContext(
   const r = await runner.execute<{
     book_id: string | null;
     currency: string | null;
-  }>(sql`
+  }>(
+    sql`
     select (select id from accounting_books where org_id = ${orgId} and id=${bookId} and is_active and posts_gl for share) as book_id,
            (select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}) as currency
-  `, "objects");
+  `,
+    "objects",
+  );
   const row = r[0];
   if (!row?.book_id)
     throw new LeaseError(
       "the lease posting book is no longer active or GL-posting; ask an authorized administrator to restore the originating book's posting configuration in Accounting books before posting this lease",
     );
-  if (!period)
-    throw new LeaseError(`no accounting period covers ${date}`);
+  if (!period) throw new LeaseError(`no accounting period covers ${date}`);
   if (!row.currency) throw new LeaseError("subsidiary not found");
   return {
     bookId: row.book_id,
@@ -1287,15 +1210,18 @@ async function assertLeaseAccountsPostable(
   const ids = [...new Set(accountIds)];
   if (!ids.length) return;
   const accounts = await tx.execute<{
-      id: string;
-      is_active: boolean;
-      is_summary: boolean;
-    }>(sql`
+    id: string;
+    is_active: boolean;
+    is_summary: boolean;
+  }>(
+    sql`
     select id, is_active, is_summary
       from accounts
      where org_id=${orgId} and id=any(${uuidArray(ids)}::uuid[])
      for share
-  `, "objects");
+  `,
+    "objects",
+  );
   const byId = new Map(accounts.map((account) => [account.id, account]));
   if (
     ids.some((id) => {
@@ -1349,8 +1275,7 @@ export async function postLeaseEntry(
   },
 ): Promise<string> {
   const residual = args.lines.reduce((a, l) => add(a, l.amount), "0");
-  if (!isZero(residual))
-    throw new LeaseError(`lease entry does not balance (${residual})`);
+  if (!isZero(residual)) throw new LeaseError(`lease entry does not balance (${residual})`);
   // Apply the same native legal-entity policy as other posting workflows. Hold
   // the hierarchy and referenced configuration throughout validation and writes.
   await tx.execute(
@@ -1454,11 +1379,14 @@ export async function commenceLease(
     if (actorId) {
       await lockActorCommandAuthority(tx, orgId, actorId, null, "assets.manage");
       if (!(await lockAndCheckOrgFeature(tx, orgId, "fixedAssets"))) {
-        throw new LeaseError("Fixed assets is disabled; enable it in Company Settings → Features before commencing this lease.");
+        throw new LeaseError(
+          "Fixed assets is disabled; enable it in Company Settings → Features before commencing this lease.",
+        );
       }
     }
     const lease = await leaseRow(orgId, leaseId, tx);
-    if (actorId) await lockActorCommandAuthority(tx, orgId, actorId, lease.subsidiary_id, "assets.manage");
+    if (actorId)
+      await lockActorCommandAuthority(tx, orgId, actorId, lease.subsidiary_id, "assets.manage");
     if (lease.status === "active") {
       return {
         leaseId,
@@ -1479,10 +1407,7 @@ export async function commenceLease(
       lease.opening_rou_carrying,
       lease.opening_balances_as_of,
     ];
-    if (
-      openingFields.some((f) => f === null) &&
-      openingFields.some((f) => f !== null)
-    ) {
+    if (openingFields.some((f) => f === null) && openingFields.some((f) => f !== null)) {
       throw new LeaseError(
         "opening balances require a liability, a right-of-use carrying amount, and an as-of date together",
       );
@@ -1502,9 +1427,7 @@ export async function commenceLease(
         );
       }
       if (opening.asOf < lease.commencement_on) {
-        throw new LeaseError(
-          "opening balances as-of date cannot precede the commencement date",
-        );
+        throw new LeaseError("opening balances as-of date cannot precede the commencement date");
       }
     }
 
@@ -1543,13 +1466,15 @@ export async function commenceLease(
                   '0', ${lease.payment_amount}, '0', '0', '0', ${lease.payment_amount},
                   ${actorId}, ${actorId})`);
       }
-      const activated = await tx.execute(sql`
+      const activated = await tx.execute(
+        sql`
         update lease_agreements
            set status = 'active', initial_liability = '0', initial_rou_asset = '0',
                updated_at = now(), updated_by = ${actorId}
-         where id = ${leaseId} and org_id = ${orgId} and status='draft' returning id`, "objects");
-      if (activated.length !== 1)
-        throw new LeaseError("draft lease could not be commenced");
+         where id = ${leaseId} and org_id = ${orgId} and status='draft' returning id`,
+        "objects",
+      );
+      if (activated.length !== 1) throw new LeaseError("draft lease could not be commenced");
       return {
         leaseId,
         liability: "0",
@@ -1564,9 +1489,7 @@ export async function commenceLease(
     // must never be caught up. The full-term sequence numbering continues so
     // the remaining rows read as periods k..n of n.
     const remaining = opening
-      ? boundaries
-          .map((b, i) => ({ ...b, index: i }))
-          .filter((b) => b.end > opening.asOf)
+      ? boundaries.map((b, i) => ({ ...b, index: i })).filter((b) => b.end > opening.asOf)
       : boundaries.map((b, i) => ({ ...b, index: i }));
     if (opening && remaining.length === 0) {
       throw new LeaseError(
@@ -1626,14 +1549,16 @@ export async function commenceLease(
     // them. The subledger ties to those balances through initial_liability /
     // initial_rou_asset instead.
     if (opening) {
-      const activated = await tx.execute(sql`
+      const activated = await tx.execute(
+        sql`
         update lease_agreements
            set status = 'active', initial_liability = ${opening.liability},
                initial_rou_asset = ${opening.rouCarrying}, commencement_entry_id = null,
                updated_at = now(), updated_by = ${actorId}
-         where id = ${leaseId} and org_id = ${orgId} and status='draft' returning id`, "objects");
-      if (activated.length !== 1)
-        throw new LeaseError("draft lease could not be commenced");
+         where id = ${leaseId} and org_id = ${orgId} and status='draft' returning id`,
+        "objects",
+      );
+      if (activated.length !== 1) throw new LeaseError("draft lease could not be commenced");
       return {
         leaseId,
         liability: opening.liability,
@@ -1664,11 +1589,7 @@ export async function commenceLease(
               {
                 accountId: lease.cost_clearing_account_id,
                 amount: neg(
-                  sum([
-                    lease.initial_direct_costs,
-                    lease.prepayments,
-                    neg(lease.incentives),
-                  ]),
+                  sum([lease.initial_direct_costs, lease.prepayments, neg(lease.incentives)]),
                 ),
               },
             ]
@@ -1678,24 +1599,27 @@ export async function commenceLease(
     });
 
     if (!isZero(measurement.initialPayment)) {
-      const paid = await tx.execute(sql`
+      const paid = await tx.execute(
+        sql`
         update lease_agreement_schedule_lines set payment_entry_id=${entryId},payment_posted_at=now(),
           updated_by=${actorId},updated_at=now()
          where org_id=${orgId} and lease_id=${leaseId} and sequence=1 returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (paid.length !== 1)
-        throw new LeaseError(
-          "commencement payment could not be linked to its schedule",
-        );
+        throw new LeaseError("commencement payment could not be linked to its schedule");
     }
-    const activated = await tx.execute(sql`
+    const activated = await tx.execute(
+      sql`
       update lease_agreements
          set status = 'active', initial_liability = ${measurement.liability},
              initial_rou_asset = ${measurement.rouAsset}, commencement_entry_id = ${entryId},
              updated_at = now(), updated_by = ${actorId}
-       where id = ${leaseId} and org_id = ${orgId} and status='draft' returning id`, "objects");
-    if (activated.length !== 1)
-      throw new LeaseError("draft lease could not be commenced");
+       where id = ${leaseId} and org_id = ${orgId} and status='draft' returning id`,
+      "objects",
+    );
+    if (activated.length !== 1) throw new LeaseError("draft lease could not be commenced");
 
     return {
       leaseId,
@@ -1761,10 +1685,9 @@ export async function postDueLeaseSchedules(
   options: { leaseId?: string } = {},
 ): Promise<PostLeaseScheduleResult> {
   if (!isIsoCalendarDate(asOfDate))
-    throw new LeaseError(
-      "as-of date must be a valid calendar date (YYYY-MM-DD)",
-    );
-  const due = await db.execute<{ line_id: string; lease_id: string }>(sql`
+    throw new LeaseError("as-of date must be a valid calendar date (YYYY-MM-DD)");
+  const due = await db.execute<{ line_id: string; lease_id: string }>(
+    sql`
     select l.id as line_id,l.lease_id from lease_agreement_schedule_lines l
       join lease_agreements a on a.id=l.lease_id and a.org_id=l.org_id
      where l.org_id=${orgId} and a.status='active' and l.superseded_by_change_id is null
@@ -1772,7 +1695,9 @@ export async function postDueLeaseSchedules(
        and ((l.due_on<=${asOfDate} and l.payment_posted_at is null)
          or (l.period_end<=${asOfDate} and l.accrual_posted_at is null))
      order by l.period_start,l.sequence,l.id
-  `, "objects");
+  `,
+    "objects",
+  );
   const result: PostLeaseScheduleResult = {
     posted: 0,
     skipped: 0,
@@ -1791,13 +1716,18 @@ export async function postDueLeaseSchedules(
           feature: "fixedAssets",
         });
       if (lease.status !== "active") return null;
-      const line = (await tx.execute<LeaseSchedulePostingRow>(sql`
+      const line = (
+        await tx.execute<LeaseSchedulePostingRow>(
+          sql`
         select id as line_id,lease_id,sequence,due_on::text,period_end::text,
           payment::text,interest::text,principal::text,amortization::text,single_cost::text,rou_adjustment::text,
           payment_posted_at,accrual_posted_at,payment_entry_id,amortization_entry_id
          from lease_agreement_schedule_lines where org_id=${orgId} and id=${candidate.line_id}
            and lease_id=${lease.id} and superseded_by_change_id is null for update
-      `, "objects"))[0];
+      `,
+          "objects",
+        )
+      )[0];
       if (!line) return null;
       const pay = !line.payment_posted_at && line.due_on <= asOfDate;
       const accrue = !line.accrual_posted_at && line.period_end <= asOfDate;
@@ -1810,13 +1740,7 @@ export async function postDueLeaseSchedules(
         ...(pay ? [line.due_on] : []),
         ...(accrue ? [line.period_end] : []),
       ])) {
-        const ctx = await postingContext(
-          tx,
-          orgId,
-          lease.subsidiary_id,
-          date,
-          lease.book_id,
-        );
+        const ctx = await postingContext(tx, orgId, lease.subsidiary_id, date, lease.book_id);
         try {
           await assertLeasePeriodOpen(tx, {
             orgId,
@@ -1869,47 +1793,35 @@ export async function postDueLeaseSchedules(
             "arrears schedule completion is inconsistent; inspect its linked entries",
           );
         if (lease.exemption) {
-          paymentEntryId = await post(
-            line.due_on,
-            "",
-            `Exempt lease expense — ${tag}`,
-            [
-              {
-                accountId: lease.lease_expense_account_id,
-                amount: line.single_cost!,
-              },
-              {
-                accountId: lease.payment_account_id,
-                amount: neg(line.payment),
-              },
-              {
-                accountId:
-                  lease.cost_clearing_account_id ??
-                  lease.lease_liability_account_id,
-                amount: neg(add(line.single_cost!, neg(line.payment))),
-              },
-            ],
-          );
+          paymentEntryId = await post(line.due_on, "", `Exempt lease expense — ${tag}`, [
+            {
+              accountId: lease.lease_expense_account_id,
+              amount: line.single_cost!,
+            },
+            {
+              accountId: lease.payment_account_id,
+              amount: neg(line.payment),
+            },
+            {
+              accountId: lease.cost_clearing_account_id ?? lease.lease_liability_account_id,
+              amount: neg(add(line.single_cost!, neg(line.payment))),
+            },
+          ]);
         } else if (lease.classification === "finance") {
-          paymentEntryId = await post(
-            line.due_on,
-            "",
-            `Lease payment — ${tag}`,
-            [
-              {
-                accountId: lease.interest_expense_account_id,
-                amount: line.interest,
-              },
-              {
-                accountId: lease.lease_liability_account_id,
-                amount: line.principal,
-              },
-              {
-                accountId: lease.payment_account_id,
-                amount: neg(line.payment),
-              },
-            ],
-          );
+          paymentEntryId = await post(line.due_on, "", `Lease payment — ${tag}`, [
+            {
+              accountId: lease.interest_expense_account_id,
+              amount: line.interest,
+            },
+            {
+              accountId: lease.lease_liability_account_id,
+              amount: line.principal,
+            },
+            {
+              accountId: lease.payment_account_id,
+              amount: neg(line.payment),
+            },
+          ]);
           amortizationEntryId = await post(
             line.period_end,
             "AM-",
@@ -1926,29 +1838,24 @@ export async function postDueLeaseSchedules(
             ],
           );
         } else {
-          paymentEntryId = await post(
-            line.due_on,
-            "",
-            `Operating lease cost — ${tag}`,
-            [
-              {
-                accountId: lease.lease_expense_account_id,
-                amount: line.single_cost!,
-              },
-              {
-                accountId: lease.lease_liability_account_id,
-                amount: line.principal,
-              },
-              {
-                accountId: lease.payment_account_id,
-                amount: neg(line.payment),
-              },
-              {
-                accountId: lease.rou_asset_account_id,
-                amount: neg(line.rou_adjustment!),
-              },
-            ],
-          );
+          paymentEntryId = await post(line.due_on, "", `Operating lease cost — ${tag}`, [
+            {
+              accountId: lease.lease_expense_account_id,
+              amount: line.single_cost!,
+            },
+            {
+              accountId: lease.lease_liability_account_id,
+              amount: line.principal,
+            },
+            {
+              accountId: lease.payment_account_id,
+              amount: neg(line.payment),
+            },
+            {
+              accountId: lease.rou_asset_account_id,
+              amount: neg(line.rou_adjustment!),
+            },
+          ]);
         }
       } else {
         if (lease.exemption && !lease.cost_clearing_account_id)
@@ -1956,23 +1863,18 @@ export async function postDueLeaseSchedules(
             "select a prepaid lease expense clearing account before posting exempt advance payments",
           );
         if (pay)
-          paymentEntryId = await post(
-            line.due_on,
-            "PAY-",
-            `Advance lease payment — ${tag}`,
-            [
-              {
-                accountId: lease.exemption
-                  ? lease.cost_clearing_account_id!
-                  : lease.lease_liability_account_id,
-                amount: line.payment,
-              },
-              {
-                accountId: lease.payment_account_id,
-                amount: neg(line.payment),
-              },
-            ],
-          );
+          paymentEntryId = await post(line.due_on, "PAY-", `Advance lease payment — ${tag}`, [
+            {
+              accountId: lease.exemption
+                ? lease.cost_clearing_account_id!
+                : lease.lease_liability_account_id,
+              amount: line.payment,
+            },
+            {
+              accountId: lease.payment_account_id,
+              amount: neg(line.payment),
+            },
+          ]);
         if (accrue) {
           const lines = lease.exemption
             ? [
@@ -2026,7 +1928,8 @@ export async function postDueLeaseSchedules(
           );
         }
       }
-      const updated = await tx.execute(sql`
+      const updated = await tx.execute(
+        sql`
         update lease_agreement_schedule_lines set payment_entry_id=${paymentEntryId},
           amortization_entry_id=${amortizationEntryId},
           payment_posted_at=case when ${pay} then now() else payment_posted_at end,
@@ -2034,7 +1937,9 @@ export async function postDueLeaseSchedules(
           posted_at=case when ${pay || !!line.payment_posted_at} and ${accrue || !!line.accrual_posted_at} then now() else posted_at end,
           updated_at=now(),updated_by=${actorId}
          where org_id=${orgId} and id=${line.line_id} returning id
-      `, "objects");
+      `,
+        "objects",
+      );
       if (updated.length !== 1)
         throw new LeaseError("lease schedule completion could not be recorded");
       return {

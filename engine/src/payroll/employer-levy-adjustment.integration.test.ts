@@ -12,7 +12,13 @@ import { createPayRun } from "./run-lifecycle.ts";
 import { mutatePayRunAdjustment, PayRunAdjustmentIdempotencyConflict } from "./run-adjustments.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { seedOntarioEhtFixture, seedVacationTerms } from "./filing-test-fixtures.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions } from "../testing/fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrgReporting,
+  seedFlowActors,
+  seedWorkerEmployment,
+  grantScratchPermissions,
+} from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -57,7 +63,9 @@ test(
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
         wagesTo: "expense",
-        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } }
+        slotAccounts: {
+          CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable },
+        },
       });
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
@@ -108,71 +116,148 @@ test(
       const peerId = await hire("Casey Peer");
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
       });
-      const base = { orgId: org.orgId, documentId: run.documentId, actorId, allowedSubsidiaryIds: null };
-      const reason = "Issued catch-up for disability earnings the levy group omitted in an earlier quarter";
+      const base = {
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+        allowedSubsidiaryIds: null,
+      };
+      const reason =
+        "Issued catch-up for disability earnings the levy group omitted in an earlier quarter";
 
       // Employee-side programmes and unconfigured shapes refuse by name.
-      await assert.rejects(mutatePayRunAdjustment({
-        ...base, reason,
-        mutation: {
-          action: "employer_levy_adjustment", employeePartyId: adjustedId,
-          programKey: "cpp" as never, amount: "17.82", sourceKey: "source-card:00001:313",
-          reason, sourceReference: "adjustment cheque 43129", idempotencyKey: randomUUID(),
-        },
-      }), /employer-only levy programme/);
-      await assert.rejects(mutatePayRunAdjustment({
-        ...base, reason,
-        mutation: {
-          action: "employer_levy_adjustment", employeePartyId: adjustedId,
-          programKey: "ca_wcb", workerCompGroupId: otherGroupId,
-          amount: "17.82", sourceKey: "source-card:00002:313",
-          reason, sourceReference: "adjustment cheque 43129", idempotencyKey: randomUUID(),
-        },
-      }), /not this employee's group on the run's pay date/);
-      await assert.rejects(mutatePayRunAdjustment({
-        ...base, reason,
-        mutation: {
-          action: "employer_levy_adjustment", employeePartyId: adjustedId,
-          programKey: "ca_eht", workerCompGroupId: wcbGroupId,
-          amount: "26.32", sourceKey: "source-card:00003:305",
-          reason, sourceReference: "adjustment cheque 42984", idempotencyKey: randomUUID(),
-        },
-      }), /has no worker-compensation group/);
+      await assert.rejects(
+        mutatePayRunAdjustment({
+          ...base,
+          reason,
+          mutation: {
+            action: "employer_levy_adjustment",
+            employeePartyId: adjustedId,
+            programKey: "cpp" as never,
+            amount: "17.82",
+            sourceKey: "source-card:00001:313",
+            reason,
+            sourceReference: "adjustment cheque 43129",
+            idempotencyKey: randomUUID(),
+          },
+        }),
+        /employer-only levy programme/,
+      );
+      await assert.rejects(
+        mutatePayRunAdjustment({
+          ...base,
+          reason,
+          mutation: {
+            action: "employer_levy_adjustment",
+            employeePartyId: adjustedId,
+            programKey: "ca_wcb",
+            workerCompGroupId: otherGroupId,
+            amount: "17.82",
+            sourceKey: "source-card:00002:313",
+            reason,
+            sourceReference: "adjustment cheque 43129",
+            idempotencyKey: randomUUID(),
+          },
+        }),
+        /not this employee's group on the run's pay date/,
+      );
+      await assert.rejects(
+        mutatePayRunAdjustment({
+          ...base,
+          reason,
+          mutation: {
+            action: "employer_levy_adjustment",
+            employeePartyId: adjustedId,
+            programKey: "ca_eht",
+            workerCompGroupId: wcbGroupId,
+            amount: "26.32",
+            sourceKey: "source-card:00003:305",
+            reason,
+            sourceReference: "adjustment cheque 42984",
+            idempotencyKey: randomUUID(),
+          },
+        }),
+        /has no worker-compensation group/,
+      );
 
       const wcbInput = {
-        action: "employer_levy_adjustment" as const, employeePartyId: adjustedId,
-        programKey: "ca_wcb" as const, workerCompGroupId: wcbGroupId,
-        amount: "17.82", sourceKey: "source-card:43129:313",
-        reason, sourceReference: "adjustment cheque 43129", idempotencyKey: randomUUID(),
+        action: "employer_levy_adjustment" as const,
+        employeePartyId: adjustedId,
+        programKey: "ca_wcb" as const,
+        workerCompGroupId: wcbGroupId,
+        amount: "17.82",
+        sourceKey: "source-card:43129:313",
+        reason,
+        sourceReference: "adjustment cheque 43129",
+        idempotencyKey: randomUUID(),
       };
-      assert.deepEqual(await mutatePayRunAdjustment({ ...base, reason, mutation: wcbInput }),
-        { changed: true, replayed: false });
-      assert.deepEqual(await mutatePayRunAdjustment({ ...base, reason, mutation: wcbInput }),
-        { changed: false, replayed: true }, "the same request key replays the saved adjustment");
-      await assert.rejects(mutatePayRunAdjustment({
-        ...base, reason, mutation: { ...wcbInput, amount: "17.83" },
-      }), PayRunAdjustmentIdempotencyConflict);
-      await assert.rejects(mutatePayRunAdjustment({
-        ...base, reason, mutation: { ...wcbInput, idempotencyKey: randomUUID() },
-      }), /already has an audited recording/, "the same issued source record cannot be recorded twice under a new request key");
-      assert.deepEqual(await mutatePayRunAdjustment({
-        ...base, reason,
-        mutation: {
-          action: "employer_levy_adjustment", employeePartyId: adjustedId,
-          programKey: "ca_eht", amount: "26.32", sourceKey: "source-card:42984:305",
-          reason, sourceReference: "adjustment cheque 42984", idempotencyKey: randomUUID(),
-        },
-      }), { changed: true, replayed: false });
+      assert.deepEqual(await mutatePayRunAdjustment({ ...base, reason, mutation: wcbInput }), {
+        changed: true,
+        replayed: false,
+      });
+      assert.deepEqual(
+        await mutatePayRunAdjustment({ ...base, reason, mutation: wcbInput }),
+        { changed: false, replayed: true },
+        "the same request key replays the saved adjustment",
+      );
+      await assert.rejects(
+        mutatePayRunAdjustment({
+          ...base,
+          reason,
+          mutation: { ...wcbInput, amount: "17.83" },
+        }),
+        PayRunAdjustmentIdempotencyConflict,
+      );
+      await assert.rejects(
+        mutatePayRunAdjustment({
+          ...base,
+          reason,
+          mutation: { ...wcbInput, idempotencyKey: randomUUID() },
+        }),
+        /already has an audited recording/,
+        "the same issued source record cannot be recorded twice under a new request key",
+      );
+      assert.deepEqual(
+        await mutatePayRunAdjustment({
+          ...base,
+          reason,
+          mutation: {
+            action: "employer_levy_adjustment",
+            employeePartyId: adjustedId,
+            programKey: "ca_eht",
+            amount: "26.32",
+            sourceKey: "source-card:42984:305",
+            reason,
+            sourceReference: "adjustment cheque 42984",
+            idempotencyKey: randomUUID(),
+          },
+        }),
+        { changed: true, replayed: false },
+      );
 
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(result.errors, [], `calculation refused: ${JSON.stringify(result.errors)}`);
-      const stubs = await db.execute<{ employee_party_id: string; factors: Record<string, string>; net_pay: string }>(sql`
+      const stubs = await db.execute<{
+        employee_party_id: string;
+        factors: Record<string, string>;
+        net_pay: string;
+      }>(
+        sql`
         select employee_party_id, factors, net_pay::text from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
-      `, "objects");
+      `,
+        "objects",
+      );
       const adjusted = stubs.find((row) => row.employee_party_id === adjustedId)!;
       const peer = stubs.find((row) => row.employee_party_id === peerId)!;
       // Assessed factors stay the native assessment of the stub's own lines;
@@ -185,16 +270,29 @@ test(
       assert.equal(adjusted.factors.EHT_ADJ, "26.3200");
       assert.equal(peer.factors.WCB, "13.2000");
       assert.equal(peer.factors.EHT, "19.5000");
-      assert.equal(cmp(adjusted.net_pay, peer.net_pay), 0, "employer-only adjustments never move net pay");
+      assert.equal(
+        cmp(adjusted.net_pay, peer.net_pay),
+        0,
+        "employer-only adjustments never move net pay",
+      );
 
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = await db.execute<{ account_id: string; amount: string }>(sql`
+      const glLines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
         select account_id, amount from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
-      assert.equal(sum(glLines.filter((row) => row.account_id === wcbPayable).map((row) => row.amount)), "-44.2200");
-      assert.equal(sum(glLines.filter((row) => row.account_id === ehtPayable).map((row) => row.amount)), "-65.3200");
+      assert.equal(
+        sum(glLines.filter((row) => row.account_id === wcbPayable).map((row) => row.amount)),
+        "-44.2200",
+      );
+      assert.equal(
+        sum(glLines.filter((row) => row.account_id === ehtPayable).map((row) => row.amount)),
+        "-65.3200",
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
@@ -238,7 +336,9 @@ test(
         burdenExpenseAccountId: burdenExpense,
         netPayAccountId: netPayable,
         wagesTo: "expense",
-        slotAccounts: { CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable } }
+        slotAccounts: {
+          CA: { cpp: craPayable, ei: craPayable, qpip: craPayable, income_tax: craPayable },
+        },
       });
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
@@ -280,61 +380,136 @@ test(
       await seedVacationTerms(org.orgId, employmentId, actorId, "0", "accrue");
 
       const run = await createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18", payDate: "2026-07-21",
+        orgId: org.orgId,
+        actorId,
+        payScheduleId: scheduleId,
+        periodStart: "2026-07-05",
+        periodEnd: "2026-07-18",
+        payDate: "2026-07-21",
         runType: "supplemental",
       });
-      const base = { orgId: org.orgId, documentId: run.documentId, actorId, allowedSubsidiaryIds: null };
+      const base = {
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+        allowedSubsidiaryIds: null,
+      };
       const reason = "Recorded as issued per owner decision; source adjustment card 43129";
       const wcbInput = {
-        action: "employer_levy_adjustment" as const, employeePartyId: employeeId,
-        programKey: "ca_wcb" as const, workerCompGroupId: wcbGroupId,
-        amount: "17.82", sourceKey: "source-card:43129:313",
-        reason, sourceReference: "card export line 1244", idempotencyKey: randomUUID(),
+        action: "employer_levy_adjustment" as const,
+        employeePartyId: employeeId,
+        programKey: "ca_wcb" as const,
+        workerCompGroupId: wcbGroupId,
+        amount: "17.82",
+        sourceKey: "source-card:43129:313",
+        reason,
+        sourceReference: "card export line 1244",
+        idempotencyKey: randomUUID(),
       };
-      assert.deepEqual(await mutatePayRunAdjustment({ ...base, reason, mutation: wcbInput }),
-        { changed: true, replayed: false });
-      assert.deepEqual(await mutatePayRunAdjustment({
-        ...base, reason,
-        mutation: {
-          action: "employer_levy_adjustment", employeePartyId: employeeId,
-          programKey: "ca_eht", amount: "26.32", sourceKey: "source-card:42984:305",
-          reason, sourceReference: "card export line 1242", idempotencyKey: randomUUID(),
-        },
-      }), { changed: true, replayed: false });
+      assert.deepEqual(await mutatePayRunAdjustment({ ...base, reason, mutation: wcbInput }), {
+        changed: true,
+        replayed: false,
+      });
+      assert.deepEqual(
+        await mutatePayRunAdjustment({
+          ...base,
+          reason,
+          mutation: {
+            action: "employer_levy_adjustment",
+            employeePartyId: employeeId,
+            programKey: "ca_eht",
+            amount: "26.32",
+            sourceKey: "source-card:42984:305",
+            reason,
+            sourceReference: "card export line 1242",
+            idempotencyKey: randomUUID(),
+          },
+        }),
+        { changed: true, replayed: false },
+      );
 
-      const raceRuns = await Promise.all([0, 1].map(() => createPayRun({
-        orgId: org.orgId, actorId, payScheduleId: scheduleId,
-        periodStart: "2026-07-05", periodEnd: "2026-07-18", payDate: "2026-07-21", runType: "supplemental",
-      })));
-      const racingInputs = raceRuns.map((target) => ({ ...base, documentId: target.documentId,
-        mutation: { action: "employer_levy_adjustment" as const, employeePartyId: employeeId,
-          programKey: "ca_eht" as const, amount: "1.00", sourceKey: "export:concurrent-issued-row",
-          reason, sourceReference: "Reviewed employer-only export row", idempotencyKey: randomUUID() } }));
-      const race = await Promise.allSettled(racingInputs.map(input => mutatePayRunAdjustment(input)));
-      assert.equal(race.filter(result => result.status === "fulfilled").length, 1,
-        "two independent run locks cannot admit the same source twice");
-      const loser = race.find(result => result.status === "rejected") as PromiseRejectedResult;
+      const raceRuns = await Promise.all(
+        [0, 1].map(() =>
+          createPayRun({
+            orgId: org.orgId,
+            actorId,
+            payScheduleId: scheduleId,
+            periodStart: "2026-07-05",
+            periodEnd: "2026-07-18",
+            payDate: "2026-07-21",
+            runType: "supplemental",
+          }),
+        ),
+      );
+      const racingInputs = raceRuns.map((target) => ({
+        ...base,
+        documentId: target.documentId,
+        mutation: {
+          action: "employer_levy_adjustment" as const,
+          employeePartyId: employeeId,
+          programKey: "ca_eht" as const,
+          amount: "1.00",
+          sourceKey: "export:concurrent-issued-row",
+          reason,
+          sourceReference: "Reviewed employer-only export row",
+          idempotencyKey: randomUUID(),
+        },
+      }));
+      const race = await Promise.allSettled(
+        racingInputs.map((input) => mutatePayRunAdjustment(input)),
+      );
+      assert.equal(
+        race.filter((result) => result.status === "fulfilled").length,
+        1,
+        "two independent run locks cannot admit the same source twice",
+      );
+      const loser = race.find((result) => result.status === "rejected") as PromiseRejectedResult;
       assert.ok(loser.reason instanceof PayRunAdjustmentIdempotencyConflict);
       assert.equal(loser.reason.status, 409);
-      const admitted = await db.execute<{ id: string; events: string }>(sql`
+      const admitted = await db.execute<{ id: string; events: string }>(
+        sql`
         select a.id::text, (select count(*)::text from audit_log event
           where event.org_id=a.org_id and event.table_name='pay_run_adjustments' and event.row_id=a.id) as events
          from pay_run_adjustments a where a.org_id=${org.orgId}
           and a.id in (${racingInputs[0]!.mutation.idempotencyKey},${racingInputs[1]!.mutation.idempotencyKey})
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(admitted.length, 1);
-      assert.equal(admitted[0]!.events, "1", "only the winning source admission creates an audit event");
-      await assert.rejects(mutatePayRunAdjustment({ ...racingInputs[0]!,
-        allowedSubsidiaryIds: new Set(), mutation: { ...racingInputs[0]!.mutation,
-          sourceKey: "export:out-of-scope", idempotencyKey: randomUUID() } }), /pay run not found/);
+      assert.equal(
+        admitted[0]!.events,
+        "1",
+        "only the winning source admission creates an audit event",
+      );
+      await assert.rejects(
+        mutatePayRunAdjustment({
+          ...racingInputs[0]!,
+          allowedSubsidiaryIds: new Set(),
+          mutation: {
+            ...racingInputs[0]!.mutation,
+            sourceKey: "export:out-of-scope",
+            idempotencyKey: randomUUID(),
+          },
+        }),
+        /pay run not found/,
+      );
 
-      const stubOf = async () => (await db.execute<{ factors: Record<string, string>; gross: string; net_pay: string }>(sql`
+      const stubOf = async () =>
+        (
+          await db.execute<{ factors: Record<string, string>; gross: string; net_pay: string }>(
+            sql`
         select factors, gross::text, net_pay::text from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
            and employee_party_id = ${employeeId}
-      `, "objects"))[0];
-      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      `,
+            "objects",
+          )
+        )[0];
+      const result = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
       assert.deepEqual(result.errors, [], `calculation refused: ${JSON.stringify(result.errors)}`);
       const stub = await stubOf();
       assert.ok(stub, "a zero-earning supplemental stub is calculated for the issued entries");
@@ -344,50 +519,101 @@ test(
       // premiums are zero and the issued amounts ride separately.
       assert.equal(cmp(stub.factors.WCB_EARN!, "0"), 0);
       assert.equal(cmp(stub.factors.EHT_EARN!, "0"), 0);
-      assert.equal(stub.factors.WCB, undefined, "zero-assessed premium factor retains its native conditional shape");
-      assert.equal(stub.factors.EHT, undefined, "zero-assessed premium factor retains its native conditional shape");
+      assert.equal(
+        stub.factors.WCB,
+        undefined,
+        "zero-assessed premium factor retains its native conditional shape",
+      );
+      assert.equal(
+        stub.factors.EHT,
+        undefined,
+        "zero-assessed premium factor retains its native conditional shape",
+      );
       assert.equal(stub.factors.WCB_ADJ, "17.8200");
       assert.equal(stub.factors.EHT_ADJ, "26.3200");
-      const lineSums = await db.execute<{ kind: string; total: string; lines: number }>(sql`
+      const lineSums = await db.execute<{ kind: string; total: string; lines: number }>(
+        sql`
         select l.kind, coalesce(sum(l.amount), 0)::text as total, count(*)::int as lines
           from pay_stub_lines l join pay_stubs s on s.org_id = l.org_id and s.id = l.stub_id
          where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
          group by l.kind
-      `, "objects");
+      `,
+        "objects",
+      );
       // Sole levy projection: each issued entry materializes exactly once —
       // one employer-contribution line per programme, totalling the issued
       // premiums and nothing more.
       assert.equal(lineSums.find((row) => row.kind === "employer_contribution")?.total, "44.1400");
       assert.equal(lineSums.find((row) => row.kind === "employer_contribution")?.lines, 2);
-      assert.equal(lineSums.find((row) => row.kind === "earning"), undefined);
+      assert.equal(
+        lineSums.find((row) => row.kind === "earning"),
+        undefined,
+      );
 
       // Deleting the issued entry invalidates the calculated snapshot and
       // tombstones its source record: the spent request key cannot replay
       // and no fresh key can record that source again.
-      assert.deepEqual(await mutatePayRunAdjustment({
-        ...base, mutation: { action: "delete", adjustmentId: wcbInput.idempotencyKey },
-      }), { changed: true, replayed: false });
-      assert.equal(await stubOf(), undefined, "deleting an issued entry invalidates calculated stubs");
-      await assert.rejects(mutatePayRunAdjustment({ ...base, reason, mutation: wcbInput }),
-        PayRunAdjustmentIdempotencyConflict, "a corrected request key cannot replay");
-      await assert.rejects(mutatePayRunAdjustment({
-        ...base, reason, mutation: { ...wcbInput, idempotencyKey: randomUUID() },
-      }), /already has an audited recording/, "a deleted source record cannot be re-recorded under a fresh key");
+      assert.deepEqual(
+        await mutatePayRunAdjustment({
+          ...base,
+          mutation: { action: "delete", adjustmentId: wcbInput.idempotencyKey },
+        }),
+        { changed: true, replayed: false },
+      );
+      assert.equal(
+        await stubOf(),
+        undefined,
+        "deleting an issued entry invalidates calculated stubs",
+      );
+      await assert.rejects(
+        mutatePayRunAdjustment({ ...base, reason, mutation: wcbInput }),
+        PayRunAdjustmentIdempotencyConflict,
+        "a corrected request key cannot replay",
+      );
+      await assert.rejects(
+        mutatePayRunAdjustment({
+          ...base,
+          reason,
+          mutation: { ...wcbInput, idempotencyKey: randomUUID() },
+        }),
+        /already has an audited recording/,
+        "a deleted source record cannot be re-recorded under a fresh key",
+      );
 
-      const recalculated = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      assert.deepEqual(recalculated.errors, [], `recalculation refused: ${JSON.stringify(recalculated.errors)}`);
+      const recalculated = await calculatePayRun({
+        orgId: org.orgId,
+        documentId: run.documentId,
+        actorId,
+      });
+      assert.deepEqual(
+        recalculated.errors,
+        [],
+        `recalculation refused: ${JSON.stringify(recalculated.errors)}`,
+      );
       const finalStub = await stubOf();
       assert.equal(finalStub!.factors.WCB_ADJ, undefined, "the deleted issued entry stays deleted");
       assert.equal(finalStub!.factors.EHT_ADJ, "26.3200");
       assert.equal(cmp(finalStub!.net_pay, "0"), 0);
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      const glLines = await db.execute<{ account_id: string; amount: string }>(sql`
+      const glLines = await db.execute<{ account_id: string; amount: string }>(
+        sql`
         select account_id, amount from document_lines
          where org_id = ${org.orgId} and document_id = ${run.documentId}
-      `, "objects");
+      `,
+        "objects",
+      );
       assert.equal(cmp(sum(glLines.map((row) => row.amount)), "0"), 0, "projection balances");
-      assert.equal(cmp(sum(glLines.filter((row) => row.account_id === wcbPayable).map((row) => row.amount)), "0"), 0);
-      assert.equal(sum(glLines.filter((row) => row.account_id === ehtPayable).map((row) => row.amount)), "-26.3200");
+      assert.equal(
+        cmp(
+          sum(glLines.filter((row) => row.account_id === wcbPayable).map((row) => row.amount)),
+          "0",
+        ),
+        0,
+      );
+      assert.equal(
+        sum(glLines.filter((row) => row.account_id === ehtPayable).map((row) => row.amount)),
+        "-26.3200",
+      );
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

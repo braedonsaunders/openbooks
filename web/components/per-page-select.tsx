@@ -1,9 +1,9 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { useTranslations } from 'next-intl'
-import { cn } from '@openbooks/ui'
-import { mergeHref } from '@/lib/list-params'
+import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { cn } from "@openbooks/ui";
+import { mergeHref } from "@/lib/list-params";
 
 /**
  * The page-size choice for a server-paged house list — the control the
@@ -25,20 +25,20 @@ export function PerPageSelect({
   currentParams,
   perPage,
   options = [25, 50, 100],
-  paramKey = 'perPage',
-  pageParamKey = 'page',
+  paramKey = "perPage",
+  pageParamKey = "page",
 }: {
-  basePath: string
-  currentParams: Record<string, string | string[] | undefined>
-  perPage: number
-  options?: number[]
+  basePath: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  perPage: number;
+  options?: number[];
   /** URL param carrying the size. Sub-tables pass a prefixed key. */
-  paramKey?: string
+  paramKey?: string;
   /** Pagination param reset when the size changes. */
-  pageParamKey?: string
+  pageParamKey?: string;
 }) {
-  const t = useTranslations('ui')
-  const label = t('pagination.perPage')
+  const t = useTranslations("ui");
+  const label = t("pagination.perPage");
   return (
     <div className="flex items-center gap-2">
       <span className="text-sm text-slate-500 dark:text-slate-400">{label}</span>
@@ -48,11 +48,11 @@ export function PerPageSelect({
         className="flex overflow-hidden rounded-md border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
       >
         {options.map((option) => {
-          const active = option === perPage
+          const active = option === perPage;
           const href = mergeHref(basePath, currentParams, {
             [paramKey]: option,
             [pageParamKey]: 1,
-          })
+          });
           return active ? (
             <span
               key={option}
@@ -66,15 +66,15 @@ export function PerPageSelect({
               key={option}
               href={href as never}
               className={cn(
-                'px-2.5 py-1.5 text-xs text-slate-700 tabular-nums transition-colors hover:bg-slate-50 hover:text-slate-900',
-                'dark:text-slate-200 dark:hover:bg-slate-800/60 dark:hover:text-slate-100',
+                "px-2.5 py-1.5 text-xs text-slate-700 tabular-nums transition-colors hover:bg-slate-50 hover:text-slate-900",
+                "dark:text-slate-200 dark:hover:bg-slate-800/60 dark:hover:text-slate-100",
               )}
             >
               {option}
             </Link>
-          )
+          );
         })}
       </div>
     </div>
-  )
+  );
 }

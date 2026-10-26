@@ -1,59 +1,74 @@
-'use client'
+"use client";
 
-import { useMoney } from '@/components/money-provider'
-import { useEffect, useMemo, useState } from 'react'
-import { usePathname, useSearchParams } from 'next/navigation'
-import { useLocale, useTranslations } from 'next-intl'
-import { formatCivilDate } from '../../../lib/format'
-import { ArrowUpRight } from 'lucide-react'
-import { Badge, Button, Drawer, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
-import { TxnLink } from './TxnLink'
-import { AccountRegisterLink } from '../../../components/account-register-link'
-import { ContributorGroupHeading, groupEntryLinesByContributor } from '../../../components/journal-entry-link'
-import { entryTotals } from './entry-totals'
-import { decimalCmp, decimalNeg } from '../../../lib/statement-format'
-import { hrefWithoutKeys } from '../../../lib/report-overlay'
-import { useReportOverlayOptional } from '../../../components/navigation-provider'
+import { useMoney } from "@/components/money-provider";
+import { useEffect, useMemo, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { formatCivilDate } from "../../../lib/format";
+import { ArrowUpRight } from "lucide-react";
+import {
+  Badge,
+  Button,
+  Drawer,
+  Skeleton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+  cn,
+} from "@openbooks/ui";
+import { TxnLink } from "./TxnLink";
+import { AccountRegisterLink } from "../../../components/account-register-link";
+import {
+  ContributorGroupHeading,
+  groupEntryLinesByContributor,
+} from "../../../components/journal-entry-link";
+import { entryTotals } from "./entry-totals";
+import { decimalCmp, decimalNeg } from "../../../lib/statement-format";
+import { hrefWithoutKeys } from "../../../lib/report-overlay";
+import { useReportOverlayOptional } from "../../../components/navigation-provider";
 
 export type EntryData = {
   entry: {
-    id: string
-    entry_number: string
-    date: string
-    memo: string | null
-    origin: string
-    status: string
-    source_document_id: string | null
-    reverses_number: string | null
-    doc_id: string | null
-    doc_kind: string | null
-    doc_number: string | null
-    subsidiary_id: string
-    custom?: Record<string, unknown>
+    id: string;
+    entry_number: string;
+    date: string;
+    memo: string | null;
+    origin: string;
+    status: string;
+    source_document_id: string | null;
+    reverses_number: string | null;
+    doc_id: string | null;
+    doc_kind: string | null;
+    doc_number: string | null;
+    subsidiary_id: string;
+    custom?: Record<string, unknown>;
     /** Code of the accounting book the entry belongs to. */
-    book_code?: string | null
-  }
+    book_code?: string | null;
+  };
   lines: {
-    line_number: number
-    amount: string
-    memo: string | null
-    is_open_item: boolean
-    contributor_kind: string | null
-    contributor_ref: string | null
-    contributor_name: string | null
-    account_id: string
-    account_number: string | null
-    account_name: string
-    party: string | null
-    department: string | null
-    project: string | null
-    subsidiary_id: string
-    subsidiary: string
-    functional_currency: string
-    extra_dims: Record<string, string>
-    custom?: Record<string, unknown>
-  }[]
-}
+    line_number: number;
+    amount: string;
+    memo: string | null;
+    is_open_item: boolean;
+    contributor_kind: string | null;
+    contributor_ref: string | null;
+    contributor_name: string | null;
+    account_id: string;
+    account_number: string | null;
+    account_name: string;
+    party: string | null;
+    department: string | null;
+    project: string | null;
+    subsidiary_id: string;
+    subsidiary: string;
+    functional_currency: string;
+    extra_dims: Record<string, string>;
+    custom?: Record<string, unknown>;
+  }[];
+};
 
 /**
  * Reports-wide transaction flyout. Any report link can open a journal entry as a
@@ -64,116 +79,132 @@ export type EntryData = {
  * journal) it offers "Open full transaction" → that record's editable drawer.
  */
 export function EntryFlyout() {
-  const { money } = useMoney()
-  const nextParams = useSearchParams()
-  const nextPath = usePathname()
-  const overlay = useReportOverlayOptional()
-  const pathname = overlay?.pathname ?? nextPath
+  const { money } = useMoney();
+  const nextParams = useSearchParams();
+  const nextPath = usePathname();
+  const overlay = useReportOverlayOptional();
+  const pathname = overlay?.pathname ?? nextPath;
   const params = useMemo(
     () => new URLSearchParams(overlay?.search ?? nextParams.toString()),
     [overlay?.search, nextParams],
-  )
-  const t = useTranslations('journal')
-  const tc = useTranslations('common')
-  const tr = useTranslations('reports')
-  const locale = useLocale()
-  const txn = pathname === '/journal' ? null : params.get('txn')
+  );
+  const t = useTranslations("journal");
+  const tc = useTranslations("common");
+  const tr = useTranslations("reports");
+  const locale = useLocale();
+  const txn = pathname === "/journal" ? null : params.get("txn");
 
-  const [data, setData] = useState<EntryData | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [data, setData] = useState<EntryData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
 
   // Reset while reloading for another entry, during render (same committed
   // values, no extra render). Like the fetch below, a cleared `txn` resets
   // nothing — the flyout simply closes over the retained payload.
-  const [prevTxn, setPrevTxn] = useState(txn)
+  const [prevTxn, setPrevTxn] = useState(txn);
   if (prevTxn !== txn) {
-    setPrevTxn(txn)
+    setPrevTxn(txn);
     if (txn) {
-      setLoading(true)
-      setFailed(false)
-      setData(null)
+      setLoading(true);
+      setFailed(false);
+      setData(null);
     }
   }
 
   useEffect(() => {
-    if (!txn) return
-    let active = true
+    if (!txn) return;
+    let active = true;
     fetch(`/api/reports/entry/${txn}`)
       .then((r) => {
-        if (!r.ok) throw new Error('entry load failed')
-        return r.json()
+        if (!r.ok) throw new Error("entry load failed");
+        return r.json();
       })
       .then((d) => active && (setData(d), setLoading(false)))
-      .catch(() => { if (active) { setFailed(true); setLoading(false) } })
+      .catch(() => {
+        if (active) {
+          setFailed(true);
+          setLoading(false);
+        }
+      });
     return () => {
-      active = false
-    }
-  }, [txn])
+      active = false;
+    };
+  }, [txn]);
 
   const close = () => {
-    const href = hrefWithoutKeys(pathname ?? '/', params.toString(), ['txn'])
-    if (overlay) overlay.replace(href)
-    else window.location.assign(href)
-  }
+    const href = hrefWithoutKeys(pathname ?? "/", params.toString(), ["txn"]);
+    if (overlay) overlay.replace(href);
+    else window.location.assign(href);
+  };
 
-  const entry = data?.entry
-  const origin = entry?.origin ? (t.has(`origins.${entry.origin}`) ? t(`origins.${entry.origin}`) : entry.origin) : ''
+  const entry = data?.entry;
+  const origin = entry?.origin
+    ? t.has(`origins.${entry.origin}`)
+      ? t(`origins.${entry.origin}`)
+      : entry.origin
+    : "";
 
-  const { debit: totalDebit, credit: totalCredit } = entryTotals(data?.lines ?? [])
-  const groups = groupEntryLinesByContributor(data?.lines ?? [])
-  const grouped = groups.length > 1 || (groups.length === 1 && groups[0]!.kind !== null)
+  const { debit: totalDebit, credit: totalCredit } = entryTotals(data?.lines ?? []);
+  const groups = groupEntryLinesByContributor(data?.lines ?? []);
+  const grouped = groups.length > 1 || (groups.length === 1 && groups[0]!.kind !== null);
 
   const groupTitle = (group: (typeof groups)[number]) => {
-    if (group.kind === null) return t('detail.contributors.standardLines')
-    const name = group.name ?? group.ref ?? group.kind
-    if (group.kind === 'rule') return t('detail.contributors.ruleGroup', { name })
-    if (group.kind === 'script') return t('detail.contributors.scriptGroup', { name })
-    return t('detail.contributors.otherGroup', { kind: group.kind, name })
-  }
+    if (group.kind === null) return t("detail.contributors.standardLines");
+    const name = group.name ?? group.ref ?? group.kind;
+    if (group.kind === "rule") return t("detail.contributors.ruleGroup", { name });
+    if (group.kind === "script") return t("detail.contributors.scriptGroup", { name });
+    return t("detail.contributors.otherGroup", { kind: group.kind, name });
+  };
 
-  const lineRow = (l: NonNullable<EntryData['lines']>[number]) => {
-    const isDebit = decimalCmp(l.amount, '0') > 0
-    const isCredit = decimalCmp(l.amount, '0') < 0
+  const lineRow = (l: NonNullable<EntryData["lines"]>[number]) => {
+    const isDebit = decimalCmp(l.amount, "0") > 0;
+    const isCredit = decimalCmp(l.amount, "0") < 0;
     return (
       <TableRow key={l.line_number}>
         <TableCell className="text-slate-400">{l.line_number}</TableCell>
         <TableCell>
-          <AccountRegisterLink accountId={l.account_id} className="hover:text-teal-700 dark:hover:text-teal-300">
-            <span className="mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">{l.account_number}</span>
+          <AccountRegisterLink
+            accountId={l.account_id}
+            className="hover:text-teal-700 dark:hover:text-teal-300"
+          >
+            <span className="mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">
+              {l.account_number}
+            </span>
             {l.account_name}
           </AccountRegisterLink>
           {(l.memo || l.project) && (
             <span className="mt-0.5 block text-xs text-slate-400 dark:text-slate-500">
-              {[l.project, l.memo].filter(Boolean).join(' · ')}
+              {[l.project, l.memo].filter(Boolean).join(" · ")}
             </span>
           )}
           {l.is_open_item && (
             <Badge variant="outline" className="ml-0 mt-0.5">
-              {t('detail.openItemBadge')}
+              {t("detail.openItemBadge")}
             </Badge>
           )}
         </TableCell>
         <TableCell className="text-slate-500 dark:text-slate-400">{l.party}</TableCell>
         <TableCell className="text-slate-500 dark:text-slate-400">{l.department}</TableCell>
-        <TableCell className="text-right tabular-nums">{isDebit ? money(l.amount) : ''}</TableCell>
-        <TableCell className="text-right tabular-nums">{isCredit ? money(decimalNeg(l.amount)) : ''}</TableCell>
+        <TableCell className="text-right tabular-nums">{isDebit ? money(l.amount) : ""}</TableCell>
+        <TableCell className="text-right tabular-nums">
+          {isCredit ? money(decimalNeg(l.amount)) : ""}
+        </TableCell>
       </TableRow>
-    )
-  }
+    );
+  };
 
   const tableHead = (
     <TableHeader>
       <TableRow>
         <TableHead className="w-8">#</TableHead>
-        <TableHead>{tc('labels.account')}</TableHead>
-        <TableHead>{tc('labels.party')}</TableHead>
-        <TableHead>{tc('labels.department')}</TableHead>
-        <TableHead className="text-right">{t('detail.columns.debit')}</TableHead>
-        <TableHead className="text-right">{t('detail.columns.credit')}</TableHead>
+        <TableHead>{tc("labels.account")}</TableHead>
+        <TableHead>{tc("labels.party")}</TableHead>
+        <TableHead>{tc("labels.department")}</TableHead>
+        <TableHead className="text-right">{t("detail.columns.debit")}</TableHead>
+        <TableHead className="text-right">{t("detail.columns.credit")}</TableHead>
       </TableRow>
     </TableHeader>
-  )
+  );
 
   return (
     <Drawer
@@ -184,37 +215,56 @@ export function EntryFlyout() {
         entry ? (
           <span className="flex items-center gap-2">
             <span className="font-mono">{entry.entry_number}</span>
-            <Badge variant={entry.status === 'posted' ? 'success' : 'destructive'}>
+            <Badge variant={entry.status === "posted" ? "success" : "destructive"}>
               {tc.has(`status.${entry.status}`) ? tc(`status.${entry.status}`) : entry.status}
             </Badge>
           </span>
         ) : (
-          tr('flyout.title')
+          tr("flyout.title")
         )
       }
       description={
         entry
-          ? [entry.date ? formatCivilDate(entry.date, locale) : null, origin, entry.memo, entry.reverses_number ? t('detail.reverses', { number: entry.reverses_number }) : null]
+          ? [
+              entry.date ? formatCivilDate(entry.date, locale) : null,
+              origin,
+              entry.memo,
+              entry.reverses_number
+                ? t("detail.reverses", { number: entry.reverses_number })
+                : null,
+            ]
               .filter(Boolean)
-              .join(' · ')
+              .join(" · ")
           : undefined
       }
       stacked={[
-        'reportDrill', 'accountRegister', 'reportRecord', 'doc', 'entry',
-        'payment', 'expense', 'order', 'estimate', 'party', 'project', 'asset',
+        "reportDrill",
+        "accountRegister",
+        "reportRecord",
+        "doc",
+        "entry",
+        "payment",
+        "expense",
+        "order",
+        "estimate",
+        "party",
+        "project",
+        "asset",
       ].some((key) => params.has(key))}
       headerActions={
         entry?.doc_kind && entry.doc_id ? (
           <Button asChild variant="outline" size="sm">
             <TxnLink entryId={entry.id} docKind={entry.doc_kind} docId={entry.doc_id}>
-              {tr('flyout.openTransaction')} <ArrowUpRight size={14} />
+              {tr("flyout.openTransaction")} <ArrowUpRight size={14} />
             </TxnLink>
           </Button>
         ) : undefined
       }
     >
       {failed ? (
-        <p role="alert" className="text-sm text-destructive">{tc('feedback.loadFailed')}</p>
+        <p role="alert" className="text-sm text-destructive">
+          {tc("feedback.loadFailed")}
+        </p>
       ) : loading || !data ? (
         <div className="space-y-2">
           <Skeleton className="h-8 w-full" />
@@ -228,10 +278,14 @@ export function EntryFlyout() {
             {data.lines.map(lineRow)}
             <TableRow className="border-t border-slate-300 dark:border-slate-600">
               <TableCell colSpan={4} className="font-semibold">
-                {t('detail.totals')}
+                {t("detail.totals")}
               </TableCell>
-              <TableCell className={cn('text-right font-semibold tabular-nums')}>{money(totalDebit)}</TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{money(totalCredit)}</TableCell>
+              <TableCell className={cn("text-right font-semibold tabular-nums")}>
+                {money(totalDebit)}
+              </TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">
+                {money(totalCredit)}
+              </TableCell>
             </TableRow>
           </TableBody>
         </Table>
@@ -241,7 +295,7 @@ export function EntryFlyout() {
             <section key={group.key}>
               <ContributorGroupHeading
                 title={groupTitle(group)}
-                lockedLabel={group.kind === null ? t('detail.contributors.locked') : undefined}
+                lockedLabel={group.kind === null ? t("detail.contributors.locked") : undefined}
               />
               <Table>
                 {tableHead}
@@ -253,15 +307,19 @@ export function EntryFlyout() {
             <TableBody>
               <TableRow className="border-t border-slate-300 dark:border-slate-600">
                 <TableCell colSpan={4} className="font-semibold">
-                  {t('detail.totals')}
+                  {t("detail.totals")}
                 </TableCell>
-                <TableCell className={cn('text-right font-semibold tabular-nums')}>{money(totalDebit)}</TableCell>
-                <TableCell className="text-right font-semibold tabular-nums">{money(totalCredit)}</TableCell>
+                <TableCell className={cn("text-right font-semibold tabular-nums")}>
+                  {money(totalDebit)}
+                </TableCell>
+                <TableCell className="text-right font-semibold tabular-nums">
+                  {money(totalCredit)}
+                </TableCell>
               </TableRow>
             </TableBody>
           </Table>
         </div>
       )}
     </Drawer>
-  )
+  );
 }

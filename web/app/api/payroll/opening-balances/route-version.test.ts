@@ -1,6 +1,6 @@
-import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import test, { after } from 'node:test'
+import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
+import test, { after } from "node:test";
 // The REAL refusal class and tax-year guard, imported statically (static
 // imports resolve before any module code below runs, so before the hooks
 // are registered) and shared with the engine stub through global state —
@@ -9,7 +9,7 @@ import test, { after } from 'node:test'
 import {
   assertTaxYear as realAssertTaxYear,
   OpeningBalanceSaveError as RealOpeningBalanceSaveError,
-} from '@openbooks/engine/payroll/opening-balances'
+} from "@openbooks/engine/payroll/opening-balances";
 
 /**
  * F3-25: the adoption grid replayed full-row payloads from its stale loader
@@ -22,28 +22,38 @@ import {
  * engine/src/payroll/opening-balance-versions.integration.test.ts.
  */
 
-const stateKey = Symbol.for('openbooks.opening-balances-version-test'); const realAuthzUrl = new URL('../../../../lib/authz.ts', import.meta.url).href
+const stateKey = Symbol.for("openbooks.opening-balances-version-test");
+const realAuthzUrl = new URL("../../../../lib/authz.ts", import.meta.url).href;
 interface RouteState {
-  saveCalls: { auditReason?: string; sourceReference?: string; rows: { employeePartyId: string; updatedAt?: string | null; components?: Record<string, unknown> }[]; allowedSubsidiaryIds?: Set<string> | null }[]
-  allowedSubsidiaryIds: Set<string> | null
-  saveResult: unknown
-  throwSave: unknown
-  ErrorClass: typeof RealOpeningBalanceSaveError
-  assertTaxYear: typeof realAssertTaxYear
+  saveCalls: {
+    auditReason?: string;
+    sourceReference?: string;
+    rows: {
+      employeePartyId: string;
+      updatedAt?: string | null;
+      components?: Record<string, unknown>;
+    }[];
+    allowedSubsidiaryIds?: Set<string> | null;
+  }[];
+  allowedSubsidiaryIds: Set<string> | null;
+  saveResult: unknown;
+  throwSave: unknown;
+  ErrorClass: typeof RealOpeningBalanceSaveError;
+  assertTaxYear: typeof realAssertTaxYear;
 }
 const routeState: RouteState = {
   saveCalls: [],
-  allowedSubsidiaryIds: new Set(['sub-a']),
+  allowedSubsidiaryIds: new Set(["sub-a"]),
   saveResult: { created: 0, updated: 1, deleted: 0, skipped: [], errors: [] },
   throwSave: null,
   ErrorClass: RealOpeningBalanceSaveError,
   assertTaxYear: realAssertTaxYear,
-}
-;(globalThis as Record<symbol, unknown>)[stateKey] = routeState
+};
+(globalThis as Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockSources = new Map<string, string>([
   [
-    'mock:db',
+    "mock:db",
     `
       export const db = {
         execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return Promise.resolve({ rows: [] }).then(inMode) },
@@ -57,7 +67,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:feature-gates',
+    "mock:feature-gates",
     `
       const state = globalThis[Symbol.for('openbooks.opening-balances-version-test')]
       export async function guardFeaturePermission() {
@@ -66,19 +76,19 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:payroll-subsidiary-scope',
+    "mock:payroll-subsidiary-scope",
     `
       export async function guardPayrollEmployees() { return null }
     `,
   ],
   [
-    'mock:payroll-scoped-views',
+    "mock:payroll-scoped-views",
     `
       export async function scopedOpeningBalances() { throw new Error('not under test') }
     `,
   ],
   [
-    'mock:opening-balances',
+    "mock:opening-balances",
     `
       const state = globalThis[Symbol.for('openbooks.opening-balances-version-test')]
       export const OpeningBalanceSaveError = state.ErrorClass
@@ -97,168 +107,194 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-])
+]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/payroll/opening-balances' && context.parentURL?.includes('/app/api/payroll/opening-balances/route.ts')) {
-      return { url: 'mock:opening-balances', shortCircuit: true }
+    if (specifier === "@openbooks/engine/platform/db")
+      return { url: "mock:db", shortCircuit: true };
+    if (
+      specifier === "@openbooks/engine/payroll/opening-balances" &&
+      context.parentURL?.includes("/app/api/payroll/opening-balances/route.ts")
+    ) {
+      return { url: "mock:opening-balances", shortCircuit: true };
     }
-    if (specifier.endsWith('/lib/authz')) return { url: realAuthzUrl, shortCircuit: true }
-    if (specifier === '../subsidiary-scope') return { url: 'mock:payroll-subsidiary-scope', shortCircuit: true }
-    if (specifier.endsWith('/lib/payroll-scoped-views')) return { url: 'mock:payroll-scoped-views', shortCircuit: true }
-    if (specifier.endsWith('/lib/feature-gates')) return { url: 'mock:feature-gates', shortCircuit: true }
-    return nextResolve(specifier, context)
+    if (specifier.endsWith("/lib/authz")) return { url: realAuthzUrl, shortCircuit: true };
+    if (specifier === "../subsidiary-scope")
+      return { url: "mock:payroll-subsidiary-scope", shortCircuit: true };
+    if (specifier.endsWith("/lib/payroll-scoped-views"))
+      return { url: "mock:payroll-scoped-views", shortCircuit: true };
+    if (specifier.endsWith("/lib/feature-gates"))
+      return { url: "mock:feature-gates", shortCircuit: true };
+    return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    const source = mockSources.get(url);
+    if (source !== undefined) return { format: "module", source, shortCircuit: true };
+    return nextLoad(url, context);
   },
-})
+});
 
-const routeUrl = './route.ts?opening-balances-version-test'; const { POST } = (await import(routeUrl)) as typeof import('./route.ts'); const { POST: postEmployerLevyOpening } = await import('./employer-levies/route.ts')
+const routeUrl = "./route.ts?opening-balances-version-test";
+const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
+const { POST: postEmployerLevyOpening } = await import("./employer-levies/route.ts");
 // The genuine refusal class, shared with the stub above.
-const OpeningBalanceSaveError = RealOpeningBalanceSaveError
-after(() => hooks.deregister())
+const OpeningBalanceSaveError = RealOpeningBalanceSaveError;
+after(() => hooks.deregister());
 
 function uuid(n: number): string {
-  return `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`
+  return `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 }
 
 function reset() {
-  routeState.saveCalls = []
-  routeState.throwSave = null
-  routeState.allowedSubsidiaryIds = new Set(['sub-a'])
+  routeState.saveCalls = [];
+  routeState.throwSave = null;
+  routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
 }
 
 function post(body: unknown) {
   return POST(
-    new Request('http://openbooks.test/api/payroll/opening-balances', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
+    new Request("http://openbooks.test/api/payroll/opening-balances", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }),
-  )
+  );
 }
 
-test('POST threads each row loader-served version into the save', async () => {
-  reset()
+test("POST threads each row loader-served version into the save", async () => {
+  reset();
   const res = await post({
     taxYear: 2026,
-    rows: [{ employeePartyId: uuid(1), amounts: {}, updatedAt: '2026-09-01 00:00:00+00' }],
-  })
-  assert.equal(res.status, 200)
-  assert.equal(routeState.saveCalls.length, 1)
-  assert.equal(routeState.saveCalls[0]!.rows[0]!.updatedAt, '2026-09-01 00:00:00+00')
-})
+    rows: [{ employeePartyId: uuid(1), amounts: {}, updatedAt: "2026-09-01 00:00:00+00" }],
+  });
+  assert.equal(res.status, 200);
+  assert.equal(routeState.saveCalls.length, 1);
+  assert.equal(routeState.saveCalls[0]!.rows[0]!.updatedAt, "2026-09-01 00:00:00+00");
+});
 
-test('POST retains the native rebased employee identity and opening revision', async () => {
-  reset()
-  const employeePartyId = 'db76ccd6-d8a3-ead7-42d2-6279dd4ea029'
-  const updatedAt = '2026-09-01 00:00:00+00'
-  const res = await post({ taxYear: 2026, rows: [{ employeePartyId, amounts: {}, updatedAt }] })
-  assert.equal(res.status, 200)
-  assert.equal(routeState.saveCalls.length, 1)
-  assert.equal(routeState.saveCalls[0]!.rows[0]!.employeePartyId, employeePartyId)
-  assert.equal(routeState.saveCalls[0]!.rows[0]!.updatedAt, updatedAt)
-  assert.deepEqual(routeState.saveCalls[0]!.allowedSubsidiaryIds, new Set(['sub-a']))
-})
+test("POST retains the native rebased employee identity and opening revision", async () => {
+  reset();
+  const employeePartyId = "db76ccd6-d8a3-ead7-42d2-6279dd4ea029";
+  const updatedAt = "2026-09-01 00:00:00+00";
+  const res = await post({ taxYear: 2026, rows: [{ employeePartyId, amounts: {}, updatedAt }] });
+  assert.equal(res.status, 200);
+  assert.equal(routeState.saveCalls.length, 1);
+  assert.equal(routeState.saveCalls[0]!.rows[0]!.employeePartyId, employeePartyId);
+  assert.equal(routeState.saveCalls[0]!.rows[0]!.updatedAt, updatedAt);
+  assert.deepEqual(routeState.saveCalls[0]!.allowedSubsidiaryIds, new Set(["sub-a"]));
+});
 
-test('POST passes the restricted subsidiary scope into the opening-balance writer', async () => {
-  reset()
-  const allowedSubsidiaryIds = new Set(['sub-a'])
-  routeState.allowedSubsidiaryIds = allowedSubsidiaryIds
-  const res = await post({ taxYear: 2026, rows: [{ employeePartyId: uuid(1), amounts: {} }] })
-  assert.deepEqual([res.status, routeState.saveCalls.length, routeState.saveCalls[0]!.allowedSubsidiaryIds], [200, 1, allowedSubsidiaryIds])
-  const employer = await postEmployerLevyOpening(new Request('http://openbooks.test/api/payroll/opening-balances/employer-levies', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taxYear: 2026, rows: [] }) }))
-  assert.deepEqual([employer.status, routeState.saveCalls.length], [403, 1])
-})
+test("POST passes the restricted subsidiary scope into the opening-balance writer", async () => {
+  reset();
+  const allowedSubsidiaryIds = new Set(["sub-a"]);
+  routeState.allowedSubsidiaryIds = allowedSubsidiaryIds;
+  const res = await post({ taxYear: 2026, rows: [{ employeePartyId: uuid(1), amounts: {} }] });
+  assert.deepEqual(
+    [res.status, routeState.saveCalls.length, routeState.saveCalls[0]!.allowedSubsidiaryIds],
+    [200, 1, allowedSubsidiaryIds],
+  );
+  const employer = await postEmployerLevyOpening(
+    new Request("http://openbooks.test/api/payroll/opening-balances/employer-levies", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ taxYear: 2026, rows: [] }),
+    }),
+  );
+  assert.deepEqual([employer.status, routeState.saveCalls.length], [403, 1]);
+});
 
-test('a row with no version arrives unguarded for callers that do not speak versions', async () => {
-  reset()
-  const res = await post({ taxYear: 2026, rows: [{ employeePartyId: uuid(1), amounts: {} }] })
-  assert.equal(res.status, 200)
-  assert.equal(routeState.saveCalls[0]!.rows[0]!.updatedAt, undefined)
-})
+test("a row with no version arrives unguarded for callers that do not speak versions", async () => {
+  reset();
+  const res = await post({ taxYear: 2026, rows: [{ employeePartyId: uuid(1), amounts: {} }] });
+  assert.equal(res.status, 200);
+  assert.equal(routeState.saveCalls[0]!.rows[0]!.updatedAt, undefined);
+});
 
-test('a version conflict answers 409 with the named per-row errors', async () => {
-  reset()
+test("a version conflict answers 409 with the named per-row errors", async () => {
+  reset();
   routeState.throwSave = new OpeningBalanceSaveError({
     created: 0,
     updated: 0,
     deleted: 0,
     skipped: [],
-    errors: [{
-      employeePartyId: uuid(1),
-      employeeName: 'Ada',
-      message: 'the carry-in for Ada changed since this screen was loaded — reload the page and re-enter your edits',
-    }],
-  })
+    errors: [
+      {
+        employeePartyId: uuid(1),
+        employeeName: "Ada",
+        message:
+          "the carry-in for Ada changed since this screen was loaded — reload the page and re-enter your edits",
+      },
+    ],
+  });
   const res = await post({
     taxYear: 2026,
-    rows: [{ employeePartyId: uuid(1), amounts: {}, updatedAt: 'stale' }],
-  })
-  assert.equal(res.status, 409)
+    rows: [{ employeePartyId: uuid(1), amounts: {}, updatedAt: "stale" }],
+  });
+  assert.equal(res.status, 409);
   const body = (await res.json()) as {
-    error: string
-    errors: { employeePartyId: string; message: string }[]
-    created: number
-    updated: number
-    deleted: number
-  }
-  assert.match(body.errors[0]!.message, /changed since/)
-  assert.match(body.errors[0]!.message, /reload/)
-  assert.deepEqual([body.created, body.updated, body.deleted], [0, 0, 0])
-})
+    error: string;
+    errors: { employeePartyId: string; message: string }[];
+    created: number;
+    updated: number;
+    deleted: number;
+  };
+  assert.match(body.errors[0]!.message, /changed since/);
+  assert.match(body.errors[0]!.message, /reload/);
+  assert.deepEqual([body.created, body.updated, body.deleted], [0, 0, 0]);
+});
 
-test('a non-string version refuses by name before anything is saved', async () => {
-  reset()
+test("a non-string version refuses by name before anything is saved", async () => {
+  reset();
   const res = await post({
     taxYear: 2026,
     rows: [{ employeePartyId: uuid(1), amounts: {}, updatedAt: 42 }],
-  })
-  assert.equal(res.status, 422)
-  const body = (await res.json()) as { error: string }
-  assert.match(body.error, /updatedAt/)
-  assert.equal(routeState.saveCalls.length, 0)
-})
+  });
+  assert.equal(res.status, 422);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /updatedAt/);
+  assert.equal(routeState.saveCalls.length, 0);
+});
 
-test('a supplied malformed components payload refuses instead of preserving stale values', async () => {
-  for (const components of [[], 'not-an-object']) {
-    reset()
+test("a supplied malformed components payload refuses instead of preserving stale values", async () => {
+  for (const components of [[], "not-an-object"]) {
+    reset();
     const res = await post({
       taxYear: 2026,
       rows: [{ employeePartyId: uuid(1), amounts: {}, components }],
-    })
-    assert.equal(res.status, 422)
-    assert.match((await res.json() as { error: string }).error, /components must be an object/)
-    assert.equal(routeState.saveCalls.length, 0)
+    });
+    assert.equal(res.status, 422);
+    assert.match(((await res.json()) as { error: string }).error, /components must be an object/);
+    assert.equal(routeState.saveCalls.length, 0);
   }
-})
+});
 
-test('omitted and null components remain valid requests that preserve stored values', async () => {
+test("omitted and null components remain valid requests that preserve stored values", async () => {
   for (const row of [
     { employeePartyId: uuid(1), amounts: {} },
     { employeePartyId: uuid(1), amounts: {}, components: null },
   ]) {
-    reset()
-    const res = await post({ taxYear: 2026, rows: [row] })
-    assert.equal(res.status, 200)
-    assert.equal(routeState.saveCalls.length, 1)
-    assert.equal(routeState.saveCalls[0]!.rows[0]!.components, undefined)
+    reset();
+    const res = await post({ taxYear: 2026, rows: [row] });
+    assert.equal(res.status, 200);
+    assert.equal(routeState.saveCalls.length, 1);
+    assert.equal(routeState.saveCalls[0]!.rows[0]!.components, undefined);
   }
-})
+});
 
-test('opening adoption reason and source reference reach the native writer without becoming business eligibility facts', async () => {
-  routeState.saveCalls.length = 0
-  const response = await post({taxYear:2026,rows:[],auditReason:'  Adopt reviewed annual carry-in  ',sourceReference:' register:2026 '})
-  assert.equal(response.status,200)
-  assert.equal(routeState.saveCalls.at(-1)?.auditReason,'Adopt reviewed annual carry-in')
-  assert.equal(routeState.saveCalls.at(-1)?.sourceReference,'register:2026')
-  const count=routeState.saveCalls.length
-  const refused = await post({taxYear:2026,rows:[],sourceReference:'register:2026'})
-  assert.equal(refused.status,422)
-  assert.equal(routeState.saveCalls.length,count)
-})
+test("opening adoption reason and source reference reach the native writer without becoming business eligibility facts", async () => {
+  routeState.saveCalls.length = 0;
+  const response = await post({
+    taxYear: 2026,
+    rows: [],
+    auditReason: "  Adopt reviewed annual carry-in  ",
+    sourceReference: " register:2026 ",
+  });
+  assert.equal(response.status, 200);
+  assert.equal(routeState.saveCalls.at(-1)?.auditReason, "Adopt reviewed annual carry-in");
+  assert.equal(routeState.saveCalls.at(-1)?.sourceReference, "register:2026");
+  const count = routeState.saveCalls.length;
+  const refused = await post({ taxYear: 2026, rows: [], sourceReference: "register:2026" });
+  assert.equal(refused.status, 422);
+  assert.equal(routeState.saveCalls.length, count);
+});

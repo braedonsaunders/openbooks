@@ -1,4 +1,4 @@
-import { defineRoute } from '@/lib/api/route';
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { bookSlot, readBookingLink } from "@openbooks/engine/hrm/recruiting/scheduling";
 import { recruitingErrorResponse } from "../../../hrm/recruiting/_lib";
@@ -17,35 +17,35 @@ export const runtime = "nodejs";
  *   POST /api/recruiting/book/[token]  { slotId } → booked (siblings declined)
  */
 export const GET = defineRoute({
-  public: 'token',
+  public: "token",
   handler: async ({ request: _req, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { token: string });
     const { token } = await params;
     try {
-        const link = await readBookingLink(decodeURIComponent(token));
-        return NextResponse.json({ link });
-      } catch (e) {
-        return recruitingErrorResponse(e);
-      }
+      const link = await readBookingLink(decodeURIComponent(token));
+      return NextResponse.json({ link });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
   },
 });
 
 export const POST = defineRoute({
-  public: 'token',
+  public: "token",
   body: bookSlotBody,
   handler: async ({ params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { token: string });
     const { token } = await params;
 
     try {
-        const slot = await bookSlot({
-          bookingToken: decodeURIComponent(token),
-          slotId: routeBody.slotId,
-          candidateName: routeBody.candidateName,
-        });
-        return NextResponse.json({ slot });
-      } catch (e) {
-        return recruitingErrorResponse(e);
-      }
+      const slot = await bookSlot({
+        bookingToken: decodeURIComponent(token),
+        slotId: routeBody.slotId,
+        candidateName: routeBody.candidateName,
+      });
+      return NextResponse.json({ slot });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
   },
 });

@@ -13,7 +13,8 @@ async function listen(server: Server): Promise<string> {
     });
   });
   const address = server.address();
-  if (!address || typeof address === "string") throw new Error("test server did not bind a TCP port");
+  if (!address || typeof address === "string")
+    throw new Error("test server did not bind a TCP port");
   return `http://127.0.0.1:${address.port}`;
 }
 
@@ -24,7 +25,11 @@ async function close(server: Server): Promise<void> {
   });
 }
 
-const app = { clientId: "client-id", clientSecret: "client-secret", redirectUri: "https://app.example/callback" };
+const app = {
+  clientId: "client-id",
+  clientSecret: "client-secret",
+  redirectUri: "https://app.example/callback",
+};
 const tokens = {
   accessToken: "access-token",
   refreshToken: "refresh-token",
@@ -42,12 +47,15 @@ test("every credentialed Xero request opts out of redirect-following", async () 
   globalThis.fetch = ((input, init) => {
     seen.push({ url: String(input), init });
     const pathname = new URL(String(input)).pathname;
-    const body = pathname === "/connect/token"
-      ? JSON.stringify({ access_token: "at", refresh_token: "rt", expires_in: 1800 })
-      : pathname === "/connections"
-      ? "[]"
-      : "{}";
-    return Promise.resolve(new Response(body, { status: 200, headers: { "content-type": "application/json" } }));
+    const body =
+      pathname === "/connect/token"
+        ? JSON.stringify({ access_token: "at", refresh_token: "rt", expires_in: 1800 })
+        : pathname === "/connections"
+          ? "[]"
+          : "{}";
+    return Promise.resolve(
+      new Response(body, { status: 200, headers: { "content-type": "application/json" } }),
+    );
   }) as typeof fetch;
 
   try {
@@ -56,14 +64,17 @@ test("every credentialed Xero request opts out of redirect-following", async () 
     await listConnections(tokens.accessToken, mockedTransport);
     await new XeroClient(app, "tenant-id", tokens, undefined, mockedTransport).get("Invoices");
 
-    assert.deepEqual(seen.map(({ url }) => new URL(url).href), [
-      "https://identity.xero.com/connect/token",
-      "https://identity.xero.com/connect/token",
-      "https://api.xero.com/connections",
-      "https://api.xero.com/api.xro/2.0/Invoices",
-    ]);
+    assert.deepEqual(
+      seen.map(({ url }) => new URL(url).href),
+      [
+        "https://identity.xero.com/connect/token",
+        "https://identity.xero.com/connect/token",
+        "https://api.xero.com/connections",
+        "https://api.xero.com/api.xro/2.0/Invoices",
+      ],
+    );
     const authorization = seen.map(({ init }) =>
-      String((init?.headers as Record<string, string> | undefined)?.Authorization)
+      String((init?.headers as Record<string, string> | undefined)?.Authorization),
     );
     assert.match(authorization[0]!, /^Basic /);
     assert.match(authorization[1]!, /^Basic /);
@@ -121,7 +132,10 @@ test("Xero OAuth and API calls refuse every redirect class without forwarding cr
 
   const client = new XeroClient(app, "tenant-id", tokens, undefined, mockedTransport);
   try {
-    await assert.rejects(exchangeCode(app, "auth-code", mockedTransport), /HTTP 301 redirect.*credential-capture/s);
+    await assert.rejects(
+      exchangeCode(app, "auth-code", mockedTransport),
+      /HTTP 301 redirect.*credential-capture/s,
+    );
     await assert.rejects(refreshTokens(app, "refresh-token", mockedTransport), /redirect/i);
     await assert.rejects(listConnections(tokens.accessToken, mockedTransport), /redirect/i);
     await assert.rejects(client.get("Invoices"), /redirect/i);
@@ -129,7 +143,12 @@ test("Xero OAuth and API calls refuse every redirect class without forwarding cr
     // Exactly one hop per call reaches the allowlisted origin — never a
     // second, followed hop — even though XeroClient.get retries transient
     // faults: a redirect refusal is terminal by design.
-    assert.deepEqual(attemptedPaths, ["/connect/token", "/connect/token", "/connections", "/api.xro/2.0/Invoices"]);
+    assert.deepEqual(attemptedPaths, [
+      "/connect/token",
+      "/connect/token",
+      "/connections",
+      "/api.xro/2.0/Invoices",
+    ]);
     assert.deepEqual(redirectModes, ["manual", "manual", "manual", "manual"]);
     assert.equal(attackerRequests, 0, "credentials must never reach the redirect target");
   } finally {

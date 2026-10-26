@@ -1,5 +1,5 @@
-import { SQL } from 'drizzle-orm';
-import { PgDialect } from 'drizzle-orm/pg-core';
+import { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 /**
  * NL payroll pack tests — declarations plus 2026 wiring, no database.
  *
@@ -19,10 +19,7 @@ import {
   resolveCertificate,
   type StoredCertificate,
 } from "../certificates.ts";
-import type {
-  PayrollStatutoryComputeContext,
-  PushStatutoryFn,
-} from "../statutory-context.ts";
+import type { PayrollStatutoryComputeContext, PushStatutoryFn } from "../statutory-context.ts";
 import { EMPTY_EMPLOYER_LEVY_FACTORS } from "../statutory-context.ts";
 import {
   registerPayrollWithholding,
@@ -37,7 +34,10 @@ test("the NL pack exists and is an installable EUR calendar-year pack", () => {
   assert.equal(NL_PAYROLL_PACK.installable, true);
   assert.equal(NL_PAYROLL_PACK.statutoryCurrency, "EUR");
   assert.deepEqual(NL_PAYROLL_PACK.taxYear, {
-    basis: "calendar", startMonth: 1, startDay: 1, namedBy: "opening_year",
+    basis: "calendar",
+    startMonth: 1,
+    startDay: 1,
+    namedBy: "opening_year",
   });
   assert.equal(NL_PAYROLL_PACK.statutoryEngineLabel, "Loonbelastingtabellen");
   assert.equal(NL_PAYROLL_PACK.remittanceVendorSettingsKey, null);
@@ -57,7 +57,8 @@ test("the NL pack declares the loonheffing as one combined slot, not a Canada-sh
   assert.equal(loonheffing.components[0]!.assessedOn, "taxable_income");
   assert.equal(loonheffing.components[0]!.remittance, "tax_authority");
   // Employer SV is employer-side only: WW/WIA/ZW plus the werkgeversheffing Zvw.
-  const employer = slots.flatMap((slot) => slot.components)
+  const employer = slots
+    .flatMap((slot) => slot.components)
     .filter((component) => component.kind === "employer_contribution");
   assert.deepEqual(
     employer.map((component) => component.systemKey),
@@ -77,12 +78,17 @@ test("loonheffing is national: NL is known and supported, no subnational table d
 test("the NL pack declares both certificates, and they pass generic validation", () => {
   const declared = NL_PAYROLL_PACK.certificates();
   assert.equal(declared.country, "NL");
-  assert.deepEqual(declared.certificates.map((certificate) => certificate.key), ["nl_loonheffingen", "nl_premies", "nl_tax_liability", "nl_contract"]);
+  assert.deepEqual(
+    declared.certificates.map((certificate) => certificate.key),
+    ["nl_loonheffingen", "nl_premies", "nl_tax_liability", "nl_contract"],
+  );
   const [form, premies] = declared.certificates;
   assert.equal(form!.form, "Model opgaaf gegevens voor de loonheffingen");
   assert.equal(form!.storage, "certificate_rows");
   assert.ok(
-    form!.fields.some((field) => field.key === "apply_loonheffingskorting" && field.kind === "flag"),
+    form!.fields.some(
+      (field) => field.key === "apply_loonheffingskorting" && field.kind === "flag",
+    ),
     "the loonheffingskorting question is declared",
   );
   assert.ok(
@@ -192,22 +198,49 @@ function stubContext(
   };
   const storedCertificates = stubStored(stored);
   const ctx: PayrollStatutoryComputeContext = {
-    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} }, supplementalTaxMethod: "per_run",
-    programBases: {}, pensionableNonPeriodic: "0", insurableNonPeriodic: "0", programNonPeriodicBases: {},
+    periodPriors: { pensionable: "0", insurable: "0", factors: {}, withheldBySystemKey: {} },
+    supplementalTaxMethod: "per_run",
+    programBases: {},
+    pensionableNonPeriodic: "0",
+    insurableNonPeriodic: "0",
+    programNonPeriodicBases: {},
     // No committed history in unit tests: the annual cap prices the declared opening alone.
     // The sealed profile BSN verifies (the suite always sets OPENBOOKS_DATA_KEY), so unit runs
     // price the standard tables, never the anonymous rate.
     tx: {
-      execute: (async (query: unknown, mode?: string) => {
-        const inMode = <T extends { rows: unknown }>(result: T) => (mode === "objects" ? result.rows : result);
-        assert.ok(query instanceof SQL);const text=new PgDialect().sqlToQuery(query).sql;
-        if(text.includes("sin_encrypted"))return inMode({rows:[{sin_encrypted:sealSecret("123456782",{orgId:"11111111-1111-4111-8111-111111111111",purpose:"payroll.employee.sin"})}]});
-        if(text.includes("d.kind='pay_run'"))return inMode({rows:[{subsidiaryId:"44444444-4444-4444-8444-444444444444",currency:"EUR",taxYear:2026}]});
-        if(text.includes('select s.id from pay_stubs s'))return inMode({rows:[]});
-        if(text.includes('jsonb_array_elements_text'))return inMode({rows:[]});
-      if(text.includes('history_run_pay_date'))return inMode({rows:[{sv:"0"}]});
-        throw new Error('Unexpected database read outside the declared Dutch statutory history fixture');
-      }),
+      execute: async (query: unknown, mode?: string) => {
+        const inMode = <T extends { rows: unknown }>(result: T) =>
+          mode === "objects" ? result.rows : result;
+        assert.ok(query instanceof SQL);
+        const text = new PgDialect().sqlToQuery(query).sql;
+        if (text.includes("sin_encrypted"))
+          return inMode({
+            rows: [
+              {
+                sin_encrypted: sealSecret("123456782", {
+                  orgId: "11111111-1111-4111-8111-111111111111",
+                  purpose: "payroll.employee.sin",
+                }),
+              },
+            ],
+          });
+        if (text.includes("d.kind='pay_run'"))
+          return inMode({
+            rows: [
+              {
+                subsidiaryId: "44444444-4444-4444-8444-444444444444",
+                currency: "EUR",
+                taxYear: 2026,
+              },
+            ],
+          });
+        if (text.includes("select s.id from pay_stubs s")) return inMode({ rows: [] });
+        if (text.includes("jsonb_array_elements_text")) return inMode({ rows: [] });
+        if (text.includes("history_run_pay_date")) return inMode({ rows: [{ sv: "0" }] });
+        throw new Error(
+          "Unexpected database read outside the declared Dutch statutory history fixture",
+        );
+      },
     } as never,
     orgId: "11111111-1111-4111-8111-111111111111",
     documentId: "22222222-2222-4222-8222-222222222222",
@@ -231,9 +264,15 @@ function stubContext(
     pushStatutory,
     storedCertificates,
     certificateFor: (key) => {
-      const declared = NL_PAYROLL_PACK.certificates().certificates.find((certificate) => certificate.key === key);
+      const declared = NL_PAYROLL_PACK.certificates().certificates.find(
+        (certificate) => certificate.key === key,
+      );
       if (!declared) return null;
-      return resolveCertificate({ certificate: declared, stored: storedCertificates, asOf: "2026-02-13" });
+      return resolveCertificate({
+        certificate: declared,
+        stored: storedCertificates,
+        asOf: "2026-02-13",
+      });
     },
     bool: (value) => value === "true",
     assertRegionSupported: (region) => {
@@ -245,16 +284,18 @@ function stubContext(
     ...overrides,
     // NL declares no pre-tax treatments: derived from the final legs (an
     // explicit override wins), so a leg override cannot drift from its base.
-    reducedBases: overrides.reducedBases ?? reduceTaxBases(
-      [],
-      {
-        income: overrides.income ?? "999.0000",
-        nonPeriodic: overrides.nonPeriodic ?? "0.0000",
-        pensionable: overrides.pensionable ?? "999.0000",
-        insurable: overrides.insurable ?? "999.0000",
-      },
-      NL_PAYROLL_PACK.deductionTreatments,
-    ),
+    reducedBases:
+      overrides.reducedBases ??
+      reduceTaxBases(
+        [],
+        {
+          income: overrides.income ?? "999.0000",
+          nonPeriodic: overrides.nonPeriodic ?? "0.0000",
+          pensionable: overrides.pensionable ?? "999.0000",
+          insurable: overrides.insurable ?? "999.0000",
+        },
+        NL_PAYROLL_PACK.deductionTreatments,
+      ),
   };
   return { ctx, pushed };
 }
@@ -314,17 +355,23 @@ test("computeStatutory refuses an undeclared age class by name", async () => {
 
 test("computeStatutory refuses an untranscribed tax year and an unsupported region", async () => {
   const { ctx: wrongYear } = stubContext({ nl_premies: PREMIES }, { taxYear: 2027 });
-  await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(wrongYear), /no transcribed loonheffing tables/);
+  await assert.rejects(
+    () => NL_PAYROLL_PACK.computeStatutory(wrongYear),
+    /no transcribed loonheffing tables/,
+  );
   const { ctx: wrongRegion } = stubContext({ nl_premies: PREMIES }, { region: "DE" });
   await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(wrongRegion), /not supported/);
 });
 
 test("computeStatutory refuses a bonus by name", async () => {
-  const { ctx } = stubContext({
-    nl_loonheffingen: { age_class: "under_aow" },
-    nl_premies: PREMIES,
-    nl_tax_liability: { liability_class: "standard_resident" },
-    nl_contract: { contract_start: "2025-01-01" },
-  }, { nonPeriodic: "500.0000" });
+  const { ctx } = stubContext(
+    {
+      nl_loonheffingen: { age_class: "under_aow" },
+      nl_premies: PREMIES,
+      nl_tax_liability: { liability_class: "standard_resident" },
+      nl_contract: { contract_start: "2025-01-01" },
+    },
+    { nonPeriodic: "500.0000" },
+  );
   await assert.rejects(() => NL_PAYROLL_PACK.computeStatutory(ctx), /bijzondere beloningen/);
 });

@@ -72,7 +72,9 @@ function flattenOpens(m: Record<string, { ar?: string; ap?: string }>): Record<s
   return out;
 }
 
-function flattenProjects(m: Record<string, { cost: string; billed: string; margin: string }>): Record<string, string> {
+function flattenProjects(
+  m: Record<string, { cost: string; billed: string; margin: string }>,
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, r] of Object.entries(m)) {
     out[`${key}.cost`] = r.cost;
@@ -82,7 +84,11 @@ function flattenProjects(m: Record<string, { cost: string; billed: string; margi
   return out;
 }
 
-async function replayAsGlJournal(world: SimOrg, item: DatasetEvent, projectIds: Record<string, string>): Promise<void> {
+async function replayAsGlJournal(
+  world: SimOrg,
+  item: DatasetEvent,
+  projectIds: Record<string, string>,
+): Promise<void> {
   if (!item.glLines?.length) throw new Error("no glLines to fall back to");
   await withSimClock(item.event.date, () =>
     withOrgContext(world.orgId, async () => {
@@ -156,12 +162,16 @@ export async function rebuildDataset(
     }
   }
 
-  const [tb, opens, projects, integrity] = await withOrgContext(world.orgId, async () => [
-    await trialBalanceByKey(world.orgId, world.accounts),
-    await openBalancesByParty(world.orgId, partyIds),
-    await projectRollups(world.orgId, projectIds),
-    await cheapInvariants(world.orgId),
-  ] as const);
+  const [tb, opens, projects, integrity] = await withOrgContext(
+    world.orgId,
+    async () =>
+      [
+        await trialBalanceByKey(world.orgId, world.accounts),
+        await openBalancesByParty(world.orgId, partyIds),
+        await projectRollups(world.orgId, projectIds),
+        await cheapInvariants(world.orgId),
+      ] as const,
+  );
 
   report.trialBalanceDiffs = diffKeyed(tb, golden.trialBalance);
   report.openBalanceDiffs = diffKeyed(flattenOpens(opens), flattenOpens(golden.openBalances));

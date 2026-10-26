@@ -21,7 +21,8 @@ export async function resolveBankPayDateValuation(
   payDate: string,
   lock: boolean,
 ): Promise<BankCashPayDateValuation | null> {
-  const { laborCostingSettingsInTx, resolveWageValuationInTx } = await import("../projects/labor-costing.ts");
+  const { laborCostingSettingsInTx, resolveWageValuationInTx } =
+    await import("../projects/labor-costing.ts");
   const settings = await laborCostingSettingsInTx(executor, orgId);
   const resolved = await resolveWageValuationInTx(executor, orgId, employeePartyId, payDate, {
     annualHoursDefault: settings.annualHours,
@@ -45,5 +46,7 @@ export async function resolveBankPayDateValuation(
 
 /** Refusal text shared by the line phase and the evidence freeze for an unvalued split. */
 export function bankSplitValuationRefusal(employeeName: string, payDate: string): PayrollError {
-  return new PayrollError(`${employeeName}'s audited bank payout split on the ${payDate} run has no native hourly wage for bank valuation; configure the effective wage and recalculate`);
+  return new PayrollError(
+    `${employeeName}'s audited bank payout split on the ${payDate} run has no native hourly wage for bank valuation; configure the effective wage and recalculate`,
+  );
 }

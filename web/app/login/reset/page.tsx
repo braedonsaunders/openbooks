@@ -1,11 +1,11 @@
-'use client'
+"use client";
 
-import { Suspense, useState } from 'react'
-import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import { useTranslations } from 'next-intl'
-import { Button, Card, CardContent, Input, Label } from '@openbooks/ui'
-import { readApiErrorMessage } from '@/lib/api-error'
+import { Suspense, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Button, Card, CardContent, Input, Label } from "@openbooks/ui";
+import { readApiErrorMessage } from "@/lib/api-error";
 
 /**
  * Password reset. Without ?token= this asks for the account email and always
@@ -14,63 +14,73 @@ import { readApiErrorMessage } from '@/lib/api-error'
  * link (?invite=1) uses the same token flow with first-password wording.
  */
 function ResetForm() {
-  const t = useTranslations('login')
-  const tCommon = useTranslations('common')
-  const params = useSearchParams()
-  const token = params.get('token')
-  const invite = Boolean(token) && params.get('invite') === '1'
+  const t = useTranslations("login");
+  const tCommon = useTranslations("common");
+  const params = useSearchParams();
+  const token = params.get("token");
+  const invite = Boolean(token) && params.get("invite") === "1";
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirm, setConfirm] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [done, setDone] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submitRequest(e: React.FormEvent) {
-    e.preventDefault()
-    setBusy(true)
-    setError(null)
-    const res = await fetch('/api/password-reset', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    const res = await fetch("/api/password-reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
-    }).catch(() => null)
-    setBusy(false)
+    }).catch(() => null);
+    setBusy(false);
     // Anti-enumeration stays: a reached server always answers 200 whether
     // the address matched or mail could go out. Only a failed request
     // (network, gateway, origin gate) may say so — never claim the link is
     // on its way when nothing was asked.
     if (!res || !res.ok) {
-      setError(t('reset.requestFailed'))
-      return
+      setError(t("reset.requestFailed"));
+      return;
     }
-    setDone(true)
+    setDone(true);
   }
 
   async function submitConfirm(e: React.FormEvent) {
-    e.preventDefault()
+    e.preventDefault();
     if (password !== confirm) {
-      setError(t('reset.mismatch'))
-      return
+      setError(t("reset.mismatch"));
+      return;
     }
-    setBusy(true)
-    setError(null)
-    const res = await fetch('/api/password-reset', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+    setBusy(true);
+    setError(null);
+    const res = await fetch("/api/password-reset", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, password }),
-    })
+    });
     if (res.ok) {
-      setDone(true)
+      setDone(true);
     } else {
       // The body parses from a clone so the weak-password code keeps its
       // mapped copy while every other refusal reads through the shared
       // helper with message, remedy and code.
-      const data = (await res.clone().json().catch(() => ({}))) as { error?: string }
-      setError(data.error === 'weak_password' ? t('reset.weakPassword') : await readApiErrorMessage(res, t(invite ? 'reset.inviteInvalidToken' : 'reset.invalidToken')))
+      const data = (await res
+        .clone()
+        .json()
+        .catch(() => ({}))) as { error?: string };
+      setError(
+        data.error === "weak_password"
+          ? t("reset.weakPassword")
+          : await readApiErrorMessage(
+              res,
+              t(invite ? "reset.inviteInvalidToken" : "reset.invalidToken"),
+            ),
+      );
     }
-    setBusy(false)
+    setBusy(false);
   }
 
   return (
@@ -82,23 +92,27 @@ function ResetForm() {
               open<span className="text-teal-600 dark:text-teal-400">books</span>
             </h1>
             <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-              {invite ? t('reset.inviteTitle') : token ? t('reset.chooseTitle') : t('reset.requestTitle')}
+              {invite
+                ? t("reset.inviteTitle")
+                : token
+                  ? t("reset.chooseTitle")
+                  : t("reset.requestTitle")}
             </p>
           </div>
 
           {done ? (
             <div className="space-y-4 text-center">
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                {invite ? t('reset.inviteDone') : token ? t('reset.changed') : t('reset.sent')}
+                {invite ? t("reset.inviteDone") : token ? t("reset.changed") : t("reset.sent")}
               </p>
               <Button asChild className="h-11 w-full text-base font-semibold">
-                <Link href="/login">{t('reset.backToSignIn')}</Link>
+                <Link href="/login">{t("reset.backToSignIn")}</Link>
               </Button>
             </div>
           ) : token ? (
             <form onSubmit={submitConfirm} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="new-password">{t('reset.newPassword')}</Label>
+                <Label htmlFor="new-password">{t("reset.newPassword")}</Label>
                 <Input
                   id="new-password"
                   type="password"
@@ -110,10 +124,12 @@ function ResetForm() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="h-11"
                 />
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('reset.passwordHelp')}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {t("reset.passwordHelp")}
+                </p>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="confirm-password">{t('reset.confirmPassword')}</Label>
+                <Label htmlFor="confirm-password">{t("reset.confirmPassword")}</Label>
                 <Input
                   id="confirm-password"
                   type="password"
@@ -125,17 +141,21 @@ function ResetForm() {
                 />
               </div>
               {error ? (
-                <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>
+                <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+                  {error}
+                </p>
               ) : null}
               <Button type="submit" disabled={busy} className="h-11 w-full text-base font-semibold">
-                {busy ? t('reset.saving') : t(invite ? 'reset.inviteSetPassword' : 'reset.setPassword')}
+                {busy
+                  ? t("reset.saving")
+                  : t(invite ? "reset.inviteSetPassword" : "reset.setPassword")}
               </Button>
             </form>
           ) : (
             <form onSubmit={submitRequest} className="space-y-4">
-              <p className="text-sm text-slate-600 dark:text-slate-400">{t('reset.requestHelp')}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">{t("reset.requestHelp")}</p>
               <div className="space-y-1.5">
-                <Label htmlFor="email">{tCommon('labels.email')}</Label>
+                <Label htmlFor="email">{tCommon("labels.email")}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -148,14 +168,19 @@ function ResetForm() {
                 />
               </div>
               {error ? (
-                <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>
+                <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+                  {error}
+                </p>
               ) : null}
               <Button type="submit" disabled={busy} className="h-11 w-full text-base font-semibold">
-                {busy ? t('reset.sending') : t('reset.sendLink')}
+                {busy ? t("reset.sending") : t("reset.sendLink")}
               </Button>
               <p className="text-center">
-                <Link href="/login" className="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
-                  {t('reset.backToSignIn')}
+                <Link
+                  href="/login"
+                  className="text-sm text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                >
+                  {t("reset.backToSignIn")}
                 </Link>
               </p>
             </form>
@@ -163,7 +188,7 @@ function ResetForm() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
 
 export default function ResetPage() {
@@ -173,5 +198,5 @@ export default function ResetPage() {
         <ResetForm />
       </Suspense>
     </main>
-  )
+  );
 }

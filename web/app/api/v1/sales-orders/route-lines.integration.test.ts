@@ -4,17 +4,13 @@ import test from "node:test";
 
 // Full order create through POST /api/v1/sales-orders, line replacement, and
 // issue — the same drawer writer end to end, with the storefront dedupe key.
-const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/platform/db"
-);
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
 const { generateApiKey } = await import("../../../../lib/api-auth.ts");
-const { v1CreateOrder, v1IssueOrder, v1ReplaceOrderLines } = await import(
-  "../../../../lib/api/v1-orders.ts"
-);
+const { v1CreateOrder, v1IssueOrder, v1ReplaceOrderLines } =
+  await import("../../../../lib/api/v1-orders.ts");
 const { createApplicationOrder } = await import("../../../../lib/application/orders.ts");
 const { applyOrderEdit } = await import("../../../../lib/order-draft-edit.ts");
 const { orderEditServices } = await import("../../_order/handlers.ts");
@@ -34,23 +30,38 @@ interface Setup {
 
 async function setup(): Promise<Setup> {
   const org = await withBypassContext(() => createScratchOrg());
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features', '{}'::jsonb) || '{"orders":true,"apiAccess":true}'::jsonb)
-    where id = ${org.orgId}`));
+    where id = ${org.orgId}`),
+  );
   const actor = await withBypassContext(() => createScratchUser(org.orgId, "Api", "api_owner"));
-  await withBypassContext(() => db.execute(sql`
-    update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'api_owner'`));
+  await withBypassContext(() =>
+    db.execute(sql`
+    update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'api_owner'`),
+  );
   const generated = generateApiKey();
-  await withBypassContext(() => db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     insert into api_keys (org_id, user_id, name, key_prefix, key_hash, key_preview, scopes, is_active)
     values (${org.orgId}, ${actor}, 'route lines test', ${generated.keyPrefix}, ${generated.keyHash},
-            ${generated.keyPreview}, '["ar.create","ar.read","parties.manage","parties.read","items.read"]'::jsonb, true)`));
+            ${generated.keyPreview}, '["ar.create","ar.read","parties.manage","parties.read","items.read"]'::jsonb, true)`),
+  );
   const code = `SVC-${randomUUID().slice(0, 8)}`;
-  await withBypassContext(() => db.execute(sql`
-    update items set code = ${code} where id = ${org.items.service} and org_id = ${org.orgId}`));
-  const item = (await withBypassContext(() => db.execute<{ id: string; code: string | null }>(sql`
-    select id, code from items where id = ${org.items.service} and org_id = ${org.orgId}`, "objects")))[0]!;
+  await withBypassContext(() =>
+    db.execute(sql`
+    update items set code = ${code} where id = ${org.items.service} and org_id = ${org.orgId}`),
+  );
+  const item = (
+    await withBypassContext(() =>
+      db.execute<{ id: string; code: string | null }>(
+        sql`
+    select id, code from items where id = ${org.items.service} and org_id = ${org.orgId}`,
+        "objects",
+      ),
+    )
+  )[0]!;
   assert.equal(item.code, code, "the scratch service item takes a code");
   return {
     orgId: org.orgId,
@@ -134,7 +145,9 @@ test("full order create posts the drawer's totals and lines", { skip: !DB }, asy
 
     // The same commercial intent through the drawer's own writer, priced at
     // the net the discount maps to: totals and line amounts must agree.
-    const actor = await withBypassContext(() => createScratchUser(fixture.orgId, "Drawer", "drawer_probe"));
+    const actor = await withBypassContext(() =>
+      createScratchUser(fixture.orgId, "Drawer", "drawer_probe"),
+    );
     const draft = await withOrgContext(fixture.orgId, () =>
       createApplicationOrder(
         {
@@ -158,11 +171,22 @@ test("full order create posts the drawer's totals and lines", { skip: !DB }, asy
           requestId: randomUUID(),
           apiKeyId: null,
         },
-        { kind: "sales_order", idempotencyKey: `drawer-${ref}`, subsidiaryId: fixture.subsidiaryId },
+        {
+          kind: "sales_order",
+          idempotencyKey: `drawer-${ref}`,
+          subsidiaryId: fixture.subsidiaryId,
+        },
       ),
     );
-    const token = (await withBypassContext(() => db.execute<{ t: string }>(sql`
-      select revision_seq::text as t from documents where id = ${draft.result.id}`, "objects")))[0]!.t;
+    const token = (
+      await withBypassContext(() =>
+        db.execute<{ t: string }>(
+          sql`
+      select revision_seq::text as t from documents where id = ${draft.result.id}`,
+          "objects",
+        ),
+      )
+    )[0]!.t;
     const drawer = await withOrgContext(fixture.orgId, () =>
       applyOrderEdit(
         {
@@ -192,13 +216,21 @@ test("full order create posts the drawer's totals and lines", { skip: !DB }, asy
           documentDate: fixture.date,
           lines: [
             { itemId: fixture.itemId, quantity: "2", unitPrice: "17.991" },
-            { accountId: fixture.revenueAccountId, description: "Freight", quantity: "1", unitPrice: "5" },
+            {
+              accountId: fixture.revenueAccountId,
+              description: "Freight",
+              quantity: "1",
+              unitPrice: "5",
+            },
           ],
         },
       ),
     );
     assert.equal(drawer.status, 200);
-    const drawerBody = (await drawer.json()) as { doc: Record<string, unknown>; lines: Array<Record<string, unknown>> };
+    const drawerBody = (await drawer.json()) as {
+      doc: Record<string, unknown>;
+      lines: Array<Record<string, unknown>>;
+    };
     assert.equal(result.total, String(drawerBody.doc.total));
     assert.equal(result.subtotal, String(drawerBody.doc.subtotal));
     assert.equal(result.taxTotal, String(drawerBody.doc.tax_total));
@@ -208,9 +240,16 @@ test("full order create posts the drawer's totals and lines", { skip: !DB }, asy
     );
 
     // The dedupe key landed on the stored row.
-    const stored = (await withBypassContext(() => db.execute<{ external_ref: string | null; external_source: string | null; status: string }>(sql`
+    const stored = (
+      await withBypassContext(() =>
+        db.execute<{ external_ref: string | null; external_source: string | null; status: string }>(
+          sql`
       select external_ref, external_source, status from documents
-       where id = ${result.id} and org_id = ${fixture.orgId}`, "objects")))[0];
+       where id = ${result.id} and org_id = ${fixture.orgId}`,
+          "objects",
+        ),
+      )
+    )[0];
     assert.equal(stored?.external_ref, ref);
     assert.equal(stored?.external_source, "shopify");
     assert.equal(stored?.status, "draft");
@@ -262,9 +301,16 @@ test("a duplicate external reference returns 409 with the existing id", { skip: 
       (second.json.details as { existingId?: string } | undefined)?.existingId,
       first.json.id,
     );
-    const count = (await withBypassContext(() => db.execute<{ n: string }>(sql`
+    const count = (
+      await withBypassContext(() =>
+        db.execute<{ n: string }>(
+          sql`
       select count(*)::text as n from documents
-       where org_id = ${fixture.orgId} and external_source = 'shopify' and external_ref = ${ref}`, "objects")))[0]!.n;
+       where org_id = ${fixture.orgId} and external_source = 'shopify' and external_ref = ${ref}`,
+          "objects",
+        ),
+      )
+    )[0]!.n;
     assert.equal(count, "1");
   } finally {
     await teardown(fixture.orgId);
@@ -324,16 +370,10 @@ test("lines replace and issue drive a draft to issued", { skip: !DB }, async () 
     const replaced = await callV1(
       fixture.orgId,
       (req) => v1ReplaceOrderLines(req, "sales-orders", id),
-      request(
-        "PATCH",
-        `/api/v1/sales-orders/${id}/lines`,
-        fixture.key,
-        `lines-${ref}`,
-        {
-          expectedUpdatedAt: token,
-          lines: [{ itemCode: fixture.itemCode, quantity: "1", unitPrice: "10.00" }],
-        },
-      ),
+      request("PATCH", `/api/v1/sales-orders/${id}/lines`, fixture.key, `lines-${ref}`, {
+        expectedUpdatedAt: token,
+        lines: [{ itemCode: fixture.itemCode, quantity: "1", unitPrice: "10.00" }],
+      }),
     );
     assert.equal(replaced.status, 200, JSON.stringify(replaced.json));
     const nextToken = String(replaced.json.expectedUpdatedAt);
@@ -343,46 +383,49 @@ test("lines replace and issue drive a draft to issued", { skip: !DB }, async () 
     const stale = await callV1(
       fixture.orgId,
       (req) => v1ReplaceOrderLines(req, "sales-orders", id),
-      request(
-        "PATCH",
-        `/api/v1/sales-orders/${id}/lines`,
-        fixture.key,
-        `stale-${ref}`,
-        { expectedUpdatedAt: token, lines: [] },
-      ),
+      request("PATCH", `/api/v1/sales-orders/${id}/lines`, fixture.key, `stale-${ref}`, {
+        expectedUpdatedAt: token,
+        lines: [],
+      }),
     );
     assert.equal(stale.status, 409, JSON.stringify(stale.json));
 
     const issued = await callV1(
       fixture.orgId,
       (req) => v1IssueOrder(req, "sales-orders", id),
-      request(
-        "POST",
-        `/api/v1/sales-orders/${id}/issue`,
-        fixture.key,
-        `issue-${ref}`,
-        { expectedUpdatedAt: nextToken },
-      ),
+      request("POST", `/api/v1/sales-orders/${id}/issue`, fixture.key, `issue-${ref}`, {
+        expectedUpdatedAt: nextToken,
+      }),
     );
     assert.equal(issued.status, 200, JSON.stringify(issued.json));
     assert.equal(issued.json.status, "approved");
-    const status = (await withBypassContext(() => db.execute<{ status: string }>(sql`
-      select status from documents where id = ${id} and org_id = ${fixture.orgId}`, "objects")))[0]!.status;
+    const status = (
+      await withBypassContext(() =>
+        db.execute<{ status: string }>(
+          sql`
+      select status from documents where id = ${id} and org_id = ${fixture.orgId}`,
+          "objects",
+        ),
+      )
+    )[0]!.status;
     assert.equal(status, "approved");
 
-    const currentToken = (await withBypassContext(() => db.execute<{ t: string }>(sql`
-      select revision_seq::text as t from documents where id = ${id}`, "objects")))[0]!.t;
+    const currentToken = (
+      await withBypassContext(() =>
+        db.execute<{ t: string }>(
+          sql`
+      select revision_seq::text as t from documents where id = ${id}`,
+          "objects",
+        ),
+      )
+    )[0]!.t;
     assert.equal(String(issued.json.expectedUpdatedAt), currentToken);
     const reissued = await callV1(
       fixture.orgId,
       (req) => v1IssueOrder(req, "sales-orders", id),
-      request(
-        "POST",
-        `/api/v1/sales-orders/${id}/issue`,
-        fixture.key,
-        `reissue-${ref}`,
-        { expectedUpdatedAt: currentToken },
-      ),
+      request("POST", `/api/v1/sales-orders/${id}/issue`, fixture.key, `reissue-${ref}`, {
+        expectedUpdatedAt: currentToken,
+      }),
     );
     assert.equal(reissued.status, 422, JSON.stringify(reissued.json));
     assert.match(String(reissued.json.message), /only a draft can be issued/);

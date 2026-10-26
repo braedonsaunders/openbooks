@@ -13,7 +13,11 @@ import {
   type SqlExecutor,
   type StoredQualificationStatus,
 } from "./shared.ts";
-import { resolveSubject, type RequirementSubjectKind, type RequirementSeverity } from "./requirements.ts";
+import {
+  resolveSubject,
+  type RequirementSubjectKind,
+  type RequirementSeverity,
+} from "./requirements.ts";
 
 /**
  * Dispatch gating (HR-14): can this person be on that job today?
@@ -43,7 +47,9 @@ export interface GateFinding {
   readonly detail: string;
 }
 
-export type GateVerdict = { ok: true; warnings: GateFinding[] } | { ok: false; blocking: GateFinding[]; warnings: GateFinding[] };
+export type GateVerdict =
+  | { ok: true; warnings: GateFinding[] }
+  | { ok: false; blocking: GateFinding[]; warnings: GateFinding[] };
 
 export interface CheckAssignmentInput {
   readonly orgId: string;
@@ -90,12 +96,17 @@ export async function checkAssignment(
   await assertQualificationsFeature(exec, orgId, "Dispatch gating");
   const on = input.on ? requireDate(input.on, "on") : await businessToday(orgId);
   const employmentScope = allowed === null ? null : `{${[...allowed].join(",")}}`;
-  const visibleEmployment = (await exec.execute<{ id: string }>(sql`
+  const visibleEmployment = (
+    await exec.execute<{ id: string }>(
+      sql`
     select id from worker_employments
      where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
        and (${employmentScope}::uuid[] is null or employer_subsidiary_id = any(${employmentScope}::uuid[]))
      for share
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!visibleEmployment) {
     throw new HrmQualificationError(
       "The employment was not found in this organization or you cannot read it — use a visible employment and retry the qualification check.",
@@ -138,7 +149,8 @@ export async function checkAssignmentInternal(
   subjectId: string,
   on: string,
 ): Promise<GateVerdict> {
-  const requirements = await exec.execute<ApplicableRequirement>(sql`
+  const requirements = await exec.execute<ApplicableRequirement>(
+    sql`
     select r.type_id::text as type_id, t.code as type_code, t.name as type_name,
            t.renewal_lead_days, r.severity
       from hrm_qualification_requirements r
@@ -150,15 +162,20 @@ export async function checkAssignmentInternal(
        and r.required_from <= ${on}::date
        and (r.required_to is null or r.required_to >= ${on}::date)
      order by t.code
-  `, "objects");
+  `,
+    "objects",
+  );
   if (requirements.length === 0) return { ok: true, warnings: [] };
-  const held = await exec.execute<HeldRow>(sql`
+  const held = await exec.execute<HeldRow>(
+    sql`
     select q.id::text as id, q.type_id::text as type_id, q.status,
            q.expires_on::text, q.issued_on::text
       from hrm_worker_qualifications q
      where q.org_id = ${orgId}::uuid and q.employment_id = ${employmentId}::uuid
      order by q.issued_on desc
-  `, "objects");
+  `,
+    "objects",
+  );
   const blocking: GateFinding[] = [];
   const warnings: GateFinding[] = [];
   for (const req of requirements) {
@@ -217,7 +234,15 @@ function evaluateRequirement(
   // one still needs HR verification — so not-yet-effective outranks
   // pending, and both outrank expired.
   const rank = (s: DerivedQualificationStatus) =>
-    s === "valid" ? 0 : s === "expiring" ? 1 : s === "not_yet_effective" ? 2 : s === "pending_verification" ? 3 : 4;
+    s === "valid"
+      ? 0
+      : s === "expiring"
+        ? 1
+        : s === "not_yet_effective"
+          ? 2
+          : s === "pending_verification"
+            ? 3
+            : 4;
   projected.sort((a, b) => rank(a.status) - rank(b.status));
   const best = projected[0];
   // Unreachable: live is non-empty above, so projected is non-empty.
@@ -278,15 +303,22 @@ export async function noteWarnedDispatch(
   const context = input.context.trim() || "dispatch";
   for (const warning of input.warnings) {
     if (!warning.qualificationId) continue;
-    const inserted = (await exec.execute<{ id: string }>(sql`
+    const inserted = (
+      await exec.execute<{ id: string }>(
+        sql`
       insert into hrm_qualification_events
         (org_id, qualification_id, kind, actor_id, reason)
       values (${orgId}::uuid, ${warning.qualificationId}::uuid, 'warned',
               ${actorId}::uuid, ${`${context}: ${warning.detail}`}::text)
       returning id
-    `, "objects"))[0]?.id;
+    `,
+        "objects",
+      )
+    )[0]?.id;
     if (!inserted) {
-      throw new HrmQualificationError("The dispatch warning was not recorded — no row was written; retry the action.");
+      throw new HrmQualificationError(
+        "The dispatch warning was not recorded — no row was written; retry the action.",
+      );
     }
   }
 }
@@ -298,10 +330,7 @@ export interface ScheduleGateInput {
   readonly taskId?: string;
   readonly on?: string;
   /** Injectable gate for the feature-off bypass proof (throws if called). */
-  readonly gate?: (
-    exec: SqlExecutor,
-    input: CheckAssignmentInput,
-  ) => Promise<GateVerdict>;
+  readonly gate?: (exec: SqlExecutor, input: CheckAssignmentInput) => Promise<GateVerdict>;
   /**
    * Trusted scheduling-path mode: skip the per-actor read grant and gate
    * on the employment behind the resource. The dispatcher sees only the
@@ -326,8 +355,10 @@ export interface ScheduleGateResult {
  * the project scheduling board, so it runs only while both modules are on.
  */
 export async function dispatchGatingOn(exec: SqlExecutor, orgId: string): Promise<boolean> {
-  return (await lockAndCheckOrgFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE))
-    && (await lockAndCheckOrgFeature(exec, orgId, "projectScheduling"));
+  return (
+    (await lockAndCheckOrgFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE)) &&
+    (await lockAndCheckOrgFeature(exec, orgId, "projectScheduling"))
+  );
 }
 
 /**
@@ -352,11 +383,16 @@ export async function gateScheduleAssignment(
     resourceName: null,
   };
   if (!(await dispatchGatingOn(exec, orgId))) return passThrough;
-  const resource = (await exec.execute<{ name: string; party_id: string | null; project_id: string | null }>(sql`
+  const resource = (
+    await exec.execute<{ name: string; party_id: string | null; project_id: string | null }>(
+      sql`
     select name, party_id::text, project_id::text
       from schedule_resources
      where org_id = ${orgId}::uuid and id = ${resourceId}::uuid
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   if (!resource) {
     throw new HrmQualificationError(
       "The schedule resource was not found in this organization — refresh the board and try again.",
@@ -372,10 +408,15 @@ export async function gateScheduleAssignment(
   let projectId: string | null = resource.project_id;
   if (input.taskId !== undefined) {
     const taskId = requireId(input.taskId, "taskId");
-    const task = (await exec.execute<{ project_id: string }>(sql`
+    const task = (
+      await exec.execute<{ project_id: string }>(
+        sql`
       select project_id::text as project_id from project_tasks
        where org_id = ${orgId}::uuid and id = ${taskId}::uuid
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!task) {
       throw new HrmQualificationError(
         "The schedule task was not found in this organization — refresh the board and try again.",
@@ -394,10 +435,15 @@ export async function gateScheduleAssignment(
   // a phantom subject with zero requirements (which always passes).
   let projectSubsidiaryId: string | null = null;
   if (projectId) {
-    const project = (await exec.execute<{ subsidiary_id: string | null }>(sql`
+    const project = (
+      await exec.execute<{ subsidiary_id: string | null }>(
+        sql`
       select subsidiary_id::text as subsidiary_id from projects
        where org_id = ${orgId}::uuid and id = ${projectId}::uuid
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!project) {
       throw new HrmQualificationError(
         `The schedule resource "${resource.name}" names a project that is not visible in this organization — refresh the board and assign again.`,
@@ -411,7 +457,8 @@ export async function gateScheduleAssignment(
   // effective rows means no person to gate (as before); several means
   // the gate cannot know which record's credentials answer, so it
   // refuses by name instead of silently gating the newest row.
-  const effective = await exec.execute<{ id: string; employer_subsidiary_id: string }>(sql`
+  const effective = await exec.execute<{ id: string; employer_subsidiary_id: string }>(
+    sql`
     select e.id::text as id, e.employer_subsidiary_id::text as employer_subsidiary_id
       from worker_employments e
      where e.org_id = ${orgId}::uuid
@@ -423,7 +470,9 @@ export async function gateScheduleAssignment(
             and v.effective_from <= ${on}::date
             and (v.effective_to is null or v.effective_to > ${on}::date)
        )
-  `, "objects");
+  `,
+    "objects",
+  );
   if (effective.length === 0) return { ...passThrough, resourceName: resource.name };
   let candidates = effective;
   if (projectSubsidiaryId) {
@@ -440,7 +489,8 @@ export async function gateScheduleAssignment(
     );
   }
   const employment = candidates[0]!;
-  if (!projectId) return { ...passThrough, employmentId: employment.id, resourceName: resource.name };
+  if (!projectId)
+    return { ...passThrough, employmentId: employment.id, resourceName: resource.name };
   if (input.gate) {
     const verdict = await input.gate(exec, {
       orgId,
@@ -452,16 +502,23 @@ export async function gateScheduleAssignment(
     });
     return { gated: true, verdict, employmentId: employment.id, resourceName: resource.name };
   }
-  const verdict = input.trusted === true
-    ? await checkAssignmentTrusted(exec, { orgId, employmentId: employment.id, subjectKind: "project", subjectId: projectId, on })
-    : await checkAssignment(exec, {
-        orgId,
-        actorId,
-        employmentId: employment.id,
-        subjectKind: "project",
-        subjectId: projectId,
-        on,
-      });
+  const verdict =
+    input.trusted === true
+      ? await checkAssignmentTrusted(exec, {
+          orgId,
+          employmentId: employment.id,
+          subjectKind: "project",
+          subjectId: projectId,
+          on,
+        })
+      : await checkAssignment(exec, {
+          orgId,
+          actorId,
+          employmentId: employment.id,
+          subjectKind: "project",
+          subjectId: projectId,
+          on,
+        });
   return { gated: true, verdict, employmentId: employment.id, resourceName: resource.name };
 }
 
@@ -470,10 +527,7 @@ export async function gateScheduleAssignment(
  * scheduling write path calls this after gateScheduleAssignment: a
  * block severity never becomes a silent assignment.
  */
-export function refuseBlockedDispatch(
-  verdict: GateVerdict,
-  resourceName: string | null,
-): void {
+export function refuseBlockedDispatch(verdict: GateVerdict, resourceName: string | null): void {
   if (verdict.ok) return;
   const names = verdict.blocking.map((b) => b.typeName).join(", ");
   const who = resourceName ? `Resource "${resourceName}"` : "The resource";

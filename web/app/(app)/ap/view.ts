@@ -1,13 +1,24 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { groupTabs } from '../../../components/module-home/group-tabs'
-import { requirePermission, can } from '../../../lib/authz'
-import { analyticsConfig } from '../../../lib/analytics/config'
-import { ANALYTICS_CONFIG } from '../../../lib/analytics/config-spec'
-import { normalizeCashHorizonWeeks, normalizeMoneyValue, withoutWeekEntries } from '../../../lib/cash/core'
-import { apPosition } from '../../../lib/cash/ap-position'
-import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { getLocale, getTranslations } from "next-intl/server";
+import { groupTabs } from "../../../components/module-home/group-tabs";
+import { requirePermission, can } from "../../../lib/authz";
+import { analyticsConfig } from "../../../lib/analytics/config";
+import { ANALYTICS_CONFIG } from "../../../lib/analytics/config-spec";
+import {
+  normalizeCashHorizonWeeks,
+  normalizeMoneyValue,
+  withoutWeekEntries,
+} from "../../../lib/cash/core";
+import { apPosition } from "../../../lib/cash/ap-position";
+import {
+  page,
+  pageHeader,
+  ref,
+  widget,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
 
 /**
  * The AP cockpit, split into a loader and a spec.
@@ -22,39 +33,49 @@ import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@brae
  */
 
 export interface ApCockpitData {
-  title: string
-  description: string
-  canCreate: boolean
-  canConfigure: boolean
-  canPay: boolean
-  captureHref: string
-  captureLabel: string
-  newItems: { kind: string; label: string; href?: string }[]
-  newBasePath: string
-  newTriggerLabel: string
-  tabs: unknown
-  data: unknown
+  title: string;
+  description: string;
+  canCreate: boolean;
+  canConfigure: boolean;
+  canPay: boolean;
+  captureHref: string;
+  captureLabel: string;
+  newItems: { kind: string; label: string; href?: string }[];
+  newBasePath: string;
+  newTriggerLabel: string;
+  tabs: unknown;
+  data: unknown;
 }
 
 export async function loadApCockpit(): Promise<ApCockpitData> {
-  const authz = await requirePermission('ap.read')
-  const canCreate = can(authz, 'ap.create')
+  const authz = await requirePermission("ap.read");
+  const canCreate = can(authz, "ap.create");
   // Navigation and configuration are independent reads; neither should wait
   // for the complete cash forecast before the page can finish loading.
   const [t, locale, cfg, tabs] = await Promise.all([
-    getTranslations('ap'),
+    getTranslations("ap"),
     getLocale(),
-    analyticsConfig(authz.user.orgId, 'cashflow'),
-    groupTabs('purchasing', '/ap', { orgId: authz.user.orgId }),
-  ])
-  const apSettings = { weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)), restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
+    analyticsConfig(authz.user.orgId, "cashflow"),
+    groupTabs("purchasing", "/ap", { orgId: authz.user.orgId }),
+  ]);
+  const apSettings = {
+    weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
+    restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
+  };
   // The cockpit reads the org's configured default horizon — the same
   // setting the banking cash page opens on — never a hardcoded 4 weeks.
   const horizon = normalizeCashHorizonWeeks(
     cfg.defaultHorizonWeeks,
     ANALYTICS_CONFIG.cashflow.defaults.defaultHorizonWeeks,
-  )
-  const position = await apPosition(authz.user.orgId, horizon, apSettings, undefined, authz.allowedSubsidiaryIds, locale)
+  );
+  const position = await apPosition(
+    authz.user.orgId,
+    horizon,
+    apSettings,
+    undefined,
+    authz.allowedSubsidiaryIds,
+    locale,
+  );
   // The schedule bars need each week's label and amount; the week drill
   // fetches the week a reader actually opens from /api/cash/week-entries.
   // Shipping every week's transactions as well repeated the whole open-item
@@ -63,51 +84,57 @@ export async function loadApCockpit(): Promise<ApCockpitData> {
     ...position,
     weeks: position.weeks.map((w) => ({ ...w, entries: [] })),
     timeline: withoutWeekEntries(position.timeline),
-  }
+  };
 
   return {
-    title: t('cockpit.title'),
-    description: t('cockpit.description'),
+    title: t("cockpit.title"),
+    description: t("cockpit.description"),
     canCreate,
     // The selection config writes org-wide cashflow settings (the cashflow
     // config PUT's gate): a scoped admin holds the permission yet is still
     // refused, so the gear needs unrestricted scope too.
-    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, 'admin.setup.manage'),
-    canPay: can(authz, 'ap.pay'),
-    captureHref: '/ap/capture',
-    captureLabel: t('actions.capture'),
+    canConfigure: authz.allowedSubsidiaryIds === null && can(authz, "admin.setup.manage"),
+    canPay: can(authz, "ap.pay"),
+    captureHref: "/ap/capture",
+    captureLabel: t("actions.capture"),
     newItems: [
-      { kind: 'vendor_bill', label: t('actions.newBill') },
-      { kind: 'vendor_credit', label: t('actions.newCredit') ?? t('actions.newBill') },
-      ...(can(authz, 'ap.pay')
-        ? [{ kind: 'vendor_payment', label: t('actions.payBills'), href: '/payments?paymentNew=1&mode=edit' }]
+      { kind: "vendor_bill", label: t("actions.newBill") },
+      { kind: "vendor_credit", label: t("actions.newCredit") ?? t("actions.newBill") },
+      ...(can(authz, "ap.pay")
+        ? [
+            {
+              kind: "vendor_payment",
+              label: t("actions.payBills"),
+              href: "/payments?paymentNew=1&mode=edit",
+            },
+          ]
         : []),
     ],
-    newBasePath: '/ap/bills',
-    newTriggerLabel: t('actions.newBill'),
+    newBasePath: "/ap/bills",
+    newTriggerLabel: t("actions.newBill"),
     tabs,
     data,
-  }
+  };
 }
 
-const f = ref<ApCockpitData>()
+const f = ref<ApCockpitData>();
 
 export function apCockpitSpec(data: ApCockpitData): PageSpec {
   return page({
-    route: '/ap',
-    layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    route: "/ap",
+    layout: "list",
+    bodyClassName: "flex h-full min-h-0 flex-col",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        actionsClassName: 'flex flex-wrap items-center gap-3',
+        title: f("title"),
+        description: f("description"),
+        actionsClassName: "flex flex-wrap items-center gap-3",
         actions: [
           // ONE widget, not two side by side: the native header nests the
           // capture link and the create menu in their own `gap-2` row inside
           // this `gap-3` wrapper. Three flat widgets render one wrapper where
           // the native page renders two, and space the pair differently.
-          widget('ap-header-actions', {
+          widget("ap-header-actions", {
             captureHref: data.captureHref,
             captureLabel: data.captureLabel,
             canCreate: data.canCreate,
@@ -115,16 +142,16 @@ export function apCockpitSpec(data: ApCockpitData): PageSpec {
             newBasePath: data.newBasePath,
             newTriggerLabel: data.newTriggerLabel,
           }),
-          widget('module-home-tabs', { tabs: data.tabs }),
+          widget("module-home-tabs", { tabs: data.tabs }),
         ],
       }),
     ],
     body: [
-      widgetBlock('ap-cockpit', {
+      widgetBlock("ap-cockpit", {
         data: data.data,
         canConfigure: data.canConfigure,
         canPay: data.canPay,
       }),
     ],
-  })
+  });
 }

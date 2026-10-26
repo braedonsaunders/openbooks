@@ -55,8 +55,7 @@ export function resolveQuorumOutcome(
   }
 
   // quorum === 'all'
-  if (decision === "rejected")
-    return { resume: "reject", cancelIds: cancellable };
+  if (decision === "rejected") return { resume: "reject", cancelIds: cancellable };
   const stillPending = siblings.some((s) => s.status === "pending");
   if (stillPending) return { resume: null, cancelIds: [] };
   if (siblings.some((s) => s.status === "rejected"))
@@ -66,11 +65,7 @@ export function resolveQuorumOutcome(
       .filter((s) => s.status === "approved" && s.escalatedFromGateId)
       .map((s) => s.escalatedFromGateId),
   );
-  if (
-    siblings.some(
-      (s) => s.status !== "approved" && !approvedReplacements.has(s.id),
-    )
-  )
+  if (siblings.some((s) => s.status !== "approved" && !approvedReplacements.has(s.id)))
     throw new Error(
       "This approval group has an unresolved required decision. Recall the submission and review its Flow before resubmitting.",
     );

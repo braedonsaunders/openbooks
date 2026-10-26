@@ -86,9 +86,7 @@ function inspect(query: unknown): { text: string; params: unknown[] } {
   return { text: walk(chunks, true), params };
 }
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksAssetCreateInspect = inspect;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksAssetCreateInspect = inspect;
 
 const mockDb = `
   const state = globalThis[Symbol.for('openbooks.asset-create-route-test')]
@@ -224,10 +222,7 @@ function reset(): void {
   state.queries = [];
 }
 
-function post(
-  key: string | null,
-  body: Record<string, unknown>,
-): Promise<Response> {
+function post(key: string | null, body: Record<string, unknown>): Promise<Response> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
   };
@@ -262,9 +257,11 @@ test("Save inserts one tenant-scoped asset with one audit event", async () => {
   assert.equal(state.audits.length, 1);
   assert.equal(state.audits[0]!.row_id, KEY_A);
   assert.equal(state.audits[0]!.request_id, KEY_A);
-  assert.ok(state.queries.some((query) => query.includes("from custom_field_defs")), "native custom-field lookup uses the tracked database");
-  const insertText =
-    state.queries.find((q) => q.includes("insert into fixed_assets")) ?? "";
+  assert.ok(
+    state.queries.some((query) => query.includes("from custom_field_defs")),
+    "native custom-field lookup uses the tracked database",
+  );
+  const insertText = state.queries.find((q) => q.includes("insert into fixed_assets")) ?? "";
   assert.match(insertText, new RegExp(ORG_ID));
 });
 
@@ -283,10 +280,7 @@ test("reusing a key for a changed request is a named conflict", async () => {
   assert.equal((await post(KEY_A, baseBody())).status, 201);
   const conflict = await post(KEY_A, { ...baseBody(), name: "Different Mill" });
   assert.equal(conflict.status, 409);
-  assert.equal(
-    ((await conflict.json()) as { error: string }).error,
-    "idempotency-conflict",
-  );
+  assert.equal(((await conflict.json()) as { error: string }).error, "idempotency-conflict");
   assert.equal(state.assets.length, 1);
   assert.equal(state.audits.length, 1);
 });
@@ -300,10 +294,7 @@ test("a key already owned by another organization never leaks that row", async (
   });
   const res = await post(KEY_A, baseBody());
   assert.equal(res.status, 409);
-  assert.equal(
-    ((await res.json()) as { error: string }).error,
-    "idempotency-conflict",
-  );
+  assert.equal(((await res.json()) as { error: string }).error, "idempotency-conflict");
   assert.ok(!state.assets.some((row) => row.org_id === ORG_ID));
   assert.equal(state.audits.length, 0);
 });
@@ -313,10 +304,7 @@ test("missing or malformed idempotency keys are refused before any write", async
   for (const key of [null, "not-a-uuid"]) {
     const res = await post(key, baseBody());
     assert.equal(res.status, 400);
-    assert.equal(
-      ((await res.json()) as { error: string }).error,
-      "invalid_idempotency_key",
-    );
+    assert.equal(((await res.json()) as { error: string }).error, "invalid_idempotency_key");
   }
   assert.equal(state.assets.length, 0);
   assert.equal(state.audits.length, 0);
@@ -337,14 +325,30 @@ test("unconfigured inputs are refused by name, never stored as zero", async () =
     { ...baseBody(), acquiredOn: "2026-02-30" },
     { ...baseBody(), status: "active" },
   ];
-  const codes = ["name_required", "", "invalid_category", "invalid_subsidiary", "", "acquisition_cost_negative", "salvage_exceeds_cost", "", ""];
-  const schemaFields = new Map([[1, "categoryId"], [4, "acquisitionCost"], [7, "acquiredOn"], [8, "status"]]);
+  const codes = [
+    "name_required",
+    "",
+    "invalid_category",
+    "invalid_subsidiary",
+    "",
+    "acquisition_cost_negative",
+    "salvage_exceeds_cost",
+    "",
+    "",
+  ];
+  const schemaFields = new Map([
+    [1, "categoryId"],
+    [4, "acquisitionCost"],
+    [7, "acquiredOn"],
+    [8, "status"],
+  ]);
   for (let index = 0; index < bodies.length; index += 1) {
     const key = `00000000-0000-4000-8000-000000003${String(index + 1).padStart(3, "0")}`;
     const res = await post(key, bodies[index]!);
     const responseBody = (await res.json()) as { error: string; issues?: { path: string }[] };
     assert.equal(res.status, schemaFields.has(index) ? 400 : 422);
-    if (schemaFields.has(index)) assert.equal(responseBody.issues?.[0]?.path, schemaFields.get(index));
+    if (schemaFields.has(index))
+      assert.equal(responseBody.issues?.[0]?.path, schemaFields.get(index));
     else assert.equal(responseBody.error, codes[index]);
   }
   assert.equal(state.assets.length, 0);
@@ -355,7 +359,10 @@ test("financial JSON numbers are refused with a decimal-string remedy before ass
   reset();
   const response = await post(KEY_A, { ...baseBody(), acquisitionCost: 100.25 });
   assert.equal(response.status, 400);
-  const body = (await response.json()) as { error: string; issues?: { path: string; message: string }[] };
+  const body = (await response.json()) as {
+    error: string;
+    issues?: { path: string; message: string }[];
+  };
   assert.match(body.error, /decimal string.*JSON numbers are refused/);
   assert.equal(body.issues?.[0]?.path, "acquisitionCost");
   assert.equal(state.assets.length, 0);
@@ -369,10 +376,7 @@ test("a supplied number conflict names the remedy and consumes no audit row", as
   assert.equal(state.assets[0]!.asset_number, "FA-0042");
   const second = await post(KEY_B, { ...baseBody(), assetNumber: "FA-0042" });
   assert.equal(second.status, 422);
-  assert.equal(
-    ((await second.json()) as { error: string }).error,
-    "asset_number_in_use",
-  );
+  assert.equal(((await second.json()) as { error: string }).error, "asset_number_in_use");
   assert.equal(state.audits.length, 1);
 });
 
@@ -393,10 +397,7 @@ test("no subsidiary anywhere is a named refusal, not a silent default", async ()
   delete body.subsidiaryId;
   const res = await post(KEY_A, body);
   assert.equal(res.status, 409);
-  assert.equal(
-    ((await res.json()) as { error: string }).error,
-    "no_available_subsidiary",
-  );
+  assert.equal(((await res.json()) as { error: string }).error, "no_available_subsidiary");
   assert.equal(state.assets.length, 0);
 });
 
@@ -439,13 +440,20 @@ test("the full drawer body is validated with named refusals, never dropped", asy
     "tax_business_use_invalid",
     "",
   ];
-  const schemaFields = new Map([[0, "method"], [2, "ratePercent"], [4, "convention"], [8, "depreciationMethodId"], [10, "inServiceOn"]]);
+  const schemaFields = new Map([
+    [0, "method"],
+    [2, "ratePercent"],
+    [4, "convention"],
+    [8, "depreciationMethodId"],
+    [10, "inServiceOn"],
+  ]);
   for (let index = 0; index < bodies.length; index += 1) {
     const key = `00000000-0000-4000-8000-000000004${String(index + 1).padStart(3, "0")}`;
     const res = await post(key, bodies[index]!);
     const responseBody = (await res.json()) as { error: string; issues?: { path: string }[] };
     assert.equal(res.status, schemaFields.has(index) ? 400 : 422);
-    if (schemaFields.has(index)) assert.equal(responseBody.issues?.[0]?.path, schemaFields.get(index));
+    if (schemaFields.has(index))
+      assert.equal(responseBody.issues?.[0]?.path, schemaFields.get(index));
     else assert.equal(responseBody.error, codes[index]);
   }
   assert.equal(state.assets.length, 0);

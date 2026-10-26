@@ -62,7 +62,10 @@ test("rejects impossible February and month/day ranges", () => {
     assert.throws(() => parseCivilDate(iso), InvalidCivilDateError);
     assert.equal(isCivilDate(iso), false);
   }
-  assert.equal(refusalCode(() => parseCivilDate("2023-02-29")), "INVALID_DATE");
+  assert.equal(
+    refusalCode(() => parseCivilDate("2023-02-29")),
+    "INVALID_DATE",
+  );
 });
 
 test("rejects malformed shapes and non-strings", () => {
@@ -123,10 +126,11 @@ test("rejects trailing newlines and whitespace on recorded stamps", () => {
     );
   }
   assert.throws(
-    () => resolveAsOf(
-      [makeRecordedRevision(effective, "2026-01-01T00:00:00Z", null, "v")],
-      { effective: "2026-03-01", asKnown: "2026-03-01T00:00:00Z\n" },
-    ),
+    () =>
+      resolveAsOf([makeRecordedRevision(effective, "2026-01-01T00:00:00Z", null, "v")], {
+        effective: "2026-03-01",
+        asKnown: "2026-03-01T00:00:00Z\n",
+      }),
     InvalidRecordedStampError,
   );
 });
@@ -158,8 +162,16 @@ test("refusal messages stay bounded on hostile input", () => {
 
 test("isCivilDate agrees with parseCivilDate over a mixed corpus", () => {
   const corpus: unknown[] = [
-    "2024-02-29", "2023-02-29", "2026-06-15", "not-a-date",
-    "", null, 42, "0001-01-01", "9999-12-31", "2026-13-40",
+    "2024-02-29",
+    "2023-02-29",
+    "2026-06-15",
+    "not-a-date",
+    "",
+    null,
+    42,
+    "0001-01-01",
+    "9999-12-31",
+    "2026-13-40",
   ];
   for (const value of corpus) {
     let parses = true;
@@ -177,9 +189,17 @@ test("compareCivilDates orders, equates, and stays transitive", () => {
   assert.equal(compareCivilDates("2026-01-02", "2026-01-01"), 1);
   assert.equal(compareCivilDates("2026-01-01", "2026-01-01"), 0);
   const corpus = [
-    "0001-01-01", "1900-02-28", "1969-12-31", "1970-01-01",
-    "2000-02-29", "2024-02-28", "2024-02-29", "2024-03-01",
-    "2026-01-01", "2026-02-15", "9999-12-31",
+    "0001-01-01",
+    "1900-02-28",
+    "1969-12-31",
+    "1970-01-01",
+    "2000-02-29",
+    "2024-02-28",
+    "2024-02-29",
+    "2024-03-01",
+    "2026-01-01",
+    "2026-02-15",
+    "9999-12-31",
   ].map((iso) => parseCivilDate(iso));
   for (const a of corpus) {
     for (const b of corpus) {
@@ -197,10 +217,12 @@ test("compareCivilDates orders, equates, and stays transitive", () => {
 
 test("makeEffectiveInterval builds bounded and unbounded windows", () => {
   assert.deepEqual(makeEffectiveInterval("2026-01-01", "2026-02-01"), {
-    start: "2026-01-01", end: "2026-02-01",
+    start: "2026-01-01",
+    end: "2026-02-01",
   });
   assert.deepEqual(makeEffectiveInterval("2026-01-01", null), {
-    start: "2026-01-01", end: null,
+    start: "2026-01-01",
+    end: null,
   });
 });
 
@@ -209,7 +231,10 @@ test("makeEffectiveInterval rejects empty and malformed windows", () => {
   assert.throws(() => makeEffectiveInterval("2026-03-01", "2026-02-01"), EmptyIntervalError);
   assert.throws(() => makeEffectiveInterval("2026-01-01", undefined), InvalidCivilDateError);
   assert.throws(() => makeEffectiveInterval("nope", null), InvalidCivilDateError);
-  assert.equal(refusalCode(() => makeEffectiveInterval("2026-02-01", "2026-02-01")), "EMPTY_INTERVAL");
+  assert.equal(
+    refusalCode(() => makeEffectiveInterval("2026-02-01", "2026-02-01")),
+    "EMPTY_INTERVAL",
+  );
 });
 
 test("containsDate is half-open with an unbounded null end", () => {
@@ -232,9 +257,12 @@ test("containsDate matches half-open string comparison over a grid", () => {
   ];
   for (const interval of intervals) {
     for (const date of dates) {
-      const expected =
-        date >= interval.start && (interval.end === null || date < interval.end);
-      assert.equal(containsDate(interval, date), expected, `${date} in ${interval.start}..${interval.end}`);
+      const expected = date >= interval.start && (interval.end === null || date < interval.end);
+      assert.equal(
+        containsDate(interval, date),
+        expected,
+        `${date} in ${interval.start}..${interval.end}`,
+      );
     }
   }
 });
@@ -275,10 +303,11 @@ test("assertNoOverlap refuses overlap and containment, order-independently", () 
   assert.throws(() => assertNoOverlap(overlapping), OverlappingIntervalsError);
   assert.throws(() => assertNoOverlap([...overlapping].reverse()), OverlappingIntervalsError);
   assert.throws(
-    () => assertNoOverlap([
-      makeEffectiveInterval("2026-01-01", null),
-      makeEffectiveInterval("2026-02-01", "2026-02-15"),
-    ]),
+    () =>
+      assertNoOverlap([
+        makeEffectiveInterval("2026-01-01", null),
+        makeEffectiveInterval("2026-02-01", "2026-02-15"),
+      ]),
     OverlappingIntervalsError,
   );
   assert.equal(
@@ -328,9 +357,14 @@ test("recorded stamps accept sub-second precision and reject non-UTC shapes", ()
     );
   }
   assert.equal(
-    refusalCode(() => makeRecordedRevision(
-      makeEffectiveInterval("2026-01-01", null), "2026-01-01T00:00:00+00:00", null, "v1",
-    )),
+    refusalCode(() =>
+      makeRecordedRevision(
+        makeEffectiveInterval("2026-01-01", null),
+        "2026-01-01T00:00:00+00:00",
+        null,
+        "v1",
+      ),
+    ),
     "INVALID_RECORDED_STAMP",
   );
 });
@@ -346,9 +380,9 @@ test("recorded windows reject empty bounds", () => {
     EmptyRecordedWindowError,
   );
   assert.equal(
-    refusalCode(() => makeRecordedRevision(
-      effective, "2026-02-01T00:00:00Z", "2026-02-01T00:00:00Z", "v",
-    )),
+    refusalCode(() =>
+      makeRecordedRevision(effective, "2026-02-01T00:00:00Z", "2026-02-01T00:00:00Z", "v"),
+    ),
     "EMPTY_RECORDED_WINDOW",
   );
 });
@@ -373,7 +407,10 @@ function supersessionChain(): RecordedRevision<string>[] {
 test("superseded facts stay dead: Feb15 as-known Feb2 is NoRevision", () => {
   const query: AsOfQuery = { effective: "2026-02-15", asKnown: "2026-02-02T00:00:00Z" };
   assert.throws(() => resolveAsOf(supersessionChain(), query), NoRevisionError);
-  assert.equal(refusalCode(() => resolveAsOf(supersessionChain(), query)), "NO_REVISION");
+  assert.equal(
+    refusalCode(() => resolveAsOf(supersessionChain(), query)),
+    "NO_REVISION",
+  );
 });
 
 test("recorded filter applies before effective membership", () => {
@@ -408,10 +445,16 @@ test("handoff at the exact recorded boundary selects only the new revision", () 
 test("effective boundary selects the next interval", () => {
   const chain = [
     makeRecordedRevision(
-      makeEffectiveInterval("2026-01-01", "2026-02-01"), "2026-01-01T00:00:00Z", null, "jan",
+      makeEffectiveInterval("2026-01-01", "2026-02-01"),
+      "2026-01-01T00:00:00Z",
+      null,
+      "jan",
     ),
     makeRecordedRevision(
-      makeEffectiveInterval("2026-02-01", null), "2026-01-01T00:00:00Z", null, "feb",
+      makeEffectiveInterval("2026-02-01", null),
+      "2026-01-01T00:00:00Z",
+      null,
+      "feb",
     ),
   ];
   assert.equal(
@@ -427,10 +470,16 @@ test("effective boundary selects the next interval", () => {
 test("two live applicable revisions refuse, even with distinct recordedAt", () => {
   const sloppy = [
     makeRecordedRevision(
-      makeEffectiveInterval("2026-01-01", null), "2026-01-01T00:00:00Z", null, "original",
+      makeEffectiveInterval("2026-01-01", null),
+      "2026-01-01T00:00:00Z",
+      null,
+      "original",
     ),
     makeRecordedRevision(
-      makeEffectiveInterval("2026-01-01", null), "2026-02-01T00:00:00Z", null, "correction",
+      makeEffectiveInterval("2026-01-01", null),
+      "2026-02-01T00:00:00Z",
+      null,
+      "correction",
     ),
   ];
   assert.throws(
@@ -438,9 +487,12 @@ test("two live applicable revisions refuse, even with distinct recordedAt", () =
     AmbiguousRevisionError,
   );
   assert.equal(
-    refusalCode(() => resolveAsOf(sloppy, {
-      effective: "2026-03-01", asKnown: "2026-03-01T00:00:00Z",
-    })),
+    refusalCode(() =>
+      resolveAsOf(sloppy, {
+        effective: "2026-03-01",
+        asKnown: "2026-03-01T00:00:00Z",
+      }),
+    ),
     "AMBIGUOUS_REVISION",
   );
 });
@@ -448,10 +500,16 @@ test("two live applicable revisions refuse, even with distinct recordedAt", () =
 test("identical duplicate live revisions refuse rather than deduplicate", () => {
   const twice = [
     makeRecordedRevision(
-      makeEffectiveInterval("2026-01-01", null), "2026-01-01T00:00:00Z", null, "same",
+      makeEffectiveInterval("2026-01-01", null),
+      "2026-01-01T00:00:00Z",
+      null,
+      "same",
     ),
     makeRecordedRevision(
-      makeEffectiveInterval("2026-01-01", null), "2026-01-01T00:00:00Z", null, "same",
+      makeEffectiveInterval("2026-01-01", null),
+      "2026-01-01T00:00:00Z",
+      null,
+      "same",
     ),
   ];
   assert.throws(
@@ -527,7 +585,14 @@ test("resolution is independent of input order", () => {
       "mar",
     ),
   ];
-  const orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+  const orders = [
+    [0, 1, 2],
+    [0, 2, 1],
+    [1, 0, 2],
+    [1, 2, 0],
+    [2, 0, 1],
+    [2, 1, 0],
+  ];
   for (const order of orders) {
     const shuffled: RecordedRevision<string>[] = [];
     for (const i of order) {
@@ -544,13 +609,18 @@ test("resolution is independent of input order", () => {
 
 test("malformed revisions and queries fail closed", () => {
   const ok = makeRecordedRevision(
-    makeEffectiveInterval("2026-01-01", null), "2026-01-01T00:00:00Z", null, "v",
+    makeEffectiveInterval("2026-01-01", null),
+    "2026-01-01T00:00:00Z",
+    null,
+    "v",
   );
   const badEffective = { ...ok, effective: { start: "2026-02-01", end: "2026-01-01" } };
   assert.throws(
-    () => resolveAsOf([badEffective as RecordedRevision<string>], {
-      effective: "2026-03-01", asKnown: "2026-03-01T00:00:00Z",
-    }),
+    () =>
+      resolveAsOf([badEffective as RecordedRevision<string>], {
+        effective: "2026-03-01",
+        asKnown: "2026-03-01T00:00:00Z",
+      }),
     EmptyIntervalError,
   );
   const badWindow = { ...ok, recordedUntil: "2025-01-01T00:00:00Z" };

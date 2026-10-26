@@ -40,14 +40,16 @@
  */
 import { PayrollError } from "../../error.ts";
 import { D, max0, rate6, U } from "../../../money/payroll-decimal.ts";
-import {
-  certificateChoice, type PayrollCertificate,
-} from "../../certificates.ts";
+import { certificateChoice, type PayrollCertificate } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import { roundDiv } from "../../../money/money.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
-import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
+import {
+  defineStateEngine,
+  pairStateRateEditions,
+  type StateEngineContext,
+} from "./state-engine.ts";
 import {
   requireUsSourceWages,
   type UsStatePayPeriod,
@@ -60,12 +62,24 @@ const RATES_MODULE = "engine/src/payroll/us/states/ut.ts";
 
 /** Pub 14 prints a schedule for each of these eight periods. */
 type UtPeriod =
-  | "weekly" | "biweekly" | "semimonthly" | "monthly"
-  | "quarterly" | "semiannual" | "annual" | "daily";
+  | "weekly"
+  | "biweekly"
+  | "semimonthly"
+  | "monthly"
+  | "quarterly"
+  | "semiannual"
+  | "annual"
+  | "daily";
 
 const UT_PERIODS: readonly UsStatePayPeriod[] = [
-  "weekly", "biweekly", "semimonthly", "monthly",
-  "quarterly", "semiannual", "annual", "daily",
+  "weekly",
+  "biweekly",
+  "semimonthly",
+  "monthly",
+  "quarterly",
+  "semiannual",
+  "annual",
+  "daily",
 ];
 
 export type UtSchedule = "single" | "married";
@@ -104,9 +118,9 @@ export const UT_EDITION_2025: UtEdition = {
   year: 2026,
   label: "Publication 14 (Rev. 4/25), effective June 1, 2025",
   citation:
-    "Utah State Tax Commission, Publication 14, Withholding Tax Guide (Rev. 4/25), "
-    + "effective June 1, 2025 — computer-formula Schedules 1–8 (pp. 8–10) and worked "
-    + "examples (p. 11); https://files.tax.utah.gov/tax/forms/2025/pub-14.pdf",
+    "Utah State Tax Commission, Publication 14, Withholding Tax Guide (Rev. 4/25), " +
+    "effective June 1, 2025 — computer-formula Schedules 1–8 (pp. 8–10) and worked " +
+    "examples (p. 11); https://files.tax.utah.gov/tax/forms/2025/pub-14.pdf",
   printedRatePercent: "4.5",
   rate: pctToRate("4.5"),
   printedPhaseoutPercent: "1.3",
@@ -156,9 +170,9 @@ export const UT_EDITION_2026: UtEdition = {
   year: 2026,
   label: "Publication 14 (Rev. 4/26), effective June 1, 2026",
   citation:
-    "Utah State Tax Commission, Publication 14, Withholding Tax Guide (Rev. 4/26), "
-    + "effective June 1, 2026 — computer-formula Schedules 1–8 (pp. 8–10) and worked "
-    + "examples (p. 11); https://files.tax.utah.gov/tax/forms/pubs/pub-14.pdf",
+    "Utah State Tax Commission, Publication 14, Withholding Tax Guide (Rev. 4/26), " +
+    "effective June 1, 2026 — computer-formula Schedules 1–8 (pp. 8–10) and worked " +
+    "examples (p. 11); https://files.tax.utah.gov/tax/forms/pubs/pub-14.pdf",
   printedRatePercent: "4.45",
   rate: pctToRate("4.45"),
   printedPhaseoutPercent: "1.3",
@@ -201,14 +215,16 @@ export const UT_EDITION_2026: UtEdition = {
 
 export const UT_EDITIONS: readonly UtEdition[] = [UT_EDITION_2025, UT_EDITION_2026];
 
-export const UT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
-  year: 2026,
-  label: "Publication 14 (Rev. 4/25 through May 31; Rev. 4/26 from June 1)",
-  effectiveFrom: "2026-01-01",
-  citation: UT_EDITIONS.map((edition) => edition.citation).join("; "),
-  status: "published",
-  region: "UT",
-}];
+export const UT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [
+  {
+    year: 2026,
+    label: "Publication 14 (Rev. 4/25 through May 31; Rev. 4/26 from June 1)",
+    effectiveFrom: "2026-01-01",
+    citation: UT_EDITIONS.map((edition) => edition.citation).join("; "),
+    status: "published",
+    region: "UT",
+  },
+];
 
 interface UtYearRates {
   year: number;
@@ -234,13 +250,15 @@ export function utMulRateDollars(units: bigint, rate: string): bigint {
 
 export function utEditionForPeriodStart(periodStart: string): UtEdition {
   const rates = UT_STATE_ENGINE.ratesForPayDate(periodStart);
-  const edition = rates.editions.find((candidate) =>
-    periodStart >= candidate.effectiveFrom
-    && (candidate.effectiveTo == null || periodStart < candidate.effectiveTo));
+  const edition = rates.editions.find(
+    (candidate) =>
+      periodStart >= candidate.effectiveFrom &&
+      (candidate.effectiveTo == null || periodStart < candidate.effectiveTo),
+  );
   if (!edition) {
     throw new PayrollError(
-      `no Utah withholding edition is loaded for a payroll period beginning ${periodStart} — `
-      + RATES_MODULE,
+      `no Utah withholding edition is loaded for a payroll period beginning ${periodStart} — ` +
+        RATES_MODULE,
     );
   }
   return edition;
@@ -249,10 +267,10 @@ export function utEditionForPeriodStart(periodStart: string): UtEdition {
 function requirePeriodStart(input: UsStateWithholdingInput): string {
   if (!input.periodStart) {
     throw new PayrollError(
-      "Utah withholding tables are keyed to the PAYROLL PERIOD START DATE, not the pay date — "
-      + "Publication 14's June 1, 2026 revision applies to periods beginning on or after June 1. "
-      + "Supply the period start date; substituting the pay date would apply the wrong table set "
-      + "for a period that crosses the revision date.",
+      "Utah withholding tables are keyed to the PAYROLL PERIOD START DATE, not the pay date — " +
+        "Publication 14's June 1, 2026 revision applies to periods beginning on or after June 1. " +
+        "Supply the period start date; substituting the pay date would apply the wrong table set " +
+        "for a period that crosses the revision date.",
     );
   }
   return input.periodStart;
@@ -283,13 +301,15 @@ function compute(
   context: StateEngineContext<UtYearRates>,
 ): UsStateWithholdingResult {
   const periodStart = requirePeriodStart(input);
-  const edition = rates.editions.find((candidate) =>
-    periodStart >= candidate.effectiveFrom
-    && (candidate.effectiveTo == null || periodStart < candidate.effectiveTo));
+  const edition = rates.editions.find(
+    (candidate) =>
+      periodStart >= candidate.effectiveFrom &&
+      (candidate.effectiveTo == null || periodStart < candidate.effectiveTo),
+  );
   if (!edition) {
     throw new PayrollError(
-      `no Utah withholding edition is loaded for a payroll period beginning ${periodStart} — `
-      + RATES_MODULE,
+      `no Utah withholding edition is loaded for a payroll period beginning ${periodStart} — ` +
+        RATES_MODULE,
     );
   }
   const period = utPeriodFor(input.periodsPerYear);
@@ -300,7 +320,9 @@ function compute(
   // Pub 14: write "Utah Only - Exempt, Interstate Transportation" or
   // "Utah Only - Exempt, Military Spouse" under W-4 box 4c.
   const exempt = context.exemptResult({
-    factorKey: "UT_EXEMPT", statutoryTax: true, additionalWithholding: true,
+    factorKey: "UT_EXEMPT",
+    statutoryTax: true,
+    additionalWithholding: true,
   });
   if (exempt) return exempt;
 
@@ -313,9 +335,10 @@ function compute(
   // withholding tax." Supplemental wages are ordinary compensation here — the
   // publication prints no separate supplemental rate.
   const grossWages = U(input.wages) + U(input.supplemental ?? "0");
-  const wages = input.basis === "nonresident"
-    ? U(requireUsSourceWages(input.wageAllocations, "UT", null))
-    : grossWages;
+  const wages =
+    input.basis === "nonresident"
+      ? U(requireUsSourceWages(input.wageAllocations, "UT", null))
+      : grossWages;
   trace("UT_WAGES", wages);
   if (input.basis === "nonresident") trace("UT_SOURCE_WAGES", wages);
 
@@ -407,12 +430,12 @@ export const UT_CERTIFICATE: PayrollCertificate = {
   scope: { level: "region", region: "UT" },
   purpose: "withholding",
   citation:
-    "Utah Publication 14 (Rev. 4/26) pp. 3 and 8–12; Publication 14 (Rev. 4/25) pp. 3 and 8–12; "
-    + "federal Form W-4",
+    "Utah Publication 14 (Rev. 4/26) pp. 3 and 8–12; Publication 14 (Rev. 4/25) pp. 3 and 8–12; " +
+    "federal Form W-4",
   summary:
-    "Utah has no state W-4. Pub 14 withholds from the federal W-4 filing status and the "
-    + "Utah schedules. With no W-4 on file the federal default is Single, which is the "
-    + "Single column.",
+    "Utah has no state W-4. Pub 14 withholds from the federal W-4 filing status and the " +
+    "Utah schedules. With no W-4 on file the federal default is Single, which is the " +
+    "Single column.",
   storage: "certificate_rows",
   fields: [
     {
@@ -434,25 +457,25 @@ export const UT_CERTIFICATE: PayrollCertificate = {
           value: "head_household",
           label: "Head of household",
           help:
-            "Pub 14 withholding-tables footnote: \"Use the Single column for taxpayers who "
-            + "file as head-of-household on their federal return.\"",
+            'Pub 14 withholding-tables footnote: "Use the Single column for taxpayers who ' +
+            'file as head-of-household on their federal return."',
         },
       ],
       default: "single",
       required: true,
       help:
-        "The filing status on the employee's federal W-4. Pub 14 prints only Single and "
-        + "Married; head of household uses Single. Default Single is the federal W-4 "
-        + "default when no certificate is on file.",
+        "The filing status on the employee's federal W-4. Pub 14 prints only Single and " +
+        "Married; head of household uses Single. Default Single is the federal W-4 " +
+        "default when no certificate is on file.",
     },
     {
       key: "exempt",
       label: "Utah Only — Exempt (interstate transportation or military spouse)",
       kind: "flag",
       help:
-        "The employee wrote \"Utah Only - Exempt, Interstate Transportation\" or "
-        + "\"Utah Only - Exempt, Military Spouse\" under federal W-4 box 4c. Pub 14 "
-        + "pp. 2–3: do not withhold Utah tax.",
+        'The employee wrote "Utah Only - Exempt, Interstate Transportation" or ' +
+        '"Utah Only - Exempt, Military Spouse" under federal W-4 box 4c. Pub 14 ' +
+        "pp. 2–3: do not withhold Utah tax.",
     },
   ],
 };
@@ -472,6 +495,6 @@ export const UT_REGION: PayrollRegionWithholding = {
   subRegions: [],
   subRegionConflictRule: "both",
   citation:
-    "Utah State Tax Commission, Publication 14, Withholding Tax Guide (Rev. 4/26), "
-    + "effective June 1, 2026; Publication 14 (Rev. 4/25) for pay dates before then",
+    "Utah State Tax Commission, Publication 14, Withholding Tax Guide (Rev. 4/26), " +
+    "effective June 1, 2026; Publication 14 (Rev. 4/25) for pay dates before then",
 };

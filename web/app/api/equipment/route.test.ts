@@ -87,9 +87,8 @@ function inspect(query: unknown): { text: string; params: unknown[] } {
   return { text: walk(chunks, true), params };
 }
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksEquipmentCreateInspect = inspect;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksEquipmentCreateInspect =
+  inspect;
 
 const mockDb = `
   const state = globalThis[Symbol.for('openbooks.equipment-create-route-test')]
@@ -215,10 +214,7 @@ function reset(): void {
   state.projectsEnabled = true;
 }
 
-function post(
-  key: string | null,
-  body: Record<string, unknown>,
-): Promise<Response> {
+function post(key: string | null, body: Record<string, unknown>): Promise<Response> {
   const headers: Record<string, string> = {
     "content-type": "application/json",
   };
@@ -251,8 +247,7 @@ test("Save inserts one tenant-scoped unit with one audit event", async () => {
   assert.equal(state.units[0]!.unit_number, "EQ-0001");
   assert.equal(state.audits.length, 1);
   assert.equal(state.audits[0]!.request_id, KEY_A);
-  const insertText =
-    state.queries.find((q) => q.includes("insert into equipment_units")) ?? "";
+  const insertText = state.queries.find((q) => q.includes("insert into equipment_units")) ?? "";
   assert.match(insertText, new RegExp(ORG_ID));
 });
 
@@ -271,10 +266,7 @@ test("reusing a key for a changed request is a named conflict", async () => {
   assert.equal((await post(KEY_A, baseBody())).status, 201);
   const conflict = await post(KEY_A, { ...baseBody(), name: "Dozer 1" });
   assert.equal(conflict.status, 409);
-  assert.equal(
-    ((await conflict.json()) as { code: string }).code,
-    "idempotency_key_conflict",
-  );
+  assert.equal(((await conflict.json()) as { code: string }).code, "idempotency_key_conflict");
   assert.equal(state.units.length, 1);
 });
 
@@ -283,10 +275,7 @@ test("a key already owned by another organization never leaks that row", async (
   state.units.push({ id: KEY_A, org_id: OTHER_ORG_ID, unit_number: "EQ-0001" });
   const res = await post(KEY_A, baseBody());
   assert.equal(res.status, 409);
-  assert.equal(
-    ((await res.json()) as { code: string }).code,
-    "idempotency_key_conflict",
-  );
+  assert.equal(((await res.json()) as { code: string }).code, "idempotency_key_conflict");
   assert.ok(!state.units.some((row) => row.org_id === ORG_ID));
   assert.equal(state.audits.length, 0);
 });
@@ -296,10 +285,7 @@ test("missing or malformed idempotency keys are refused before any write", async
   for (const key of [null, "not-a-uuid"]) {
     const res = await post(key, baseBody());
     assert.equal(res.status, 400);
-    assert.equal(
-      ((await res.json()) as { error: string }).error,
-      "invalid_idempotency_key",
-    );
+    assert.equal(((await res.json()) as { error: string }).error, "invalid_idempotency_key");
   }
   assert.equal(state.units.length, 0);
 });
@@ -346,7 +332,10 @@ test("financial JSON numbers are refused with a decimal-string remedy before equ
   reset();
   const response = await post(KEY_A, { ...baseBody(), purchasePrice: 100.25 });
   assert.equal(response.status, 400);
-  const body = (await response.json()) as { error: string; issues?: { path: string; message: string }[] };
+  const body = (await response.json()) as {
+    error: string;
+    issues?: { path: string; message: string }[];
+  };
   assert.match(body.error, /decimal string.*JSON number/);
   assert.equal(body.issues?.[0]?.path, "purchasePrice");
   assert.equal(state.units.length, 0);
@@ -359,10 +348,7 @@ test("a supplied number conflict names the remedy and consumes no audit row", as
   assert.equal(first.status, 201);
   const second = await post(KEY_B, { ...baseBody(), unitNumber: "EQ-0007" });
   assert.equal(second.status, 422);
-  assert.equal(
-    ((await second.json()) as { error: string }).error,
-    "unit_number_in_use",
-  );
+  assert.equal(((await second.json()) as { error: string }).error, "unit_number_in_use");
   assert.equal(state.audits.length, 1);
 });
 
@@ -390,23 +376,14 @@ test("linked records are validated against this organization", async () => {
   const bookId = "00000000-0000-4000-8000-00000000d002";
   const unknownAsset = await post(KEY_A, { ...baseBody(), fixedAssetId: assetId });
   assert.equal(unknownAsset.status, 422);
-  assert.equal(
-    ((await unknownAsset.json()) as { error: string }).error,
-    "fixed_asset_not_found",
-  );
+  assert.equal(((await unknownAsset.json()) as { error: string }).error, "fixed_asset_not_found");
   state.fixedAssets.push({ id: assetId, subsidiary_id: otherSubsidiary });
   const mismatched = await post(KEY_B, { ...baseBody(), fixedAssetId: assetId });
   assert.equal(mismatched.status, 422);
-  assert.equal(
-    ((await mismatched.json()) as { error: string }).error,
-    "subsidiary_mismatch",
-  );
+  assert.equal(((await mismatched.json()) as { error: string }).error, "subsidiary_mismatch");
   const unknownBook = await post(KEY_C, { ...baseBody(), rateBookId: bookId });
   assert.equal(unknownBook.status, 422);
-  assert.equal(
-    ((await unknownBook.json()) as { error: string }).error,
-    "rate_book_not_found",
-  );
+  assert.equal(((await unknownBook.json()) as { error: string }).error, "rate_book_not_found");
   assert.equal(state.units.length, 0);
 });
 
@@ -417,9 +394,6 @@ test("no subsidiary anywhere is a named refusal, not a silent default", async ()
   delete body.subsidiaryId;
   const res = await post(KEY_A, body);
   assert.equal(res.status, 409);
-  assert.equal(
-    ((await res.json()) as { error: string }).error,
-    "no_available_subsidiary",
-  );
+  assert.equal(((await res.json()) as { error: string }).error, "no_available_subsidiary");
   assert.equal(state.units.length, 0);
 });

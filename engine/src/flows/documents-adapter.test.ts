@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createDocumentsFlowAdapter, headerValues, RESERVED_DOCUMENT_FIELD_KEYS } from "./documents-adapter.ts";
+import {
+  createDocumentsFlowAdapter,
+  headerValues,
+  RESERVED_DOCUMENT_FIELD_KEYS,
+} from "./documents-adapter.ts";
 import { WRITABLE_DOCUMENT_FIELDS } from "./subject-profiles.ts";
 import { PAYMENT_SYSTEM_CUSTOM_FIELDS } from "../platform/payment-system-fields.ts";
 
@@ -102,7 +106,9 @@ for (const kind of ["vendor_payment", "customer_payment"] as const) {
   for (const field of PAYMENT_SYSTEM_CUSTOM_FIELDS) {
     test(`${kind} flow writes refuse payment-system field ${field}`, async () => {
       await assert.rejects(
-        createDocumentsFlowAdapter(kind).setField("payment-id", field, "forged", { orgId: "org-id" }),
+        createDocumentsFlowAdapter(kind).setField("payment-id", field, "forged", {
+          orgId: "org-id",
+        }),
         new RegExp(`payment field \\\"${field}\\\" is not writable by flows`),
       );
     });

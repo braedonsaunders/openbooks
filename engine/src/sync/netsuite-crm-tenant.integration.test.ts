@@ -28,32 +28,66 @@ test(
       const target = String(input);
       if (target.includes("/query/v1/suiteql")) {
         const query = String(
-          (typeof init?.body === "string" ? (JSON.parse(init.body) as { q?: unknown }).q : undefined) ?? "",
+          (typeof init?.body === "string"
+            ? (JSON.parse(init.body) as { q?: unknown }).q
+            : undefined) ?? "",
         );
         let items: Record<string, unknown>[] = [];
         if (query.includes("from entitystatus")) {
           items = [{ key: "17", name: "Customer", entitytype: "CUSTOMER" }];
         } else if (query.includes("from customer")) {
-          items = [{ id: "NS-CUST-1", stage: customerStage, entitystatus: "17", datecreated: "01/15/2026" }];
+          items = [
+            {
+              id: "NS-CUST-1",
+              stage: customerStage,
+              entitystatus: "17",
+              datecreated: "01/15/2026",
+            },
+          ];
         } else if (query.includes("from transaction where type='Opprtnty'")) {
-          items = [{
-            id: "NS-OPP-1",
-            tranid: "OPP-17",
-            entity: "NS-CUST-1",
-            probability: "37",
-            currency: "CAD",
-            foreigntotal: "100.01",
-            memo: "Hydraulic press",
-          }];
+          items = [
+            {
+              id: "NS-OPP-1",
+              tranid: "OPP-17",
+              entity: "NS-CUST-1",
+              probability: "37",
+              currency: "CAD",
+              foreigntotal: "100.01",
+              memo: "Hydraulic press",
+            },
+          ];
         }
         return Response.json({ items, hasMore: false });
       }
-      if (target.includes('/app/site/hosting/restlet.nl')) {
-        const params = JSON.parse(String(init?.body)) as { action: string; recordType: string }
-        if (params.action === 'health') return Response.json({ ok: true, schemaVersion: 1, bridgeVersion: '1.7.2', accountId: '123456' })
-        assert.equal(params.action, 'crmActivities')
-        return Response.json({ schemaVersion: 1, recordType: params.recordType, hasMore: false,
-          rows: params.recordType === 'note' ? [{ id: '1845', fields: { title: 'Plant visit', note: 'Meeting at the plant. Went on a site tour and left rate sheets.', entity: 'NS-CUST-1', notedate: '2024-05-03T16:30:00.000Z' } }] : [] })
+      if (target.includes("/app/site/hosting/restlet.nl")) {
+        const params = JSON.parse(String(init?.body)) as { action: string; recordType: string };
+        if (params.action === "health")
+          return Response.json({
+            ok: true,
+            schemaVersion: 1,
+            bridgeVersion: "1.7.2",
+            accountId: "123456",
+          });
+        assert.equal(params.action, "crmActivities");
+        return Response.json({
+          schemaVersion: 1,
+          recordType: params.recordType,
+          hasMore: false,
+          rows:
+            params.recordType === "note"
+              ? [
+                  {
+                    id: "1845",
+                    fields: {
+                      title: "Plant visit",
+                      note: "Meeting at the plant. Went on a site tour and left rate sheets.",
+                      entity: "NS-CUST-1",
+                      notedate: "2024-05-03T16:30:00.000Z",
+                    },
+                  },
+                ]
+              : [],
+        });
       }
       throw new Error(`unstubbed NetSuite URL ${target}`);
     };
@@ -62,18 +96,26 @@ test(
     const orgB = await createScratchOrg();
     try {
       const parties: Record<string, string> = {};
-      for (const [org, label] of [[orgA, "Tenant A"], [orgB, "Tenant B"]] as const) {
+      for (const [org, label] of [
+        [orgA, "Tenant A"],
+        [orgB, "Tenant B"],
+      ] as const) {
         await createScratchUser(org.orgId, `CRM Importer ${label}`, "admin");
         await db.execute(sql`
           update orgs
              set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
                    coalesce(settings -> 'features', '{}'::jsonb) || '{"crm": true}'::jsonb)
            where id = ${org.orgId}`);
-        const partyId = (await db.execute<{ id: string }>(sql`
+        const partyId = (
+          await db.execute<{ id: string }>(
+            sql`
             insert into parties (org_id, kind, display_name, is_active, custom)
             values (${org.orgId}, 'company', ${`Source Customer ${label}`}, true,
                     '{"nsId": "NS-CUST-1"}'::jsonb)
-            returning id`, "objects"))[0]!.id;
+            returning id`,
+            "objects",
+          )
+        )[0]!.id;
         parties[org.orgId] = partyId;
         await db.execute(sql`
           insert into connections (org_id, source, display_name, status, config, secrets)
@@ -100,10 +142,13 @@ test(
       assert.equal(other.accounts, 1);
       assert.equal(other.opportunities, 1);
 
-      const profiles = await db.execute<{ orgId: string; partyId: string; stage: string }>(sql`
+      const profiles = await db.execute<{ orgId: string; partyId: string; stage: string }>(
+        sql`
         select org_id as "orgId", party_id as "partyId", lifecycle_stage as stage
           from crm_account_profiles
-         where org_id in (${orgA.orgId}, ${orgB.orgId})`, "objects");
+         where org_id in (${orgA.orgId}, ${orgB.orgId})`,
+        "objects",
+      );
       assert.deepEqual(
         profiles.sort((a, b) => a.orgId.localeCompare(b.orgId)),
         [
@@ -112,12 +157,15 @@ test(
         ].sort((a, b) => a.orgId.localeCompare(b.orgId)),
       );
 
-      const transition = await db.execute<{ fromStage: string | null; toStage: string }>(sql`
+      const transition = await db.execute<{ fromStage: string | null; toStage: string }>(
+        sql`
         select e.from_stage as "fromStage", e.to_stage as "toStage"
           from crm_account_stage_events e
           join crm_account_profiles p on p.id = e.account_profile_id and p.org_id = e.org_id
          where e.org_id = ${orgA.orgId} and p.party_id = ${parties[orgA.orgId]}
-           and e.to_stage = 'prospect' and e.source_kind = 'import'`, "objects");
+           and e.to_stage = 'prospect' and e.source_kind = 'import'`,
+        "objects",
+      );
       assert.deepEqual(transition, [{ fromStage: "customer", toStage: "prospect" }]);
 
       const opportunities = await db.execute<{
@@ -126,34 +174,55 @@ test(
         currency: string;
         projectedAmount: string;
         weightedAmount: string;
-      }>(sql`
+      }>(
+        sql`
         select org_id as "orgId", probability, currency,
                projected_amount::text as "projectedAmount",
                weighted_amount::text as "weightedAmount"
           from crm_opportunities
          where org_id in (${orgA.orgId}, ${orgB.orgId})
-           and custom -> 'netsuite' ->> 'id' = 'NS-OPP-1'`, "objects");
+           and custom -> 'netsuite' ->> 'id' = 'NS-OPP-1'`,
+        "objects",
+      );
       assert.deepEqual(
         opportunities.sort((a, b) => a.orgId.localeCompare(b.orgId)),
         [
-          { orgId: orgA.orgId, probability: 37, currency: "CAD", projectedAmount: "100.0100", weightedAmount: "37.0037" },
-          { orgId: orgB.orgId, probability: 37, currency: "CAD", projectedAmount: "100.0100", weightedAmount: "37.0037" },
+          {
+            orgId: orgA.orgId,
+            probability: 37,
+            currency: "CAD",
+            projectedAmount: "100.0100",
+            weightedAmount: "37.0037",
+          },
+          {
+            orgId: orgB.orgId,
+            probability: 37,
+            currency: "CAD",
+            projectedAmount: "100.0100",
+            weightedAmount: "37.0037",
+          },
         ].sort((a, b) => a.orgId.localeCompare(b.orgId)),
       );
 
-      const activities = await db.execute<{ orgId: string; id: string; subject: string }>(sql`
+      const activities = await db.execute<{ orgId: string; id: string; subject: string }>(
+        sql`
         select org_id as "orgId", id, subject from crm_activities
          where org_id in (${orgA.orgId}, ${orgB.orgId})
-           and custom -> 'netsuite' ->> 'recordType' = 'note'`, "objects");
+           and custom -> 'netsuite' ->> 'recordType' = 'note'`,
+        "objects",
+      );
       assert.equal(activities.length, 2);
       const byOrg = new Map(activities.map((row) => [row.orgId, row]));
       assert.notEqual(byOrg.get(orgA.orgId)!.id, byOrg.get(orgB.orgId)!.id);
       assert.equal(byOrg.get(orgA.orgId)!.subject, "Plant visit");
 
-      const links = await db.execute<{ orgId: string; n: number }>(sql`
+      const links = await db.execute<{ orgId: string; n: number }>(
+        sql`
         select org_id as "orgId", count(*)::int as n from crm_activity_links
          where org_id in (${orgA.orgId}, ${orgB.orgId})
-         group by org_id`, "objects");
+         group by org_id`,
+        "objects",
+      );
       assert.deepEqual(
         links.sort((a, b) => a.orgId.localeCompare(b.orgId)),
         [

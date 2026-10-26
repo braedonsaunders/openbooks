@@ -1,5 +1,5 @@
 /** Shared posting-row projection breaking the preview/run cycle. Split from revenue/recognition.ts (pure moves only). */
-import { resolveCoveringPeriod } from '../periods/period-resolution.ts';
+import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { canonicalPeriodLabel, type PeriodDisplayInput } from "../periods/period-policy.ts";
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
@@ -30,31 +30,63 @@ import { RevenueRecognitionError } from "./recognition-transaction-price.ts";
  * allocations stay book-specific; the invoice's settled credits are shared.
  */
 export async function recognitionUnearnedRemaining(
- tx:SqlExecutor,input:{orgId:string;obligationId:string;bookId:string;deferredAccountId:string},
-):Promise<{remaining:string;credited:string;exposure:CreditExposure}> {
- const row=(await tx.execute<{allocated:string;recognized:string;change_basis:RevenueChangeBasis|null;invoice_id:string|null;currency:string|null;tx_fx_rate:string|null}>(sql`
+  tx: SqlExecutor,
+  input: { orgId: string; obligationId: string; bookId: string; deferredAccountId: string },
+): Promise<{ remaining: string; credited: string; exposure: CreditExposure }> {
+  const row = (
+    await tx.execute<{
+      allocated: string;
+      recognized: string;
+      change_basis: RevenueChangeBasis | null;
+      invoice_id: string | null;
+      currency: string | null;
+      tx_fx_rate: string | null;
+    }>(
+      sql`
  select coalesce(s.total_amount,o.allocated_price)::text as allocated,s.change_basis,inv.id as invoice_id,inv.currency,s.transaction_fx_rate::text as tx_fx_rate,
    coalesce((select sum(case when l.journal_entry_id is not null and l.reversal_journal_entry_id is null then coalesce(l.recognized_amount,0) else 0 end)
      from recognition_schedule_lines l where l.org_id=o.org_id and l.schedule_id=s.id),0)::text as recognized
  from performance_obligations o left join recognition_schedules s on s.obligation_id=o.id and s.org_id=o.org_id and s.book_id=${input.bookId}
  left join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id
  left join documents inv on inv.id=dl.document_id and inv.org_id=dl.org_id
- where o.org_id=${input.orgId} and o.id=${input.obligationId}`, "objects"))[0];
- if(!row)throw new RevenueRecognitionError('recognition obligation disappeared during posting');
- let exposure:CreditExposure=row.change_basis?.creditExposure??{kind:'none'};
- if(!row.change_basis?.creditExposure && row.invoice_id && row.currency) {
-   const peers=await tx.execute<{id:string;weight:string}>(sql`select o.id,coalesce(o.booked_amount,o.allocated_price)::text as weight
+ where o.org_id=${input.orgId} and o.id=${input.obligationId}`,
+      "objects",
+    )
+  )[0];
+  if (!row) throw new RevenueRecognitionError("recognition obligation disappeared during posting");
+  let exposure: CreditExposure = row.change_basis?.creditExposure ?? { kind: "none" };
+  if (!row.change_basis?.creditExposure && row.invoice_id && row.currency) {
+    const peers = await tx.execute<{ id: string; weight: string }>(
+      sql`select o.id,coalesce(o.booked_amount,o.allocated_price)::text as weight
     from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id
     left join items i on i.id=o.item_id and i.org_id=o.org_id join recognition_rules r on r.id=o.recognition_rule_id and r.org_id=o.org_id
-    where o.org_id=${input.orgId} and dl.document_id=${row.invoice_id} and coalesce(o.deferred_account_id,i.deferred_account_id,r.deferred_account_id)=${input.deferredAccountId} order by o.id`, "objects");
-   const index=peers.findIndex(p=>p.id===input.obligationId);
-   if(index<0)throw new RevenueRecognitionError('the invoice credit allocation omitted this promise');
-   // The credit pool measures in transaction units, but the evidence names
-   // the historical deferral rate (0256), not a defaulted 1.
-   exposure={kind:'invoice',source:{invoiceId:row.invoice_id,deferredAccountId:input.deferredAccountId,baseline:'0',currency:row.currency,fxRate:row.tx_fx_rate ?? '1'},weights:peers.map(p=>p.weight),index};
- }
- const credited=await measureCreditExposure(tx,input.orgId,input.bookId,exposure);
- return {remaining:sum([row.allocated,neg(row.recognized),neg(credited)]),credited,exposure};
+    where o.org_id=${input.orgId} and dl.document_id=${row.invoice_id} and coalesce(o.deferred_account_id,i.deferred_account_id,r.deferred_account_id)=${input.deferredAccountId} order by o.id`,
+      "objects",
+    );
+    const index = peers.findIndex((p) => p.id === input.obligationId);
+    if (index < 0)
+      throw new RevenueRecognitionError("the invoice credit allocation omitted this promise");
+    // The credit pool measures in transaction units, but the evidence names
+    // the historical deferral rate (0256), not a defaulted 1.
+    exposure = {
+      kind: "invoice",
+      source: {
+        invoiceId: row.invoice_id,
+        deferredAccountId: input.deferredAccountId,
+        baseline: "0",
+        currency: row.currency,
+        fxRate: row.tx_fx_rate ?? "1",
+      },
+      weights: peers.map((p) => p.weight),
+      index,
+    };
+  }
+  const credited = await measureCreditExposure(tx, input.orgId, input.bookId, exposure);
+  return {
+    remaining: sum([row.allocated, neg(row.recognized), neg(credited)]),
+    credited,
+    exposure,
+  };
 }
 /**
  * Cumulative net earned for one obligation on one book: posted recognition
@@ -65,17 +97,27 @@ export async function recognitionUnearnedRemaining(
  * original too would double-count earned). Unposted plan lines never count.
  */
 export async function recognitionNetRecognized(
- tx:SqlExecutor,input:{orgId:string;obligationId:string;bookId:string},
-):Promise<string> {
- const row=(await tx.execute<{net:string}>(sql`
+  tx: SqlExecutor,
+  input: { orgId: string; obligationId: string; bookId: string },
+): Promise<string> {
+  const row = (
+    await tx.execute<{ net: string }>(
+      sql`
   select coalesce((select sum(case when l.journal_entry_id is not null and l.reversal_journal_entry_id is null then coalesce(l.recognized_amount,0) else 0 end)
     from recognition_schedule_lines l
     join recognition_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
-   where l.org_id=${input.orgId} and s.obligation_id=${input.obligationId} and s.book_id=${input.bookId}),0)::text as net`, "objects"))[0];
- return row?.net ?? "0";
+   where l.org_id=${input.orgId} and s.obligation_id=${input.obligationId} and s.book_id=${input.bookId}),0)::text as net`,
+      "objects",
+    )
+  )[0];
+  return row?.net ?? "0";
 }
 
-export function recognitionObligationScope(orgId: string, allowedSubsidiaryIds: readonly string[] | undefined, fallbackSubsidiaryId: string) {
+export function recognitionObligationScope(
+  orgId: string,
+  allowedSubsidiaryIds: readonly string[] | undefined,
+  fallbackSubsidiaryId: string,
+) {
   if (allowedSubsidiaryIds === undefined) return sql`true`;
   // Unattributed obligations fall back to the shared unscoped-posting
   // default (the hierarchy root), resolved once by the caller — never the
@@ -93,9 +135,18 @@ export function recognitionObligationScope(orgId: string, allowedSubsidiaryIds: 
 }
 
 export type RecognitionPostingRow = {
-  recognition_on: string | null; recognition_currency: string | null; functional_currency:string|null; recognition_fx_rate: string;
-  bundle_delivered_on: string | null; recognition_held: boolean; hold_reason: string | null; delivery_pending: boolean;
-  line_id: string; planned: string; period_id: string; sequence: number;
+  recognition_on: string | null;
+  recognition_currency: string | null;
+  functional_currency: string | null;
+  recognition_fx_rate: string;
+  bundle_delivered_on: string | null;
+  recognition_held: boolean;
+  hold_reason: string | null;
+  delivery_pending: boolean;
+  line_id: string;
+  planned: string;
+  period_id: string;
+  sequence: number;
   book_id: string;
   /** Stored period name: part of the recognition journal's entry number. */
   period_name: string;
@@ -105,14 +156,23 @@ export type RecognitionPostingRow = {
   period_ref: PeriodDisplayInput;
   period_ends_on: string;
   method: RecognitionMethod;
-  obligation_id: string; obligation_desc: string; contract_number: string;
-  obl_deferred: string | null; obl_recognized: string | null;
-  item_deferred: string | null; item_income: string | null;
-  rule_deferred: string | null; rule_recognized: string | null;
-  subsidiary_id: string | null; base_currency: string | null;
-  department_id: string | null; project_id: string | null;
-  location_id: string | null; class_id: string | null;
-  equipment_unit_id: string | null; extra_dims: Record<string, unknown>;
+  obligation_id: string;
+  obligation_desc: string;
+  contract_number: string;
+  obl_deferred: string | null;
+  obl_recognized: string | null;
+  item_deferred: string | null;
+  item_income: string | null;
+  rule_deferred: string | null;
+  rule_recognized: string | null;
+  subsidiary_id: string | null;
+  base_currency: string | null;
+  department_id: string | null;
+  project_id: string | null;
+  location_id: string | null;
+  class_id: string | null;
+  equipment_unit_id: string | null;
+  extra_dims: Record<string, unknown>;
 };
 
 /** Discovery is advisory. The posting transaction reloads this same projection
@@ -135,8 +195,13 @@ export async function recognitionPostingRows(
   lineId?: string,
   claim = false,
 ): Promise<RecognitionPostingRow[]> {
-  const obligationScope = recognitionObligationScope(orgId, allowedSubsidiaryIds, fallbackSubsidiaryId);
-  const rows = await runner.execute<RecognitionPostingRow>(sql`
+  const obligationScope = recognitionObligationScope(
+    orgId,
+    allowedSubsidiaryIds,
+    fallbackSubsidiaryId,
+  );
+  const rows = await runner.execute<RecognitionPostingRow>(
+    sql`
     select (select max(peer.delivered_on)::text from performance_obligations peer where peer.org_id=o.org_id and peer.delivery_bundle_document_id=o.delivery_bundle_document_id and peer.status<>'cancelled') as bundle_delivered_on, o.recognition_held, o.hold_reason,
            (o.delivery_bundle_document_id is not null and exists (select 1 from performance_obligations peer
              where peer.org_id=o.org_id and peer.delivery_bundle_document_id=o.delivery_bundle_document_id and peer.status<>'cancelled'
@@ -201,17 +266,31 @@ export async function recognitionPostingRows(
        and ${obligationScope}
        ${lineId ? sql`and l.id = ${lineId}` : sql``}
      order by c.contract_number, o.description, l.sequence
-     ${claim ? sql`for update of l for share of s, bk, c, r, p` : sql``}`, "objects");
+     ${claim ? sql`for update of l for share of s, bk, c, r, p` : sql``}`,
+    "objects",
+  );
   for (const row of rows) {
-    const plannedDate=row.recognition_on ?? row.period_ends_on;
-    if (!row.delivery_pending && row.bundle_delivered_on && row.bundle_delivered_on>plannedDate) {
-      const deliveryPeriod=await resolveCoveringPeriod(runner,orgId,row.bundle_delivered_on);
-      if (!deliveryPeriod) throw new RevenueRecognitionError('Generate an accounting period covering software bundle delivery before recognizing the deferred consideration');
-      const period=(await runner.execute<{name:string;ends_on:string;period_ref:PeriodDisplayInput}>(sql`select p.name,p.ends_on::text,${periodRefSql("p")} as period_ref from accounting_periods p where p.org_id=${orgId} and p.id=${deliveryPeriod.id}`, "objects"))[0];
-      if (!period) throw new RevenueRecognitionError('Delivery accounting period is unavailable');
-      row.period_id=deliveryPeriod.id; row.period_name=period.name; row.period_ref=period.period_ref; row.period_ends_on=period.ends_on; row.recognition_on=row.bundle_delivered_on;
+    const plannedDate = row.recognition_on ?? row.period_ends_on;
+    if (!row.delivery_pending && row.bundle_delivered_on && row.bundle_delivered_on > plannedDate) {
+      const deliveryPeriod = await resolveCoveringPeriod(runner, orgId, row.bundle_delivered_on);
+      if (!deliveryPeriod)
+        throw new RevenueRecognitionError(
+          "Generate an accounting period covering software bundle delivery before recognizing the deferred consideration",
+        );
+      const period = (
+        await runner.execute<{ name: string; ends_on: string; period_ref: PeriodDisplayInput }>(
+          sql`select p.name,p.ends_on::text,${periodRefSql("p")} as period_ref from accounting_periods p where p.org_id=${orgId} and p.id=${deliveryPeriod.id}`,
+          "objects",
+        )
+      )[0];
+      if (!period) throw new RevenueRecognitionError("Delivery accounting period is unavailable");
+      row.period_id = deliveryPeriod.id;
+      row.period_name = period.name;
+      row.period_ref = period.period_ref;
+      row.period_ends_on = period.ends_on;
+      row.recognition_on = row.bundle_delivered_on;
     }
-    row.period_label=canonicalPeriodLabel(row.period_ref);
+    row.period_label = canonicalPeriodLabel(row.period_ref);
   }
   return rows;
 }

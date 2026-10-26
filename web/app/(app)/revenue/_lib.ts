@@ -1,5 +1,5 @@
-import type { breakageGrantOptions, ContractPosition } from '@openbooks/engine/revenue'
-import { contractPosition } from '@openbooks/engine/revenue'
+import type { breakageGrantOptions, ContractPosition } from "@openbooks/engine/revenue";
+import { contractPosition } from "@openbooks/engine/revenue";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
@@ -19,7 +19,11 @@ export type ScheduleLineRow = {
 };
 
 export interface ObligationRow {
-  recognition_held?: boolean; hold_reason?: string | null; control_revision?: number; delivered_on?: string | null; delivery_bundle_document_id?: string | null;
+  recognition_held?: boolean;
+  hold_reason?: string | null;
+  control_revision?: number;
+  delivered_on?: string | null;
+  delivery_bundle_document_id?: string | null;
   id: string;
   description: string;
   allocated_price: string;
@@ -82,9 +86,9 @@ export interface ContractPayload {
     /** The billed agreement for scoped contracts; null for invoice scope. */
     source: ContractSource | null;
     /**
-    * The source customer invoice for invoice-scoped contracts. Shared
-    * order/subscription contracts expose their individual billings instead;
-    * project contracts have no invoice and nothing voidable.
+     * The source customer invoice for invoice-scoped contracts. Shared
+     * order/subscription contracts expose their individual billings instead;
+     * project contracts have no invoice and nothing voidable.
      */
     sourceInvoiceId: string | null;
     sourceInvoiceNumber: string | null;
@@ -122,13 +126,16 @@ export async function loadContract(
     subscription_id: string | null;
     sourceInvoiceId: string | null;
     sourceInvoiceNumber: string | null;
-  }>(sql`
+  }>(
+    sql`
     select c.id, c.subsidiary_id,c.revision,c.contract_number, c.status, c.currency, c.total_transaction_price, c.starts_on, c.ends_on,
            c.scope, c.source_document_id, c.subscription_id,
            coalesce(p.display_name, '—') as customer
       from revenue_contracts c
       left join parties p on p.id = c.customer_id and p.org_id = c.org_id
-     where c.id = ${id} and c.org_id = ${orgId} ${subsidiaryVisibleFilter(sql`coalesce(c.subsidiary_id,(select p.subsidiary_id from projects p where p.id=c.project_id and p.org_id=c.org_id),(select coalesce(dl.subsidiary_id,d.subsidiary_id) from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id join documents d on d.id=dl.document_id and d.org_id=dl.org_id where o.contract_id=c.id and o.org_id=c.org_id order by o.id limit 1))`, allowedSubsidiaryIds)}`, "objects");
+     where c.id = ${id} and c.org_id = ${orgId} ${subsidiaryVisibleFilter(sql`coalesce(c.subsidiary_id,(select p.subsidiary_id from projects p where p.id=c.project_id and p.org_id=c.org_id),(select coalesce(dl.subsidiary_id,d.subsidiary_id) from performance_obligations o join document_lines dl on dl.id=o.document_line_id and dl.org_id=o.org_id join documents d on d.id=dl.document_id and d.org_id=dl.org_id where o.contract_id=c.id and o.org_id=c.org_id order by o.id limit 1))`, allowedSubsidiaryIds)}`,
+    "objects",
+  );
   const contract = cRes[0];
   if (!contract) return null;
 
@@ -136,9 +143,14 @@ export async function loadContract(
   // record drawer) or the subscription (with its record drawer).
   let source: ContractSource | null = null;
   if (contract.scope === "order" && contract.source_document_id) {
-    const order = (await db.execute<{ document_number: string }>(sql`
+    const order = (
+      await db.execute<{ document_number: string }>(
+        sql`
       select document_number from documents
-       where id = ${contract.source_document_id} and org_id = ${orgId}`, "objects"))[0];
+       where id = ${contract.source_document_id} and org_id = ${orgId}`,
+        "objects",
+      )
+    )[0];
     if (order) {
       source = {
         kind: "order",
@@ -147,11 +159,16 @@ export async function loadContract(
       };
     }
   } else if (contract.scope === "subscription" && contract.subscription_id) {
-    const subscription = (await db.execute<{ plan: string }>(sql`
+    const subscription = (
+      await db.execute<{ plan: string }>(
+        sql`
       select coalesce((select p.name from subscription_plans p
                         where p.id = s.plan_id and p.org_id = s.org_id),
                       s.id::text) as plan
-        from subscriptions s where s.id = ${contract.subscription_id} and s.org_id = ${orgId}`, "objects"))[0];
+        from subscriptions s where s.id = ${contract.subscription_id} and s.org_id = ${orgId}`,
+        "objects",
+      )
+    )[0];
     if (subscription) {
       source = {
         kind: "subscription",
@@ -163,8 +180,11 @@ export async function loadContract(
 
   // Invoice-scoped contracts have one source invoice by construction;
   // order/subscription contracts expose their individual billings below.
-  const invoice = contract.scope === "invoice"
-    ? (await db.execute<{ id: string; document_number: string }>(sql`
+  const invoice =
+    contract.scope === "invoice"
+      ? ((
+          await db.execute<{ id: string; document_number: string }>(
+            sql`
         select distinct inv.id, inv.document_number
           from performance_obligations o
           join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
@@ -172,8 +192,11 @@ export async function loadContract(
            and inv.kind = 'customer_invoice'
          where o.contract_id = ${id} and o.org_id = ${orgId}
          order by inv.document_number
-         limit 1`, "objects"))[0] ?? null
-    : null;
+         limit 1`,
+            "objects",
+          )
+        )[0] ?? null)
+      : null;
   contract.sourceInvoiceId = invoice?.id ?? null;
   contract.sourceInvoiceNumber = invoice?.document_number ?? null;
 
@@ -190,7 +213,8 @@ export async function loadContract(
     method: string;
     rule_name: string;
     legacy_unverified: boolean;
-  }>(sql`
+  }>(
+    sql`
     select o.recognition_held, o.hold_reason, o.control_revision, o.delivered_on::text, o.delivery_bundle_document_id, o.id, o.description, o.allocated_price, o.recognition_starts_on, o.recognition_ends_on, o.status,
            o.fair_value_flag, o.fair_value_low, o.fair_value_high,
            r.method, r.name as rule_name,o.recognition_rule_id,o.standalone_selling_price::text,o.percent_complete::text,
@@ -204,11 +228,14 @@ export async function loadContract(
       join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
       left join items i on i.id=o.item_id and i.org_id=o.org_id
      where o.contract_id = ${id} and o.org_id = ${orgId}
-     order by o.created_at`, "objects");
+     order by o.created_at`,
+    "objects",
+  );
 
   const obligations: ObligationRow[] = [];
   for (const o of oRes) {
-    const lRes = await db.execute<ScheduleLineRow>(sql`
+    const lRes = await db.execute<ScheduleLineRow>(
+      sql`
       select ${periodDisplayLabelSql(locale, "p")} as period_name, p.ends_on as period_ends_on,
              l.planned_amount, l.recognized_amount, l.journal_entry_id,l.superseded_by_change_id,l.revision,l.reversal_journal_entry_id
         from recognition_schedules s
@@ -216,18 +243,14 @@ export async function loadContract(
         join recognition_schedule_lines l on l.schedule_id = s.id and l.org_id = s.org_id
         join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
        where s.obligation_id = ${o.id} and s.org_id = ${orgId}
-       order by l.sequence`, "objects");
+       order by l.sequence`,
+      "objects",
+    );
     const planned = lRes.reduce(
       (a, r) =>
         r.superseded_by_change_id || r.reversal_journal_entry_id
           ? a
-          : add(
-              a,
-              String(
-                (r.journal_entry_id ? r.recognized_amount : r.planned_amount) ??
-                  "0",
-              ),
-            ),
+          : add(a, String((r.journal_entry_id ? r.recognized_amount : r.planned_amount) ?? "0")),
       "0",
     );
     const recognized = lRes.reduce(
@@ -246,21 +269,27 @@ export async function loadContract(
   }
 
   const changes = await db.execute<{
-      id: string;
-      operation: string;
-      effective_on: string;
-      status: string;
-    }>(
-      sql`select id,operation,effective_on::text,status from financial_changes where org_id=${orgId} and domain='revenue' and subject_id=${id} order by created_at desc`, "objects",
-    );
+    id: string;
+    operation: string;
+    effective_on: string;
+    status: string;
+  }>(
+    sql`select id,operation,effective_on::text,status from financial_changes where org_id=${orgId} and domain='revenue' and subject_id=${id} order by created_at desc`,
+    "objects",
+  );
 
-  const billings = (await db.execute<ContractBillingRow>(sql`
+  const billings = (
+    await db.execute<ContractBillingRow>(
+      sql`
     select b.document_id as id, d.document_number, b.amount::text as amount,
            b.billed_on::text as billed_on, d.status
       from revenue_contract_billings b
       join documents d on d.id = b.document_id and d.org_id = b.org_id
      where b.contract_id = ${id} and b.org_id = ${orgId}
-     order by b.billed_on, d.document_number`, "objects")).map((row) => ({
+     order by b.billed_on, d.document_number`,
+      "objects",
+    )
+  ).map((row) => ({
     id: row.id,
     document_number: row.document_number,
     amount: row.amount,
@@ -277,22 +306,23 @@ export async function loadContract(
   };
 }
 
-export async function revenueModificationOptions(
-  orgId: string,
-  allowed: Set<string> | null,
-) {
+export async function revenueModificationOptions(orgId: string, allowed: Set<string> | null) {
   const [subsidiaries, accounts, rules, books] = await Promise.all([
     db.execute<{ value: string; label: string; currency: string }>(
-      sql`select s.id as value,s.name as label,s.base_currency as currency from subsidiaries s where org_id=${orgId} and is_active and not is_elimination ${subsidiaryVisibleFilter(sql`s.id`, allowed)} order by name`, "objects",
+      sql`select s.id as value,s.name as label,s.base_currency as currency from subsidiaries s where org_id=${orgId} and is_active and not is_elimination ${subsidiaryVisibleFilter(sql`s.id`, allowed)} order by name`,
+      "objects",
     ),
     db.execute<{ value: string; label: string }>(
-      sql`select id as value,number||' — '||name as label from accounts where org_id=${orgId} and is_active and not is_summary order by number`, "objects",
+      sql`select id as value,number||' — '||name as label from accounts where org_id=${orgId} and is_active and not is_summary order by number`,
+      "objects",
     ),
     db.execute<{ value: string; label: string; method: string }>(
-      sql`select id as value,name as label,method from recognition_rules where org_id=${orgId} and is_active and not is_forecast order by name`, "objects",
+      sql`select id as value,name as label,method from recognition_rules where org_id=${orgId} and is_active and not is_forecast order by name`,
+      "objects",
     ),
     db.execute<{ value: string; label: string }>(
-      sql`select id as value,name as label from accounting_books where org_id=${orgId} and is_active and posts_gl order by is_primary desc,code`, "objects",
+      sql`select id as value,name as label from accounting_books where org_id=${orgId} and is_active and posts_gl order by is_primary desc,code`,
+      "objects",
     ),
   ]);
   return {
@@ -306,13 +336,16 @@ export async function revenueModificationOptions(
 export async function revenueRecognitionCandidates(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-): Promise<Array<{ obligationId: string; contractId: string; contractNumber: string; description: string }>> {
+): Promise<
+  Array<{ obligationId: string; contractId: string; contractNumber: string; description: string }>
+> {
   const rows = await db.execute<{
-    obligation_id: string
-    contract_id: string
-    contract_number: string
-    description: string
-  }>(sql`
+    obligation_id: string;
+    contract_id: string;
+    contract_number: string;
+    description: string;
+  }>(
+    sql`
     select distinct o.id as obligation_id, c.id as contract_id,
            c.contract_number, o.description
       from performance_obligations o
@@ -322,14 +355,14 @@ export async function revenueRecognitionCandidates(
      where o.org_id = ${orgId} and o.status <> 'cancelled'
        and l.journal_entry_id is null and l.superseded_by_change_id is null
        ${subsidiaryVisibleFilter(sql`coalesce(c.subsidiary_id,(select p.subsidiary_id from projects p where p.id=c.project_id and p.org_id=c.org_id),(select coalesce(dl.subsidiary_id,d.subsidiary_id) from performance_obligations source_o join document_lines dl on dl.id=source_o.document_line_id and dl.org_id=source_o.org_id join documents d on d.id=dl.document_id and d.org_id=dl.org_id where source_o.contract_id=c.id and source_o.org_id=c.org_id order by source_o.id limit 1))`, allowedSubsidiaryIds)}
-     order by c.contract_number, o.description`, "objects")
+     order by c.contract_number, o.description`,
+    "objects",
+  );
   return rows.map((row) => ({
     obligationId: row.obligation_id,
     contractId: row.contract_id,
     contractNumber: row.contract_number,
     description: row.description,
-  }))
+  }));
 }
-export type RevenueModificationOptions = Awaited<
-  ReturnType<typeof revenueModificationOptions>
->;
+export type RevenueModificationOptions = Awaited<ReturnType<typeof revenueModificationOptions>>;

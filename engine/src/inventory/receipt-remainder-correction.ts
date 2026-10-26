@@ -5,8 +5,16 @@ import { isUuid } from "../platform/uuid.ts";
 import { adjustInventory } from "./movements.ts";
 import { assertInventoryDate } from "./position.ts";
 import { InventoryError } from "./contracts.ts";
-import { captureTransactionAuditSnapshot, recordTransactionAudit, type TransactionAuditSnapshot } from "../records/transaction-audit.ts";
-import { liveReceiptMovements, layerCover, lockReceiptInventoryPositions } from "./receipt-void-state.ts";
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+  type TransactionAuditSnapshot,
+} from "../records/transaction-audit.ts";
+import {
+  liveReceiptMovements,
+  layerCover,
+  lockReceiptInventoryPositions,
+} from "./receipt-void-state.ts";
 
 /** Correcting the undelivered remainder of a purchase receipt that is partly consumed, without voiding the consumed part. */
 
@@ -24,7 +32,11 @@ export interface CorrectReceiptRemainderResult {
   receiptNumber: string;
   adjustedQuantity: string;
   adjustedLines: { movementId: string; itemId: string; quantity: string }[];
-  restoredLines: { purchaseOrderNumber: string; purchaseOrderLineNumber: number; quantity: string }[];
+  restoredLines: {
+    purchaseOrderNumber: string;
+    purchaseOrderLineNumber: number;
+    quantity: string;
+  }[];
 }
 
 /**
@@ -50,13 +62,18 @@ export async function correctReceiptRemainder(
   const { orgId, actorId, receiptId } = input;
   return db.transaction(async (tx) => {
     await lockReceiptInventoryPositions(tx, orgId, receiptId);
-    const header = (await tx.execute<{
-      document_number: string;
-      status: string;
-    }>(sql`
+    const header = (
+      await tx.execute<{
+        document_number: string;
+        status: string;
+      }>(
+        sql`
       select document_number, status from documents
        where id = ${receiptId} and org_id = ${orgId} and kind = 'purchase_receipt'
-       for update`, "objects"))[0];
+       for update`,
+        "objects",
+      )
+    )[0];
     if (!header) throw new InventoryError("goods receipt not found");
     if (header.status !== "approved") {
       throw new InventoryError(
@@ -68,12 +85,15 @@ export async function correctReceiptRemainder(
       line_number: number;
       quantity: string;
       source_line_id: string | null;
-    }>(sql`
+    }>(
+      sql`
       select l.id, l.line_number, l.quantity::text as quantity,
              l.custom->'receipt'->>'sourceLineId' as source_line_id
         from document_lines l
        where l.document_id = ${receiptId} and l.org_id = ${orgId}
-       order by l.line_number`, "objects");
+       order by l.line_number`,
+      "objects",
+    );
     if (receiptLines.some((line) => !line.source_line_id)) {
       throw new InventoryError(
         "this receipt has a line without order-line provenance — correct the line before adjusting its remainder",
@@ -92,7 +112,9 @@ export async function correctReceiptRemainder(
     }
     const movementIds = movements.map((movement) => movement.id);
     const { cover, layered } = await layerCover(tx, orgId, movementIds);
-    const blended = movements.filter((movement) => !layered.has(movement.id) && cmp(movement.received, "0") !== 0);
+    const blended = movements.filter(
+      (movement) => !layered.has(movement.id) && cmp(movement.received, "0") !== 0,
+    );
     if (blended.length > 0) {
       throw new InventoryError(
         "the receipt's cost layers were blended into a shared pool — correct the remainder with a manual Inventory Adjust against this receipt instead",
@@ -117,13 +139,16 @@ export async function correctReceiptRemainder(
     // void faces: never below zero, never into billed cover.
     const sourceIds = [...new Set(receiptLines.map((line) => line.source_line_id!))].sort();
     const idArr = `{${sourceIds.join(",")}}`;
-    const orders = await tx.execute<{ id: string; status: string; document_number: string }>(sql`
+    const orders = await tx.execute<{ id: string; status: string; document_number: string }>(
+      sql`
       select d.id, d.status, d.document_number
         from documents d
        where d.org_id = ${orgId}
          and d.id in (select l.document_id from document_lines l where l.org_id = ${orgId} and l.id = any(${idArr}::uuid[]))
        order by d.id
-       for update`, "objects");
+       for update`,
+      "objects",
+    );
     for (const order of orders) {
       if (order.status !== "approved") {
         throw new InventoryError(
@@ -144,15 +169,24 @@ export async function correctReceiptRemainder(
     for (const line of receiptLines) {
       const lineRemainder = remainderByLine.get(line.id);
       if (!lineRemainder) continue;
-      bySource.set(line.source_line_id!, add(bySource.get(line.source_line_id!) ?? "0", lineRemainder));
+      bySource.set(
+        line.source_line_id!,
+        add(bySource.get(line.source_line_id!) ?? "0", lineRemainder),
+      );
     }
     for (const [sourceId, quantity] of bySource) {
-      const coverRow = (await tx.execute<{ restorable: boolean; billed_block: boolean }>(sql`
+      const coverRow = (
+        await tx.execute<{ restorable: boolean; billed_block: boolean }>(
+          sql`
         select (quantity_fulfilled - ${quantity}::numeric) >= 0 as restorable,
                (quantity_fulfilled - ${quantity}::numeric) < quantity_billed as billed_block
           from document_lines where id = ${sourceId} and org_id = ${orgId}
-      `, "objects"))[0];
-      if (!coverRow) throw new InventoryError("a source order line is missing — reload and correct again");
+      `,
+          "objects",
+        )
+      )[0];
+      if (!coverRow)
+        throw new InventoryError("a source order line is missing — reload and correct again");
       if (!coverRow.restorable) {
         throw new InventoryError("correcting would drive a source line below zero received");
       }
@@ -165,7 +199,8 @@ export async function correctReceiptRemainder(
     const beforeSnapshots = new Map<string, TransactionAuditSnapshot>();
     for (const order of orders) {
       const snapshot = await captureTransactionAuditSnapshot(tx, order.id, orgId);
-      if (!snapshot) throw new InventoryError("a source order disappeared while it was being corrected");
+      if (!snapshot)
+        throw new InventoryError("a source order disappeared while it was being corrected");
       beforeSnapshots.set(order.id, snapshot);
     }
     // The stock leg first: the remainder leaves at carried cost through the
@@ -193,39 +228,68 @@ export async function correctReceiptRemainder(
     // The cover leg: approved lines are storage-immutable, so each source
     // header reopens while its counters restore (the order-cycle pattern),
     // then returns to approved.
-    const restoredLines: { purchaseOrderNumber: string; purchaseOrderLineNumber: number; quantity: string }[] = [];
+    const restoredLines: {
+      purchaseOrderNumber: string;
+      purchaseOrderLineNumber: number;
+      quantity: string;
+    }[] = [];
     for (const order of orders) {
-      const reopened = (await tx.execute<{ id: string }>(sql`
+      const reopened = (
+        await tx.execute<{ id: string }>(
+          sql`
         update documents set status = 'draft', updated_at = now(), updated_by = ${actorId}
          where id = ${order.id} and org_id = ${orgId} and status = 'approved'
-        returning id`, "objects"))[0];
-      if (!reopened) throw new InventoryError("the source order changed while it was being corrected");
-      const orderSources = await tx.execute<{ id: string; line_number: number; document_number: string }>(sql`
+        returning id`,
+          "objects",
+        )
+      )[0];
+      if (!reopened)
+        throw new InventoryError("the source order changed while it was being corrected");
+      const orderSources = await tx.execute<{
+        id: string;
+        line_number: number;
+        document_number: string;
+      }>(
+        sql`
         select l.id, l.line_number, d.document_number
           from document_lines l
           join documents d on d.id = l.document_id and d.org_id = l.org_id
-         where l.org_id = ${orgId} and l.document_id = ${order.id} and l.id = any(${idArr}::uuid[])`, "objects");
+         where l.org_id = ${orgId} and l.document_id = ${order.id} and l.id = any(${idArr}::uuid[])`,
+        "objects",
+      );
       for (const source of orderSources) {
         const quantity = bySource.get(source.id);
         if (!quantity) continue;
-        const restored = (await tx.execute<{ id: string }>(sql`
+        const restored = (
+          await tx.execute<{ id: string }>(
+            sql`
           update document_lines
              set quantity_fulfilled = quantity_fulfilled - ${quantity}::numeric, updated_at = now(), updated_by = ${actorId}
            where id = ${source.id} and org_id = ${orgId}
              and quantity_fulfilled - ${quantity}::numeric >= 0
-          returning id`, "objects"))[0];
-        if (!restored) throw new InventoryError("a source order line changed while it was being corrected");
+          returning id`,
+            "objects",
+          )
+        )[0];
+        if (!restored)
+          throw new InventoryError("a source order line changed while it was being corrected");
         restoredLines.push({
           purchaseOrderNumber: source.document_number,
           purchaseOrderLineNumber: source.line_number,
           quantity,
         });
       }
-      const reapproved = (await tx.execute<{ id: string }>(sql`
+      const reapproved = (
+        await tx.execute<{ id: string }>(
+          sql`
         update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
          where id = ${order.id} and org_id = ${orgId} and status = 'draft'
-        returning id`, "objects"))[0];
-      if (!reapproved) throw new InventoryError("the source order changed while it was being corrected");
+        returning id`,
+          "objects",
+        )
+      )[0];
+      if (!reapproved)
+        throw new InventoryError("the source order changed while it was being corrected");
     }
     for (const order of orders) {
       const after = await captureTransactionAuditSnapshot(tx, order.id, orgId);

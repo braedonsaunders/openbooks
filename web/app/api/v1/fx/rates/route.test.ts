@@ -3,7 +3,9 @@ import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-fx-rates-route-test");
-interface RouteState { input: unknown }
+interface RouteState {
+  input: unknown;
+}
 const routeState: RouteState = { input: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
@@ -27,7 +29,11 @@ stubModules({
 const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
 
 test("GET /api/v1/fx/rates uppercases the pair and forwards asOf", async () => {
-  const response = await GET(new Request("http://openbooks.test/api/v1/fx/rates?fromCurrency=usd&toCurrency=cad&asOf=2026-09-01"));
+  const response = await GET(
+    new Request(
+      "http://openbooks.test/api/v1/fx/rates?fromCurrency=usd&toCurrency=cad&asOf=2026-09-01",
+    ),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(routeState.input, {
     fromCurrency: "USD",

@@ -1,14 +1,14 @@
-import 'server-only'
+import "server-only";
 
-import { getTranslations } from 'next-intl/server'
+import { getTranslations } from "next-intl/server";
 import {
   page,
   pageHeader,
   ref,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+} from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../lib/authz";
 
 /**
  * The reconciliations list, split into a loader and a spec.
@@ -29,12 +29,12 @@ import { requirePermission } from '../../../../lib/authz'
  */
 
 export interface BankingReconciliationsData {
-  title: string
-  description: string
-  homeTitle: string
-  currentParams: Record<string, string | string[] | undefined>
-  chooseAccountHref: string
-  chooseAccountLabel: string
+  title: string;
+  description: string;
+  homeTitle: string;
+  currentParams: Record<string, string | string[] | undefined>;
+  chooseAccountHref: string;
+  chooseAccountLabel: string;
 }
 
 export async function loadBankingReconciliations(
@@ -43,42 +43,42 @@ export async function loadBankingReconciliations(
   // Permission gate copied verbatim from page.tsx. The org/user ids the
   // list needs stay server-side: the entity-list slot re-derives them from
   // the session rather than receiving them through the spec.
-  await requirePermission('banking.reconcile')
-  const t = await getTranslations('banking')
+  await requirePermission("banking.reconcile");
+  const t = await getTranslations("banking");
 
   return {
-    title: t('reconsPage.title'),
-    description: t('reconsPage.description'),
-    homeTitle: t('home.title'),
+    title: t("reconsPage.title"),
+    description: t("reconsPage.description"),
+    homeTitle: t("home.title"),
     currentParams: sp,
-    chooseAccountHref: '/banking',
-    chooseAccountLabel: t('reconsPage.chooseAccount'),
-  }
+    chooseAccountHref: "/banking",
+    chooseAccountLabel: t("reconsPage.chooseAccount"),
+  };
 }
 
-const f = ref<BankingReconciliationsData>()
+const f = ref<BankingReconciliationsData>();
 
 export function bankingReconciliationsSpec(data: BankingReconciliationsData): PageSpec {
   const chooseAccount = {
-    widget: 'choose-recon-account',
+    widget: "choose-recon-account",
     props: { href: data.chooseAccountHref, label: data.chooseAccountLabel },
-  }
+  };
   return page({
-    route: '/banking/reconciliations',
-    layout: 'list',
+    route: "/banking/reconciliations",
+    layout: "list",
     header: [
       pageHeader({
-        back: { href: '/banking', label: f('homeTitle') },
-        title: f('title'),
-        description: f('description'),
+        back: { href: "/banking", label: f("homeTitle") },
+        title: f("title"),
+        description: f("description"),
       }),
     ],
     body: [
-      widgetBlock('entity-list-view', {
-        recordType: 'bank_reconciliation',
+      widgetBlock("entity-list-view", {
+        recordType: "bank_reconciliation",
         sp: data.currentParams,
         emptyAction: chooseAccount,
       }),
     ],
-  })
+  });
 }

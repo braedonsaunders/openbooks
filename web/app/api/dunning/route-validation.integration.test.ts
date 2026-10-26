@@ -13,8 +13,11 @@ const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __dunningValidationUser: state });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/authz") && (context.parentURL?.includes("/api/dunning/") ||
-        (specifier === '@/lib/authz' && context.parentURL?.includes('/lib/api/route')))) {
+    if (
+      specifier.endsWith("/lib/authz") &&
+      (context.parentURL?.includes("/api/dunning/") ||
+        (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")))
+    ) {
       return {
         shortCircuit: true,
         url:
@@ -29,18 +32,26 @@ registerHooks({
 });
 const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST: create } = await import("./route");
 const { PATCH: patch } = await import("./[id]/route");
 
 const json = (method: string, body?: unknown) =>
-  new Request("http://audit.local/api/dunning", { method, body: body === undefined ? undefined : JSON.stringify(body) });
+  new Request("http://audit.local/api/dunning", {
+    method,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
-async function policyRow(orgId: string, id: string): Promise<{ name: string; grace: number } | undefined> {
+async function policyRow(
+  orgId: string,
+  id: string,
+): Promise<{ name: string; grace: number } | undefined> {
   const r = await withBypassContext(() =>
     db.execute<{ name: string; grace: number }>(
-      sql`select name, grace_period_days as grace from dunning_policies where id = ${id} and org_id = ${orgId}`, "objects",
+      sql`select name, grace_period_days as grace from dunning_policies where id = ${id} and org_id = ${orgId}`,
+      "objects",
     ),
   );
   return r[0];
@@ -57,7 +68,8 @@ const ladderStage = () => ({
 async function stageCount(orgId: string, id: string): Promise<number> {
   const r = await withBypassContext(() =>
     db.execute<{ n: number }>(
-      sql`select count(*)::int as n from dunning_stages where policy_id = ${id} and org_id = ${orgId}`, "objects",
+      sql`select count(*)::int as n from dunning_stages where policy_id = ${id} and org_id = ${orgId}`,
+      "objects",
     ),
   );
   return r[0]!.n;
@@ -66,7 +78,10 @@ async function stageCount(orgId: string, id: string): Promise<number> {
 test("dunning writes reject an invalid grace period or an empty name", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
+    state.user = {
+      orgId: org.orgId,
+      id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId,
+    };
 
     // gracePeriodDays is stored into an integer column: non-numeric input must
     // be a 4xx, never an unhandled storage error, and negative or fractional
@@ -76,11 +91,16 @@ test("dunning writes reject an invalid grace period or an empty name", async () 
       assert.equal(refused.status, 400, `POST gracePeriodDays ${JSON.stringify(gracePeriodDays)}`);
     }
     const count = await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`, "objects"),
+      db.execute<{ n: number }>(
+        sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`,
+        "objects",
+      ),
     );
     assert.equal(count[0]!.n, 0, "a refused policy must not be created");
 
-    const created = await create(json("POST", { name: "Collections", gracePeriodDays: 3, stages: [ladderStage()] }));
+    const created = await create(
+      json("POST", { name: "Collections", gracePeriodDays: 3, stages: [ladderStage()] }),
+    );
     assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
     const { id } = (await created.json()) as { id: string };
 
@@ -97,7 +117,10 @@ test("dunning writes reject an invalid grace period or an empty name", async () 
     assert.deepEqual(await policyRow(org.orgId, id), { name: "Collections", grace: 3 });
 
     // Controls: valid values still write on both paths.
-    const renamed = await patch(json("PATCH", { name: "Collections (AR)", gracePeriodDays: 0 }), params(id));
+    const renamed = await patch(
+      json("PATCH", { name: "Collections (AR)", gracePeriodDays: 0 }),
+      params(id),
+    );
     assert.equal(renamed.status, 200, JSON.stringify(await renamed.clone().json()));
     assert.deepEqual(await policyRow(org.orgId, id), { name: "Collections (AR)", grace: 0 });
   } finally {
@@ -111,7 +134,10 @@ test("dunning writes refuse blank stage templates with the fix named", async () 
   // nothing; non-blank templates still store on both paths.
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
+    state.user = {
+      orgId: org.orgId,
+      id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId,
+    };
     const blank = (field: string) => ({
       sequence: 1,
       name: "Nudge",
@@ -123,19 +149,29 @@ test("dunning writes refuse blank stage templates with the fix named", async () 
     for (const field of ["subjectTemplate", "bodyTemplate"]) {
       const refused = await create(json("POST", { name: "Chase", stages: [blank(field)] }));
       assert.equal(refused.status, 400, `POST blank ${field}`);
-      assert.deepEqual(await refused.json(), { error: "stage subject and body templates must not be blank" });
+      assert.deepEqual(await refused.json(), {
+        error: "stage subject and body templates must not be blank",
+      });
     }
     const count = await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`, "objects"),
+      db.execute<{ n: number }>(
+        sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`,
+        "objects",
+      ),
     );
     assert.equal(count[0]!.n, 0, "a refused policy must not be created");
 
     const created = await create(json("POST", { name: "Collections", stages: [ladderStage()] }));
     assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
     const { id } = (await created.json()) as { id: string };
-    const refusedPatch = await patch(json("PATCH", { stages: [blank("bodyTemplate")] }), params(id));
+    const refusedPatch = await patch(
+      json("PATCH", { stages: [blank("bodyTemplate")] }),
+      params(id),
+    );
     assert.equal(refusedPatch.status, 400);
-    assert.deepEqual(await refusedPatch.json(), { error: "stage subject and body templates must not be blank" });
+    assert.deepEqual(await refusedPatch.json(), {
+      error: "stage subject and body templates must not be blank",
+    });
     assert.equal(await stageCount(org.orgId, id), 1, "refused restage keeps the ladder");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -145,27 +181,43 @@ test("dunning writes refuse blank stage templates with the fix named", async () 
 test("dunning writes reject an invalid reply-to and store a valid one", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
+    state.user = {
+      orgId: org.orgId,
+      id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId,
+    };
     const replyOf = async (id: string) =>
-      (await withBypassContext(() =>
-        db.execute<{ replyTo: string | null }>(
-          sql`select reply_to as "replyTo" from dunning_policies where id = ${id} and org_id = ${org.orgId}`, "objects",
-        ),
-      ))[0]?.replyTo;
+      (
+        await withBypassContext(() =>
+          db.execute<{ replyTo: string | null }>(
+            sql`select reply_to as "replyTo" from dunning_policies where id = ${id} and org_id = ${org.orgId}`,
+            "objects",
+          ),
+        )
+      )[0]?.replyTo;
 
     // POST: malformed reply-to values are 400s and create nothing.
     for (const replyTo of ["not-an-email", "", 7]) {
-      const refused = await create(json("POST", { name: "Chase", gracePeriodDays: 3, stages: [], replyTo }));
+      const refused = await create(
+        json("POST", { name: "Chase", gracePeriodDays: 3, stages: [], replyTo }),
+      );
       assert.equal(refused.status, 400, `POST replyTo ${JSON.stringify(replyTo)}`);
     }
     const count = await withBypassContext(() =>
-      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`, "objects"),
+      db.execute<{ n: number }>(
+        sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`,
+        "objects",
+      ),
     );
     assert.equal(count[0]!.n, 0, "a refused policy must not be created");
 
     // POST: a valid reply-to stores; omission stores null (org default applies).
     const stored = await create(
-      json("POST", { name: "Collections", gracePeriodDays: 3, stages: [ladderStage()], replyTo: "ar@example.com" }),
+      json("POST", {
+        name: "Collections",
+        gracePeriodDays: 3,
+        stages: [ladderStage()],
+        replyTo: "ar@example.com",
+      }),
     );
     assert.equal(stored.status, 201, JSON.stringify(await stored.clone().json()));
     const { id } = (await stored.json()) as { id: string };

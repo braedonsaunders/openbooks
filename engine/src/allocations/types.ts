@@ -26,7 +26,8 @@ export type AllocationBasisKind = "fixed_percent" | "driver" | "stepped";
 export type AllocationDriverAsOf = "period" | "document_date" | "prior_period";
 export type AllocationTargetKind = "explicit" | "dynamic";
 export type AllocationImpact = "reclass" | "net_zero_pair" | "report_only";
-export type AllocationResidualPolicy = "largest_share" | "first_target" | "last_target" | "explicit_target";
+export type AllocationResidualPolicy =
+  "largest_share" | "first_target" | "last_target" | "explicit_target";
 export type AllocationSolveMethod = "sequential" | "simultaneous";
 export type AllocationRunPolicy = "manual" | "auto_preview" | "auto_post";
 export type AllocationDriverSourceKind =
@@ -36,18 +37,13 @@ export type AllocationDriverSourceKind =
   | "native_measure"
   | "manual"
   | "report_definition";
-export type AllocationRunStatus = "previewed" | "pending_approval" | "posted" | "reversed" | "failed" | "superseded";
+export type AllocationRunStatus =
+  "previewed" | "pending_approval" | "posted" | "reversed" | "failed" | "superseded";
 export type AllocationRunTrigger = "manual" | "scheduled" | "close_automation" | "rerun";
-
 
 /** Built-in dimensions plus custom segments (`extra:<segmentKey>`). */
 export type AllocationDimension =
-  | "department"
-  | "location"
-  | "class"
-  | "project"
-  | "subsidiary"
-  | `extra:${string}`;
+  "department" | "location" | "class" | "project" | "subsidiary" | `extra:${string}`;
 
 export type AccountScope =
   | { kind: "any" }

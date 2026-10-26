@@ -17,7 +17,12 @@ import { PNL_TYPES } from "../records/account-types.ts";
  * Amounts are exact ledger decimals, debit-positive.
  */
 
-export const PERIOD_END_JOURNAL_KINDS = ["income_statement", "income_summary", "balance_sheet", "opening"] as const;
+export const PERIOD_END_JOURNAL_KINDS = [
+  "income_statement",
+  "income_summary",
+  "balance_sheet",
+  "opening",
+] as const;
 export type PeriodEndJournalKind = (typeof PERIOD_END_JOURNAL_KINDS)[number];
 
 export interface PeriodEndDimensions {
@@ -108,7 +113,9 @@ function compareKeys(a: string, b: string): number {
 }
 
 /** Net balances by account and dimension combination, zero groups removed, in a deterministic order. */
-function netByAccount(balances: readonly { accountId: string; dimensions: PeriodEndDimensions; amount: string }[]): PeriodEndLine[] {
+function netByAccount(
+  balances: readonly { accountId: string; dimensions: PeriodEndDimensions; amount: string }[],
+): PeriodEndLine[] {
   const groups = new Map<string, PeriodEndLine>();
   for (const balance of balances) {
     const dimensions = normalizedDimensions(balance.dimensions);
@@ -127,12 +134,17 @@ function netByAccount(balances: readonly { accountId: string; dimensions: Period
 }
 
 /** Sum of the given lines per dimension combination, in a deterministic order. */
-function totalsByDimensions(lines: readonly PeriodEndLine[]): { dimensions: PeriodEndDimensions; amount: string }[] {
+function totalsByDimensions(
+  lines: readonly PeriodEndLine[],
+): { dimensions: PeriodEndDimensions; amount: string }[] {
   const totals = new Map<string, { dimensions: PeriodEndDimensions; amount: string }>();
   for (const line of lines) {
     const key = dimensionKey(line.dimensions);
     const existing = totals.get(key);
-    totals.set(key, { dimensions: line.dimensions, amount: existing ? add(existing.amount, line.amount) : line.amount });
+    totals.set(key, {
+      dimensions: line.dimensions,
+      amount: existing ? add(existing.amount, line.amount) : line.amount,
+    });
   }
   return [...totals.entries()].sort(([a], [b]) => compareKeys(a, b)).map(([, total]) => total);
 }
@@ -156,25 +168,32 @@ export function computePeriodEndJournals(input: {
 }): PeriodEndPlan {
   const { policy } = input;
   if (policy.closingMethod === "income_summary" && !policy.incomeSummaryAccountId) {
-    throw new PeriodEndComputationError("the income summary closing method needs an income summary account");
+    throw new PeriodEndComputationError(
+      "the income summary closing method needs an income summary account",
+    );
   }
   for (const balance of input.incomeStatement) {
     if (!isIncomeStatementType(balance.accountType)) {
-      throw new PeriodEndComputationError(`account ${balance.accountId} is not an income-statement account`);
+      throw new PeriodEndComputationError(
+        `account ${balance.accountId} is not an income-statement account`,
+      );
     }
   }
   for (const balance of input.balanceSheet) {
     if (isIncomeStatementType(balance.accountType)) {
-      throw new PeriodEndComputationError(`account ${balance.accountId} is not a balance-sheet account`);
+      throw new PeriodEndComputationError(
+        `account ${balance.accountId} is not a balance-sheet account`,
+      );
     }
   }
 
   const journals: PeriodEndJournalPlan[] = [];
   const incomeBalances = netByAccount(input.incomeStatement);
   const closedEarnings = neg(sum(incomeBalances.map((line) => line.amount)));
-  const offsetAccount = policy.closingMethod === "income_summary"
-    ? policy.incomeSummaryAccountId!
-    : policy.retainedEarningsAccountId;
+  const offsetAccount =
+    policy.closingMethod === "income_summary"
+      ? policy.incomeSummaryAccountId!
+      : policy.retainedEarningsAccountId;
 
   // Each income-statement balance is reversed; its dimension combination's
   // total lands on the offset account in that same combination.
@@ -186,7 +205,11 @@ export function computePeriodEndJournals(input: {
   const offsets = totalsByDimensions(incomeBalances).filter((total) => !isZero(total.amount));
   const incomeStatementJournal = [
     ...closingLines,
-    ...offsets.map((total) => ({ accountId: offsetAccount, dimensions: total.dimensions, amount: total.amount })),
+    ...offsets.map((total) => ({
+      accountId: offsetAccount,
+      dimensions: total.dimensions,
+      amount: total.amount,
+    })),
   ];
   const equityEffects: PeriodEndLine[] = [];
   if (incomeStatementJournal.length > 0) {
@@ -194,8 +217,16 @@ export function computePeriodEndJournals(input: {
     journals.push({ kind: "income_statement", lines: incomeStatementJournal });
     if (policy.closingMethod === "income_summary") {
       const summaryJournal = offsets.flatMap((total) => [
-        { accountId: policy.incomeSummaryAccountId!, dimensions: total.dimensions, amount: neg(total.amount) },
-        { accountId: policy.retainedEarningsAccountId, dimensions: total.dimensions, amount: total.amount },
+        {
+          accountId: policy.incomeSummaryAccountId!,
+          dimensions: total.dimensions,
+          amount: neg(total.amount),
+        },
+        {
+          accountId: policy.retainedEarningsAccountId,
+          dimensions: total.dimensions,
+          amount: total.amount,
+        },
       ]);
       if (summaryJournal.length > 0) {
         assertBalanced("income_summary", summaryJournal);
@@ -203,7 +234,13 @@ export function computePeriodEndJournals(input: {
         equityEffects.push(...summaryJournal);
       }
     }
-    equityEffects.push(...offsets.map((total) => ({ accountId: offsetAccount, dimensions: total.dimensions, amount: total.amount })));
+    equityEffects.push(
+      ...offsets.map((total) => ({
+        accountId: offsetAccount,
+        dimensions: total.dimensions,
+        amount: total.amount,
+      })),
+    );
   }
 
   if (policy.balanceSheetJournals) {
@@ -230,22 +267,27 @@ export function computePeriodEndJournals(input: {
 }
 
 /** Content identity of a plan: two generations with the same hash post the same journals. */
-export function periodEndPlanHash(plan: Pick<PeriodEndPlan, "journals">, context: Record<string, unknown>): string {
+export function periodEndPlanHash(
+  plan: Pick<PeriodEndPlan, "journals">,
+  context: Record<string, unknown>,
+): string {
   return createHash("sha256")
-    .update(canonicalJson({
-      version: 1,
-      context,
-      journals: plan.journals.map((journal) => ({
-        kind: journal.kind,
-        lines: journal.lines.map((line) => ({
-          accountId: line.accountId,
-          dimensions: {
-            ...line.dimensions,
-            extraDims: Object.fromEntries(sortedExtraDims(line.dimensions.extraDims)),
-          },
-          amount: normalizeMoney(line.amount),
+    .update(
+      canonicalJson({
+        version: 1,
+        context,
+        journals: plan.journals.map((journal) => ({
+          kind: journal.kind,
+          lines: journal.lines.map((line) => ({
+            accountId: line.accountId,
+            dimensions: {
+              ...line.dimensions,
+              extraDims: Object.fromEntries(sortedExtraDims(line.dimensions.extraDims)),
+            },
+            amount: normalizeMoney(line.amount),
+          })),
         })),
-      })),
-    }))
+      }),
+    )
     .digest("hex");
 }

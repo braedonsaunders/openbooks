@@ -20,7 +20,11 @@ test("annual hours resolve per employee under wage scope priority", async () => 
   const empB = randomUUID();
   const empHourly = randomUUID();
   try {
-    for (const [id, name] of [[empA, "Annual A"], [empB, "Annual B"], [empHourly, "Hourly Only"]] as const) {
+    for (const [id, name] of [
+      [empA, "Annual A"],
+      [empB, "Annual B"],
+      [empHourly, "Hourly Only"],
+    ] as const) {
       await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
         values (${id}, ${org.orgId}, 'employee', ${name}, ${org.subsidiaryId}, true, '{}'::jsonb)`);
     }
@@ -35,11 +39,16 @@ test("annual hours resolve per employee under wage scope priority", async () => 
     // covers the hourly employee — never the row's own 2080 default.
     assert.equal(got.get(empHourly), "2000.0000");
     // Without the org default, the employee with no row resolves to absent.
-    await db.execute(sql`delete from labor_cost_rates where org_id = ${org.orgId} and employee_party_id is null`);
+    await db.execute(
+      sql`delete from labor_cost_rates where org_id = ${org.orgId} and employee_party_id is null`,
+    );
     const bare = await resolveAnnualHoursMany(org.orgId, [empA, empB, empHourly], "2026-07-14");
     assert.equal(bare.get(empA), "1800.0000");
     assert.ok(!bare.has(empB), "no covering row must resolve to absent");
-    assert.ok(!bare.has(empHourly), "an hourly-only employee must resolve to absent, never the 2080 column default");
+    assert.ok(
+      !bare.has(empHourly),
+      "an hourly-only employee must resolve to absent, never the 2080 column default",
+    );
     assert.deepEqual(await resolveAnnualHoursMany(org.orgId, [], "2026-07-14"), new Map());
   } finally {
     await dropScratchOrg(org.orgId);

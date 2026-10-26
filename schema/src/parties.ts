@@ -72,13 +72,11 @@ export const parties = pgTable(
     uniqueIndex("parties_org_id_id_unique").on(t.orgId, t.id),
     index("parties_org_name").on(t.orgId, t.displayName),
     uniqueIndex("parties_org_shortcode").on(t.orgId, t.shortCode),
-    uniqueIndex("parties_org_source_identity")
-      .on(
-        t.orgId,
-        sql`(${t.custom}->'source'->>'system')`,
-        sql`(${t.custom}->'source'->>'externalId')`,
-      )
-      .where(sql`
+    uniqueIndex("parties_org_source_identity").on(
+      t.orgId,
+      sql`(${t.custom}->'source'->>'system')`,
+      sql`(${t.custom}->'source'->>'externalId')`,
+    ).where(sql`
         ${t.custom}->'source'->>'system' is not null
         and ${t.custom}->'source'->>'externalId' is not null
       `),
@@ -101,7 +99,20 @@ export const customerRoles = pgTable("customer_roles", {
   heldBy: uuid("held_by"),
   /** E-invoice format the customer receives; null when it receives none. */
   einvoiceProfile: text("einvoice_profile", {
-    enum: ["en16931-cii", "en16931-ubl", "xrechnung-cii", "xrechnung-ubl", "facturx", "peppol-bis", "nlcius", "ehf", "peppol-aunz", "peppol-sg", "pint-aunz", "pint-sg"],
+    enum: [
+      "en16931-cii",
+      "en16931-ubl",
+      "xrechnung-cii",
+      "xrechnung-ubl",
+      "facturx",
+      "peppol-bis",
+      "nlcius",
+      "ehf",
+      "peppol-aunz",
+      "peppol-sg",
+      "pint-aunz",
+      "pint-sg",
+    ],
   }),
   /** Buyer electronic address (BT-49) and its EAS scheme. */
   einvoiceAddress: text("einvoice_address"),
@@ -336,16 +347,18 @@ export const partyBankAccounts = pgTable(
  * `netDays` after the document date, or, when `dueDayOfMonth` is set, the
  * first such day of a month more than `netDays` after it (31 = month end).
  */
-export const paymentTerms = pgTable("payment_terms", {
-  id: id(),
-  orgId: orgRef(),
-  name: text("name").notNull(), // "Net 30"
-  netDays: integer("net_days").notNull().default(30),
-  dueDayOfMonth: smallint("due_day_of_month"),
-  discountDays: integer("discount_days"),
-  discountPercent: money("discount_percent"),
-  isActive: boolean("is_active").notNull().default(true),
-  custom: jsonb("custom").notNull().default({}), // source nsId bridge for sync
-}, (t) => [
-  check("payment_terms_due_day_of_month_range", sql`${t.dueDayOfMonth} between 1 and 31`),
-]);
+export const paymentTerms = pgTable(
+  "payment_terms",
+  {
+    id: id(),
+    orgId: orgRef(),
+    name: text("name").notNull(), // "Net 30"
+    netDays: integer("net_days").notNull().default(30),
+    dueDayOfMonth: smallint("due_day_of_month"),
+    discountDays: integer("discount_days"),
+    discountPercent: money("discount_percent"),
+    isActive: boolean("is_active").notNull().default(true),
+    custom: jsonb("custom").notNull().default({}), // source nsId bridge for sync
+  },
+  (t) => [check("payment_terms_due_day_of_month_range", sql`${t.dueDayOfMonth} between 1 and 31`)],
+);

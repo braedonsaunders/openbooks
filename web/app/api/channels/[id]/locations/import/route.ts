@@ -22,7 +22,8 @@ export const POST = defineRoute({
     try {
       return NextResponse.json(await importShopifyLocations(gate.user.orgId, gate.user.id, id));
     } catch (error) {
-      if (error instanceof CommerceError && error.code === "channel_not_found") return notFound("channel");
+      if (error instanceof CommerceError && error.code === "channel_not_found")
+        return notFound("channel");
       throw error;
     }
   },

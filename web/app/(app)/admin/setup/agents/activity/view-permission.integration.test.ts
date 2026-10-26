@@ -63,12 +63,10 @@ const { loadAgentsActivity } = await import("./view.ts");
 hooks.deregister();
 
 const { withBypassContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
-const { CONTINUOUS_CLOSE_AGENT_KEYS, runSetupAgentNow, saveSetupAgentPolicy } = await import(
-  "../../../../../../lib/setup/agents.ts"
-);
+const { createScratchOrg, createScratchUser, dropScratchOrg } =
+  await import("@openbooks/engine/testing/fixtures");
+const { CONTINUOUS_CLOSE_AGENT_KEYS, runSetupAgentNow, saveSetupAgentPolicy } =
+  await import("../../../../../../lib/setup/agents.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -78,7 +76,13 @@ const ENABLE_ACCOUNTING = {
   cadence: "daily",
   materialityThreshold: "500",
   detectors: [],
-  analysis: { rootCauseAnalysis: false, recommendations: false, narrative: false, modelTier: "fast", maxToolSteps: 4 },
+  analysis: {
+    rootCauseAnalysis: false,
+    recommendations: false,
+    narrative: false,
+    modelTier: "fast",
+    maxToolSteps: 4,
+  },
 };
 
 test("a setup manager sees runs, the pack filter and paging", { skip: !DB }, async () => {
@@ -100,7 +104,14 @@ test("a setup manager sees runs, the pack filter and paging", { skip: !DB }, asy
     await withBypassContext(() =>
       saveSetupAgentPolicy(org.orgId, userId, "accounting", ENABLE_ACCOUNTING),
     );
-    await withBypassContext(() => runSetupAgentNow(org.orgId, userId, "accounting", null /* test setup: system provenance, unrestricted */));
+    await withBypassContext(() =>
+      runSetupAgentNow(
+        org.orgId,
+        userId,
+        "accounting",
+        null /* test setup: system provenance, unrestricted */,
+      ),
+    );
     const data = await withBypassContext(() => loadAgentsActivity({}));
     assert.equal(data.total, 1);
     assert.equal(data.rows.length, 1);
@@ -129,7 +140,10 @@ test("without the setup key the activity redirects", { skip: !DB }, async () => 
   try {
     loaderState.user = { orgId: org.orgId, id: "00000000-0000-0000-0000-000000000002" };
     loaderState.permissions = new Set(["assistant.use"]);
-    await assert.rejects(withBypassContext(() => loadAgentsActivity()), /NEXT_REDIRECT:\// );
+    await assert.rejects(
+      withBypassContext(() => loadAgentsActivity()),
+      /NEXT_REDIRECT:\//,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

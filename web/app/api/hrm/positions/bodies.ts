@@ -10,7 +10,8 @@ import { isUuid } from "../../../../lib/list-params";
  * shape it can pin.
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
-const civilDate = (field: string) => civilDateInput(`${field} must be a real YYYY-MM-DD calendar date`);
+const civilDate = (field: string) =>
+  civilDateInput(`${field} must be a real YYYY-MM-DD calendar date`);
 const fte = z.string().regex(/^\d+(\.\d{1,4})?$/, "must be a decimal with up to 4 fraction digits");
 const text255 = z.string().trim().min(1).max(255);
 const reason = z.string().trim().min(1, "reason required").max(2000);
@@ -54,8 +55,16 @@ export const fundPositionBody = z.object({
   periodId: uuid,
   fundedFte: fte,
   fundingSourceId: uuid.nullable().optional(),
-  amount: z.string().regex(/^\d+(\.\d{1,4})?$/).nullable().optional(),
-  currency: z.string().regex(/^[A-Z]{3}$/).nullable().optional(),
+  amount: z
+    .string()
+    .regex(/^\d+(\.\d{1,4})?$/)
+    .nullable()
+    .optional(),
+  currency: z
+    .string()
+    .regex(/^[A-Z]{3}$/)
+    .nullable()
+    .optional(),
   reason,
 });
 

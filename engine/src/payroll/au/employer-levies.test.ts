@@ -12,13 +12,16 @@ test("regional premiums include employer SG calculated from OTE", () => {
   // WorkSafe Victoria includes employer super in rateable remuneration.
   // 12% SG on $2,400 OTE is $288; $2,688 × 1.2% = $32.256 → $32.26.
   assert.deepEqual(assessAuWorkersComp("2400.0000", "0.012", "2400.0000"), {
-    amount: "32.2600", assessable: "2688.0000",
+    amount: "32.2600",
+    assessable: "2688.0000",
   });
   assert.deepEqual(assessAuWorkersComp("2400.0000", "0.014", "2400.0000"), {
-    amount: "37.6300", assessable: "2688.0000",
+    amount: "37.6300",
+    assessable: "2688.0000",
   });
   assert.deepEqual(assessAuWorkersComp("2400.0000", "0.011", "2400.0000"), {
-    amount: "29.5700", assessable: "2688.0000",
+    amount: "29.5700",
+    assessable: "2688.0000",
   });
 });
 
@@ -38,14 +41,16 @@ test("the rounding is single: ledger precision never double-rounds", () => {
 
 test("zero gross prices nothing", () => {
   assert.deepEqual(assessAuWorkersComp("0.0000", "0.012", "0"), {
-    amount: "0.0000", assessable: "0.0000",
+    amount: "0.0000",
+    assessable: "0.0000",
   });
 });
 
 test("non-OTE wages contribute gross but do not generate SG for the levy base", () => {
   // $10,000 gross includes $5,000 OTE: SG is $600; rateable wages become $10,600.
   assert.deepEqual(assessAuWorkersComp("10000", "0.01", "5000"), {
-    amount: "106.0000", assessable: "10600.0000",
+    amount: "106.0000",
+    assessable: "10600.0000",
   });
 });
 
@@ -54,9 +59,9 @@ test("a rate above 100% is refused by name, never priced", () => {
   assert.throws(
     () => assessAuWorkersComp("2400.0000", "1.5", "2400.0000"),
     (error: unknown) =>
-      error instanceof PayrollPackError
-      && /exceeds 1 \(100%\)/.test(error.message)
-      && /au_workers_comp/.test(error.message),
+      error instanceof PayrollPackError &&
+      /exceeds 1 \(100%\)/.test(error.message) &&
+      /au_workers_comp/.test(error.message),
   );
   assert.throws(
     () => assessAuWorkersComp("2400.0000", "twelve", "2400.0000"),

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
+import { LOCALE_CODES as LOCALES } from "../../../../i18n/config";
 
 // The Admin Users -> linked person workflow renders its drawer, reason and
 // attestation copy from the shared en/admin labels. Every locale must carry
@@ -36,7 +36,11 @@ test("every locale labels the linked-person workflow", () => {
   for (const locale of LOCALES.slice(1)) {
     const users = catalog(locale).users as Record<string, unknown>;
     for (const key of KEYS) {
-      assert.notEqual(users[key], en[key], `${locale} users.${key} must not paste the English copy`);
+      assert.notEqual(
+        users[key],
+        en[key],
+        `${locale} users.${key} must not paste the English copy`,
+      );
     }
   }
 });

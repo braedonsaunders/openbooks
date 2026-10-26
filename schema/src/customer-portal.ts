@@ -35,12 +35,13 @@ export const customerPortalLinks = pgTable(
     uniqueIndex("customer_portal_links_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("customer_portal_links_token_hash_unique").on(t.tokenHash),
     index("customer_portal_links_party_scan").on(t.orgId, t.partyId, t.expiresAt),
-    check(
-      "customer_portal_links_email_nonblank",
-      sql`length(btrim(${t.contactEmail})) > 0`,
-    ),
+    check("customer_portal_links_email_nonblank", sql`length(btrim(${t.contactEmail})) > 0`),
     check("customer_portal_links_hash_nonblank", sql`length(btrim(${t.tokenHash})) > 0`),
-    foreignKey({ name: "customer_portal_links_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "customer_portal_links_org_fk",
+      columns: [t.orgId],
+      foreignColumns: [orgs.id],
+    }),
     foreignKey({
       name: "customer_portal_links_party_tenant_fk",
       columns: [t.orgId, t.partyId],
@@ -67,10 +68,7 @@ export const customerPortalSettings = pgTable(
     uniqueIndex("customer_portal_settings_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("customer_portal_settings_effective_unique").on(t.orgId, t.effectiveFrom),
     index("customer_portal_settings_effective_scan").on(t.orgId, t.effectiveFrom),
-    check(
-      "customer_portal_settings_window_nonnegative",
-      sql`${t.returnWindowDays} >= 0`,
-    ),
+    check("customer_portal_settings_window_nonnegative", sql`${t.returnWindowDays} >= 0`),
     foreignKey({
       name: "customer_portal_settings_org_fk",
       columns: [t.orgId],

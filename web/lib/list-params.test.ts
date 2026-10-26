@@ -1,166 +1,198 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { buildListDrawerHref, hasActiveListFilters, isUuid, mergeHref, setupSectionParams } from './list-params'
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  buildListDrawerHref,
+  hasActiveListFilters,
+  isUuid,
+  mergeHref,
+  setupSectionParams,
+} from "./list-params";
 
-test('rehomed setup sections preserve each drawer key and shared list state', () => {
+test("rehomed setup sections preserve each drawer key and shared list state", () => {
   assert.deepEqual(
-    setupSectionParams({ frow: 'new', prow: 'pair-1', mrow: ['mapping-1', 'ignored'], q: 'restricted', f_function: 'program' }, ['frow', 'prow', 'mrow']),
-    { frow: 'new', prow: 'pair-1', mrow: 'mapping-1', q: 'restricted', f_function: 'program' },
-  )
-})
+    setupSectionParams(
+      {
+        frow: "new",
+        prow: "pair-1",
+        mrow: ["mapping-1", "ignored"],
+        q: "restricted",
+        f_function: "program",
+      },
+      ["frow", "prow", "mrow"],
+    ),
+    { frow: "new", prow: "pair-1", mrow: "mapping-1", q: "restricted", f_function: "program" },
+  );
+});
 
-test('exclusive journal links clear competing drawers and preserve list state', () => {
-  const href = buildListDrawerHref('/journal', { q: 'accrual', page: '3', entry: 'old-journal', txn: 'old-payment', reportRecord: 'old-invoice' },
-    'journalEntry', 'next-journal', ['entry', 'txn', 'reportRecord'])
-  const params = new URL(href, 'https://openbooks.example').searchParams
-  assert.equal(params.get('journalEntry'), 'next-journal')
-  for (const key of ['entry', 'txn', 'reportRecord']) assert.equal(params.has(key), false)
-  assert.equal(params.get('drawerReturn'), '/journal?q=accrual&page=3')
-})
+test("exclusive journal links clear competing drawers and preserve list state", () => {
+  const href = buildListDrawerHref(
+    "/journal",
+    {
+      q: "accrual",
+      page: "3",
+      entry: "old-journal",
+      txn: "old-payment",
+      reportRecord: "old-invoice",
+    },
+    "journalEntry",
+    "next-journal",
+    ["entry", "txn", "reportRecord"],
+  );
+  const params = new URL(href, "https://openbooks.example").searchParams;
+  assert.equal(params.get("journalEntry"), "next-journal");
+  for (const key of ["entry", "txn", "reportRecord"]) assert.equal(params.has(key), false);
+  assert.equal(params.get("drawerReturn"), "/journal?q=accrual&page=3");
+});
 
-test('isUuid accepts canonical UUIDs and rejects malformed route ids', () => {
+test("isUuid accepts canonical UUIDs and rejects malformed route ids", () => {
   const canonicalIds = [
-    '019f68a5-6a24-78ec-bed6-cc04e06f2078',
-    '550e8400-e29b-41d4-a716-446655440000',
-    '019F68A5-6A24-78EC-BED6-CC04E06F2078',
-  ]
+    "019f68a5-6a24-78ec-bed6-cc04e06f2078",
+    "550e8400-e29b-41d4-a716-446655440000",
+    "019F68A5-6A24-78EC-BED6-CC04E06F2078",
+  ];
   for (const id of canonicalIds) {
-    assert.equal(isUuid(id), true, `canonical UUID should be accepted: ${id}`)
+    assert.equal(isUuid(id), true, `canonical UUID should be accepted: ${id}`);
   }
 
   const malformedIds = [
-    '-'.repeat(36),
-    '019f68a5-6a24-78ec-bed6-cc04e06f207',
-    '019f68a5-6a24-78ec-bed6-cc04e06f2078x',
-    '019f68a5-6a24-78ec-bed6-cc04e06f207g',
-    '019f68a56a2478ecbed6cc04e06f2078',
-    '019f68a5-6a24-78ec-bed6-cc04e06f20-78',
-  ]
+    "-".repeat(36),
+    "019f68a5-6a24-78ec-bed6-cc04e06f207",
+    "019f68a5-6a24-78ec-bed6-cc04e06f2078x",
+    "019f68a5-6a24-78ec-bed6-cc04e06f207g",
+    "019f68a56a2478ecbed6cc04e06f2078",
+    "019f68a5-6a24-78ec-bed6-cc04e06f20-78",
+  ];
   for (const id of malformedIds) {
-    assert.equal(isUuid(id), false, `malformed UUID should be rejected: ${id}`)
+    assert.equal(isUuid(id), false, `malformed UUID should be rejected: ${id}`);
   }
-})
+});
 
-test('list drawer href preserves all query-backed list state for close', () => {
+test("list drawer href preserves all query-backed list state for close", () => {
   const href = buildListDrawerHref(
-    '/projects',
+    "/projects",
     {
-      q: 'gyp',
-      status: 'active',
-      billing: 'fixed_price',
-      view: 'margin-review',
-      sort: 'name',
-      dir: 'desc',
-      page: '3',
-      perPage: '50',
+      q: "gyp",
+      status: "active",
+      billing: "fixed_price",
+      view: "margin-review",
+      sort: "name",
+      dir: "desc",
+      page: "3",
+      perPage: "50",
     },
-    'project',
-    '019f68a5-6a24-78ec-bed6-cc04e06f2078',
-  )
+    "project",
+    "019f68a5-6a24-78ec-bed6-cc04e06f2078",
+  );
 
-  const url = new URL(href, 'https://openbooks.example')
-  assert.equal(url.searchParams.get('project'), '019f68a5-6a24-78ec-bed6-cc04e06f2078')
+  const url = new URL(href, "https://openbooks.example");
+  assert.equal(url.searchParams.get("project"), "019f68a5-6a24-78ec-bed6-cc04e06f2078");
   assert.equal(
-    url.searchParams.get('drawerReturn'),
-    '/projects?q=gyp&status=active&billing=fixed_price&view=margin-review&sort=name&dir=desc&page=3&perPage=50',
-  )
-})
+    url.searchParams.get("drawerReturn"),
+    "/projects?q=gyp&status=active&billing=fixed_price&view=margin-review&sort=name&dir=desc&page=3&perPage=50",
+  );
+});
 
-test('project row links drop the unsaved-create flag instead of reopening the create form', () => {
+test("project row links drop the unsaved-create flag instead of reopening the create form", () => {
   const href = buildListDrawerHref(
-    '/projects',
-    { q: 'gyp', projectNew: '1', project: 'old-record' },
-    'project',
-    '019f68a5-6a24-78ec-bed6-cc04e06f2078',
-    ['projectNew'],
-  )
-  const url = new URL(href, 'https://openbooks.example')
-  assert.equal(url.searchParams.get('project'), '019f68a5-6a24-78ec-bed6-cc04e06f2078')
-  assert.equal(url.searchParams.has('projectNew'), false)
-  assert.equal(url.searchParams.get('q'), 'gyp')
-  assert.equal(url.searchParams.get('drawerReturn'), '/projects?q=gyp')
-})
+    "/projects",
+    { q: "gyp", projectNew: "1", project: "old-record" },
+    "project",
+    "019f68a5-6a24-78ec-bed6-cc04e06f2078",
+    ["projectNew"],
+  );
+  const url = new URL(href, "https://openbooks.example");
+  assert.equal(url.searchParams.get("project"), "019f68a5-6a24-78ec-bed6-cc04e06f2078");
+  assert.equal(url.searchParams.has("projectNew"), false);
+  assert.equal(url.searchParams.get("q"), "gyp");
+  assert.equal(url.searchParams.get("drawerReturn"), "/projects?q=gyp");
+});
 
-test('list drawer href replaces stale drawer context instead of nesting it', () => {
+test("list drawer href replaces stale drawer context instead of nesting it", () => {
   const href = buildListDrawerHref(
-    '/bills',
+    "/bills",
     {
-      q: 'steel',
-      status: 'pending_approval',
-      doc: 'old-record',
-      drawerReturn: '/bills?q=old',
+      q: "steel",
+      status: "pending_approval",
+      doc: "old-record",
+      drawerReturn: "/bills?q=old",
     },
-    'doc',
-    'new-record',
-  )
+    "doc",
+    "new-record",
+  );
 
-  const url = new URL(href, 'https://openbooks.example')
-  assert.equal(url.searchParams.get('doc'), 'new-record')
-  assert.equal(
-    url.searchParams.get('drawerReturn'),
-    '/bills?q=steel&status=pending_approval',
-  )
-  assert.equal(url.searchParams.getAll('drawerReturn').length, 1)
-})
+  const url = new URL(href, "https://openbooks.example");
+  assert.equal(url.searchParams.get("doc"), "new-record");
+  assert.equal(url.searchParams.get("drawerReturn"), "/bills?q=steel&status=pending_approval");
+  assert.equal(url.searchParams.getAll("drawerReturn").length, 1);
+});
 
-test('an unfiltered list is not filter-active, so the empty state may use page copy', () => {
+test("an unfiltered list is not filter-active, so the empty state may use page copy", () => {
   // UX-08b: "no imports yet" and "filters match nothing" need different copy
   // AND different actions. Only a truly unfiltered shell may render the
   // page-specific "nothing here yet" copy.
   assert.equal(
     hasActiveListFilters({ q: undefined, quickValues: {}, savedViewFilterCount: 0 }),
     false,
-  )
-})
+  );
+});
 
-test('a search term marks the list filter-active even when it is only whitespace-padded', () => {
+test("a search term marks the list filter-active even when it is only whitespace-padded", () => {
   assert.equal(
-    hasActiveListFilters({ q: '  ofx  ', quickValues: {}, savedViewFilterCount: 0 }),
+    hasActiveListFilters({ q: "  ofx  ", quickValues: {}, savedViewFilterCount: 0 }),
     true,
-  )
-  assert.equal(
-    hasActiveListFilters({ q: '   ', quickValues: {}, savedViewFilterCount: 0 }),
-    false,
-  )
-})
+  );
+  assert.equal(hasActiveListFilters({ q: "   ", quickValues: {}, savedViewFilterCount: 0 }), false);
+});
 
-test('an applied quick filter marks the list filter-active, requested or defaulted', () => {
+test("an applied quick filter marks the list filter-active, requested or defaulted", () => {
   assert.equal(
-    hasActiveListFilters({ q: undefined, quickValues: { source: 'manual' }, savedViewFilterCount: 0 }),
+    hasActiveListFilters({
+      q: undefined,
+      quickValues: { source: "manual" },
+      savedViewFilterCount: 0,
+    }),
     true,
-  )
+  );
   // A defaulted chip still narrows the list, so it still counts.
   assert.equal(
-    hasActiveListFilters({ q: undefined, quickValues: { source: 'all' }, savedViewFilterCount: 0 }),
+    hasActiveListFilters({ q: undefined, quickValues: { source: "all" }, savedViewFilterCount: 0 }),
     true,
-  )
+  );
   // An explicitly cleared ('all' → undefined) chip does not.
   assert.equal(
-    hasActiveListFilters({ q: undefined, quickValues: { source: undefined }, savedViewFilterCount: 0 }),
+    hasActiveListFilters({
+      q: undefined,
+      quickValues: { source: undefined },
+      savedViewFilterCount: 0,
+    }),
     false,
-  )
-})
+  );
+});
 
-test('a saved-view filter marks the list filter-active', () => {
+test("a saved-view filter marks the list filter-active", () => {
   assert.equal(
     hasActiveListFilters({ q: undefined, quickValues: {}, savedViewFilterCount: 2 }),
     true,
-  )
-})
+  );
+});
 
-test('mergeHref keeps a query-bearing base to a single question mark', () => {
-  const href = mergeHref('/admin/setup/period-close?tab=periods', {}, { fy: 2025 })
-  assert.equal(href, '/admin/setup/period-close?tab=periods&fy=2025')
-  const params = new URL(href, 'https://openbooks.example').searchParams
-  assert.equal(params.get('tab'), 'periods')
-  assert.equal(params.get('fy'), '2025')
-})
+test("mergeHref keeps a query-bearing base to a single question mark", () => {
+  const href = mergeHref("/admin/setup/period-close?tab=periods", {}, { fy: 2025 });
+  assert.equal(href, "/admin/setup/period-close?tab=periods&fy=2025");
+  const params = new URL(href, "https://openbooks.example").searchParams;
+  assert.equal(params.get("tab"), "periods");
+  assert.equal(params.get("fy"), "2025");
+});
 
-test('mergeHref lets current params and overrides win over the base query', () => {
-  const href = mergeHref('/items?item=old&view=catalog', { item: 'new' }, { view: undefined, fy: 2025 })
-  const params = new URL(href, 'https://openbooks.example').searchParams
-  assert.equal(params.get('item'), 'new')
-  assert.equal(params.has('view'), false)
-  assert.equal(params.get('fy'), '2025')
-  assert.equal(href.split('?').length, 2)
-})
+test("mergeHref lets current params and overrides win over the base query", () => {
+  const href = mergeHref(
+    "/items?item=old&view=catalog",
+    { item: "new" },
+    { view: undefined, fy: 2025 },
+  );
+  const params = new URL(href, "https://openbooks.example").searchParams;
+  assert.equal(params.get("item"), "new");
+  assert.equal(params.has("view"), false);
+  assert.equal(params.get("fy"), "2025");
+  assert.equal(href.split("?").length, 2);
+});

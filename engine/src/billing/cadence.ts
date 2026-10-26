@@ -64,7 +64,7 @@ function shiftAnchoredMonth(
   if (!Number.isSafeInteger(targetYear) || targetYear < 1 || targetYear > 9999) {
     throw new Error("cadence step falls outside the supported date range");
   }
-  const targetMonth1 = ((targetMonthIndex % 12) + 12) % 12 + 1;
+  const targetMonth1 = (((targetMonthIndex % 12) + 12) % 12) + 1;
   const day = Math.min(anchorDay, daysInCivilMonth(targetYear, targetMonth1));
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${String(targetYear).padStart(4, "0")}-${pad(targetMonth1)}-${pad(day)}`;

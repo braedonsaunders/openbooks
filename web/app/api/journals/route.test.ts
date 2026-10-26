@@ -64,16 +64,12 @@ function sqlText(query: unknown): string {
       if (typeof chunk === "string") return chunk;
       const value = (chunk as { value?: unknown[] })?.value;
       if (Array.isArray(value)) return value.map(String).join("");
-      return (chunk as { queryChunks?: unknown[] })?.queryChunks
-        ? sqlText(chunk)
-        : "";
+      return (chunk as { queryChunks?: unknown[] })?.queryChunks ? sqlText(chunk) : "";
     })
     .join("");
 }
 
-(
-  globalThis as typeof globalThis & Record<string, unknown>
-).openbooksJournalsSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksJournalsSqlText = sqlText;
 
 stubModules({
   navigation: false,
@@ -232,8 +228,13 @@ const BALANCED = {
 function post(key: string | null, body: Record<string, unknown>): Promise<Response> {
   state.requestKey = key;
   if (!state.inserted) {
-    const lines = Array.isArray(body.lines) ? body.lines as { accountId: string; amount: string }[] : [];
-    state.storedLines = lines.map((line) => ({ accountId: line.accountId, amount: Number(line.amount).toFixed(4) }));
+    const lines = Array.isArray(body.lines)
+      ? (body.lines as { accountId: string; amount: string }[])
+      : [];
+    state.storedLines = lines.map((line) => ({
+      accountId: line.accountId,
+      amount: Number(line.amount).toFixed(4),
+    }));
   }
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (key !== null) headers["Idempotency-Key"] = key;
@@ -287,8 +288,14 @@ test("journal creation replays only the exact request for an idempotency key", a
   });
   captureAuditAfter();
   assert.equal(state.auditInserts, 1);
-  assert.ok(state.databaseQueries.some((query) => query.includes("from custom_field_defs")), "native custom-field lookup uses the tracked database");
-  assert.ok(state.databaseQueries.some((query) => query.includes("from segment_definitions")), "native dimension lookup uses the tracked database");
+  assert.ok(
+    state.databaseQueries.some((query) => query.includes("from custom_field_defs")),
+    "native custom-field lookup uses the tracked database",
+  );
+  assert.ok(
+    state.databaseQueries.some((query) => query.includes("from segment_definitions")),
+    "native dimension lookup uses the tracked database",
+  );
 
   const replay = await post(key, BALANCED);
   assert.equal(replay.status, 200);

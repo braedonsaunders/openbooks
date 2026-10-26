@@ -19,7 +19,7 @@ interface RouteState {
   } | null;
 }
 const routeState: RouteState = { authz: null };
-;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.close-run-date-test')]
@@ -33,12 +33,19 @@ const engineRoot = new URL("../../../../../engine/", import.meta.url).href;
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "next/navigation") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export function redirect() {}" };
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export function redirect() {}",
+      };
     }
     // Bare @openbooks/engine/* resolves cross-checkout to main; pin the
     // engine graph to the worktree copy carrying the startCloseRun guard.
     if (specifier.startsWith("@openbooks/engine/")) {
-      return nextResolve(new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href, context);
+      return nextResolve(
+        new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href,
+        context,
+      );
     }
     // The route factory resolves the gate by @/ alias at request time, after
     // this module's imports; serve it the same intended session.
@@ -62,9 +69,8 @@ registerHooks({
 const routeUrl = "./route.ts?close-run-date-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/testing/fixtures"
-);
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 interface Fixture {
   orgId: string;
@@ -79,29 +85,40 @@ async function seed(): Promise<Fixture> {
   return { orgId: org.orgId, actorId, periodId: org.periodId, bookId: org.bookId };
 }
 
-async function post(fixture: Fixture, body: Record<string, unknown>): Promise<{ status: number; json: unknown }> {
+async function post(
+  fixture: Fixture,
+  body: Record<string, unknown>,
+): Promise<{ status: number; json: unknown }> {
   routeState.authz = {
     user: { orgId: fixture.orgId, id: fixture.actorId },
     permissions: new Set(["*"]),
     allowedSubsidiaryIds: null,
   };
   try {
-    const response = await withOrgContext(fixture.orgId, () => POST(
-      new Request("http://openbooks.test/api/close/runs", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }),
-    ));
+    const response = await withOrgContext(fixture.orgId, () =>
+      POST(
+        new Request("http://openbooks.test/api/close/runs", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      ),
+    );
     return { status: response.status, json: await response.json().catch(() => null) };
   } catch (error) {
-    return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } };
+    return {
+      status: 500,
+      json: { thrown: error instanceof Error ? error.message : String(error) },
+    };
   }
 }
 
 async function runCount(orgId: string): Promise<number> {
-  const rows = await db.execute<{ n: number }>(sql`
-    select count(*)::int as n from close_runs where org_id = ${orgId}`, "objects");
+  const rows = await db.execute<{ n: number }>(
+    sql`
+    select count(*)::int as n from close_runs where org_id = ${orgId}`,
+    "objects",
+  );
   return rows[0]!.n;
 }
 
@@ -109,9 +126,15 @@ test("POST refuses an impossible target close date without starting a run", asyn
   const fixture = await withBypass(seed);
   try {
     const result = await post(fixture, {
-      periodId: fixture.periodId, bookId: fixture.bookId, targetCloseDate: "2024-02-30",
+      periodId: fixture.periodId,
+      bookId: fixture.bookId,
+      targetCloseDate: "2024-02-30",
     });
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`);
+    assert.equal(
+      result.status,
+      422,
+      `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
     assert.equal(await runCount(fixture.orgId), 0);
   } finally {
     await withBypass(() => dropScratchOrg(fixture.orgId));
@@ -122,9 +145,15 @@ test("POST still starts a run with a real target close date", async () => {
   const fixture = await withBypass(seed);
   try {
     const result = await post(fixture, {
-      periodId: fixture.periodId, bookId: fixture.bookId, targetCloseDate: "2024-02-29",
+      periodId: fixture.periodId,
+      bookId: fixture.bookId,
+      targetCloseDate: "2024-02-29",
     });
-    assert.equal(result.status, 200, `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`);
+    assert.equal(
+      result.status,
+      200,
+      `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`,
+    );
     assert.equal(await runCount(fixture.orgId), 1);
   } finally {
     await withBypass(() => dropScratchOrg(fixture.orgId));

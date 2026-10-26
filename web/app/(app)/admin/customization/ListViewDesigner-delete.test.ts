@@ -1,99 +1,105 @@
-import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import test from 'node:test'
-import { fileURLToPath } from 'node:url'
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const here = dirname(fileURLToPath(import.meta.url))
+const here = dirname(fileURLToPath(import.meta.url));
 
-const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
-await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/customization?recordType=vendor_bill&tab=views', matchMediaMatches: false, resizeObserver: false })
+const { bootJsdomEnvironment } = await import("../../../../testing/jsdom-env");
+await bootJsdomEnvironment({
+  url: "http://localhost:4800/admin/customization?recordType=vendor_bill&tab=views",
+  matchMediaMatches: false,
+  resizeObserver: false,
+});
 
-const { registerHooks } = await import('node:module')
-const { pathToFileURL } = await import('node:url')
+const { registerHooks } = await import("node:module");
+const { pathToFileURL } = await import("node:url");
 // @openbooks/* symlinks resolve to the MAIN checkout (stale); pin the real
 // worktree copies so the test runs the code under test.
-const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
-const worktreeCustomization = pathToFileURL(join(process.cwd(), 'packages', 'customization', 'src', 'index.ts')).href
-const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: { pathname: '/admin/customization' } })
+const worktreeUi = pathToFileURL(join(process.cwd(), "packages", "ui", "src", "index.ts")).href;
+const worktreeCustomization = pathToFileURL(
+  join(process.cwd(), "packages", "customization", "src", "index.ts"),
+).href;
+const { stubModules } = await import("../../../../testing/stub-modules");
+stubModules({ navigation: { pathname: "/admin/customization" } });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '@openbooks/ui') {
-      return { shortCircuit: true, url: worktreeUi }
+    if (specifier === "@openbooks/ui") {
+      return { shortCircuit: true, url: worktreeUi };
     }
-    if (specifier === '@openbooks/customization') {
-      return { shortCircuit: true, url: worktreeCustomization }
+    if (specifier === "@openbooks/customization") {
+      return { shortCircuit: true, url: worktreeCustomization };
     }
 
-    if (specifier === 'sonner') {
+    if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}',
-      }
+        url: "data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}",
+      };
     }
-    if (specifier === '@/lib/confirm') {
+    if (specifier === "@/lib/confirm") {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export function confirmDialog(o){(globalThis.__confirms??=[]).push(String(typeof o==="string"?o:o.message));return Promise.resolve(globalThis.__confirmAnswer??false)};export function ConfirmRoot(){return null}',
-      }
+      };
     }
-    return next(specifier, context)
+    return next(specifier, context);
   },
-})
+});
 
-const React = await import('react')
-Object.assign(globalThis, { React })
-const { act } = await import('react')
-const { createRoot } = await import('react-dom/client')
-const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../../messages/en')).default
-const { ListViewDesigner } = await import('./ListViewDesigner')
-const { defaultListView } = await import('@openbooks/customization')
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { act } = await import("react");
+const { createRoot } = await import("react-dom/client");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../../../messages/en")).default;
+const { ListViewDesigner } = await import("./ListViewDesigner");
+const { defaultListView } = await import("@openbooks/customization");
 
-const VIEW_ID = '019f68a5-6a24-78ec-bed6-cc04e06f2079'
+const VIEW_ID = "019f68a5-6a24-78ec-bed6-cc04e06f2079";
 
-type FetchCall = { url: string; method: string }
-const calls: FetchCall[] = []
+type FetchCall = { url: string; method: string };
+const calls: FetchCall[] = [];
 declare global {
-  var __confirms: string[] | undefined
-  var __confirmAnswer: boolean | undefined
+  var __confirms: string[] | undefined;
+  var __confirmAnswer: boolean | undefined;
 }
-globalThis.__confirms = []
-globalThis.__confirmAnswer = false
+globalThis.__confirms = [];
+globalThis.__confirmAnswer = false;
 globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
-  calls.push({ url: String(url), method: init?.method ?? 'GET' })
-  return new Response(JSON.stringify({}), { headers: { 'content-type': 'application/json' } })
-}) as typeof fetch
+  calls.push({ url: String(url), method: init?.method ?? "GET" });
+  return new Response(JSON.stringify({}), { headers: { "content-type": "application/json" } });
+}) as typeof fetch;
 
-test('deleting a saved view confirms before the DELETE goes out', async () => {
-  document.body.innerHTML = ''
-  calls.length = 0
-  globalThis.__confirms = []
-  globalThis.__confirmAnswer = false
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+test("deleting a saved view confirms before the DELETE goes out", async () => {
+  document.body.innerHTML = "";
+  calls.length = 0;
+  globalThis.__confirms = [];
+  globalThis.__confirmAnswer = false;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   /* eslint-disable react/no-children-prop */
   await act(async () => {
     root.render(
       React.createElement(NextIntlClientProvider, {
-        locale: 'en',
+        locale: "en",
         messages,
-        timeZone: 'UTC',
+        timeZone: "UTC",
         children: React.createElement(ListViewDesigner, {
-          recordType: 'vendor_bill',
+          recordType: "vendor_bill",
           def: {
             id: VIEW_ID,
-            name: 'Ops payables',
-            scope: 'org',
+            name: "Ops payables",
+            scope: "org",
             isDefault: false,
             isActive: true,
-            config: defaultListView('vendor_bill'),
-            recordType: 'vendor_bill',
+            config: defaultListView("vendor_bill"),
+            recordType: "vendor_bill",
           },
           canManageOrg: true,
-          userId: '00000000-0000-4000-8000-00000000a002',
+          userId: "00000000-0000-4000-8000-00000000a002",
           showInListDefs: [],
           filterOptions: {},
           inventoryEnabled: false,
@@ -102,55 +108,63 @@ test('deleting a saved view confirms before the DELETE goes out', async () => {
           multiSubsidiary: false,
         }),
       }),
-    )
-    await new Promise((resolve) => setTimeout(resolve, 0))
-  })
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
   /* eslint-enable react/no-children-prop */
   try {
-    const remove = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Delete view')
-    assert.ok(remove, 'the Delete view button must render')
+    const remove = [...document.querySelectorAll("button")].find(
+      (b) => (b.textContent ?? "").trim() === "Delete view",
+    );
+    assert.ok(remove, "the Delete view button must render");
     await act(async () => {
-      ;(remove as HTMLButtonElement).dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
-    assert.equal(globalThis.__confirms?.length, 1, 'deleting the view must ask for confirmation')
-    assert.deepEqual(calls, [], 'no DELETE request before the operator confirms')
+      (remove as HTMLButtonElement).dispatchEvent(
+        new window.MouseEvent("click", { bubbles: true }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.equal(globalThis.__confirms?.length, 1, "deleting the view must ask for confirmation");
+    assert.deepEqual(calls, [], "no DELETE request before the operator confirms");
 
-    globalThis.__confirmAnswer = true
+    globalThis.__confirmAnswer = true;
     await act(async () => {
-      ;(remove as HTMLButtonElement).dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
-      await new Promise((resolve) => setTimeout(resolve, 0))
-    })
-    assert.deepEqual(calls, [{ url: `/api/customization/list-views/${VIEW_ID}`, method: 'DELETE' }])
+      (remove as HTMLButtonElement).dispatchEvent(
+        new window.MouseEvent("click", { bubbles: true }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    assert.deepEqual(calls, [
+      { url: `/api/customization/list-views/${VIEW_ID}`, method: "DELETE" },
+    ]);
   } finally {
     await act(async () => {
-      root.unmount()
-    })
-    host.remove()
+      root.unmount();
+    });
+    host.remove();
   }
-})
+});
 
-test('column move buttons expose translated names with their column context', async (t) => {
-  document.body.innerHTML = ''
-  const host = document.createElement('div')
-  document.body.appendChild(host)
-  const root = createRoot(host)
+test("column move buttons expose translated names with their column context", async (t) => {
+  document.body.innerHTML = "";
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
   t.after(async () => {
-    await act(async () => root.unmount())
-    host.remove()
-  })
+    await act(async () => root.unmount());
+    host.remove();
+  });
   /* eslint-disable react/no-children-prop */
   await act(async () => {
     root.render(
       React.createElement(NextIntlClientProvider, {
-        locale: 'en',
+        locale: "en",
         messages,
-        timeZone: 'UTC',
+        timeZone: "UTC",
         children: React.createElement(ListViewDesigner, {
-          recordType: 'vendor_bill',
+          recordType: "vendor_bill",
           def: null,
           canManageOrg: true,
-          userId: '00000000-0000-4000-8000-00000000a002',
+          userId: "00000000-0000-4000-8000-00000000a002",
           showInListDefs: [],
           filterOptions: {},
           inventoryEnabled: false,
@@ -159,32 +173,50 @@ test('column move buttons expose translated names with their column context', as
           multiSubsidiary: false,
         }),
       }),
-    )
-    await new Promise((resolve) => setTimeout(resolve, 0))
-  })
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
   /* eslint-enable react/no-children-prop */
 
-  const moveUp = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Previous: "]')]
-  const moveDown = [...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Next: "]')]
-  const lockedBadge = [...document.querySelectorAll('span')].find((node) => node.textContent === 'Locked')
-  assert.equal(lockedBadge?.parentElement?.querySelector('button[aria-label="Shown"]')?.hasAttribute('disabled'), true)
-  assert.ok(moveUp.length > 0, 'each column has a named move-up control')
-  assert.equal(moveDown.length, moveUp.length, 'each column has a named move-down control')
-  assert.ok(moveUp.every((button) => button.getAttribute('aria-label')!.length > 'Previous: '.length))
-  assert.ok(moveDown.every((button) => button.getAttribute('aria-label')!.length > 'Next: '.length))
-})
+  const moveUp = [
+    ...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Previous: "]'),
+  ];
+  const moveDown = [
+    ...document.querySelectorAll<HTMLButtonElement>('button[aria-label^="Next: "]'),
+  ];
+  const lockedBadge = [...document.querySelectorAll("span")].find(
+    (node) => node.textContent === "Locked",
+  );
+  assert.equal(
+    lockedBadge?.parentElement
+      ?.querySelector('button[aria-label="Shown"]')
+      ?.hasAttribute("disabled"),
+    true,
+  );
+  assert.ok(moveUp.length > 0, "each column has a named move-up control");
+  assert.equal(moveDown.length, moveUp.length, "each column has a named move-down control");
+  assert.ok(
+    moveUp.every((button) => button.getAttribute("aria-label")!.length > "Previous: ".length),
+  );
+  assert.ok(
+    moveDown.every((button) => button.getAttribute("aria-label")!.length > "Next: ".length),
+  );
+});
 
 // history: the delete confirmation names the fallback consequence,
 // so it must exist in every shipped locale.
-for (const locale of ['en', 'fr', 'es']) {
+for (const locale of ["en", "fr", "es"]) {
   test(`view delete confirmation is translated in ${locale}`, () => {
     const catalog = JSON.parse(
-      readFileSync(join(here, '..', '..', '..', '..', 'messages', locale, 'customization.json'), 'utf8'),
-    ) as { designer?: { list?: Record<string, unknown> } }
+      readFileSync(
+        join(here, "..", "..", "..", "..", "messages", locale, "customization.json"),
+        "utf8",
+      ),
+    ) as { designer?: { list?: Record<string, unknown> } };
     assert.equal(
       typeof catalog.designer?.list?.deleteConfirm,
-      'string',
+      "string",
       `${locale} designer.list.deleteConfirm must exist`,
-    )
-  })
+    );
+  });
 }

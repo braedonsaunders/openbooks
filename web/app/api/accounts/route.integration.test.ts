@@ -60,8 +60,8 @@ const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
 const { PATCH, GET } = (await import(patchRouteUrl)) as typeof import("./[id]/route.ts");
 
 const { withBypassContext, db } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
-
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 
 function postRequest(key: string, body: unknown): Request {
   return new Request("http://localhost/api/accounts", {
@@ -80,239 +80,318 @@ function patchRequest(body: unknown): Request {
 }
 
 async function enableMultiCurrency(orgId: string): Promise<void> {
-  await withBypassContext(() => (db.execute(sql`
+  await withBypassContext(() =>
+    db.execute(sql`
     update orgs
        set settings = coalesce(settings, '{}'::jsonb) || '{"features":{"multiCurrency":true}}'::jsonb
      where id = ${orgId}
-  `)));
+  `),
+  );
 }
 
-test(
-  "accounts POST refuses a reconcilable account without a currency instead of failing in storage",
-  async () => {
-    const org = await withBypassContext(() => (createScratchOrg()));
-    try {
-      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-      routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
-      await enableMultiCurrency(org.orgId);
+test("accounts POST refuses a reconcilable account without a currency instead of failing in storage", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
+    await enableMultiCurrency(org.orgId);
 
-      const refused = await POST(
-        postRequest(randomUUID(), { name: "Settlement cash", type: "asset_bank", reconcilable: true }),
-      );
-      assert.equal(refused.status, 422);
-      assert.deepEqual(await refused.json(), {
-        error: "reconcilable_currency_required",
-        field: "currencyRestriction",
-      });
+    const refused = await POST(
+      postRequest(randomUUID(), {
+        name: "Settlement cash",
+        type: "asset_bank",
+        reconcilable: true,
+      }),
+    );
+    assert.equal(refused.status, 422);
+    assert.deepEqual(await refused.json(), {
+      error: "reconcilable_currency_required",
+      field: "currencyRestriction",
+    });
 
-      const created = await POST(
-        postRequest(randomUUID(), {
-          name: "Settlement cash",
-          type: "asset_bank",
-          reconcilable: true,
-          currencyRestriction: "CAD",
-        }),
-      );
-      assert.equal(created.status, 201);
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    const created = await POST(
+      postRequest(randomUUID(), {
+        name: "Settlement cash",
+        type: "asset_bank",
+        reconcilable: true,
+        currencyRestriction: "CAD",
+      }),
+    );
+    assert.equal(created.status, 201);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "accounts POST/PATCH let the reconcilable base currency through when Multi-currency is off",
-  async () => {
-    // Single-currency orgs (scratch orgs are CAD, feature off)
-    // have no other currency to settle in, so the reconcilable invariant can
-    // only ever mean the base currency. Anything else stays refused.
-    const org = await withBypassContext(() => (createScratchOrg()));
-    try {
-      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-      routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
+test("accounts POST/PATCH let the reconcilable base currency through when Multi-currency is off", async () => {
+  // Single-currency orgs (scratch orgs are CAD, feature off)
+  // have no other currency to settle in, so the reconcilable invariant can
+  // only ever mean the base currency. Anything else stays refused.
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
 
-      const created = await POST(
-        postRequest(randomUUID(), {
-          name: "Base settlement cash",
-          type: "asset_bank",
-          reconcilable: true,
-          currencyRestriction: "CAD",
-        }),
-      );
-      assert.equal(created.status, 201);
+    const created = await POST(
+      postRequest(randomUUID(), {
+        name: "Base settlement cash",
+        type: "asset_bank",
+        reconcilable: true,
+        currencyRestriction: "CAD",
+      }),
+    );
+    assert.equal(created.status, 201);
 
-      const foreign = await POST(
-        postRequest(randomUUID(), {
-          name: "Foreign settlement cash",
-          type: "asset_bank",
-          reconcilable: true,
-          currencyRestriction: "USD",
-        }),
-      );
-      assert.equal(foreign.status, 404);
+    const foreign = await POST(
+      postRequest(randomUUID(), {
+        name: "Foreign settlement cash",
+        type: "asset_bank",
+        reconcilable: true,
+        currencyRestriction: "USD",
+      }),
+    );
+    assert.equal(foreign.status, 404);
 
-      const unflagged = await POST(
-        postRequest(randomUUID(), {
-          name: "Plain cash with currency",
-          type: "asset_bank",
-          currencyRestriction: "CAD",
-        }),
-      );
-      assert.equal(unflagged.status, 404);
+    const unflagged = await POST(
+      postRequest(randomUUID(), {
+        name: "Plain cash with currency",
+        type: "asset_bank",
+        currencyRestriction: "CAD",
+      }),
+    );
+    assert.equal(unflagged.status, 404);
 
-      const plainId = randomUUID();
-      await withBypassContext(() => (db.execute(sql`
+    const plainId = randomUUID();
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into accounts (id, org_id, number, name, type)
         values (${plainId}, ${org.orgId}, '9003', 'Plain cash', 'asset_bank')
-      `)));
-      const allowed = await PATCH(patchRequest({ reconcilable: true, currencyRestriction: "cad" }), {
-        params: Promise.resolve({ id: plainId }),
-      });
-      assert.equal(allowed.status, 200);
+      `),
+    );
+    const allowed = await PATCH(patchRequest({ reconcilable: true, currencyRestriction: "cad" }), {
+      params: Promise.resolve({ id: plainId }),
+    });
+    assert.equal(allowed.status, 200);
 
-      const refused = await PATCH(patchRequest({ reconcilable: true, currencyRestriction: "USD" }), {
-        params: Promise.resolve({ id: plainId }),
-      });
-      assert.equal(refused.status, 404);
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+    const refused = await PATCH(patchRequest({ reconcilable: true, currencyRestriction: "USD" }), {
+      params: Promise.resolve({ id: plainId }),
+    });
+    assert.equal(refused.status, 404);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "accounts PATCH refuses to add reconcilable or drop its currency instead of failing in storage",
-  async () => {
-    const org = await withBypassContext(() => (createScratchOrg()));
-    try {
-      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-      routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
-      await enableMultiCurrency(org.orgId);
+test("accounts PATCH refuses to add reconcilable or drop its currency instead of failing in storage", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
+    await enableMultiCurrency(org.orgId);
 
-      const plainId = randomUUID();
-      await withBypassContext(() => (db.execute(sql`
+    const plainId = randomUUID();
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into accounts (id, org_id, number, name, type)
         values (${plainId}, ${org.orgId}, '9001', 'Plain cash', 'asset_bank')
-      `)));
-      const refused = await PATCH(patchRequest({ reconcilable: true }), {
-        params: Promise.resolve({ id: plainId }),
-      });
-      assert.equal(refused.status, 422);
-      assert.deepEqual(await refused.json(), {
-        error: "reconcilable_currency_required",
-        field: "currencyRestriction",
-      });
-      const allowed = await PATCH(
-        patchRequest({ reconcilable: true, currencyRestriction: "CAD" }),
-        { params: Promise.resolve({ id: plainId }) },
-      );
-      assert.equal(allowed.status, 200);
+      `),
+    );
+    const refused = await PATCH(patchRequest({ reconcilable: true }), {
+      params: Promise.resolve({ id: plainId }),
+    });
+    assert.equal(refused.status, 422);
+    assert.deepEqual(await refused.json(), {
+      error: "reconcilable_currency_required",
+      field: "currencyRestriction",
+    });
+    const allowed = await PATCH(patchRequest({ reconcilable: true, currencyRestriction: "CAD" }), {
+      params: Promise.resolve({ id: plainId }),
+    });
+    assert.equal(allowed.status, 200);
 
-      const settledId = randomUUID();
-      await withBypassContext(() => (db.execute(sql`
+    const settledId = randomUUID();
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into accounts (id, org_id, number, name, type, reconcilable, currency_restriction)
         values (${settledId}, ${org.orgId}, '9002', 'Settled cash', 'asset_bank', true, 'CAD')
-      `)));
-      const cleared = await PATCH(patchRequest({ currencyRestriction: null }), {
-        params: Promise.resolve({ id: settledId }),
-      });
-      assert.equal(cleared.status, 422);
-      assert.deepEqual(await cleared.json(), {
-        error: "reconcilable_currency_required",
-        field: "currencyRestriction",
-      });
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      `),
+    );
+    const cleared = await PATCH(patchRequest({ currencyRestriction: null }), {
+      params: Promise.resolve({ id: settledId }),
+    });
+    assert.equal(cleared.status, 422);
+    assert.deepEqual(await cleared.json(), {
+      error: "reconcilable_currency_required",
+      field: "currencyRestriction",
+    });
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
 
-test(
-  "accounts routes scope entity-owned accounts to the caller subsidiary",
-  async () => {
-    const org = await withBypassContext(() => (createScratchOrg()));
-    try {
-      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
-      const entityB = randomUUID();
-      await withBypassContext(() => (db.execute(sql`
+test("accounts routes scope entity-owned accounts to the caller subsidiary", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId));
+    const entityB = randomUUID();
+    await withBypassContext(() =>
+      db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${entityB}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'CAD', 'CA')
-      `)));
-      const seed = async (number: string, subsidiaryId: string | null) =>
-        withBypassContext(() => (db.execute(sql`
+      `),
+    );
+    const seed = async (number: string, subsidiaryId: string | null) =>
+      withBypassContext(() =>
+        db.execute(
+          sql`
           insert into accounts (id, org_id, number, name, type, subsidiary_id)
           values (${randomUUID()}, ${org.orgId}, ${number}, ${`Scoped ${number}`}, 'asset_other', ${subsidiaryId})
           returning id
-        `, "objects")));
-      const accountA = (await seed('9101', org.subsidiaryId))[0]!.id as string;
-      const accountB = (await seed('9102', entityB))[0]!.id as string;
-      const sharedId = (await seed('9103', null))[0]!.id as string;
-      const scoped = (subsidiaryId: string) => {
-        routeState.authz = {
-          user: { roles: [], orgId: org.orgId, id: adminId },
-          permissions: new Set(),
-          allowedSubsidiaryIds: new Set([subsidiaryId]),
-        };
+        `,
+          "objects",
+        ),
+      );
+    const accountA = (await seed("9101", org.subsidiaryId))[0]!.id as string;
+    const accountB = (await seed("9102", entityB))[0]!.id as string;
+    const sharedId = (await seed("9103", null))[0]!.id as string;
+    const scoped = (subsidiaryId: string) => {
+      routeState.authz = {
+        user: { roles: [], orgId: org.orgId, id: adminId },
+        permissions: new Set(),
+        allowedSubsidiaryIds: new Set([subsidiaryId]),
       };
+    };
 
-      scoped(org.subsidiaryId);
-      // Reads: B's metadata is indistinguishable from missing; the shared
-      // chart reads for every caller.
-      assert.equal((await GET(new Request('http://localhost/'), { params: Promise.resolve({ id: accountB }) })).status, 404);
-      assert.equal((await GET(new Request('http://localhost/'), { params: Promise.resolve({ id: accountA }) })).status, 200);
-      assert.equal((await GET(new Request('http://localhost/'), { params: Promise.resolve({ id: sharedId }) })).status, 200);
-      // Writes: minting B's account or the shared chart refuses, and the
-      // refusal stores nothing.
-      const mintB = await POST(postRequest(randomUUID(), { name: 'B cash', type: 'asset_other', subsidiaryId: entityB }));
-      assert.equal(mintB.status, 404);
-      assert.deepEqual(await mintB.json(), { error: 'not_found' });
-      // The shared chart is visible, so its refusal names the remedy (403)
-      // instead of hiding behind the record-level 404.
-      const mintShared = await POST(postRequest(randomUUID(), { name: 'Shared cash', type: 'asset_other' }));
-      assert.equal(mintShared.status, 403);
-      assert.deepEqual(await mintShared.json(), { error: 'requires unrestricted subsidiary access' });
-      const mintA = await POST(postRequest(randomUUID(), { name: 'A cash', type: 'asset_other', subsidiaryId: org.subsidiaryId }));
-      assert.equal(mintA.status, 201);
-      // A hidden parent's type/summary state must not leak through 422s.
-      // Compare each hidden reference with a genuinely absent id.
-      const hiddenParentCreate = await POST(postRequest(randomUUID(), {
-        name: 'Child of hidden parent', type: 'expense', parentId: accountB,
-      }));
-      const missingParentCreate = await POST(postRequest(randomUUID(), {
-        name: 'Child of absent parent', type: 'expense', parentId: randomUUID(),
-      }));
-      assert.equal(hiddenParentCreate.status, 404);
-      assert.deepEqual(await hiddenParentCreate.json(), await missingParentCreate.json());
-      const hiddenParentPatch = await PATCH(patchRequest({ parentId: accountB }), {
-        params: Promise.resolve({ id: accountA }),
-      });
-      assert.equal(hiddenParentPatch.status, 404);
-      assert.deepEqual(await hiddenParentPatch.json(), { error: 'not_found' });
-      const stored = await db.execute<{ n: number }>(sql`
+    scoped(org.subsidiaryId);
+    // Reads: B's metadata is indistinguishable from missing; the shared
+    // chart reads for every caller.
+    assert.equal(
+      (await GET(new Request("http://localhost/"), { params: Promise.resolve({ id: accountB }) }))
+        .status,
+      404,
+    );
+    assert.equal(
+      (await GET(new Request("http://localhost/"), { params: Promise.resolve({ id: accountA }) }))
+        .status,
+      200,
+    );
+    assert.equal(
+      (await GET(new Request("http://localhost/"), { params: Promise.resolve({ id: sharedId }) }))
+        .status,
+      200,
+    );
+    // Writes: minting B's account or the shared chart refuses, and the
+    // refusal stores nothing.
+    const mintB = await POST(
+      postRequest(randomUUID(), { name: "B cash", type: "asset_other", subsidiaryId: entityB }),
+    );
+    assert.equal(mintB.status, 404);
+    assert.deepEqual(await mintB.json(), { error: "not_found" });
+    // The shared chart is visible, so its refusal names the remedy (403)
+    // instead of hiding behind the record-level 404.
+    const mintShared = await POST(
+      postRequest(randomUUID(), { name: "Shared cash", type: "asset_other" }),
+    );
+    assert.equal(mintShared.status, 403);
+    assert.deepEqual(await mintShared.json(), { error: "requires unrestricted subsidiary access" });
+    const mintA = await POST(
+      postRequest(randomUUID(), {
+        name: "A cash",
+        type: "asset_other",
+        subsidiaryId: org.subsidiaryId,
+      }),
+    );
+    assert.equal(mintA.status, 201);
+    // A hidden parent's type/summary state must not leak through 422s.
+    // Compare each hidden reference with a genuinely absent id.
+    const hiddenParentCreate = await POST(
+      postRequest(randomUUID(), {
+        name: "Child of hidden parent",
+        type: "expense",
+        parentId: accountB,
+      }),
+    );
+    const missingParentCreate = await POST(
+      postRequest(randomUUID(), {
+        name: "Child of absent parent",
+        type: "expense",
+        parentId: randomUUID(),
+      }),
+    );
+    assert.equal(hiddenParentCreate.status, 404);
+    assert.deepEqual(await hiddenParentCreate.json(), await missingParentCreate.json());
+    const hiddenParentPatch = await PATCH(patchRequest({ parentId: accountB }), {
+      params: Promise.resolve({ id: accountA }),
+    });
+    assert.equal(hiddenParentPatch.status, 404);
+    assert.deepEqual(await hiddenParentPatch.json(), { error: "not_found" });
+    const stored = await db.execute<{ n: number }>(
+      sql`
         select count(*)::int as n from accounts where org_id = ${org.orgId} and name in ('B cash', 'Shared cash')
-      `, "objects");
-      assert.equal(stored[0]?.n ?? -1, 0, 'refused creates store nothing');
-      // PATCH: B's account is unreachable, A cannot move to B, and the shared
-      // chart refuses a restricted write.
-      assert.equal((await PATCH(patchRequest({ name: 'B renamed' }), { params: Promise.resolve({ id: accountB }) })).status, 404);
-      assert.equal((await PATCH(patchRequest({ subsidiaryId: entityB }), { params: Promise.resolve({ id: accountA }) })).status, 404);
-      const sharedPatch = await PATCH(patchRequest({ name: 'Shared renamed' }), { params: Promise.resolve({ id: sharedId }) });
-      assert.equal(sharedPatch.status, 403);
-      assert.deepEqual(await sharedPatch.json(), { error: 'requires unrestricted subsidiary access' });
-      const renamed = await PATCH(patchRequest({ name: 'A renamed' }), { params: Promise.resolve({ id: accountA }) });
-      assert.equal(renamed.status, 200);
-      // Control: the unrestricted caller still mints the shared chart.
-      routeState.authz = { user: { roles: [], orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
-      assert.equal((await POST(postRequest(randomUUID(), { name: 'Control shared', type: 'asset_other' }))).status, 201);
-    } finally {
-      routeState.authz = null;
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+      `,
+      "objects",
+    );
+    assert.equal(stored[0]?.n ?? -1, 0, "refused creates store nothing");
+    // PATCH: B's account is unreachable, A cannot move to B, and the shared
+    // chart refuses a restricted write.
+    assert.equal(
+      (
+        await PATCH(patchRequest({ name: "B renamed" }), {
+          params: Promise.resolve({ id: accountB }),
+        })
+      ).status,
+      404,
+    );
+    assert.equal(
+      (
+        await PATCH(patchRequest({ subsidiaryId: entityB }), {
+          params: Promise.resolve({ id: accountA }),
+        })
+      ).status,
+      404,
+    );
+    const sharedPatch = await PATCH(patchRequest({ name: "Shared renamed" }), {
+      params: Promise.resolve({ id: sharedId }),
+    });
+    assert.equal(sharedPatch.status, 403);
+    assert.deepEqual(await sharedPatch.json(), {
+      error: "requires unrestricted subsidiary access",
+    });
+    const renamed = await PATCH(patchRequest({ name: "A renamed" }), {
+      params: Promise.resolve({ id: accountA }),
+    });
+    assert.equal(renamed.status, 200);
+    // Control: the unrestricted caller still mints the shared chart.
+    routeState.authz = {
+      user: { roles: [], orgId: org.orgId, id: adminId },
+      permissions: new Set(),
+      allowedSubsidiaryIds: null,
+    };
+    assert.equal(
+      (await POST(postRequest(randomUUID(), { name: "Control shared", type: "asset_other" })))
+        .status,
+      201,
+    );
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 // Release the route doubles after every test in this file has run.
 test.after(() => hooks.deregister());

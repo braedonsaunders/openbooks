@@ -26,24 +26,57 @@ function strip(url: string, groups = hrmViewTabGroupsFor(EVERYTHING, key)) {
 test("every page in a job shows the job's one strip with its own tab lit", () => {
   const people = strip("/entities/employees");
   assert.deepEqual(people?.active, ["modules.employees"]);
-  for (const url of ["/hrm/org-chart?view=directory", "/hrm/processes", "/hrm/documents", "/hrm/qualifications"]) {
+  for (const url of [
+    "/hrm/org-chart?view=directory",
+    "/hrm/processes",
+    "/hrm/documents",
+    "/hrm/qualifications",
+  ]) {
     assert.deepEqual(strip(url)?.hrefs, people?.hrefs, `${url} shows the Employees strip`);
   }
-  assert.deepEqual(strip("/hrm/processes/templates")?.active, ["processes.templates.title"], "templates select their own destination");
-  assert.deepEqual(strip("/hrm/change-requests")?.hrefs, people?.hrefs, "change requests shows the Employees strip");
-  assert.deepEqual(strip("/hrm/change-requests")?.active, ["modules.hrm-change-requests"], "change requests lights its own tab");
+  assert.deepEqual(
+    strip("/hrm/processes/templates")?.active,
+    ["processes.templates.title"],
+    "templates select their own destination",
+  );
+  assert.deepEqual(
+    strip("/hrm/change-requests")?.hrefs,
+    people?.hrefs,
+    "change requests shows the Employees strip",
+  );
+  assert.deepEqual(
+    strip("/hrm/change-requests")?.active,
+    ["modules.hrm-change-requests"],
+    "change requests lights its own tab",
+  );
 
   const positions = strip("/hrm/positions?status=open");
   assert.deepEqual(positions?.active, ["home.tabs.positions"]);
   assert.deepEqual(strip("/hrm/recruiting")?.active, ["talentWorkspace.applications"]);
   assert.deepEqual(strip("/hrm/recruiting?tab=interviews")?.active, ["recruiting.tabs.interviews"]);
-  assert.deepEqual(strip("/hrm/recruiting?tab=retired")?.active, ["talentWorkspace.applications"], "an unknown view falls back to the route");
-  assert.deepEqual(strip("/hrm/performance?tab=calibration")?.active, ["performance.continuous.tabs.calibration"]);
+  assert.deepEqual(
+    strip("/hrm/recruiting?tab=retired")?.active,
+    ["talentWorkspace.applications"],
+    "an unknown view falls back to the route",
+  );
+  assert.deepEqual(strip("/hrm/performance?tab=calibration")?.active, [
+    "performance.continuous.tabs.calibration",
+  ]);
   assert.deepEqual(strip("/hrm/surveys")?.active, ["home.tabs.surveys"]);
   assert.deepEqual(strip("/hrm/leave?view=calendar")?.active, ["leave.calendarTitle"]);
-  for(const view of ["overview","programs","employees","delivery"]) assert.deepEqual(strip(view==="overview"?"/hrm/benefits":`/hrm/benefits?view=${view}`)?.active,[`benefits.workspace.tabs.${view}`]);
-  assert.deepEqual(strip("/hrm/compensation/cycles/c-1")?.active, ["compensation.workspace.overview"]);
-  assert.deepEqual(strip("/hrm/compensation/equity")?.active, ["equity.title"], "the longer route wins over the prefix");
+  for (const view of ["overview", "programs", "employees", "delivery"])
+    assert.deepEqual(
+      strip(view === "overview" ? "/hrm/benefits" : `/hrm/benefits?view=${view}`)?.active,
+      [`benefits.workspace.tabs.${view}`],
+    );
+  assert.deepEqual(strip("/hrm/compensation/cycles/c-1")?.active, [
+    "compensation.workspace.overview",
+  ]);
+  assert.deepEqual(
+    strip("/hrm/compensation/equity")?.active,
+    ["equity.title"],
+    "the longer route wins over the prefix",
+  );
 
   for (const url of ["/hrm", "/hrm/compliance", "/hrm/my-leave", "/entities/vendors"]) {
     assert.equal(strip(url), null, `${url} belongs to no job and shows no strip`);
@@ -57,19 +90,30 @@ test("filters carry between views of one route, never onto another route", () =>
     "/hrm/recruiting?tab=openings&status=open",
     "/hrm/recruiting?tab=interviews&status=open",
   ]);
-  assert.ok(!strip("/hrm/positions?status=open")?.hrefs.some((href) => href.includes("status")), "positions statuses are not recruiting statuses");
+  assert.ok(
+    !strip("/hrm/positions?status=open")?.hrefs.some((href) => href.includes("status")),
+    "positions statuses are not recruiting statuses",
+  );
 });
 
 function forViewer(grants: string[], switches: string[]) {
   return hrmViewTabGroupsFor(
-    (def) => (def.permissionsAny ? def.permissionsAny.some((permission) => grants.includes(permission)) : !def.permission || grants.includes(def.permission)) && (!def.feature || switches.includes(def.feature)),
+    (def) =>
+      (def.permissionsAny
+        ? def.permissionsAny.some((permission) => grants.includes(permission))
+        : !def.permission || grants.includes(def.permission)) &&
+      (!def.feature || switches.includes(def.feature)),
     key,
   );
 }
 
 test("a viewer is offered only the tabs their grants and switches open", () => {
   const positionsOnly = forViewer(["hrm.position.read", "parties.read"], []);
-  assert.deepEqual(strip("/hrm/positions",positionsOnly)?.hrefs,["/hrm/positions","/entities/employees"],"Workforce stays available without Recruiting");
+  assert.deepEqual(
+    strip("/hrm/positions", positionsOnly)?.hrefs,
+    ["/hrm/positions", "/entities/employees"],
+    "Workforce stays available without Recruiting",
+  );
   assert.equal(strip("/hrm/performance", positionsOnly), null, "Cycles alone is not a strip");
 
   const hiring = forViewer(["hrm.position.read", "hrm.recruiting.read"], ["hrmRecruiting"]);
@@ -81,17 +125,37 @@ test("a viewer is offered only the tabs their grants and switches open", () => {
     "/hrm/recruiting?tab=postings",
     "/hrm/recruiting?tab=pools",
   ]);
-  assert.equal(strip("/hrm/recruiting", forViewer(["hrm.position.read", "hrm.recruiting.read"], [])), null, "Recruiting off: no recruiting views");
+  assert.equal(
+    strip("/hrm/recruiting", forViewer(["hrm.position.read", "hrm.recruiting.read"], [])),
+    null,
+    "Recruiting off: no recruiting views",
+  );
 });
 
-
 test("Performance separates assessments, succession, and the native form builder", () => {
-  assert.deepEqual(strip("/hrm/performance?tab=talent")?.active, ["performance.workspace.assessments"]);
-  assert.deepEqual(strip("/hrm/performance?tab=succession")?.active, ["performance.workspace.succession"]);
-  assert.deepEqual(strip("/hrm/performance/templates/template-1")?.active, ["talentWorkspace.templates"]);
-  assert.deepEqual(strip("/hrm/performance/templates")?.hrefs, strip("/hrm/performance?tab=succession")?.hrefs);
+  assert.deepEqual(strip("/hrm/performance?tab=talent")?.active, [
+    "performance.workspace.assessments",
+  ]);
+  assert.deepEqual(strip("/hrm/performance?tab=succession")?.active, [
+    "performance.workspace.succession",
+  ]);
+  assert.deepEqual(strip("/hrm/performance/templates/template-1")?.active, [
+    "talentWorkspace.templates",
+  ]);
+  assert.deepEqual(
+    strip("/hrm/performance/templates")?.hrefs,
+    strip("/hrm/performance?tab=succession")?.hrefs,
+  );
   const manager = forViewer(["hrm.performance.manage"], ["hrmPerformance"]);
   assert.ok(strip("/hrm/performance", manager)?.hrefs.includes("/hrm/performance?tab=succession"));
-  assert.ok(strip("/hrm/performance",manager)?.hrefs.includes("/hrm/performance/templates"),"HR managers can manage native review forms");
-  assert.ok(!strip("/hrm/performance",forViewer(["hrm.self.read"],["hrmPerformance"]))?.hrefs.includes("/hrm/performance/templates"),"Self-service grants cannot configure review forms");
+  assert.ok(
+    strip("/hrm/performance", manager)?.hrefs.includes("/hrm/performance/templates"),
+    "HR managers can manage native review forms",
+  );
+  assert.ok(
+    !strip("/hrm/performance", forViewer(["hrm.self.read"], ["hrmPerformance"]))?.hrefs.includes(
+      "/hrm/performance/templates",
+    ),
+    "Self-service grants cannot configure review forms",
+  );
 });

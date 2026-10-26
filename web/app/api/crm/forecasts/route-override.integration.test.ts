@@ -12,11 +12,20 @@ import { NextRequest } from "next/server";
  */
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __forecastOverrideState: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
+const virtual = (source: string) => ({
+  shortCircuit: true as const,
+  url: "data:text/javascript," + encodeURIComponent(source),
+});
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "next-intl/server") return virtual("export async function getTranslations() { return (key) => key }; export async function getLocale() { return 'en' }");
-    if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
+    if (specifier === "next-intl/server")
+      return virtual(
+        "export async function getTranslations() { return (key) => key }; export async function getLocale() { return 'en' }",
+      );
+    if (specifier === "next/navigation")
+      return virtual(
+        "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
+      );
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
         export async function guardPermission() {
@@ -36,7 +45,8 @@ registerHooks({
 });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+  await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 async function fixture() {
@@ -45,23 +55,31 @@ async function fixture() {
   state.orgId = org.orgId;
   state.actorId = actorId;
   await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = settings || '{"features": {"crm": true}}'::jsonb where id = ${org.orgId}`),
+    db.execute(
+      sql`update orgs set settings = settings || '{"features": {"crm": true}}'::jsonb where id = ${org.orgId}`,
+    ),
   );
   return { org };
 }
 
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () =>
-    POST(new NextRequest("http://forecast.test/api/crm/forecasts", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    })),
+    POST(
+      new NextRequest("http://forecast.test/api/crm/forecasts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    ),
   );
 
 async function snapshotCount(orgId: string): Promise<number> {
   const rows = await withBypassContext(() =>
-    db.execute<{ n: number }>(sql`select count(*)::int as n from crm_forecast_snapshots where org_id = ${orgId}`, "objects"));
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from crm_forecast_snapshots where org_id = ${orgId}`,
+      "objects",
+    ),
+  );
   return rows[0]!.n;
 }
 
@@ -69,12 +87,23 @@ test("forecast snapshots refuse an override wider than numeric(19,4) without wri
   const { org } = await fixture();
   try {
     const response = await post({
-      periodStart: "2026-07-01", periodEnd: "2026-09-30",
-      overrideAmount: "99999999999999999999.99", snapshotKind: "rep_override", currency: "CAD",
+      periodStart: "2026-07-01",
+      periodEnd: "2026-09-30",
+      overrideAmount: "99999999999999999999.99",
+      snapshotKind: "rep_override",
+      currency: "CAD",
     });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
-    assert.notEqual(response.status, 500, `expected a named error, got 500: ${JSON.stringify(json)}`);
-    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.notEqual(
+      response.status,
+      500,
+      `expected a named error, got 500: ${JSON.stringify(json)}`,
+    );
+    assert.equal(
+      response.status,
+      422,
+      `expected 422, got ${response.status}: ${JSON.stringify(json)}`,
+    );
     assert.equal(await snapshotCount(org.orgId), 0);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -85,8 +114,11 @@ test("forecast snapshots still file an ordinary override", async () => {
   const { org } = await fixture();
   try {
     const response = await post({
-      periodStart: "2026-07-01", periodEnd: "2026-09-30",
-      overrideAmount: "123456.78", snapshotKind: "rep_override", currency: "CAD",
+      periodStart: "2026-07-01",
+      periodEnd: "2026-09-30",
+      overrideAmount: "123456.78",
+      snapshotKind: "rep_override",
+      currency: "CAD",
     });
     assert.equal(response.status, 201, JSON.stringify(await response.json().catch(() => null)));
     assert.equal(await snapshotCount(org.orgId), 1);

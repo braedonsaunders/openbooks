@@ -52,10 +52,7 @@ test("duplicate dimensions sum exactly and nulls are handled", () => {
 });
 
 test("rows mode refuses unselected columns", () => {
-  assert.throws(
-    () => projectDriverRows([{ a: "x" }], rowsCompiled, "nope", "headcount"),
-    /nope/,
-  );
+  assert.throws(() => projectDriverRows([{ a: "x" }], rowsCompiled, "nope", "headcount"), /nope/);
   assert.throws(
     () => projectDriverRows([{ a: "x" }], rowsCompiled, "department_id", "nope"),
     /nope/,

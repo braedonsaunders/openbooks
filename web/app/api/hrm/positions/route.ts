@@ -26,14 +26,8 @@ export const GET = defineRoute({
         { status: 400 },
       );
     }
-    if (
-      status !== null &&
-      !["planned", "open", "filled", "frozen", "closed"].includes(status)
-    ) {
-      return NextResponse.json(
-        { error: "unknown position status" },
-        { status: 400 },
-      );
+    if (status !== null && !["planned", "open", "filled", "frozen", "closed"].includes(status)) {
+      return NextResponse.json({ error: "unknown position status" }, { status: 400 });
     }
     try {
       const vacancy = await getVacancyAsOf({

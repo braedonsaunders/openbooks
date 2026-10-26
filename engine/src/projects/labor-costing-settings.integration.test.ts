@@ -61,7 +61,10 @@ test("a stored out-of-range workday refuses by name instead of mispricing overti
       annualHours: "2080",
       components: [],
     });
-    await assert.rejects(laborCostingSettings(org.orgId), /hoursPerDay must be a number between 0 and 24/);
+    await assert.rejects(
+      laborCostingSettings(org.orgId),
+      /hoursPerDay must be a number between 0 and 24/,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

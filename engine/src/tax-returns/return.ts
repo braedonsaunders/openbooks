@@ -3,11 +3,12 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { db, pool, type SqlExecutor } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { abs, add, cmp, fromUnits, mulRate, neg, toUnits } from "../money/money.ts";
+import { IncomeTaxProvisionError, spotRateToPresentation } from "./income-tax-provision.ts";
 import {
-  IncomeTaxProvisionError,
-  spotRateToPresentation,
-} from "./income-tax-provision.ts";
-import { countryTaxPackForReturn, packTaxCodesForReturn, taxReturnPackBox } from "../country-tax-packs/index.ts";
+  countryTaxPackForReturn,
+  packTaxCodesForReturn,
+  taxReturnPackBox,
+} from "../country-tax-packs/index.ts";
 import { taxRegistrationFormProblem, taxReturnPack } from "../tax/seed-tax-forms.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
@@ -60,18 +61,25 @@ export async function filterTaxReturnFormsByFeatures<T extends { code: string }>
   runner: TaxReturnRunner = db,
 ): Promise<T[]> {
   if (forms.length === 0) return [];
-  const rows = await runner.execute<{ report_code: string; input_key: string }>(sql`
+  const rows = await runner.execute<{ report_code: string; input_key: string }>(
+    sql`
     select distinct report_code, input_key
       from tax_report_lines
      where org_id = ${orgId} and input_key is not null
-  `, "objects");
+  `,
+    "objects",
+  );
   const disabled = new Set<string>();
   for (const key of new Set(rows.map((row) => row.input_key.split(".", 1)[0]!))) {
     if (!returnInputProviders.has(key) || !(await orgFeatureEnabled(orgId, key, runner))) {
       disabled.add(key);
     }
   }
-  const disabledByForm = new Set(rows.filter((row) => disabled.has(row.input_key.split(".", 1)[0]!)).map((row) => row.report_code));
+  const disabledByForm = new Set(
+    rows
+      .filter((row) => disabled.has(row.input_key.split(".", 1)[0]!))
+      .map((row) => row.report_code),
+  );
   return forms.filter((form) => !disabledByForm.has(form.code));
 }
 
@@ -149,7 +157,9 @@ export class TaxReturnInputError extends TaxReturnError {
  * describe the box: a one-sided code decides for itself; a both-sides code has
  * no declared side (null) and contributes both families.
  */
-export function taxableBaseSideForCode(appliesTo: string | undefined): "sales" | "purchases" | null {
+export function taxableBaseSideForCode(
+  appliesTo: string | undefined,
+): "sales" | "purchases" | null {
   if (appliesTo === "sales") return "sales";
   if (appliesTo === "purchases") return "purchases";
   return null;
@@ -186,7 +196,9 @@ export function evalFormula(
     // reference, not a literal, and must already be computed (sequence order).
     const v = values.get(tok);
     if (v === undefined) {
-      throw new TaxReturnError(`formula "${expr}" references unknown or not-yet-computed box "${tok}"`);
+      throw new TaxReturnError(
+        `formula "${expr}" references unknown or not-yet-computed box "${tok}"`,
+      );
     }
     return v;
   };
@@ -213,15 +225,18 @@ export function evalFormula(
     if (tok === "-") return neg(parseTerm());
     if (tok === "+") return parseTerm();
     if (tok === "abs") {
-      if (next() !== "(") throw new TaxReturnError(`abs must be followed by parentheses in "${expr}"`);
+      if (next() !== "(")
+        throw new TaxReturnError(`abs must be followed by parentheses in "${expr}"`);
       const inner = parseExpr();
       if (next() !== ")") throw new TaxReturnError(`unbalanced abs parentheses in "${expr}"`);
       return abs(inner);
     }
     if (tok === "max") {
-      if (next() !== "(") throw new TaxReturnError(`max must be followed by parentheses in "${expr}"`);
+      if (next() !== "(")
+        throw new TaxReturnError(`max must be followed by parentheses in "${expr}"`);
       const left = parseExpr();
-      if (next() !== ",") throw new TaxReturnError(`max requires two comma-separated arguments in "${expr}"`);
+      if (next() !== ",")
+        throw new TaxReturnError(`max requires two comma-separated arguments in "${expr}"`);
       const right = parseExpr();
       if (next() !== ")") throw new TaxReturnError(`unbalanced max parentheses in "${expr}"`);
       return cmp(left, right) >= 0 ? left : right;
@@ -256,9 +271,7 @@ export function assembleReturn(
   // An amount entered on a line that takes no manual amount would be dropped
   // by the box math without a trace, so it is refused by name.
   const adjustmentLines = new Set(
-    boxes
-      .filter((b) => b.editable && !b.formula?.trim() && !b.inputKey)
-      .map((b) => b.lineCode),
+    boxes.filter((b) => b.editable && !b.formula?.trim() && !b.inputKey).map((b) => b.lineCode),
   );
   for (const lineCode of adjustments.keys()) {
     if (!adjustmentLines.has(lineCode)) {
@@ -426,7 +439,9 @@ export function planReturn(rows: TaxReportLineRow[]): {
     } else {
       existing.sequence = Math.min(existing.sequence, row.sequence);
       if ((existing.inputKey || row.inputKey) && existing.inputKey !== (row.inputKey ?? null)) {
-        throw new TaxReturnError(`return box "${row.lineCode}" cannot combine an input key with another source`);
+        throw new TaxReturnError(
+          `return box "${row.lineCode}" cannot combine an input key with another source`,
+        );
       }
       if (!existing.formula && row.formula) existing.formula = row.formula;
       if (!existing.pdfField && row.pdfField) existing.pdfField = row.pdfField;
@@ -472,8 +487,14 @@ export async function resolveReturnInputValues(
     if (!box.inputKey) continue;
     const separator = box.inputKey.indexOf(".");
     const namespace = separator > 0 ? box.inputKey.slice(0, separator) : "";
-    if (!namespace || !/^[a-z][a-z0-9_-]*$/.test(namespace) || separator === box.inputKey.length - 1) {
-      throw new TaxReturnError(`return box "${box.lineCode}" has invalid input key "${box.inputKey}"`);
+    if (
+      !namespace ||
+      !/^[a-z][a-z0-9_-]*$/.test(namespace) ||
+      separator === box.inputKey.length - 1
+    ) {
+      throw new TaxReturnError(
+        `return box "${box.lineCode}" has invalid input key "${box.inputKey}"`,
+      );
     }
     const group = boxesByNamespace.get(namespace) ?? [];
     group.push(box);
@@ -508,16 +529,22 @@ export async function resolveReturnInputValues(
       }
       const value = values[key];
       if (typeof value !== "string") {
-        throw new TaxReturnError(`return input provider "${namespace}" returned a non-string value for "${key}"`);
+        throw new TaxReturnError(
+          `return input provider "${namespace}" returned a non-string value for "${key}"`,
+        );
       }
       let canonical: string;
       try {
         canonical = fromUnits(toUnits(value));
       } catch {
-        throw new TaxReturnError(`return input provider "${namespace}" returned an invalid decimal for "${key}"`);
+        throw new TaxReturnError(
+          `return input provider "${namespace}" returned an invalid decimal for "${key}"`,
+        );
       }
       if (canonical !== value) {
-        throw new TaxReturnError(`return input provider "${namespace}" returned a non-canonical decimal for "${key}"`);
+        throw new TaxReturnError(
+          `return input provider "${namespace}" returned a non-canonical decimal for "${key}"`,
+        );
       }
       resolved.set(key, canonical);
     }
@@ -685,11 +712,18 @@ async function resolveReturnScope(
   orgId: string,
   filingEntity?: TaxReturnFilingEntity,
 ): Promise<ReturnScope> {
-  const subRes = (await runner.execute<{
-    id: string; name: string; base_currency: string; is_elimination: boolean; parent_id: string | null;
-  }>(sql`
+  const subRes = await runner.execute<{
+    id: string;
+    name: string;
+    base_currency: string;
+    is_elimination: boolean;
+    parent_id: string | null;
+  }>(
+    sql`
     select id, name, base_currency, is_elimination, parent_id
-      from subsidiaries where org_id = ${orgId}`, "objects"));
+      from subsidiaries where org_id = ${orgId}`,
+    "objects",
+  );
   const currencyById = new Map(subRes.map((r) => [r.id, r.base_currency]));
   const nameById = new Map(subRes.map((r) => [r.id, r.name]));
   const rootId = subRes.find((r) => r.parent_id === null)?.id ?? null;
@@ -724,9 +758,7 @@ async function resolveReturnScope(
       `filing entity references subsidiaries outside this organization: ${unknown.join(", ")}`,
     );
   }
-  const elimination = ids.filter(
-    (id) => subRes.find((r) => r.id === id)?.is_elimination,
-  );
+  const elimination = ids.filter((id) => subRes.find((r) => r.id === id)?.is_elimination);
   if (elimination.length > 0) {
     const names = elimination.map((id) => nameById.get(id) ?? id);
     throw new TaxReturnError(
@@ -796,7 +828,8 @@ async function findReturnContributors(
                   select 1 from document_line_tax_components c
                    where c.org_id = dl.org_id and c.document_line_id = dl.id
                      and c.tax_code_id = any(${uuidArray(baseCodeIds)}::uuid[]))))`;
-  const rows = (await runner.execute<{ id: string }>(sql`
+  const rows = await runner.execute<{ id: string }>(
+    sql`
     select distinct l.subsidiary_id as id
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -813,19 +846,25 @@ async function findReturnContributors(
        and d.subsidiary_id is not null
        and d.subsidiary_id = any(${scopeIds}::uuid[])
        and (${basePredicate})
-  `, "objects"));
+  `,
+    "objects",
+  );
   // Journal lines always carry a subsidiary; only the taxable-base document
   // branch can meet unattributed legacy documents.
   const nullDocs =
-    baseCodeIds.length === 0 || (explicitScope && !(scope.rootId && scope.ids.includes(scope.rootId)))
-      ? [] as { one: number }[]
-      : await runner.execute<{ one: number }>(sql`
+    baseCodeIds.length === 0 ||
+    (explicitScope && !(scope.rootId && scope.ids.includes(scope.rootId)))
+      ? ([] as { one: number }[])
+      : await runner.execute<{ one: number }>(
+          sql`
         select 1 as one from documents d
           ${documentReturnActivity(window)}
          where d.org_id = ${orgId}
            and d.subsidiary_id is null
            and (${basePredicate})
-         limit 1`, "objects");
+         limit 1`,
+          "objects",
+        );
   return { ids: rows.map((r) => r.id), nullSubsidiaryDocs: nullDocs.length > 0 };
 }
 
@@ -850,7 +889,8 @@ async function clampTaxReturnWindowInSnapshot(
     registration_number: string | null;
     effective_from: string | null;
     effective_to: string | null;
-  }>(sql`
+  }>(
+    sql`
     select r.id, r.jurisdiction_id, j.name as jurisdiction_name, j.code as jurisdiction_code,
            j.country, r.filing_frequency, r.filing_period_start_month, r.return_form_code, r.registration_number,
            r.effective_from::text, r.effective_to::text
@@ -858,7 +898,9 @@ async function clampTaxReturnWindowInSnapshot(
       join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
      where r.org_id = ${orgId} and r.is_active and r.return_form_code = ${formCode}
        ${subsidiaryIds?.length ? sql`and (r.subsidiary_id is null or r.subsidiary_id = any(${uuidArray(subsidiaryIds)}))` : sql``}
-  `, "objects");
+  `,
+    "objects",
+  );
   const regs = registrations.map((r) => ({
     id: r.id,
     jurisdictionId: r.jurisdiction_id,
@@ -866,7 +908,7 @@ async function clampTaxReturnWindowInSnapshot(
     jurisdictionCode: r.jurisdiction_code,
     country: r.country,
     filingFrequency: r.filing_frequency,
-      filingPeriodStartMonth: r.filing_period_start_month,
+    filingPeriodStartMonth: r.filing_period_start_month,
     returnFormCode: r.return_form_code,
     registrationNumber: r.registration_number,
     effectiveFrom: r.effective_from,
@@ -884,8 +926,8 @@ async function clampTaxReturnWindowInSnapshot(
     if (periods.length > 1) {
       throw new TaxReturnError(
         `tax return "${formCode}" window ${from} to ${to} spans ${periods.length} filing periods of registration ` +
-        `${labelFor(reg)} (${periods.map((o) => `${o.periodStart} to ${o.periodEnd}`).join(", ")}) — ` +
-        `prepare one return per filing period`,
+          `${labelFor(reg)} (${periods.map((o) => `${o.periodStart} to ${o.periodEnd}`).join(", ")}) — ` +
+          `prepare one return per filing period`,
       );
     }
     return periods[0];
@@ -904,9 +946,7 @@ async function clampTaxReturnWindowInSnapshot(
     const pin = pinOk ? regs.find((r) => r.id === pinnedId) : undefined;
     if (!pin) return { from, to };
     const match = overlapping(pin);
-    return match
-      ? { from: match.reportableFrom, to: match.reportableTo }
-      : { from, to };
+    return match ? { from: match.reportableFrom, to: match.reportableTo } : { from, to };
   }
   // Unpinned: group matches by registration so sibling registrations sharing
   // one form can never silently win by calendar sort order. One registration
@@ -926,10 +966,7 @@ async function clampTaxReturnWindowInSnapshot(
         a.match.reportableFrom.localeCompare(b.match.reportableFrom) ||
         labelFor(a.reg).localeCompare(labelFor(b.reg)),
     )
-    .map(
-      (m) =>
-        `${labelFor(m.reg)} (${m.match.reportableFrom} to ${m.match.reportableTo})`,
-    );
+    .map((m) => `${labelFor(m.reg)} (${m.match.reportableFrom} to ${m.match.reportableTo})`);
   throw new TaxReturnError(
     `tax return "${formCode}" has ${matches.length} registrations active in this period — choose one: ${choices.join(", ")}`,
   );
@@ -973,7 +1010,10 @@ async function sumReturnGlRaw(
 ): Promise<Map<string, string>> {
   const { orgId, formCode, from, to, primaryBookId, orgTaxCollected, orgTaxPaid, glSources } = opts;
   const journalActivity = journalReturnActivityPredicate({
-    from, to, primaryBookId, scopeIds: opts.scopeIds,
+    from,
+    to,
+    primaryBookId,
+    scopeIds: opts.scopeIds,
   });
   const docScope =
     opts.scopeIds === null
@@ -993,12 +1033,14 @@ async function sumReturnGlRaw(
     let total: string;
     if (src.basis === "tax_collected" || src.basis === "tax_paid") {
       const orgFallback = src.basis === "tax_collected" ? orgTaxCollected : orgTaxPaid;
-      const acctCol = src.basis === "tax_collected" ? sql`tc.collected_account_id` : sql`tc.paid_account_id`;
+      const acctCol =
+        src.basis === "tax_collected" ? sql`tc.collected_account_id` : sql`tc.paid_account_id`;
       const reverseChargeOutputLeg = sql`
         c.calculation_type = 'reverse_charge'
         and sd.kind in ('vendor_bill', 'vendor_credit', 'expense_report', 'check', 'card_charge', 'card_refund')
         and l.account_id is not distinct from coalesce(c.collected_account_id, tc.collected_account_id, ${orgTaxCollected})`;
-      const r = (await runner.execute<{ total: string }>(sql`
+      const r = await runner.execute<{ total: string }>(
+        sql`
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -1048,10 +1090,13 @@ async function sumReturnGlRaw(
                )
                and l.account_id = coalesce(${acctCol}, ${orgFallback})
              )
-           )`, "objects"));
+           )`,
+        "objects",
+      );
       total = r[0]?.total ?? "0";
     } else if (src.basis === "tax_amount") {
-      const r = (await runner.execute<{ total: string }>(sql`
+      const r = await runner.execute<{ total: string }>(
+        sql`
         select coalesce(sum(l.amount), 0)::text as total
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
@@ -1071,17 +1116,21 @@ async function sumReturnGlRaw(
                 and mc.tax_code_id = l.tax_code_id
                 and mc.collected_by = 'marketplace'
                 and mf.clearing_account_id = l.account_id
-           )`, "objects"));
+           )`,
+        "objects",
+      );
       total = r[0]?.total ?? "0";
     } else if (src.basis === "marketplace_tax" || src.basis === "marketplace_sales") {
       // The facilitator share states deduct: marketplace-collected component
       // tax, and the taxable sales it was collected on. Read from the
       // immutable component evidence (posted sales documents only), with
       // credits netting like the taxable_base box below.
-      const valueCol = src.basis === "marketplace_tax"
-        ? sql`activity.sign * round(((case when d.kind in ('customer_credit', 'cash_refund') then -mc.tax_amount else mc.tax_amount end) * d.fx_rate)::numeric, 4)`
-        : sql`activity.sign * round(((case when d.kind in ('customer_credit', 'cash_refund') then -mdl.amount else mdl.amount end) * d.fx_rate)::numeric, 4)`;
-      const r = (await runner.execute<{ total: string }>(sql`
+      const valueCol =
+        src.basis === "marketplace_tax"
+          ? sql`activity.sign * round(((case when d.kind in ('customer_credit', 'cash_refund') then -mc.tax_amount else mc.tax_amount end) * d.fx_rate)::numeric, 4)`
+          : sql`activity.sign * round(((case when d.kind in ('customer_credit', 'cash_refund') then -mdl.amount else mdl.amount end) * d.fx_rate)::numeric, 4)`;
+      const r = await runner.execute<{ total: string }>(
+        sql`
         select coalesce(sum(${valueCol}), 0)::text as total
           from document_line_tax_components mc
           join document_lines mdl on mdl.id = mc.document_line_id and mdl.org_id = mc.org_id
@@ -1090,7 +1139,9 @@ async function sumReturnGlRaw(
          where mc.org_id = ${orgId} and mc.tax_code_id = ${src.taxCodeId}
            and mc.collected_by = 'marketplace'
            and d.kind in ('customer_invoice', 'customer_credit', 'cash_sale', 'cash_refund')
-           ${docScope}`, "objects"));
+           ${docScope}`,
+        "objects",
+      );
       total = r[0]?.total ?? "0";
     } else {
       continue; // taxable_base sources are summed once per box below.
@@ -1100,9 +1151,12 @@ async function sumReturnGlRaw(
   const appliesToByCode = new Map<string, string>();
   const allBaseCodes = [...new Set([...baseCodesByLineCode.values()].flat())];
   if (allBaseCodes.length > 0) {
-    const codeRows = (await runner.execute<{ id: string; applies_to: string }>(sql`
+    const codeRows = await runner.execute<{ id: string; applies_to: string }>(
+      sql`
       select id, applies_to from tax_codes
-       where org_id = ${orgId} and id = any(${uuidArray(allBaseCodes)}::uuid[])`, "objects"));
+       where org_id = ${orgId} and id = any(${uuidArray(allBaseCodes)}::uuid[])`,
+      "objects",
+    );
     for (const row of codeRows) appliesToByCode.set(row.id, row.applies_to);
   }
   for (const [lineCode, codes] of baseCodesByLineCode) {
@@ -1116,7 +1170,8 @@ async function sumReturnGlRaw(
     }
     const salesArray = uuidArray(salesCodes);
     const purchaseArray = uuidArray(purchaseCodes);
-    const r = (await runner.execute<{ total: string }>(sql`
+    const r = await runner.execute<{ total: string }>(
+      sql`
       select coalesce(sum(
                activity.sign * round(((case when d.kind in ('customer_credit', 'vendor_credit', 'cash_refund') then -dl.amount else dl.amount end) * d.fx_rate)::numeric, 4)
              ), 0)::text as total
@@ -1148,7 +1203,9 @@ async function sumReturnGlRaw(
                )
              )
            )
-         )`, "objects"));
+         )`,
+      "objects",
+    );
     glRaw.set(lineCode, add(glRaw.get(lineCode) ?? "0", r[0]?.total ?? "0"));
   }
   return glRaw;
@@ -1256,21 +1313,26 @@ async function resolveReturnRegistration(
         `tax registration "${pinnedId}" is not a valid id (${e instanceof Error ? e.message : String(e)})`,
       );
     }
-    const pin = (await runner.execute<{
-      id: string; registration_number: string | null; return_form_code: string | null;
-      effective_from: string | null; effective_to: string | null;
-      jurisdiction_code: string; subsidiary_id: string | null;
-    }>(sql`
+    const pin = await runner.execute<{
+      id: string;
+      registration_number: string | null;
+      return_form_code: string | null;
+      effective_from: string | null;
+      effective_to: string | null;
+      jurisdiction_code: string;
+      subsidiary_id: string | null;
+    }>(
+      sql`
       select r.id, r.registration_number, r.return_form_code,
              r.effective_from::text, r.effective_to::text, j.code as jurisdiction_code, r.subsidiary_id
         from tax_registrations r
         join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
-       where r.id = ${pinnedId} and r.org_id = ${orgId} and r.is_active`, "objects"));
+       where r.id = ${pinnedId} and r.org_id = ${orgId} and r.is_active`,
+      "objects",
+    );
     const row = pin[0];
     if (!row) {
-      throw new TaxReturnError(
-        `tax registration "${pinnedId}" was not found in this organization`,
-      );
+      throw new TaxReturnError(`tax registration "${pinnedId}" was not found in this organization`);
     }
     if (row.return_form_code !== formCode) {
       throw new TaxReturnError(
@@ -1295,7 +1357,13 @@ async function resolveReturnRegistration(
       effectiveTo: row.effective_to,
     };
   }
-  const regRes = (await runner.execute<{ id: string; registration_number: string | null; jurisdiction_code: string; subsidiary_id: string | null }>(sql`
+  const regRes = await runner.execute<{
+    id: string;
+    registration_number: string | null;
+    jurisdiction_code: string;
+    subsidiary_id: string | null;
+  }>(
+    sql`
     select r.id, r.registration_number, j.code as jurisdiction_code, r.subsidiary_id
       from tax_registrations r
       join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
@@ -1303,7 +1371,9 @@ async function resolveReturnRegistration(
        ${subsidiaryIds?.length ? sql`and (r.subsidiary_id is null or r.subsidiary_id = any(${uuidArray(subsidiaryIds)}))` : sql``}
        and (r.effective_from is null or r.effective_from <= ${to})
        and (r.effective_to is null or r.effective_to >= ${from})
-     order by r.effective_from desc nulls last, r.id`, "objects"));
+     order by r.effective_from desc nulls last, r.id`,
+    "objects",
+  );
   // The form match alone is not the identity: a catalog-known form belongs
   // to one jurisdiction, so a registration from another jurisdiction (a
   // legacy mismatched row saved before the write-time check) must refuse by
@@ -1320,7 +1390,8 @@ async function resolveReturnRegistration(
         registrationLabel: legacy.registration_number ?? legacy.id,
         registrationJurisdictionCode: legacy.jurisdiction_code,
         formCode,
-      }) ?? `tax return "${formCode}" has no registration in jurisdiction "${expectedJurisdiction}"`,
+      }) ??
+        `tax return "${formCode}" has no registration in jurisdiction "${expectedJurisdiction}"`,
     );
   }
   return {
@@ -1353,15 +1424,21 @@ async function assertNoUnmappedActivity(
     mappedCodeIds: string[];
   },
 ): Promise<void> {
-  const { orgId, formCode, from, to, primaryBookId, scopeIds, formJurisdictionId, mappedCodeIds } = opts;
+  const { orgId, formCode, from, to, primaryBookId, scopeIds, formJurisdictionId, mappedCodeIds } =
+    opts;
   const pack = countryTaxPackForReturn(formCode);
   const expectedCodes = pack ? packTaxCodesForReturn(pack, formCode).map((d) => d.code) : [];
   if (!formJurisdictionId && expectedCodes.length === 0) return;
   const journalActivity = journalReturnActivityPredicate({ from, to, primaryBookId, scopeIds });
-  const codeMatch = expectedCodes.length > 0
-    ? sql`or tc.code in (${sql.join(expectedCodes.map((code) => sql`${code}`), sql`, `)})`
-    : sql``;
-  const rows = (await runner.execute<{ code: string }>(sql`
+  const codeMatch =
+    expectedCodes.length > 0
+      ? sql`or tc.code in (${sql.join(
+          expectedCodes.map((code) => sql`${code}`),
+          sql`, `,
+        )})`
+      : sql``;
+  const rows = await runner.execute<{ code: string }>(
+    sql`
     select tc.code
       from tax_codes tc
      where tc.org_id = ${orgId}
@@ -1378,14 +1455,16 @@ async function assertNoUnmappedActivity(
             ${journalActivity}
             ${nettedReversalPairExcluded({ from, to })}
        )
-     order by tc.code`, "objects"));
+     order by tc.code`,
+    "objects",
+  );
   if (rows.length === 0) return;
   const codes = rows.map((r) => `"${r.code}"`).join(", ");
   throw new TaxReturnError(
     `tax return "${formCode}" understates: tax code${rows.length === 1 ? "" : "s"} ${codes} ` +
-    `has activity in ${from} to ${to} but maps to no box — map each code to a box ` +
-    `(reinstall the "${formCode}" library form after assigning its jurisdiction), ` +
-    `otherwise the filed return omits that activity`,
+      `has activity in ${from} to ${to} but maps to no box — map each code to a box ` +
+      `(reinstall the "${formCode}" library form after assigning its jurisdiction), ` +
+      `otherwise the filed return omits that activity`,
   );
 }
 
@@ -1398,10 +1477,18 @@ async function computeTaxReturnInSnapshot(
   adjustments: Record<string, string> = {},
   opts: ComputeTaxReturnOptions = {},
 ): Promise<TaxReturnResult> {
-  const formRes = (await runner.execute<{ name: string; submission_channel: string; watermark: string | null; jurisdiction_id: string | null }>(sql`
+  const formRes = await runner.execute<{
+    name: string;
+    submission_channel: string;
+    watermark: string | null;
+    jurisdiction_id: string | null;
+  }>(
+    sql`
     select name, submission_channel, watermark, jurisdiction_id
       from tax_return_forms
-     where org_id = ${orgId} and code = ${formCode} and is_active limit 1`, "objects"));
+     where org_id = ${orgId} and code = ${formCode} and is_active limit 1`,
+    "objects",
+  );
   const form = formRes[0];
   if (!form) throw new TaxReturnError(`tax return form "${formCode}" is not configured`);
 
@@ -1434,7 +1521,8 @@ async function computeTaxReturnInSnapshot(
     opts?.filingEntity?.registrationId,
     opts?.filingEntity?.subsidiaryIds,
   );
-  if (registration.effectiveFrom && registration.effectiveFrom > from) from = registration.effectiveFrom;
+  if (registration.effectiveFrom && registration.effectiveFrom > from)
+    from = registration.effectiveFrom;
   if (registration.effectiveTo && registration.effectiveTo < to) to = registration.effectiveTo;
   if (from > to) {
     throw new TaxReturnError(
@@ -1446,12 +1534,22 @@ async function computeTaxReturnInSnapshot(
   // sum below reads one consistent posture. Adjustments are denominated in the
   // return's functionalCurrency: the entity's currency, or the presentation
   // currency for a translated view (applied once, after translation).
-  const requestedEntities=opts.filingEntity?.subsidiaryIds ?? [];
-  if(registration.subsidiaryId && requestedEntities.length && (requestedEntities.length!==1 || requestedEntities[0]!==registration.subsidiaryId))
-    throw new TaxReturnError('The selected registration belongs to another filing entity — select its owning legal entity or a registration for the requested entity');
-  const scope = await resolveReturnScope(runner, orgId, registration.subsidiaryId
-    ? {subsidiaryIds:[registration.subsidiaryId],registrationId:registration.registrationId}
-    : opts?.filingEntity);
+  const requestedEntities = opts.filingEntity?.subsidiaryIds ?? [];
+  if (
+    registration.subsidiaryId &&
+    requestedEntities.length &&
+    (requestedEntities.length !== 1 || requestedEntities[0] !== registration.subsidiaryId)
+  )
+    throw new TaxReturnError(
+      "The selected registration belongs to another filing entity — select its owning legal entity or a registration for the requested entity",
+    );
+  const scope = await resolveReturnScope(
+    runner,
+    orgId,
+    registration.subsidiaryId
+      ? { subsidiaryIds: [registration.subsidiaryId], registrationId: registration.registrationId }
+      : opts?.filingEntity,
+  );
   const policy = resolveTranslationPolicy(opts?.translation, to);
 
   // The return reads the primary book only — the same book the filing gate
@@ -1466,23 +1564,35 @@ async function computeTaxReturnInSnapshot(
 
   // Org control tax accounts — the fallback a tax code posts to when it has no
   // collected/paid account of its own.
-  const ctrlRes = (await runner.execute<{ tax_collected: string | null; tax_paid: string | null }>(sql`
+  const ctrlRes = await runner.execute<{ tax_collected: string | null; tax_paid: string | null }>(
+    sql`
     select settings->'controlAccounts'->>'taxCollected' as tax_collected,
            settings->'controlAccounts'->>'taxPaid' as tax_paid
-      from orgs where id = ${orgId}`, "objects"));
+      from orgs where id = ${orgId}`,
+    "objects",
+  );
   const orgTaxCollected = ctrlRes[0]?.tax_collected ?? null;
   const orgTaxPaid = ctrlRes[0]?.tax_paid ?? null;
 
-  const boxRes = (await runner.execute<{
-      line_code: string; label: string; sign: number; sequence: number;
-      tax_code_id: string | null; basis: string | null; input_key: string | null;
-      formula: string | null; pdf_field: string | null;
-    }>(sql`
+  const boxRes = await runner.execute<{
+    line_code: string;
+    label: string;
+    sign: number;
+    sequence: number;
+    tax_code_id: string | null;
+    basis: string | null;
+    input_key: string | null;
+    formula: string | null;
+    pdf_field: string | null;
+  }>(
+    sql`
     select line_code, label, coalesce(sign, 1) as sign, coalesce(sequence, 0) as sequence,
            tax_code_id, basis, input_key, formula, pdf_field
       from tax_report_lines
      where org_id = ${orgId} and report_code = ${formCode}
-     order by sequence, line_code`, "objects"));
+     order by sequence, line_code`,
+    "objects",
+  );
   if (boxRes.length === 0) {
     throw new TaxReturnError(`tax return form "${formCode}" has no boxes configured`);
   }
@@ -1508,25 +1618,26 @@ async function computeTaxReturnInSnapshot(
   // return, and the filed figures silently understate. When such a code
   // holds this form's jurisdiction (or the catalog expects it on this form)
   // AND has activity in the period, refuse by name instead of filing short.
-  if (!hasInputBoxes || glSources.length > 0) await assertNoUnmappedActivity(runner, {
-    orgId,
-    formCode,
-    from,
-    to,
-    primaryBookId,
-    scopeIds: scope.legacy ? null : scope.ids,
-    formJurisdictionId: form.jurisdiction_id,
-    mappedCodeIds: [...new Set(glSources.map((s) => s.taxCodeId))],
-  });
+  if (!hasInputBoxes || glSources.length > 0)
+    await assertNoUnmappedActivity(runner, {
+      orgId,
+      formCode,
+      from,
+      to,
+      primaryBookId,
+      scopeIds: scope.legacy ? null : scope.ids,
+      formJurisdictionId: form.jurisdiction_id,
+      mappedCodeIds: [...new Set(glSources.map((s) => s.taxCodeId))],
+    });
 
   // Posture: which functional currencies hold return-relevant activity in the
   // scope. Precise to the return's own predicates, so an idle foreign
   // subsidiary never forces translation — and a mixed scope without a declared
   // policy fails closed instead of adding unlike units.
   const sourceCodeIds = [...new Set(glSources.map((s) => s.taxCodeId))];
-  const baseCodeIds = [...new Set(
-    glSources.filter((s) => s.basis === "taxable_base").map((s) => s.taxCodeId),
-  )];
+  const baseCodeIds = [
+    ...new Set(glSources.filter((s) => s.basis === "taxable_base").map((s) => s.taxCodeId)),
+  ];
   const { ids: contributorIds, nullSubsidiaryDocs } = await findReturnContributors(
     runner,
     orgId,
@@ -1606,15 +1717,16 @@ async function computeTaxReturnInSnapshot(
       // at any rate. Prefer the scope's single currency when it has one so an
       // idle filing entity still reports in its own words, else the org base.
       const scopeCurrencies = new Set(
-        scope.ids
-          .map((id) => scope.currencyById.get(id))
-          .filter((c): c is string => Boolean(c)),
+        scope.ids.map((id) => scope.currencyById.get(id)).filter((c): c is string => Boolean(c)),
       );
       if (scopeCurrencies.size === 1) {
         functionalCurrency = [...scopeCurrencies][0]!;
       } else {
-        const orgRow = (await runner.execute<{ base_currency: string }>(sql`
-          select base_currency from orgs where id = ${orgId}`, "objects"));
+        const orgRow = await runner.execute<{ base_currency: string }>(
+          sql`
+          select base_currency from orgs where id = ${orgId}`,
+          "objects",
+        );
         const orgBase = orgRow[0]?.base_currency;
         if (!orgBase) throw new TaxReturnError("organization has no base currency");
         functionalCurrency = orgBase;
@@ -1635,13 +1747,21 @@ async function computeTaxReturnInSnapshot(
     watermark: form.watermark,
     registrationNumber: registration.registrationNumber,
     boxes,
-    ...(hasInputBoxes ? {
-      inputSources: boxDefs.flatMap((box) => box.inputKey ? [{
-        lineCode: box.lineCode,
-        inputKey: box.inputKey,
-        value: inputValues.get(box.inputKey)!,
-      }] : []),
-    } : {}),
+    ...(hasInputBoxes
+      ? {
+          inputSources: boxDefs.flatMap((box) =>
+            box.inputKey
+              ? [
+                  {
+                    lineCode: box.lineCode,
+                    inputKey: box.inputKey,
+                    value: inputValues.get(box.inputKey)!,
+                  },
+                ]
+              : [],
+          ),
+        }
+      : {}),
     functionalCurrency,
     subsidiaryIds: scope.legacy ? [] : scope.ids,
     registrationId: registration.registrationId,

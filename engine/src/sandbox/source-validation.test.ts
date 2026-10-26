@@ -15,5 +15,8 @@ test("sandbox source validation accepts production and refuses other environment
 });
 
 test("sandbox source validation names a missing source", () => {
-  assert.throws(() => assertProductionSandboxSource(null, "missing-id"), /production org not found: missing-id/);
+  assert.throws(
+    () => assertProductionSandboxSource(null, "missing-id"),
+    /production org not found: missing-id/,
+  );
 });

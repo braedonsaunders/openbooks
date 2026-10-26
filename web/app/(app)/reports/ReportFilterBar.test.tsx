@@ -1,22 +1,22 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import assert from "node:assert/strict";
+import test from "node:test";
 
-const { stubModules } = await import('../../../testing/stub-modules')
+const { stubModules } = await import("../../../testing/stub-modules");
 stubModules({
   navigation:
     'export function useRouter(){return{replace(){}}} export function usePathname(){return"/reports/trial-balance"} export function useSearchParams(){return new URLSearchParams("period=this_fiscal_year")}',
   intl: false,
   authz: false,
   features: false,
-})
+});
 
-const React = await import('react')
+const React = await import("react");
 // Classic-JSX fallback: the shared tsx cache can serve a classic transform,
 // which resolves bare React from the global scope, not the module scope.
-Object.assign(globalThis, { React })
-const { renderToString } = await import('react-dom/server')
-const { NextIntlClientProvider } = await import('next-intl')
-const { ReportFilterBar } = await import('./ReportFilterBar')
+Object.assign(globalThis, { React });
+const { renderToString } = await import("react-dom/server");
+const { NextIntlClientProvider } = await import("next-intl");
+const { ReportFilterBar } = await import("./ReportFilterBar");
 
 // contract: the report toolbar (AS OF / period / Scheduled
 // delivery / save / export) is ONE scrollable row — the actions render
@@ -29,8 +29,8 @@ function toolbarHtml() {
   /* eslint-disable react/no-children-prop */
   return renderToString(
     React.createElement(NextIntlClientProvider, {
-      locale: 'en',
-      messages: { reports: { filterBar: { asOf: 'AS OF', period: 'Period' } } },
+      locale: "en",
+      messages: { reports: { filterBar: { asOf: "AS OF", period: "Period" } } },
       children: React.createElement(ReportFilterBar, {
         // Empty controls on purpose: the container + actions row render
         // unconditionally, and this keeps the test on ReportFilterBar's own
@@ -40,26 +40,26 @@ function toolbarHtml() {
         actions: React.createElement(
           React.Fragment,
           null,
-          React.createElement('button', { type: 'button' }, 'Scheduled delivery'),
-          React.createElement('button', { type: 'button' }, 'Save view'),
-          React.createElement('button', { type: 'button' }, 'Export'),
+          React.createElement("button", { type: "button" }, "Scheduled delivery"),
+          React.createElement("button", { type: "button" }, "Save view"),
+          React.createElement("button", { type: "button" }, "Export"),
         ),
       }),
     }),
-  )
+  );
   /* eslint-enable react/no-children-prop */
 }
 
-test('report actions render inside the scrollable toolbar row', () => {
-  const html = toolbarHtml()
-  const root = html.match(/^<div class="([^"]*)"/)
-  assert.ok(root, 'toolbar must render a single root row')
-  assert.match(root[1]!, /overflow-x-auto/, 'toolbar row must allow horizontal scroll')
-  assert.match(root[1]!, /flex-nowrap/, 'toolbar keeps its single-row design')
-  const scrollAt = html.indexOf('overflow-x-auto')
-  const actionsAt = html.indexOf('ml-auto')
-  const scheduledAt = html.indexOf('Scheduled delivery')
-  assert.ok(actionsAt > scrollAt, 'actions wrapper must sit inside the scroll container')
-  assert.ok(scheduledAt > actionsAt, 'Scheduled delivery must render inside the actions wrapper')
-  assert.ok(html.includes('Save view') && html.includes('Export'), 'all actions must render')
-})
+test("report actions render inside the scrollable toolbar row", () => {
+  const html = toolbarHtml();
+  const root = html.match(/^<div class="([^"]*)"/);
+  assert.ok(root, "toolbar must render a single root row");
+  assert.match(root[1]!, /overflow-x-auto/, "toolbar row must allow horizontal scroll");
+  assert.match(root[1]!, /flex-nowrap/, "toolbar keeps its single-row design");
+  const scrollAt = html.indexOf("overflow-x-auto");
+  const actionsAt = html.indexOf("ml-auto");
+  const scheduledAt = html.indexOf("Scheduled delivery");
+  assert.ok(actionsAt > scrollAt, "actions wrapper must sit inside the scroll container");
+  assert.ok(scheduledAt > actionsAt, "Scheduled delivery must render inside the actions wrapper");
+  assert.ok(html.includes("Save view") && html.includes("Export"), "all actions must render");
+});

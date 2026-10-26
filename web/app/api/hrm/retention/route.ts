@@ -39,10 +39,7 @@ export const GET = defineRoute({
   handler: async ({ request: req, authz: gate }) => {
     const departmentId = new URL(req.url).searchParams.get("departmentId");
     if (departmentId !== null && !isUuid(departmentId)) {
-      return NextResponse.json(
-        { error: "departmentId must be a uuid" },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: "departmentId must be a uuid" }, { status: 400 });
     }
     try {
       const today = await businessToday(gate.user.orgId);

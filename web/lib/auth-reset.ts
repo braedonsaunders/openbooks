@@ -2,7 +2,14 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "@openbooks/engine/platform/db";
-import { deriveEmailDeliveryKey, passwordResetEmail, sendVia, userInvitationEmail, type EmailOut, type EmailTransport } from "@openbooks/emails";
+import {
+  deriveEmailDeliveryKey,
+  passwordResetEmail,
+  sendVia,
+  userInvitationEmail,
+  type EmailOut,
+  type EmailTransport,
+} from "@openbooks/emails";
 import {
   insertEmailLog,
   markEmailFailed,
@@ -49,10 +56,13 @@ const NETWORK_REQUESTS_PER_HOUR = 20;
 
 async function networkOverCap(networkHash: string | null): Promise<boolean> {
   if (!networkHash) return false;
-  const recent = (await db.execute<{ n: number }>(sql`
+  const recent = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from auth_password_resets
      where network_hash = ${networkHash} and created_at > now() - interval '1 hour'
-  `, "objects"));
+  `,
+    "objects",
+  );
   return recent[0]!.n >= NETWORK_REQUESTS_PER_HOUR;
 }
 
@@ -81,10 +91,13 @@ async function mintResetToken(
   userAgentHash: string | null,
   ttlMinutes: number = RESET_TOKEN_TTL_MIN,
 ): Promise<string | null> {
-  const recent = (await db.execute<{ n: number }>(sql`
+  const recent = await db.execute<{ n: number }>(
+    sql`
     select count(*)::int as n from auth_password_resets
      where user_id = ${userId} and created_at > now() - interval '1 hour'
-  `, "objects"));
+  `,
+    "objects",
+  );
   if (recent[0]!.n >= REQUESTS_PER_HOUR) return null;
 
   // A fresh issuance supersedes outstanding links.
@@ -111,7 +124,9 @@ type ResetRecipient = { id: string; org_id: string; name: string | null; email: 
  * order deterministically (ids are time-ordered v7).
  */
 async function isResetTokenCurrent(userId: string, raw: string): Promise<boolean> {
-  const row = (await db.execute<{ id: string }>(sql`
+  const row = (
+    await db.execute<{ id: string }>(
+      sql`
     select cur.id from auth_password_resets cur
      where cur.user_id = ${userId}
        and cur.token_hash = ${tokenHash(raw)}
@@ -122,7 +137,10 @@ async function isResetTokenCurrent(userId: string, raw: string): Promise<boolean
           where newer.user_id = cur.user_id
             and (newer.created_at, newer.id) > (cur.created_at, cur.id)
        )
-  `, "objects"))[0];
+  `,
+      "objects",
+    )
+  )[0];
   return !!row;
 }
 
@@ -158,13 +176,17 @@ export async function deliverResetEmail(
 ): Promise<CredentialDelivery> {
   // bypass: identity-bootstrap — reset delivery re-reads the recipient's token and home identity; no session exists yet.
   return withBypass(async () => {
-    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"password-reset-delivery:" + user.id}, 0))`);
+    await db.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${"password-reset-delivery:" + user.id}, 0))`,
+    );
     if (!(await isResetTokenCurrent(user.id, raw))) return "superseded";
-    const message = invitation?.message ?? passwordResetEmail({
-      recipientName: user.name,
-      resetUrl: setPasswordUrl(raw),
-      expiresMinutes: RESET_TOKEN_TTL_MIN,
-    });
+    const message =
+      invitation?.message ??
+      passwordResetEmail({
+        recipientName: user.name,
+        resetUrl: setPasswordUrl(raw),
+        expiresMinutes: RESET_TOKEN_TTL_MIN,
+      });
     const logId = await insertEmailLog({
       orgId: user.org_id,
       recipients: [user.email],
@@ -177,12 +199,22 @@ export async function deliverResetEmail(
       actor: invitation?.actor ?? { kind: "system", reason: "password reset delivery" },
     });
     try {
-      const outcome = await sendVia(transport, {
-        to: user.email,
-        subject: message.subject,
-        html: message.html,
-        text: message.text,
-      }, { deliveryKey: deriveEmailDeliveryKey({ orgId: user.org_id, scope: `direct:${logId}`, to: user.email }) });
+      const outcome = await sendVia(
+        transport,
+        {
+          to: user.email,
+          subject: message.subject,
+          html: message.html,
+          text: message.text,
+        },
+        {
+          deliveryKey: deriveEmailDeliveryKey({
+            orgId: user.org_id,
+            scope: `direct:${logId}`,
+            to: user.email,
+          }),
+        },
+      );
       if (outcome.kind === "sent") {
         await markEmailSent(user.org_id, logId, outcome.providerMessageId);
         return "sent";
@@ -191,11 +223,17 @@ export async function deliverResetEmail(
         // mailbox. Record uncertainty instead of inventing an outcome; the
         // issued token's own expiry bounds any attacker window.
         await markEmailUncertain(user.org_id, logId, outcome.reason);
-        console.warn(`[password-reset] delivery outcome unresolved for org ${user.org_id}: ${outcome.reason}`);
+        console.warn(
+          `[password-reset] delivery outcome unresolved for org ${user.org_id}: ${outcome.reason}`,
+        );
         return "uncertain";
       }
     } catch (error) {
-      await markEmailFailed(user.org_id, logId, error instanceof Error ? error.message : String(error));
+      await markEmailFailed(
+        user.org_id,
+        logId,
+        error instanceof Error ? error.message : String(error),
+      );
       return "failed";
     }
   });
@@ -218,7 +256,13 @@ export async function requestPasswordReset(
     if (await networkOverCap(networkHash)) return;
     // Same single-identity rule as login: never guess between two active
     // home identities for one address.
-    const users = (await db.execute<{ id: string; org_id: string; name: string | null; email: string }>(sql`
+    const users = await db.execute<{
+      id: string;
+      org_id: string;
+      name: string | null;
+      email: string;
+    }>(
+      sql`
       select u.id, u.org_id, u.name, u.email
         from users u
         join orgs o on o.id = u.org_id and o.env_kind = 'production'
@@ -226,7 +270,9 @@ export async function requestPasswordReset(
        order by u.created_at, u.id
        limit 2
        for update of u
-    `, "objects"));
+    `,
+      "objects",
+    );
     const user = users.length === 1 ? users[0]! : null;
     if (!user) return;
 
@@ -235,7 +281,9 @@ export async function requestPasswordReset(
     // to hand to either the requester or the server logs.
     const transport = await resolveOrgEmailTransport(user.org_id);
     if (!transport) {
-      console.warn(`[password-reset] no email transport for org ${user.org_id}; request not issued`);
+      console.warn(
+        `[password-reset] no email transport for org ${user.org_id}; request not issued`,
+      );
       return;
     }
 
@@ -300,14 +348,25 @@ export async function issueInviteSetPasswordLink(input: {
     // The authoritative ceiling re-check runs inside the mint transaction:
     // throwing rolls the mint back (no token, no email).
     if (input.authorize) await input.authorize();
-    const raw = await mintResetToken(input.user.id, networkHash, userAgentHash, INVITE_TOKEN_TTL_DAYS * 24 * 60);
+    const raw = await mintResetToken(
+      input.user.id,
+      networkHash,
+      userAgentHash,
+      INVITE_TOKEN_TTL_DAYS * 24 * 60,
+    );
     if (!raw) return null;
     const transport = await resolveOrgEmailTransport(input.user.org_id);
     if (!transport) return { raw, transport, orgName: null };
-    const org = (await db.execute<{ name: string }>(sql`
+    const org = (
+      await db.execute<{ name: string }>(
+        sql`
       select name from orgs where id = ${input.user.org_id}
-    `, "objects"))[0];
-    if (!org) throw new Error(`organization ${input.user.org_id} for the invited user does not exist`);
+    `,
+        "objects",
+      )
+    )[0];
+    if (!org)
+      throw new Error(`organization ${input.user.org_id} for the invited user does not exist`);
     return { raw, transport, orgName: org.name };
   });
   if (!minted) return null;
@@ -326,8 +385,13 @@ export async function issueInviteSetPasswordLink(input: {
       ? { kind: "user", userId: input.inviter.userId }
       : { kind: "system", reason: "user invitation delivery" },
   });
-  if (delivery === "sent" || delivery === "uncertain") return { raw: minted.raw, emailQueued: true };
-  return { raw: minted.raw, emailQueued: false, ...(delivery === "failed" ? { emailFailed: true } : {}) };
+  if (delivery === "sent" || delivery === "uncertain")
+    return { raw: minted.raw, emailQueued: true };
+  return {
+    raw: minted.raw,
+    emailQueued: false,
+    ...(delivery === "failed" ? { emailFailed: true } : {}),
+  };
 }
 
 export type ResetOutcome = { ok: true } | { ok: false; reason: "invalid_token" | "weak_password" };
@@ -337,9 +401,9 @@ export async function completePasswordReset(
   newPassword: string,
 ): Promise<ResetOutcome> {
   if (
-    typeof newPassword !== "string"
-    || newPassword.length < MIN_PASSWORD_LENGTH
-    || newPassword.length > 1024
+    typeof newPassword !== "string" ||
+    newPassword.length < MIN_PASSWORD_LENGTH ||
+    newPassword.length > 1024
   ) {
     return { ok: false, reason: "weak_password" };
   }
@@ -352,11 +416,19 @@ export async function completePasswordReset(
   // the credential and active identity are rechecked under locks below.
   const hashedToken = tokenHash(rawToken);
   // bypass: identity-bootstrap — an anonymous token holder is matched to an identity before any organization is known.
-  const candidate = await withBypass(async () => (await db.execute<{ user_id: string }>(sql`
+  const candidate = await withBypass(
+    async () =>
+      (
+        await db.execute<{ user_id: string }>(
+          sql`
     select r.user_id from auth_password_resets r
       join users u on u.id = r.user_id and u.is_active
      where r.token_hash = ${hashedToken} and r.used_at is null and r.expires_at > now()
-  `, "objects"))[0]);
+  `,
+          "objects",
+        )
+      )[0],
+  );
   if (!candidate) return { ok: false, reason: "invalid_token" };
 
   // Scrypt outside the transaction — never hold a lock across the KDF.
@@ -365,11 +437,17 @@ export async function completePasswordReset(
   // bypass: identity-bootstrap — the reset rewrites the identity's credential and revokes its sessions atomically.
   return withBypass(async () => {
     // Keep the user → credential lock order shared by issuance and login.
-    const user = (await db.execute<{ id: string }>(sql`
+    const user = (
+      await db.execute<{ id: string }>(
+        sql`
       select id from users where id = ${candidate.user_id} and is_active for update
-    `, "objects"))[0];
+    `,
+        "objects",
+      )
+    )[0];
     if (!user) return { ok: false, reason: "invalid_token" as const };
-    const rows = (await db.execute<{ id: string; user_id: string }>(sql`
+    const rows = await db.execute<{ id: string; user_id: string }>(
+      sql`
       select r.id, r.user_id
         from auth_password_resets r
         join users u on u.id = r.user_id and u.is_active
@@ -377,18 +455,23 @@ export async function completePasswordReset(
          and r.user_id = ${user.id}
          and r.used_at is null and r.expires_at > now()
        for update of r
-    `, "objects"));
+    `,
+      "objects",
+    );
     const reset = rows[0];
     if (!reset) return { ok: false, reason: "invalid_token" as const };
 
     // now() is the transaction start, which may precede a long lock wait.
     // Claim the locked credential against the live database clock before
     // invalidating its siblings or changing any account state.
-    const claimed = await db.execute<{ id: string }>(sql`
+    const claimed = await db.execute<{ id: string }>(
+      sql`
       update auth_password_resets set used_at = clock_timestamp()
        where id = ${reset.id} and used_at is null and expires_at > clock_timestamp()
        returning id
-    `, "objects");
+    `,
+      "objects",
+    );
     if (!claimed[0]) return { ok: false, reason: "invalid_token" as const };
 
     await db.execute(sql`

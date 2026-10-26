@@ -1,18 +1,24 @@
-import 'server-only'
+import "server-only";
 
-import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
-import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { isUuid, pickString } from '../../../../lib/list-params'
+import {
+  page,
+  pageHeader,
+  ref,
+  widgetBlock,
+  type PageSpec,
+} from "@braedonsaunders/appkit-viewspec";
+import { can, requirePermission } from "../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../lib/feature-gates";
+import { isFeatureEnabled } from "../../../../lib/features";
+import { isUuid, pickString } from "../../../../lib/list-params";
 import {
   listPrebills,
   listPreBillingWorkspaceSources,
   loadPrebill,
   prebillApprovalFlowsConfigured,
-} from '../../../../lib/pre-billing'
-import { requirePreBillingFeature } from '../../../../lib/pre-billing-gate'
-import type { PreBillingWorkspace } from './PreBillingWorkspace'
+} from "../../../../lib/pre-billing";
+import { requirePreBillingFeature } from "../../../../lib/pre-billing-gate";
+import type { PreBillingWorkspace } from "./PreBillingWorkspace";
 
 /**
  * Pre-billing, split into a loader and a spec.
@@ -30,47 +36,50 @@ import type { PreBillingWorkspace } from './PreBillingWorkspace'
  * booleans.
  */
 
-type PreBillingWorkspaceProps = Parameters<typeof PreBillingWorkspace>[0]
+type PreBillingWorkspaceProps = Parameters<typeof PreBillingWorkspace>[0];
 
 export interface PreBillingData {
-  title: string
-  description: string
-  prebills: PreBillingWorkspaceProps['prebills']
-  unbilled: PreBillingWorkspaceProps['unbilled']
-  projects: PreBillingWorkspaceProps['projects']
-  selected: PreBillingWorkspaceProps['selected']
-  canManage: boolean
-  canCreateInvoice: boolean
-  customerPortalEnabled: boolean
-  approvalFlowsConfigured: boolean
+  title: string;
+  description: string;
+  prebills: PreBillingWorkspaceProps["prebills"];
+  unbilled: PreBillingWorkspaceProps["unbilled"];
+  projects: PreBillingWorkspaceProps["projects"];
+  selected: PreBillingWorkspaceProps["selected"];
+  canManage: boolean;
+  canCreateInvoice: boolean;
+  customerPortalEnabled: boolean;
+  approvalFlowsConfigured: boolean;
 }
 
 // node-pg returns timestamptz columns as Date objects; the spec data must be
 // plain JSON, so normalize the instants the workspace re-parses with
 // `new Date(...)`. The rendered instant is unchanged on either path.
 function isoInstant(value: string | Date): string {
-  return value instanceof Date ? value.toISOString() : value
+  return value instanceof Date ? value.toISOString() : value;
 }
 
 function isoInstantOrNull(value: string | Date | null): string | null {
-  return value == null ? null : isoInstant(value)
+  return value == null ? null : isoInstant(value);
 }
 
 export async function loadPreBilling(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PreBillingData> {
-  const authz = await requirePermission('projects.read')
-  await requireFeatureEnabled(authz.user.orgId, 'preBilling')
-  await requirePreBillingFeature(authz.user.orgId)
-  const orgId = authz.user.orgId
-  const selectedId = pickString(sp.prebill)
-  const [prebills, sources, rawSelected, customerPortalEnabled, approvalFlowsConfigured] = await Promise.all([
-    listPrebills(orgId, undefined, authz.allowedSubsidiaryIds),
-    listPreBillingWorkspaceSources(orgId, authz.allowedSubsidiaryIds),
-    selectedId && isUuid(selectedId) ? loadPrebill(orgId, selectedId, authz.allowedSubsidiaryIds) : null,
-    isFeatureEnabled(orgId, 'customerPortal'),
-    prebillApprovalFlowsConfigured(orgId),
-  ])
+  const authz = await requirePermission("projects.read");
+  await requireFeatureEnabled(authz.user.orgId, "preBilling");
+  await requirePreBillingFeature(authz.user.orgId);
+  const orgId = authz.user.orgId;
+  const selectedId = pickString(sp.prebill);
+  const [prebills, sources, rawSelected, customerPortalEnabled, approvalFlowsConfigured] =
+    await Promise.all([
+      listPrebills(orgId, undefined, authz.allowedSubsidiaryIds),
+      listPreBillingWorkspaceSources(orgId, authz.allowedSubsidiaryIds),
+      selectedId && isUuid(selectedId)
+        ? loadPrebill(orgId, selectedId, authz.allowedSubsidiaryIds)
+        : null,
+      isFeatureEnabled(orgId, "customerPortal"),
+      prebillApprovalFlowsConfigured(orgId),
+    ]);
   const selected = rawSelected
     ? {
         ...rawSelected,
@@ -83,33 +92,34 @@ export async function loadPreBilling(
           occurredAt: isoInstant(event.occurredAt as unknown as string | Date),
         })),
       }
-    : null
+    : null;
   return {
-    title: 'Pre-billing',
-    description: 'Turn unbilled work into reviewed, approved invoice packages — and deliver them with their backup.',
+    title: "Pre-billing",
+    description:
+      "Turn unbilled work into reviewed, approved invoice packages — and deliver them with their backup.",
     prebills,
     unbilled: sources.unbilled,
     projects: sources.projects,
     selected,
-    canManage: can(authz, 'projects.manage'),
-    canCreateInvoice: can(authz, 'ar.create'),
+    canManage: can(authz, "projects.manage"),
+    canCreateInvoice: can(authz, "ar.create"),
     customerPortalEnabled,
     approvalFlowsConfigured,
-  }
+  };
 }
 
-const f = ref<PreBillingData>()
+const f = ref<PreBillingData>();
 
 export function preBillingSpec(data: PreBillingData): PageSpec {
   return page({
-    route: '/projects/pre-billing',
-    layout: 'list',
-    header: [pageHeader({ title: f('title'), description: f('description') })],
+    route: "/projects/pre-billing",
+    layout: "list",
+    header: [pageHeader({ title: f("title"), description: f("description") })],
     body: [
       // The whole workspace, placed through one widget: it owns the board,
       // the drawers, the editable line inputs and every fetch mutation, so
       // splitting it would strand client state from the actions it drives.
-      widgetBlock('pre-billing-workspace', {
+      widgetBlock("pre-billing-workspace", {
         prebills: data.prebills,
         unbilled: data.unbilled,
         projects: data.projects,
@@ -120,5 +130,5 @@ export function preBillingSpec(data: PreBillingData): PageSpec {
         approvalFlowsConfigured: data.approvalFlowsConfigured,
       }),
     ],
-  })
+  });
 }

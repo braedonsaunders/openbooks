@@ -82,10 +82,7 @@ test("sweep: PRSI subclass boundaries (Oct edition, weekly)", () => {
   }
   // AX credit unchanged by the October step: €377 still credits €7.83.
   // E = 377 × 4.35% = 16.3995 → 16.40; 16.40 − 7.83 = 8.57.
-  assert.equal(
-    calculateIeStatutory(week1("377", "2026-11-15")).prsiEmployee,
-    "8.5700",
-  );
+  assert.equal(calculateIeStatutory(week1("377", "2026-11-15")).prsiEmployee, "8.5700");
 });
 
 test("sweep: PAYE band edge (weekly cut-off €846.16)", () => {
@@ -107,8 +104,21 @@ test("sweep: week-1 invariants across an income grid", () => {
   // €38 is Class J (asserted as a refusal in conformance), so the grid
   // starts at the Class A floor.
   const incomes = [
-    "38", "100", "351.99", "352", "352.01", "400", "423.99", "424", "424.01",
-    "552", "552.01", "1000", "2000", "5000", "20000",
+    "38",
+    "100",
+    "351.99",
+    "352",
+    "352.01",
+    "400",
+    "423.99",
+    "424",
+    "424.01",
+    "552",
+    "552.01",
+    "1000",
+    "2000",
+    "5000",
+    "20000",
   ];
   let prevPaye = -1n;
   let prevUsc = -1n;
@@ -122,9 +132,9 @@ test("sweep: week-1 invariants across an income grid", () => {
       }
     }
     // Deductions never exceed a 40%-of-pay ceiling Sanity: PAYE ≤ 40% of pay.
-    assert.ok(cents(r.paye) <= cents(income) * 40n / 100n, `${label}: PAYE over 40%`);
+    assert.ok(cents(r.paye) <= (cents(income) * 40n) / 100n, `${label}: PAYE over 40%`);
     // USC never exceeds 8% of pay (top USC rate).
-    assert.ok(cents(r.usc) <= cents(income) * 8n / 100n, `${label}: USC over 8%`);
+    assert.ok(cents(r.usc) <= (cents(income) * 8n) / 100n, `${label}: USC over 8%`);
     // Monotone non-decreasing in income.
     assert.ok(cents(r.paye) >= prevPaye, `${label}: PAYE fell as pay rose`);
     assert.ok(cents(r.usc) >= prevUsc, `${label}: USC fell as pay rose`);

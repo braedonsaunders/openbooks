@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server'
-import { completePosRefund } from '@openbooks/engine/pos'
-import { defineRoute } from '@/lib/api/route'
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { posRefundBody } from '@/lib/api/pos-schemas'
-import { posIdempotencyKey } from '@/lib/pos'
+import { NextResponse } from "next/server";
+import { completePosRefund } from "@openbooks/engine/pos";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { posRefundBody } from "@/lib/api/pos-schemas";
+import { posIdempotencyKey } from "@/lib/pos";
 
-export const runtime = 'nodejs'
+export const runtime = "nodejs";
 
 /**
  * POST /api/pos/refunds — refund lines of a prior receipt as a native cash
@@ -14,12 +14,19 @@ export const runtime = 'nodejs'
  * recorded.
  */
 export const POST = defineRoute({
-  permission: 'pos.refund',
-  feature: 'posRegister',
+  permission: "pos.refund",
+  feature: "posRegister",
   body: posRefundBody,
   handler: async ({ authz, body, request }) => {
-    const key = posIdempotencyKey(request)
-    if (!key) return NextResponse.json({ error: 'The refund needs an Idempotency-Key header carrying a UUID.', code: 'invalid_idempotency_key' }, { status: 400 })
+    const key = posIdempotencyKey(request);
+    if (!key)
+      return NextResponse.json(
+        {
+          error: "The refund needs an Idempotency-Key header carrying a UUID.",
+          code: "invalid_idempotency_key",
+        },
+        { status: 400 },
+      );
     try {
       const completion = await completePosRefund({
         orgId: authz.user.orgId,
@@ -31,10 +38,10 @@ export const POST = defineRoute({
         payments: body.payments,
         reason: body.reason ?? null,
         allowedSubsidiaryIds: authz.allowedSubsidiaryIds ?? null,
-      })
-      return NextResponse.json(completion, { status: completion.replayed ? 200 : 201 })
+      });
+      return NextResponse.json(completion, { status: completion.replayed ? 200 : 201 });
     } catch (error) {
-      return apiErrorResponse(error)
+      return apiErrorResponse(error);
     }
   },
-})
+});

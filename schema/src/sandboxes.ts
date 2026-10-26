@@ -57,9 +57,7 @@ export const sandboxes = pgTable(
     /** Optional cron for scheduled refresh (null = manual only). */
     refreshSchedule: text("refresh_schedule"),
     /** Preserve the sandbox customization layer across scheduled refreshes. */
-    refreshKeepCustomizations: boolean("refresh_keep_customizations")
-      .notNull()
-      .default(true),
+    refreshKeepCustomizations: boolean("refresh_keep_customizations").notNull().default(true),
     /** Storage accounting captured at last refresh. */
     storageRows: integer("storage_rows").notNull().default(0),
     ...auditColumns,
@@ -162,13 +160,16 @@ export const changeSetItems = pgTable(
   },
   (t) => [
     index("change_set_items_set").on(t.changeSetId),
-    check("change_set_items_captured_base_valid", sql`
+    check(
+      "change_set_items_captured_base_valid",
+      sql`
       not ${t.baseCaptured} or coalesce(
         (${t.op} = 'insert' and ${t.expectedBefore} is null) or
         (${t.op} in ('update', 'delete') and ${t.expectedBefore} is not null
           and jsonb_typeof(${t.expectedBefore}) = 'object'
           and ${t.expectedBefore}->>'id' = ${t.targetId}::text
           and ${t.expectedBefore}->>'org_id' = ${t.orgId}::text), false)
-    `),
+    `,
+    ),
   ],
 );

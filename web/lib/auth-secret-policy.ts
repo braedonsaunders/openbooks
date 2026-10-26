@@ -25,7 +25,9 @@ export function requireSessionSecret(
 
   const byteLength = new TextEncoder().encode(secret).byteLength;
   const distinctCharacters = new Set(secret).size;
-  const obviousPlaceholder = /(replace|change.?me|password|openbooks|example|insecure)/i.test(secret);
+  const obviousPlaceholder = /(replace|change.?me|password|openbooks|example|insecure)/i.test(
+    secret,
+  );
   const repeatedUnit = /^(.{1,16})\1+$/.test(secret);
   if (byteLength < 32 || distinctCharacters < 10 || obviousPlaceholder || repeatedUnit) {
     throw new Error(

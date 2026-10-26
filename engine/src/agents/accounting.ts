@@ -27,14 +27,15 @@ export async function accountingFindings(
   const unmatchedPolicy = byKey.get("unmatched_bank_activity");
   if (unmatchedPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(unmatchedPolicy, agentThreshold);
-    const unmatched = (await db.execute<{
-        account_id: string;
-        number: string | null;
-        name: string;
-        line_count: number;
-        oldest_date: string;
-        materiality: string;
-      }>(sql`
+    const unmatched = await db.execute<{
+      account_id: string;
+      number: string | null;
+      name: string;
+      line_count: number;
+      oldest_date: string;
+      materiality: string;
+    }>(
+      sql`
       select a.id as account_id, a.number, a.name, count(*)::int as line_count,
              min(l.posted_on) as oldest_date, sum(abs(l.amount))::text as materiality
       from bank_statement_lines l
@@ -42,10 +43,13 @@ export async function accountingFindings(
         join accounts a on a.id = s.account_id and a.org_id = s.org_id
        where l.org_id = ${orgId} and l.match_status = 'unmatched' and l.posted_on <= ${today}
        group by a.id, a.number, a.name
-    `, "objects"));
+    `,
+      "objects",
+    );
 
     for (const row of unmatched) {
-      const top = (await db.execute<Record<string, unknown>>(sql`
+      const top = await db.execute<Record<string, unknown>>(
+        sql`
       select l.id, l.posted_on, l.amount::text, l.description, l.counterparty_ref
         from bank_statement_lines l
         join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
@@ -53,9 +57,11 @@ export async function accountingFindings(
          and l.match_status = 'unmatched' and l.posted_on <= ${today}
        order by abs(l.amount) desc, l.posted_on
        limit 10
-    `, "objects"));
-    const materiality = moneyAbs(row.materiality);
-    findings.push({
+    `,
+        "objects",
+      );
+      const materiality = moneyAbs(row.materiality);
+      findings.push({
         agentKey: "accounting",
         findingType: "unmatched_bank_activity",
         fingerprint: `unmatched-bank:${row.account_id}`,
@@ -72,24 +78,24 @@ export async function accountingFindings(
         confidence: "1.0000",
         materiality,
         subjectType: "account",
-      subjectId: row.account_id,
-      summary: {
-        accountNumber: row.number,
-        accountName: row.name,
-        count: Number(row.line_count),
-        oldestDate: row.oldest_date,
-        href: `/banking/${row.account_id}`,
-      },
-      evidence: top.map((item) => ({
-        kind: "bank_transaction",
-        sourceType: "bank_statement_line",
-        sourceId: String(item.id),
-        data: {
-          postedOn: item.posted_on,
-          amount: item.amount,
-          description: item.description,
-          counterpartyRef: item.counterparty_ref,
+        subjectId: row.account_id,
+        summary: {
+          accountNumber: row.number,
+          accountName: row.name,
+          count: Number(row.line_count),
+          oldestDate: row.oldest_date,
+          href: `/banking/${row.account_id}`,
         },
+        evidence: top.map((item) => ({
+          kind: "bank_transaction",
+          sourceType: "bank_statement_line",
+          sourceId: String(item.id),
+          data: {
+            postedOn: item.posted_on,
+            amount: item.amount,
+            description: item.description,
+            counterpartyRef: item.counterparty_ref,
+          },
         })),
       });
     }
@@ -98,40 +104,47 @@ export async function accountingFindings(
   const reconciliationPolicy = byKey.get("reconciliation_difference");
   if (reconciliationPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(reconciliationPolicy, agentThreshold);
-    const reconciliations = (await db.execute<{
-        id: string;
-        account_id: string;
-        through_date: string;
-        statement_balance: string;
-        number: string | null;
-        name: string;
-      }>(sql`
+    const reconciliations = await db.execute<{
+      id: string;
+      account_id: string;
+      through_date: string;
+      statement_balance: string;
+      number: string | null;
+      name: string;
+    }>(
+      sql`
       select r.id, r.account_id, r.through_date, r.statement_balance::text,
              a.number, a.name
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.org_id = ${orgId} and r.status = 'in_progress'
-    `, "objects"));
+    `,
+      "objects",
+    );
 
     for (const record of reconciliations) {
-      const { difference } = await reconciliationTotals(record.id, { orgId, userId: SYSTEM_ACTOR_ID, allowedSubsidiaryIds: null });
+      const { difference } = await reconciliationTotals(record.id, {
+        orgId,
+        userId: SYSTEM_ACTOR_ID,
+        allowedSubsidiaryIds: null,
+      });
       const row = { ...record, difference };
       if (toUnits(row.difference) === 0n) continue;
-    const materiality = moneyAbs(row.difference);
-    findings.push({
-      agentKey: "accounting",
-      findingType: "reconciliation_difference",
-      fingerprint: `reconciliation-difference:${row.id}`,
-      severity: absoluteUnits(materiality) >= absoluteUnits(threshold) ? "critical" : "warning",
-      confidence: "1.0000",
-      materiality,
-      subjectType: "reconciliation",
-      subjectId: row.id,
-      summary: {
-        accountNumber: row.number,
-        accountName: row.name,
-        throughDate: row.through_date,
-        statementBalance: row.statement_balance,
+      const materiality = moneyAbs(row.difference);
+      findings.push({
+        agentKey: "accounting",
+        findingType: "reconciliation_difference",
+        fingerprint: `reconciliation-difference:${row.id}`,
+        severity: absoluteUnits(materiality) >= absoluteUnits(threshold) ? "critical" : "warning",
+        confidence: "1.0000",
+        materiality,
+        subjectType: "reconciliation",
+        subjectId: row.id,
+        summary: {
+          accountNumber: row.number,
+          accountName: row.name,
+          throughDate: row.through_date,
+          statementBalance: row.statement_balance,
           difference: row.difference,
           href: `/banking/${row.account_id}/reconcile/${row.id}`,
         },
@@ -156,34 +169,45 @@ export async function accountingFindings(
     const threshold = effectiveDetectorMateriality(stalePolicy, agentThreshold);
     const staleAfterDays = stalePolicy.parameters.staleAfterDays!;
     const staleOnOrBefore = addCalendarDays(today, -staleAfterDays);
-    const stale = (await db.execute<{
-        document_count: number;
-        oldest_date: string | null;
-        materiality: string;
-      }>(sql`
+    const stale = await db.execute<{
+      document_count: number;
+      oldest_date: string | null;
+      materiality: string;
+    }>(
+      sql`
       select count(*)::int as document_count, min(document_date) as oldest_date,
              coalesce(sum(abs(total)), 0)::text as materiality
         from documents
        where org_id = ${orgId} and status in ('draft','pending_approval')
          and document_date <= ${staleOnOrBefore}
          and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','cash_sale','cash_refund','expense_report','journal')
-    `, "objects"));
+    `,
+      "objects",
+    );
     const staleRow = stale[0];
     if (staleRow && Number(staleRow.document_count) > 0) {
-      const documents = (await db.execute<Record<string, unknown>>(sql`
+      const documents = await db.execute<Record<string, unknown>>(
+        sql`
         select id, kind, document_number, document_date, status, total::text
           from documents
          where org_id = ${orgId} and status in ('draft','pending_approval')
            and document_date <= ${staleOnOrBefore}
            and kind in ('vendor_bill','vendor_credit','customer_invoice','customer_credit','cash_sale','cash_refund','expense_report','journal')
          order by document_date, abs(total) desc limit 10
-      `, "objects"));
-    const materiality = moneyAbs(staleRow.materiality);
-    findings.push({
+      `,
+        "objects",
+      );
+      const materiality = moneyAbs(staleRow.materiality);
+      findings.push({
         agentKey: "accounting",
         findingType: "stale_accounting_documents",
         fingerprint: "stale-accounting-documents",
-        severity: Number(staleRow.document_count) >= stalePolicy.parameters.criticalItemCount! || absoluteUnits(materiality) >= absoluteUnits(threshold) * BigInt(stalePolicy.parameters.criticalMaterialityMultiple!) ? "critical" : "warning",
+        severity:
+          Number(staleRow.document_count) >= stalePolicy.parameters.criticalItemCount! ||
+          absoluteUnits(materiality) >=
+            absoluteUnits(threshold) * BigInt(stalePolicy.parameters.criticalMaterialityMultiple!)
+            ? "critical"
+            : "warning",
         confidence: "1.0000",
         materiality,
         subjectType: "documents",
@@ -195,14 +219,14 @@ export async function accountingFindings(
         evidence: documents.map((item) => ({
           kind: "document",
           sourceType: "document",
-        sourceId: String(item.id),
-        data: {
-          kind: item.kind,
-          documentNumber: item.document_number,
-          documentDate: item.document_date,
-          status: item.status,
-          total: item.total,
-        },
+          sourceId: String(item.id),
+          data: {
+            kind: item.kind,
+            documentNumber: item.document_number,
+            documentDate: item.document_date,
+            status: item.status,
+            total: item.total,
+          },
         })),
       });
     }
@@ -210,7 +234,12 @@ export async function accountingFindings(
 
   const strandedPolicy = byKey.get("stranded_background_work");
   if (strandedPolicy?.enabled) {
-    findings.push(...await strandedWorkFindings(orgId, addCalendarDays(today, -strandedPolicy.parameters.staleAfterDays!)));
+    findings.push(
+      ...(await strandedWorkFindings(
+        orgId,
+        addCalendarDays(today, -strandedPolicy.parameters.staleAfterDays!),
+      )),
+    );
   }
   return findings;
 }

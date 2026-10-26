@@ -11,14 +11,24 @@
 
 /** Read projection for the number-sequences setup entity: the next number to issue. */
 export const NUMBER_SEQUENCE_READ_COLUMNS = [
-  'id', 'org_id', 'document_kind', 'subsidiary_id', 'prefix',
-  '(next_number + 1) as next_number', 'padding', 'gapless', 'allocated_through',
-  'created_at', 'created_by', 'updated_at', 'updated_by',
-] as const
+  "id",
+  "org_id",
+  "document_kind",
+  "subsidiary_id",
+  "prefix",
+  "(next_number + 1) as next_number",
+  "padding",
+  "gapless",
+  "allocated_through",
+  "created_at",
+  "created_by",
+  "updated_at",
+  "updated_by",
+] as const;
 
 /** Map a requested read column to its projection (next_number becomes the next number to issue). */
 export function numberSequenceReadColumn(column: string): string {
-  return column === 'next_number' ? '(next_number + 1) as next_number' : column
+  return column === "next_number" ? "(next_number + 1) as next_number" : column;
 }
 
 /**
@@ -30,16 +40,16 @@ export function storedSequencePosition(
   nextNumber: unknown,
   allocatedThrough: number,
 ): { value: number } | { error: string } {
-  const next = typeof nextNumber === 'number' ? nextNumber : Number.NaN
+  const next = typeof nextNumber === "number" ? nextNumber : Number.NaN;
   if (!Number.isSafeInteger(next) || next < 1) {
-    return { error: 'Next number must be a whole number of 1 or more' }
+    return { error: "Next number must be a whole number of 1 or more" };
   }
   if (allocatedThrough > 0 && next <= allocatedThrough) {
     return {
       error: `This sequence has already issued numbers through ${allocatedThrough}; set the next number to ${allocatedThrough + 1} or higher`,
-    }
+    };
   }
-  return { value: next - 1 }
+  return { value: next - 1 };
 }
 
 /**
@@ -47,8 +57,12 @@ export function storedSequencePosition(
  * just before it. Callers run validateEntityIntegrity first, which refuses
  * anything that is not a whole number beyond the issued watermark.
  */
-export function numberSequenceStoredCols<T extends { column: string; value: unknown }>(cols: readonly T[]): T[] {
-  return cols.map((column) => column.column === 'next_number' && typeof column.value === 'number'
-    ? { ...column, value: column.value - 1 }
-    : column)
+export function numberSequenceStoredCols<T extends { column: string; value: unknown }>(
+  cols: readonly T[],
+): T[] {
+  return cols.map((column) =>
+    column.column === "next_number" && typeof column.value === "number"
+      ? { ...column, value: column.value - 1 }
+      : column,
+  );
 }

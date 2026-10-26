@@ -9,7 +9,10 @@ const pack = { sequence: 20, name: "Pack", status: "pending" };
 test("an operation is blocked by the earliest earlier operation that is not done", () => {
   assert.deepEqual(sequenceBlocker([roast, pack], 20), roast);
   assert.deepEqual(sequenceBlocker([roast, cool, pack], 20), roast);
-  assert.deepEqual(sequenceBlocker([{ ...roast, status: "paused" }, pack], 20), { ...roast, status: "paused" });
+  assert.deepEqual(sequenceBlocker([{ ...roast, status: "paused" }, pack], 20), {
+    ...roast,
+    status: "paused",
+  });
 });
 
 test("a paused or pending earlier operation blocks a later start just as a running one does", () => {
@@ -18,7 +21,10 @@ test("a paused or pending earlier operation blocks a later start just as a runni
 
 test("completed earlier operations do not block", () => {
   assert.equal(sequenceBlocker([{ ...roast, status: "done" }, pack], 20), null);
-  assert.equal(sequenceBlocker([{ ...roast, status: "done" }, { ...cool, status: "done" }, pack], 20), null);
+  assert.equal(
+    sequenceBlocker([{ ...roast, status: "done" }, { ...cool, status: "done" }, pack], 20),
+    null,
+  );
 });
 
 test("the first operation of an order is never blocked", () => {

@@ -18,10 +18,16 @@ test("createPayApplication refuses by name while Projects is disabled and writes
     await assert.rejects(
       createPayApplication(org.orgId, actorId, projectId, "2026-08-31", "10", null),
       (error: unknown) =>
-        error instanceof ConstructionBillingError && error.message === "Projects feature is disabled",
+        error instanceof ConstructionBillingError &&
+        error.message === "Projects feature is disabled",
     );
-    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from pay_applications
-      where org_id=${org.orgId}`, "objects"))[0]!.n;
+    const count = (
+      await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from pay_applications
+      where org_id=${org.orgId}`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(count, 0, "a refused application must leave no pay_applications row");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -30,7 +36,9 @@ test("createPayApplication refuses by name while Projects is disabled and writes
 
 test("createPayApplication blocked on the fence loses to a committed Projects disable", async () => {
   const org = await createScratchOrg();
-  const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL });
+  const writer = new pg.Client({
+    connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL,
+  });
   let pending: Promise<unknown> | undefined;
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -43,9 +51,10 @@ test("createPayApplication blocked on the fence loses to a committed Projects di
     // Stage the disable without committing: the uncommitted flag write holds
     // the org row exclusively, so a creator that checked the gate first must
     // wait on the fence instead of racing past it.
-    await writer.query("update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb) where id=$1", [
-      org.orgId,
-    ]);
+    await writer.query(
+      "update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb) where id=$1",
+      [org.orgId],
+    );
     pending = createPayApplication(org.orgId, actorId, projectId, "2026-08-31", "10", null);
     void pending.catch(() => {});
     await waitForLockWaiter(writer, { label: "the pay application" });
@@ -53,10 +62,16 @@ test("createPayApplication blocked on the fence loses to a committed Projects di
     await assert.rejects(
       pending,
       (error: unknown) =>
-        error instanceof ConstructionBillingError && error.message === "Projects feature is disabled",
+        error instanceof ConstructionBillingError &&
+        error.message === "Projects feature is disabled",
     );
-    const count = (await db.execute<{ n: number }>(sql`select count(*)::int as n from pay_applications
-      where org_id=${org.orgId}`, "objects"))[0]!.n;
+    const count = (
+      await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from pay_applications
+      where org_id=${org.orgId}`,
+        "objects",
+      )
+    )[0]!.n;
     assert.equal(count, 0, "the losing creator must leave no pay_applications row");
   } finally {
     await writer.query("rollback").catch(() => {});

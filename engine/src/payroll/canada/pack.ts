@@ -1,11 +1,8 @@
 import { CA_OPENING_LEVY_SOURCE } from "./opening-levy-source-policy.ts";
-import type {
-  PayrollCountryPack,
-  PayrollRegionCoverage,
-} from "../pack-types.ts";
+import type { PayrollCountryPack, PayrollRegionCoverage } from "../pack-types.ts";
 import { CA_COMPUTE_FACTOR_LABELS, computeCaStatutory } from "./compute-statutory.ts";
 import { CA_SUPPLEMENTAL_PAY_TREATMENT } from "./supplemental-pay.ts";
-import { CA_PERIOD_OPENING_TREATMENT } from './period-openings.ts';
+import { CA_PERIOD_OPENING_TREATMENT } from "./period-openings.ts";
 import { T4127_FACTOR_LABELS } from "./t4127.ts";
 import { TP1015_FACTOR_LABELS } from "./quebec/tp1015.ts";
 import { CRA_REMITTANCE_SCHEDULE } from "./cra/remittance.ts";
@@ -44,7 +41,20 @@ import { CA_CONSTRUCTION } from "./construction.ts";
 
 /** Every T4127 province code, plus ZZ (employed outside any province). */
 const CA_PROVINCES: readonly Province[] = [
-  "AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT", "ZZ",
+  "AB",
+  "BC",
+  "MB",
+  "NB",
+  "NL",
+  "NS",
+  "NT",
+  "NU",
+  "ON",
+  "PE",
+  "QC",
+  "SK",
+  "YT",
+  "ZZ",
 ];
 
 const CA_REGIONS: PayrollRegionCoverage = {
@@ -75,7 +85,8 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     example: "046454286",
     requiredForPayroll: true,
     neededFor: "T4/RL-1",
-    citation: "CRA: the SIN is 'the 9-digit number known as a social insurance number (SIN)' (Service Canada issues it)",
+    citation:
+      "CRA: the SIN is 'the 9-digit number known as a social insurance number (SIN)' (Service Canada issues it)",
     numericEntry: true,
   },
   installable: true,
@@ -141,7 +152,12 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   // T4127 factor U1: employee-paid dues reduce taxable income.
   employeeUnionDuesTaxTreatment: "union_dues",
   deductionTreatments: [
-    {key:"pension_f_bonus",label:"Pension deduction from a non-periodic payment (F3)",help:"RPP/RRSP deduction taken from a bonus. Reduces the bonus tax base and is retained as F4 history; does not reduce CPP/EI earnings.",reduces:["nonPeriodic"]},
+    {
+      key: "pension_f_bonus",
+      label: "Pension deduction from a non-periodic payment (F3)",
+      help: "RPP/RRSP deduction taken from a bonus. Reduces the bonus tax base and is retained as F4 history; does not reduce CPP/EI earnings.",
+      reduces: ["nonPeriodic"],
+    },
     // T4127 factors F (RPP/RRSP pension), U1 (union dues) and F2 (alimony):
     // each reduces the periodic income leg — annual taxable income A prices
     // (income − F − F2 − U1) × P, while bonuses carry their own F3/F4
@@ -186,7 +202,15 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
         // T4127 factor T: annual taxable income A is income LESS the
         // factor-F / F2 / U1 deductions, so a pre-tax protected order moves
         // it. The only Canadian line the fixpoint re-derives.
-        { code: "TAX", name: "Income tax", systemKey: "income_tax", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        {
+          code: "TAX",
+          name: "Income tax",
+          systemKey: "income_tax",
+          kind: "deduction",
+          sequence: 110,
+          assessedOn: "taxable_income",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -206,7 +230,15 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
         // Québec vendor on this component's remittance_party_id — that
         // difference in destination is the entire reason this is a second
         // slot and not part of income_tax.
-        { code: "QCTAX", name: "Québec income tax", systemKey: "qc_income_tax", kind: "deduction", sequence: 115, assessedOn: "taxable_income", remittance: "external" },
+        {
+          code: "QCTAX",
+          name: "Québec income tax",
+          systemKey: "qc_income_tax",
+          kind: "deduction",
+          sequence: 115,
+          assessedOn: "taxable_income",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -219,10 +251,46 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
         // under the C/C2 factors and the run pushes the same system keys.
         // QPP is remitted to Revenu Québec on TPZ-1015.R, not to the CRA —
         // the regional declaration routes the QC share there.
-        { code: "CPP", name: "CPP", systemKey: "cpp", kind: "deduction", sequence: 120, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
-        { code: "CPP2", name: "CPP (second additional)", systemKey: "cpp2", kind: "deduction", sequence: 130, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
-        { code: "CPP-ER", name: "CPP (employer)", systemKey: "cpp", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
-        { code: "CPP2-ER", name: "CPP2 (employer)", systemKey: "cpp2", kind: "employer_contribution", sequence: 215, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
+        {
+          code: "CPP",
+          name: "CPP",
+          systemKey: "cpp",
+          kind: "deduction",
+          sequence: 120,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+          regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" },
+        },
+        {
+          code: "CPP2",
+          name: "CPP (second additional)",
+          systemKey: "cpp2",
+          kind: "deduction",
+          sequence: 130,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+          regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" },
+        },
+        {
+          code: "CPP-ER",
+          name: "CPP (employer)",
+          systemKey: "cpp",
+          kind: "employer_contribution",
+          sequence: 210,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+          regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" },
+        },
+        {
+          code: "CPP2-ER",
+          name: "CPP2 (employer)",
+          systemKey: "cpp2",
+          kind: "employer_contribution",
+          sequence: 215,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+          regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" },
+        },
       ],
     },
     {
@@ -231,8 +299,24 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
         // EI is rate × insurable earnings; the employer share is a multiple
         // of the employee's. EI is FEDERAL for every province including
         // Quebec — no regional override; it always goes to the CRA vendor.
-        { code: "EI", name: "EI", systemKey: "ei", kind: "deduction", sequence: 140, assessedOn: "earnings", remittance: "tax_authority" },
-        { code: "EI-ER", name: "EI (employer)", systemKey: "ei", kind: "employer_contribution", sequence: 220, assessedOn: "earnings", remittance: "tax_authority" },
+        {
+          code: "EI",
+          name: "EI",
+          systemKey: "ei",
+          kind: "deduction",
+          sequence: 140,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
+        {
+          code: "EI-ER",
+          name: "EI (employer)",
+          systemKey: "ei",
+          kind: "employer_contribution",
+          sequence: 220,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+        },
       ],
     },
     {
@@ -244,8 +328,26 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
         // Québec on TPZ-1015.R — declared per region for the same reason as
         // QPP, so the declaration stays on the component, not in the
         // remittance module.
-        { code: "QPIP", name: "QPIP", systemKey: "qpip", kind: "deduction", sequence: 150, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
-        { code: "QPIP-ER", name: "QPIP (employer)", systemKey: "qpip", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
+        {
+          code: "QPIP",
+          name: "QPIP",
+          systemKey: "qpip",
+          kind: "deduction",
+          sequence: 150,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+          regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" },
+        },
+        {
+          code: "QPIP-ER",
+          name: "QPIP (employer)",
+          systemKey: "qpip",
+          kind: "employer_contribution",
+          sequence: 230,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+          regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" },
+        },
       ],
     },
     {
@@ -253,7 +355,15 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
       components: [
         // A percentage of vacationable EARNINGS (the entitlement engine
         // emits it, phase 7), never of anything net of a deduction.
-        { code: "VAC", name: "Vacation accrual", systemKey: "vacation_accrual", kind: "employer_contribution", sequence: 240, assessedOn: "earnings", remittance: "internal_accrual" },
+        {
+          code: "VAC",
+          name: "Vacation accrual",
+          systemKey: "vacation_accrual",
+          kind: "employer_contribution",
+          sequence: 240,
+          assessedOn: "earnings",
+          remittance: "internal_accrual",
+        },
       ],
     },
     {
@@ -261,7 +371,15 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
       components: [
         // Assessable earnings × the worker-comp group's rate, job-split
         // proportional to the earnings it assesses.
-        { code: "WCB", name: "Workers' compensation (WCB/WSIB)", systemKey: "wcb", kind: "employer_contribution", sequence: 260, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "WCB",
+          name: "Workers' compensation (WCB/WSIB)",
+          systemKey: "wcb",
+          kind: "employer_contribution",
+          sequence: 260,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -272,7 +390,15 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
       components: [
         // Ontario remuneration past the annual exemption — remuneration is
         // an earnings measure.
-        { code: "EHT", name: "Employer Health Tax", systemKey: "eht", kind: "employer_contribution", sequence: 270, assessedOn: "earnings", remittance: "external" },
+        {
+          code: "EHT",
+          name: "Employer Health Tax",
+          systemKey: "eht",
+          kind: "employer_contribution",
+          sequence: 270,
+          assessedOn: "earnings",
+          remittance: "external",
+        },
       ],
     },
     {
@@ -284,7 +410,16 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
       // the same reason, so the declaration stays on the component.
       regions: ["QC"],
       components: [
-        { code: "CNT", name: "Contribution related to labour standards (CNT)", systemKey: "cnt", kind: "employer_contribution", sequence: 285, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
+        {
+          code: "CNT",
+          name: "Contribution related to labour standards (CNT)",
+          systemKey: "cnt",
+          kind: "employer_contribution",
+          sequence: 285,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+          regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" },
+        },
       ],
     },
     {
@@ -299,7 +434,16 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
         // remitted to Revenu Québec on TPZ-1015.R like QPP/QPIP — declared
         // per region for the same reason, so the declaration stays on the
         // component, not in the remittance module.
-        { code: "HSF", name: "Health Services Fund", systemKey: "hsf", kind: "employer_contribution", sequence: 280, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
+        {
+          code: "HSF",
+          name: "Health Services Fund",
+          systemKey: "hsf",
+          kind: "employer_contribution",
+          sequence: 280,
+          assessedOn: "earnings",
+          remittance: "tax_authority",
+          regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" },
+        },
       ],
     },
   ],
@@ -322,20 +466,25 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
     {
       column: "wcb_exempt",
       label: "Exempt from workers' compensation",
-      help: "Only when the employer account genuinely does not cover this employment "
-        + "(for example an owner or director): a reason is required, and the run accrues "
-        + "no workers-compensation premium for them. Everyone else needs a WCB rate class.",
+      help:
+        "Only when the employer account genuinely does not cover this employment " +
+        "(for example an owner or director): a reason is required, and the run accrues " +
+        "no workers-compensation premium for them. Everyone else needs a WCB rate class.",
     },
   ],
-  employerFacts: [...CA_EMPLOYER_FACTS, {
-    key: "mb_remembrance_day_act_exempt",
-    kind: "boolean",
-    label: "Exempt from Manitoba Remembrance Day Act work provisions",
-    refusalReason: "the Act's work-triggered payment applies only to employers required to observe it",
-    legalBasis: "The Remembrance Day Act (Manitoba), CCSM c R80, ss. 2–3",
-    required: false,
-    effectivePeriod: "date",
-  }],
+  employerFacts: [
+    ...CA_EMPLOYER_FACTS,
+    {
+      key: "mb_remembrance_day_act_exempt",
+      kind: "boolean",
+      label: "Exempt from Manitoba Remembrance Day Act work provisions",
+      refusalReason:
+        "the Act's work-triggered payment applies only to employers required to observe it",
+      legalBasis: "The Remembrance Day Act (Manitoba), CCSM c R80, ss. 2–3",
+      required: false,
+      effectivePeriod: "date",
+    },
+  ],
   // HR-13: construction carve-outs as pack data — statute transcribed
   // with citations, consumed by generic readers, never a generic branch.
   construction: CA_CONSTRUCTION,

@@ -1,15 +1,23 @@
-import type { DocArticle } from '../types'
+import type { DocArticle } from "../types";
 
 export const correctingAndRescinding: DocArticle = {
-  slug: 'correcting-and-rescinding-changes',
-  title: 'Correcting and Rescinding Changes',
-  category: 'administration',
+  slug: "correcting-and-rescinding-changes",
+  title: "Correcting and Rescinding Changes",
+  category: "administration",
   order: 13,
   summary:
-    'Action and reason codes on every change request, and the three event verbs — cancel an in-flight request, rescind a completed change, or correct it — all as appended events, never edits.',
-  updated: '2026-09-27',
-  keywords: ['rescind', 'correct', 'cancel', 'reason code', 'action code', 'reverse', 'change request'],
-  related: ['hrm-processes', 'automations'],
+    "Action and reason codes on every change request, and the three event verbs — cancel an in-flight request, rescind a completed change, or correct it — all as appended events, never edits.",
+  updated: "2026-09-27",
+  keywords: [
+    "rescind",
+    "correct",
+    "cancel",
+    "reason code",
+    "action code",
+    "reverse",
+    "change request",
+  ],
+  related: ["hrm-processes", "automations"],
   body: `# Correcting and Rescinding Changes
 
 Every change request files under a generic HR action (hire, transfer, promotion, pay change, manager change, termination, and more) with a reason code from the vocabulary configured beside the change-request queue (/hrm/change-requests). Once the org has declared at least one active reason code, submitting without an action and an active reason code is refused; with no active codes declared, classification is optional. The three verbs below are part of HRM and need no switch of their own.
@@ -22,4 +30,4 @@ History is never edited. All three corrections are appended events on the immuta
 
 Rescinding and correcting need the employment approval and management permissions respectively, and every verb carries the written reason the audit needs.
 `,
-}
+};

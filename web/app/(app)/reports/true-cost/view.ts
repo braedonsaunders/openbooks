@@ -1,7 +1,7 @@
-import 'server-only'
+import "server-only";
 
-import { getLocale, getTranslations } from 'next-intl/server'
-import { reportPeriodLabel } from '../../../../lib/format'
+import { getLocale, getTranslations } from "next-intl/server";
+import { reportPeriodLabel } from "../../../../lib/format";
 import {
   filterBar,
   page,
@@ -10,14 +10,14 @@ import {
   widget,
   widgetBlock,
   type PageSpec,
-} from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
-import { requireProjectsFeature } from '../../../../lib/projects-gate'
-import { parseReportQuery } from '../../../../lib/report-filters'
-import { resolvePeriod } from '../../../../lib/periods'
-import { trueCostExportData } from '../../../../lib/analytics/true-cost-report'
-import { orgBranding } from '../../../../lib/report-pdf'
-import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
+} from "@braedonsaunders/appkit-viewspec";
+import { requirePermission } from "../../../../lib/authz";
+import { requireProjectsFeature } from "../../../../lib/projects-gate";
+import { parseReportQuery } from "../../../../lib/report-filters";
+import { resolvePeriod } from "../../../../lib/periods";
+import { trueCostExportData } from "../../../../lib/analytics/true-cost-report";
+import { orgBranding } from "../../../../lib/report-pdf";
+import { reportScheduleAnchor, scheduleParamsFrom } from "../../../../lib/report-schedule-anchor";
 
 /**
  * The true-cost report, split into a loader and a spec.
@@ -39,84 +39,90 @@ import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report
  */
 
 export interface TrueCostData {
-  title: string
-  description: string
-  backHref: string
-  backLabel: string
-  plannerHref: string
-  plannerLabel: string
-  hasScheduleDef: boolean
-  scheduleDefId: string
-  scheduleParams: Record<string, string>
-  exportParams: Record<string, string | undefined>
-  company: string
-  currency: string
-  emptyLabel: string
-  paper: unknown
+  title: string;
+  description: string;
+  backHref: string;
+  backLabel: string;
+  plannerHref: string;
+  plannerLabel: string;
+  hasScheduleDef: boolean;
+  scheduleDefId: string;
+  scheduleParams: Record<string, string>;
+  exportParams: Record<string, string | undefined>;
+  company: string;
+  currency: string;
+  emptyLabel: string;
+  paper: unknown;
 }
 
-export async function loadTrueCost(
-  sp: Record<string, string | undefined>,
-): Promise<TrueCostData> {
-  const authz = await requirePermission('reports.read')
-  await requireProjectsFeature(authz.user.orgId)
-  const q = parseReportQuery(sp)
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
+export async function loadTrueCost(sp: Record<string, string | undefined>): Promise<TrueCostData> {
+  const authz = await requirePermission("reports.read");
+  await requireProjectsFeature(authz.user.orgId);
+  const q = parseReportQuery(sp);
+  const period = await resolvePeriod(q.period, {
+    customFrom: q.from,
+    customTo: q.to,
+    orgId: authz.user.orgId,
+  });
   const [data, branding, definitionId, t, tc, locale] = await Promise.all([
-    trueCostExportData(authz.user.orgId, period), orgBranding(authz.user.orgId), reportScheduleAnchor('true-cost'),
-    getTranslations('reports'), getTranslations('analytics.trueCost'), getLocale(),
-  ])
+    trueCostExportData(authz.user.orgId, period),
+    orgBranding(authz.user.orgId),
+    reportScheduleAnchor("true-cost"),
+    getTranslations("reports"),
+    getTranslations("analytics.trueCost"),
+    getLocale(),
+  ]);
   // The analytics dashboard keeps the report's period query, exactly as the
   // dashboard's own open-report link does in reverse.
-  const dashboardQuery = new URLSearchParams()
-  for (const [key, value] of Object.entries(sp)) if (value) dashboardQuery.set(key, value)
-  const dashboardQs = dashboardQuery.toString()
+  const dashboardQuery = new URLSearchParams();
+  for (const [key, value] of Object.entries(sp)) if (value) dashboardQuery.set(key, value);
+  const dashboardQs = dashboardQuery.toString();
   return {
     title: data.title,
     description: reportPeriodLabel(period, locale),
-    backHref: '/reports',
-    backLabel: t('hub.title'),
-    plannerHref: `/analytics/true-cost${dashboardQs ? `?${dashboardQs}` : ''}`,
-    plannerLabel: tc('openAnalytics'),
+    backHref: "/reports",
+    backLabel: t("hub.title"),
+    plannerHref: `/analytics/true-cost${dashboardQs ? `?${dashboardQs}` : ""}`,
+    plannerLabel: tc("openAnalytics"),
     hasScheduleDef: Boolean(definitionId),
-    scheduleDefId: definitionId ?? '',
+    scheduleDefId: definitionId ?? "",
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: sp,
     company: branding.orgName,
     currency: branding.baseCurrency,
-    emptyLabel: t('generalLedger.empty'),
+    emptyLabel: t("generalLedger.empty"),
     // The native page renames the export title onto `periodPhrase` for the
     // paper header.
     paper: { ...data, periodPhrase: data.dateRangeLabel },
-  }
+  };
 }
 
-const f = ref<TrueCostData>()
+const f = ref<TrueCostData>();
 
 export function trueCostSpec(data: TrueCostData): PageSpec {
   const actions = [
-    widget('link-button', {
+    widget("link-button", {
       href: data.plannerHref,
       label: data.plannerLabel,
-      variant: 'outline',
-      size: 'sm',
+      variant: "outline",
+      size: "sm",
     }),
     widget(
-      'schedule-report',
+      "schedule-report",
       { definitionId: data.scheduleDefId, statementParams: data.scheduleParams },
-      f('hasScheduleDef'),
+      f("hasScheduleDef"),
     ),
-    widget('save-view'),
-    widget('export-menu', { kind: 'true-cost', params: data.exportParams }),
-  ]
+    widget("save-view"),
+    widget("export-menu", { kind: "true-cost", params: data.exportParams }),
+  ];
   return page({
-    route: '/reports/true-cost',
-    layout: 'list',
+    route: "/reports/true-cost",
+    layout: "list",
     header: [
       pageHeader({
-        title: f('title'),
-        description: f('description'),
-        back: { href: f('backHref'), label: f('backLabel') },
+        title: f("title"),
+        description: f("description"),
+        back: { href: f("backHref"), label: f("backLabel") },
       }),
       filterBar({ period: true }, { actions }),
     ],
@@ -124,12 +130,12 @@ export function trueCostSpec(data: TrueCostData): PageSpec {
       // The true-cost paper stays whole: the summary strip, the five section
       // tables and the money formatting live in the component. The loader
       // hands over the already-assembled export shape.
-      widgetBlock('paper-view', {
+      widgetBlock("paper-view", {
         company: data.company,
         currency: data.currency,
         emptyLabel: data.emptyLabel,
         data: data.paper,
       }),
     ],
-  })
+  });
 }

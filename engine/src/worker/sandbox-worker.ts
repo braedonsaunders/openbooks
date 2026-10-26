@@ -1,7 +1,12 @@
 import { Worker } from "bullmq";
 import { getBlockingConnection, SANDBOX_QUEUE, type SandboxJobData } from "@openbooks/jobs";
 import { withBypassContext } from "../platform/db.ts";
-import { createSandbox, deleteSandbox, refreshSandbox, resetSandbox } from "../sandbox/lifecycle.ts";
+import {
+  createSandbox,
+  deleteSandbox,
+  refreshSandbox,
+  resetSandbox,
+} from "../sandbox/lifecycle.ts";
 
 /**
  * Execute one `sandbox` queue payload — the exact code the worker callback
@@ -35,7 +40,10 @@ export async function processSandboxJobData(d: SandboxJobData): Promise<unknown>
           lifecycleAuthority: d.initiator,
         });
       case "refresh":
-        return await refreshSandbox(d.sandboxId, { keepCustomizations: d.keepCustomizations, authority: d.initiator });
+        return await refreshSandbox(d.sandboxId, {
+          keepCustomizations: d.keepCustomizations,
+          authority: d.initiator,
+        });
       case "reset":
         return await resetSandbox(d.sandboxId, d.initiator);
       case "delete":
@@ -47,7 +55,9 @@ export async function processSandboxJobData(d: SandboxJobData): Promise<unknown>
         // silently dropping the work with no dead-letter trace. attempts: 1
         // sends it straight to the failed set, retained and operator-visible.
         const op = (d as { op?: unknown }).op;
-        throw new Error(`unknown sandbox job op: ${typeof op === "string" && op ? op : "(missing)"}`);
+        throw new Error(
+          `unknown sandbox job op: ${typeof op === "string" && op ? op : "(missing)"}`,
+        );
       }
     }
   });

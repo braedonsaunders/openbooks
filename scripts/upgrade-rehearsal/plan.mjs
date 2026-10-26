@@ -50,7 +50,14 @@ export const ORACLE_OVERLAY_ALLOWLIST = Object.freeze([
 ]);
 
 /** The candidate's release baseline manifest; its identity decides which sources can upgrade. */
-export const CANDIDATE_BASELINE_PATH = join(HERE, "..", "..", "schema", "migrations", "baseline.json");
+export const CANDIDATE_BASELINE_PATH = join(
+  HERE,
+  "..",
+  "..",
+  "schema",
+  "migrations",
+  "baseline.json",
+);
 const BASELINE_MANIFEST = "schema/migrations/baseline.json";
 
 function refuse(problems, message) {
@@ -60,15 +67,20 @@ function refuse(problems, message) {
 function validateStep(step, where, problems) {
   if (!step || typeof step !== "object") return refuse(problems, `${where}: step is not an object`);
   if (!STEP_KINDS.includes(step.kind)) {
-    return refuse(problems, `${where}: unknown step kind ${JSON.stringify(step.kind)} (known: ${STEP_KINDS.join(", ")})`);
+    return refuse(
+      problems,
+      `${where}: unknown step kind ${JSON.stringify(step.kind)} (known: ${STEP_KINDS.join(", ")})`,
+    );
   }
   if (step.kind === "sim") {
     if (!SIM_MODES.has(step.mode)) refuse(problems, `${where}: sim mode must be run or endurance`);
     for (const key of ["profile", "seed"]) {
-      if (typeof step[key] !== "string" || step[key].length === 0) refuse(problems, `${where}: sim step needs ${key}`);
+      if (typeof step[key] !== "string" || step[key].length === 0)
+        refuse(problems, `${where}: sim step needs ${key}`);
     }
     for (const key of ["start", "end"]) {
-      if (!DATE.test(step[key] ?? "")) refuse(problems, `${where}: sim step ${key} must be YYYY-MM-DD`);
+      if (!DATE.test(step[key] ?? ""))
+        refuse(problems, `${where}: sim step ${key} must be YYYY-MM-DD`);
     }
     if (DATE.test(step.start ?? "") && DATE.test(step.end ?? "") && step.start > step.end) {
       refuse(problems, `${where}: sim step starts after it ends`);
@@ -103,11 +115,17 @@ function validateRemedyStep(step, where, problems) {
   }
   const fileCode = sql.slice(REMEDY_DIR_PREFIX.length, -".sql".length);
   if (!FINDING_CODE.test(fileCode)) {
-    refuse(problems, `${where}: remedy sql filename must be <finding-code>.sql: got ${JSON.stringify(step.sql)}`);
+    refuse(
+      problems,
+      `${where}: remedy sql filename must be <finding-code>.sql: got ${JSON.stringify(step.sql)}`,
+    );
     return;
   }
   if (code !== fileCode) {
-    refuse(problems, `${where}: remedy code ${JSON.stringify(code)} does not match its file ${JSON.stringify(step.sql)}`);
+    refuse(
+      problems,
+      `${where}: remedy code ${JSON.stringify(code)} does not match its file ${JSON.stringify(step.sql)}`,
+    );
   }
 }
 
@@ -120,7 +138,10 @@ function validateExpectFindings(dataset, where, problems) {
   }
   for (const [index, finding] of expected.entries()) {
     if (!FINDING_CODE.test(finding?.code ?? "")) {
-      refuse(problems, `${where} expectFindings ${index}: code must look like <ordinal>.<snake_reason>`);
+      refuse(
+        problems,
+        `${where} expectFindings ${index}: code must look like <ordinal>.<snake_reason>`,
+      );
     }
     if (!SEVERITIES.has(finding?.severity)) {
       refuse(problems, `${where} expectFindings ${index}: severity must be refuse or notice`);
@@ -152,16 +173,25 @@ function validateSourceOracleOverlay(dataset, where, problems) {
     refuse(problems, `${where}: sourceOracleOverlay needs a non-empty files array`);
   } else {
     for (const file of overlay.files) {
-      const allowed = typeof file === "string" && !file.includes("..") &&
+      const allowed =
+        typeof file === "string" &&
+        !file.includes("..") &&
         ORACLE_OVERLAY_ALLOWLIST.some((prefix) =>
-          prefix.endsWith("/") ? file.startsWith(prefix) : file === prefix);
+          prefix.endsWith("/") ? file.startsWith(prefix) : file === prefix,
+        );
       if (!allowed || !file.endsWith(".ts")) {
-        refuse(problems, `${where}: sourceOracleOverlay file ${JSON.stringify(file)} is outside the oracle allowlist`);
+        refuse(
+          problems,
+          `${where}: sourceOracleOverlay file ${JSON.stringify(file)} is outside the oracle allowlist`,
+        );
       }
     }
   }
   if (typeof overlay.reason !== "string" || overlay.reason.replace(/\s/g, "").length < 40) {
-    refuse(problems, `${where}: sourceOracleOverlay needs a reason (at least 40 characters) saying why the tagged oracle cannot seed this dataset`);
+    refuse(
+      problems,
+      `${where}: sourceOracleOverlay needs a reason (at least 40 characters) saying why the tagged oracle cannot seed this dataset`,
+    );
   }
 }
 
@@ -180,19 +210,29 @@ function validateRemedies(dataset, expected, where, problems) {
     validateRemedyStep(step, `${where} remedies ${index}`, problems);
   });
   if (expected.length === 0) {
-    refuse(problems, `${where}: remedies without expectFindings prove nothing; declare what the check must report first`);
+    refuse(
+      problems,
+      `${where}: remedies without expectFindings prove nothing; declare what the check must report first`,
+    );
   }
   const expectedRefuses = new Set(
     expected.filter((finding) => finding?.severity === "refuse").map((finding) => finding.code),
   );
   for (const step of remedies) {
-    if (step?.kind === "remedy" && typeof step?.code === "string" && !expectedRefuses.has(step.code)) {
+    if (
+      step?.kind === "remedy" &&
+      typeof step?.code === "string" &&
+      !expectedRefuses.has(step.code)
+    ) {
       refuse(problems, `${where}: remedy ${step.code} matches no expected refuse finding`);
     }
   }
   for (const code of expectedRefuses) {
     if (!remedies.some((step) => step?.kind === "remedy" && step?.code === code)) {
-      refuse(problems, `${where}: expected refuse ${code} has no remedy; the rehearsal cannot prove the operator path past it`);
+      refuse(
+        problems,
+        `${where}: expected refuse ${code} has no remedy; the rehearsal cannot prove the operator path past it`,
+      );
     }
   }
   return remedies;
@@ -203,24 +243,36 @@ export function validateConfig(config) {
   const problems = [];
   const sources = Array.isArray(config?.sources) ? config.sources : null;
   const datasets = Array.isArray(config?.datasets) ? config.datasets : null;
-  const required = Array.isArray(config?.requiredDatasetClasses) ? config.requiredDatasetClasses : null;
-  if (!sources || sources.length === 0) refuse(problems, "no source releases: an upgrade gate with nothing to upgrade from proves nothing");
+  const required = Array.isArray(config?.requiredDatasetClasses)
+    ? config.requiredDatasetClasses
+    : null;
+  if (!sources || sources.length === 0)
+    refuse(
+      problems,
+      "no source releases: an upgrade gate with nothing to upgrade from proves nothing",
+    );
   if (!datasets || datasets.length === 0) refuse(problems, "no datasets");
   if (!required || required.length === 0) refuse(problems, "requiredDatasetClasses is empty");
   if (problems.length > 0) return problems;
 
   const tags = new Set();
   for (const source of sources) {
-    if (!TAG.test(source?.tag ?? "")) refuse(problems, `source ${JSON.stringify(source?.tag)} is not a release tag`);
+    if (!TAG.test(source?.tag ?? ""))
+      refuse(problems, `source ${JSON.stringify(source?.tag)} is not a release tag`);
     else if (tags.has(source.tag)) refuse(problems, `source ${source.tag} is listed twice`);
     tags.add(source?.tag);
     const defects = source?.knownHarnessDefects ?? [];
-    if (!Array.isArray(defects)) refuse(problems, `source ${source?.tag}: knownHarnessDefects must be an array`);
+    if (!Array.isArray(defects))
+      refuse(problems, `source ${source?.tag}: knownHarnessDefects must be an array`);
     else {
       for (const defect of defects) {
-        if (!ID.test(defect?.check ?? "")) refuse(problems, `source ${source?.tag}: known harness defect needs its check name`);
+        if (!ID.test(defect?.check ?? ""))
+          refuse(problems, `source ${source?.tag}: known harness defect needs its check name`);
         if (typeof defect?.reason !== "string" || defect.reason.replace(/\s/g, "").length < 40) {
-          refuse(problems, `source ${source?.tag}: known harness defect ${defect?.check} needs a reason (at least 40 characters) saying why the tagged check is wrong`);
+          refuse(
+            problems,
+            `source ${source?.tag}: known harness defect ${defect?.check} needs a reason (at least 40 characters) saying why the tagged check is wrong`,
+          );
         }
       }
     }
@@ -239,7 +291,10 @@ export function validateConfig(config) {
     else {
       dataset.steps.forEach((step, index) => {
         if (step?.kind === "remedy") {
-          refuse(problems, `${where} step ${index}: remedy steps belong in the remedies array, not in steps`);
+          refuse(
+            problems,
+            `${where} step ${index}: remedy steps belong in the remedies array, not in steps`,
+          );
         }
         validateStep(step, `${where} step ${index}`, problems);
       });
@@ -252,7 +307,10 @@ export function validateConfig(config) {
     } else if (dataset?.assertions === true) {
       const file = join(HERE, "assertions", `${dataset.id}.mjs`);
       if (!existsSync(file)) {
-        refuse(problems, `${where}: declares assertions but ${file} is missing; a deleted assertions file must not silently skip the phase`);
+        refuse(
+          problems,
+          `${where}: declares assertions but ${file} is missing; a deleted assertions file must not silently skip the phase`,
+        );
       }
     }
     if (dataset?.class !== "empty" && Array.isArray(dataset?.steps) && dataset.steps.length === 0) {
@@ -275,12 +333,20 @@ export function coverageGaps(config) {
 }
 
 function hasBaselineIdentity(manifest) {
-  return typeof manifest?.filename === "string" && manifest.filename.length > 0
-    && typeof manifest?.baselineSha256 === "string" && manifest.baselineSha256.length > 0;
+  return (
+    typeof manifest?.filename === "string" &&
+    manifest.filename.length > 0 &&
+    typeof manifest?.baselineSha256 === "string" &&
+    manifest.baselineSha256.length > 0
+  );
 }
 
 function candidateBaselineRefusal(candidateBaseline) {
-  if (hasBaselineIdentity(candidateBaseline) && TAG.test(candidateBaseline?.upgradeFromRelease ?? "")) return null;
+  if (
+    hasBaselineIdentity(candidateBaseline) &&
+    TAG.test(candidateBaseline?.upgradeFromRelease ?? "")
+  )
+    return null;
   return `the candidate has no usable release baseline manifest (${BASELINE_MANIFEST} with filename, baselineSha256 and upgradeFromRelease), so no source can be shown to upgrade into it`;
 }
 
@@ -299,13 +365,16 @@ export function sourceUpgradeRefusal(tag, candidateBaseline, sourceBaseline) {
   if (unusable) return unusable;
   const { filename, baselineSha256, upgradeFromRelease } = candidateBaseline;
   if (tag === upgradeFromRelease) return null;
-  if (sourceBaseline?.filename === filename && sourceBaseline?.baselineSha256 === baselineSha256) return null;
+  if (sourceBaseline?.filename === filename && sourceBaseline?.baselineSha256 === baselineSha256)
+    return null;
   const held = hasBaselineIdentity(sourceBaseline)
     ? `${sourceBaseline.filename} at ${sourceBaseline.baselineSha256.slice(0, 12)}`
     : "no release baseline";
-  return `source ${tag ?? "(untagged)"} cannot upgrade into this candidate: it is not ${upgradeFromRelease} `
-    + `(the release that adopts ${filename}), and its tree records ${held} rather than ${filename} at ${baselineSha256.slice(0, 12)}. `
-    + `Its installations upgrade to ${upgradeFromRelease} first; remove it from rehearsal.json sources`;
+  return (
+    `source ${tag ?? "(untagged)"} cannot upgrade into this candidate: it is not ${upgradeFromRelease} ` +
+    `(the release that adopts ${filename}), and its tree records ${held} rather than ${filename} at ${baselineSha256.slice(0, 12)}. ` +
+    `Its installations upgrade to ${upgradeFromRelease} first; remove it from rehearsal.json sources`
+  );
 }
 
 /** The candidate's baseline manifest, or null when the candidate has none. */
@@ -324,12 +393,15 @@ export function readSourceTreeBaseline(sourceDir) {
  * must never read as "no baseline" or as eligible.
  */
 export function readSourceBaselineAtTag(tag, cwd = join(HERE, "..", "..")) {
-  const git = (args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  const git = (args) =>
+    execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   const ref = `refs/tags/${tag}`;
   try {
     git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
   } catch {
-    throw new Error(`release tag ${tag} is not available in this checkout; fetch release tags (git fetch --tags) so its baseline identity can be read`);
+    throw new Error(
+      `release tag ${tag} is not available in this checkout; fetch release tags (git fetch --tags) so its baseline identity can be read`,
+    );
   }
   try {
     git(["cat-file", "-e", `${ref}:${BASELINE_MANIFEST}`]);
@@ -346,17 +418,20 @@ export function readSourceBaselineAtTag(tag, cwd = join(HERE, "..", "..")) {
  * must rehearse it. The previous release is accepted by tag alone; every
  * other source's tree is read at its tag.
  */
-export function sourceEligibilityProblems(config, {
-  candidateBaseline = readCandidateBaseline(),
-  sourceBaseline = readSourceBaselineAtTag,
-} = {}) {
+export function sourceEligibilityProblems(
+  config,
+  { candidateBaseline = readCandidateBaseline(), sourceBaseline = readSourceBaselineAtTag } = {},
+) {
   const sources = Array.isArray(config?.sources) ? config.sources : [];
   const unusable = candidateBaselineRefusal(candidateBaseline);
   if (unusable) return [unusable];
   const problems = [];
   const { filename, upgradeFromRelease } = candidateBaseline;
   if (!sources.some((source) => source?.tag === upgradeFromRelease)) {
-    refuse(problems, `sources must include ${upgradeFromRelease}: existing installations adopt ${filename} from it, and the gate must rehearse that path`);
+    refuse(
+      problems,
+      `sources must include ${upgradeFromRelease}: existing installations adopt ${filename} from it, and the gate must rehearse that path`,
+    );
   }
   for (const source of sources) {
     if (source?.tag === upgradeFromRelease) continue;
@@ -364,7 +439,10 @@ export function sourceEligibilityProblems(config, {
     try {
       held = sourceBaseline(source.tag);
     } catch (error) {
-      refuse(problems, `source ${source?.tag}: ${error instanceof Error ? error.message : String(error)}`);
+      refuse(
+        problems,
+        `source ${source?.tag}: ${error instanceof Error ? error.message : String(error)}`,
+      );
       continue;
     }
     const refusal = sourceUpgradeRefusal(source.tag, candidateBaseline, held);
@@ -408,10 +486,15 @@ function validateDefaultGate(config, problems) {
     seen.add(id);
   }
   const classes = new Set(
-    (config?.datasets ?? []).filter((dataset) => seen.has(dataset?.id)).map((dataset) => dataset?.class),
+    (config?.datasets ?? [])
+      .filter((dataset) => seen.has(dataset?.id))
+      .map((dataset) => dataset?.class),
   );
   if (!classes.has("multi-entity")) {
-    refuse(problems, "defaultGate must include a populated multi-entity-class dataset; an empty-only default proves no upgrade");
+    refuse(
+      problems,
+      "defaultGate must include a populated multi-entity-class dataset; an empty-only default proves no upgrade",
+    );
   }
 }
 
@@ -443,7 +526,9 @@ export function loadConfig(path = CONFIG_PATH) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const outputIndex = process.argv.indexOf("--github-output");
   try {
-    const matrix = process.argv.includes("--default-only") ? defaultMatrix(loadConfig()) : planMatrix(loadConfig());
+    const matrix = process.argv.includes("--default-only")
+      ? defaultMatrix(loadConfig())
+      : planMatrix(loadConfig());
     const json = JSON.stringify(matrix);
     if (outputIndex >= 0) {
       const target = process.argv[outputIndex + 1];

@@ -1,14 +1,20 @@
-'use client'
+"use client";
 
-import { useTransition } from 'react'
-import { useTranslations } from 'next-intl'
-import { toast } from 'sonner'
-import { switchWorkspace, workspaceSwitchMessageKey } from '../lib/workspace-switch'
+import { useTransition } from "react";
+import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { switchWorkspace, workspaceSwitchMessageKey } from "../lib/workspace-switch";
 
 /** Returns from a sandbox to the production organization it was cloned from. */
-export function SandboxExitButton({ productionOrgId, label }: { productionOrgId: string; label: string }) {
-  const tSwitch = useTranslations('shell.accountMenu')
-  const [pending, start] = useTransition()
+export function SandboxExitButton({
+  productionOrgId,
+  label,
+}: {
+  productionOrgId: string;
+  label: string;
+}) {
+  const tSwitch = useTranslations("shell.accountMenu");
+  const [pending, start] = useTransition();
   return (
     <button
       type="button"
@@ -16,9 +22,9 @@ export function SandboxExitButton({ productionOrgId, label }: { productionOrgId:
       onClick={() =>
         start(async () => {
           try {
-            await switchWorkspace(productionOrgId)
+            await switchWorkspace(productionOrgId);
           } catch (error) {
-            toast.error(tSwitch(workspaceSwitchMessageKey(error)))
+            toast.error(tSwitch(workspaceSwitchMessageKey(error)));
           }
         })
       }
@@ -26,5 +32,5 @@ export function SandboxExitButton({ productionOrgId, label }: { productionOrgId:
     >
       {label}
     </button>
-  )
+  );
 }

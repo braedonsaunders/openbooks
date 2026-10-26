@@ -69,12 +69,14 @@ function gensenRow(amount: bigint): (typeof JP_GENSEN_MONTHLY_2026)[number] | nu
   needIntYen(amount, "社会保険料等控除後の給与等の金額");
   if (amount >= JP_GENSEN_LOOKUP_CEILING) {
     fail(
-      `社会保険料等控除後の給与等の金額 ${amount}円 is 740,000円 or more: the table's 加算 formula `
-      + "rows (20.42%/23.483%/33.693%/40.84%/45.945%) are not transcribed — see JP_REFUSED_2026",
+      `社会保険料等控除後の給与等の金額 ${amount}円 is 740,000円 or more: the table's 加算 formula ` +
+        "rows (20.42%/23.483%/33.693%/40.84%/45.945%) are not transcribed — see JP_REFUSED_2026",
     );
   }
   if (amount < JP_GENSEN_LOOKUP_FLOOR) return null;
-  const row = JP_GENSEN_MONTHLY_2026.find((candidate) => amount >= candidate.lo && amount < candidate.hi);
+  const row = JP_GENSEN_MONTHLY_2026.find(
+    (candidate) => amount >= candidate.lo && amount < candidate.hi,
+  );
   if (!row) fail(`no 月額表 row covers ${amount}円 — internal error, not a table gap`);
   return row;
 }
@@ -86,8 +88,8 @@ function gensenRow(amount: bigint): (typeof JP_GENSEN_MONTHLY_2026)[number] | nu
 export function lookupGensenKo(amountYen: bigint, dependents: number): bigint {
   if (!Number.isInteger(dependents) || dependents < 0 || dependents > 7) {
     fail(
-      `扶養親族等の数 ${dependents} is outside 0–7: the table's 7人超 1,610円-per-person `
-      + "subtraction is not transcribed — see JP_REFUSED_2026",
+      `扶養親族等の数 ${dependents} is outside 0–7: the table's 7人超 1,610円-per-person ` +
+        "subtraction is not transcribed — see JP_REFUSED_2026",
     );
   }
   const row = gensenRow(amountYen);
@@ -123,18 +125,19 @@ export function lookupBonusRate(priorMonthNetYen: bigint, dependents: number | n
   } else {
     if (!Number.isInteger(dependents) || dependents < 0 || dependents > 7) {
       fail(
-        `扶養親族等の数 ${dependents} is outside 0–7: the bonus table's 7-columns stop at 7人以上 — `
-        + "see JP_REFUSED_2026",
+        `扶養親族等の数 ${dependents} is outside 0–7: the bonus table's 7-columns stop at 7人以上 — ` +
+          "see JP_REFUSED_2026",
       );
     }
     bands = JP_BONUS_KO_2026[dependents]!;
   }
   const band = bands.find(
     (candidate) =>
-      (candidate.fromYen === null || priorMonthNetYen >= candidate.fromYen)
-      && (candidate.toYen === null || priorMonthNetYen < candidate.toYen),
+      (candidate.fromYen === null || priorMonthNetYen >= candidate.fromYen) &&
+      (candidate.toYen === null || priorMonthNetYen < candidate.toYen),
   );
-  if (!band) fail(`no bonus rate band covers ${priorMonthNetYen}円 — internal error, not a table gap`);
+  if (!band)
+    fail(`no bonus rate band covers ${priorMonthNetYen}円 — internal error, not a table gap`);
   return band.numerator;
 }
 
@@ -168,7 +171,9 @@ export interface JpBonusWithholdingInput {
 export function calculateBonusWithholding(input: JpBonusWithholdingInput): bigint {
   needIntYen(input.bonusNet, "賞与の金額（社会保険料等控除後）");
   if (input.periodMonths !== 6 && input.periodMonths !== 12) {
-    fail(`bonus computation period ${input.periodMonths} is not 6 or 12 months — see NTA Tax Answer No.2523`);
+    fail(
+      `bonus computation period ${input.periodMonths} is not 6 or 12 months — see NTA Tax Answer No.2523`,
+    );
   }
   if (input.taxResidence === "nonresident_foreign_source") return 0n;
   if (input.taxResidence === "nonresident_japan_source") {
@@ -176,9 +181,9 @@ export function calculateBonusWithholding(input: JpBonusWithholdingInput): bigin
   }
   if (input.priorMonthNet === null) {
     fail(
-      "bonus withholding needs the prior month's social-insurance-deducted pay (前月の社会保険料等控除後の"
-      + "給与等の金額, 賞与を除く): the 賞与に対する源泉徴収税額の算出率の表 starts from it — carry "
-      + "jp_bonus_prior_month_net or price the bonus outside ordinary payroll",
+      "bonus withholding needs the prior month's social-insurance-deducted pay (前月の社会保険料等控除後の" +
+        "給与等の金額, 賞与を除く): the 賞与に対する源泉徴収税額の算出率の表 starts from it — carry " +
+        "jp_bonus_prior_month_net or price the bonus outside ordinary payroll",
     );
   }
   needIntYen(input.priorMonthNet, "前月の社会保険料等控除後の給与等の金額");
@@ -193,17 +198,18 @@ export function calculateBonusWithholding(input: JpBonusWithholdingInput): bigin
   if (input.bonusNet > 10n * input.priorMonthNet) {
     if (input.priorMonthWithholding === null) {
       fail(
-        "a bonus over 10× prior-month net computes through the monthly table minus actual prior-month "
-        + "withholding: carry jp_bonus_prior_month_gensen (前月の給与に対する源泉徴収税額) — see NTA Tax "
-        + "Answer No.2523",
+        "a bonus over 10× prior-month net computes through the monthly table minus actual prior-month " +
+          "withholding: carry jp_bonus_prior_month_gensen (前月の給与に対する源泉徴収税額) — see NTA Tax " +
+          "Answer No.2523",
       );
     }
     needIntYen(input.priorMonthWithholding, "前月の給与に対する源泉徴収税額");
-    const step = monthlyFor(input.bonusNet / period + input.priorMonthNet) - input.priorMonthWithholding;
+    const step =
+      monthlyFor(input.bonusNet / period + input.priorMonthNet) - input.priorMonthWithholding;
     if (step < 0n) {
       fail(
-        "the 10× monthly-table step went negative (computed tax below actual prior-month withholding): "
-        + "inconsistent bonus inputs — refusing rather than crediting through withholding",
+        "the 10× monthly-table step went negative (computed tax below actual prior-month withholding): " +
+          "inconsistent bonus inputs — refusing rather than crediting through withholding",
       );
     }
     return step * period;
@@ -213,13 +219,15 @@ export function calculateBonusWithholding(input: JpBonusWithholdingInput): bigin
 }
 
 /** The pension grade row for an operator-entered 標準報酬月額. Refuses unknown values. */
-export function pensionGradeForStandard(standardYen: bigint): (typeof JP_PENSION_GRADES_2026)[number] {
+export function pensionGradeForStandard(
+  standardYen: bigint,
+): (typeof JP_PENSION_GRADES_2026)[number] {
   needIntYen(standardYen, "標準報酬月額");
   const grade = JP_PENSION_GRADES_2026.find((candidate) => candidate.standard === standardYen);
   if (!grade) {
     fail(
-      `標準報酬月額 ${standardYen}円 matches no 厚生年金 grade (32 published values, `
-      + "88,000–650,000円): copy the grade off the JPS notice — see JP_REFUSED_2026 on 定時決定/随時改定",
+      `標準報酬月額 ${standardYen}円 matches no 厚生年金 grade (32 published values, ` +
+        "88,000–650,000円): copy the grade off the JPS notice — see JP_REFUSED_2026 on 定時決定/随時改定",
     );
   }
   return grade;
@@ -235,10 +243,11 @@ export function pensionGradeForPay(payYen: bigint): (typeof JP_PENSION_GRADES_20
   needIntYen(payYen, "報酬月額");
   const grade = JP_PENSION_GRADES_2026.find(
     (candidate) =>
-      (candidate.lo === null || payYen >= candidate.lo)
-      && (candidate.hi === null || payYen < candidate.hi),
+      (candidate.lo === null || payYen >= candidate.lo) &&
+      (candidate.hi === null || payYen < candidate.hi),
   );
-  if (!grade) fail(`no pension grade covers 報酬月額 ${payYen}円 — internal error, not a table gap`);
+  if (!grade)
+    fail(`no pension grade covers 報酬月額 ${payYen}円 — internal error, not a table gap`);
   return grade;
 }
 
@@ -250,7 +259,8 @@ export function pensionGradeForPay(payYen: bigint): (typeof JP_PENSION_GRADES_20
 export function healthHalfShare(standardYen: bigint, ratePercent: string): bigint {
   needIntYen(standardYen, "標準報酬月額");
   const canonical = canonicalNonNegativeDecimal(ratePercent, Infinity);
-  if (canonical === null) fail(`health rate "${ratePercent}" is not a percent number (9.85 for 9.85%)`);
+  if (canonical === null)
+    fail(`health rate "${ratePercent}" is not a percent number (9.85 for 9.85%)`);
   const [whole, fraction = ""] = canonical.split(".");
   const digits = whole! + fraction;
   const decimals = fraction.length;
@@ -283,7 +293,7 @@ export function childCareEmployerLevy(standardYen: bigint): bigint {
  */
 export function nonresidentJapanSourceWithholding(paymentYen: bigint): bigint {
   needIntYen(paymentYen, "非居住者 domestic-source salary");
-  return paymentYen * 2042n / 10000n;
+  return (paymentYen * 2042n) / 10000n;
 }
 
 export interface Jp2026Input {
@@ -318,27 +328,35 @@ export function calculateJp2026(input: Jp2026Input): Jp2026Result {
   const grade = pensionGradeForStandard(input.standard);
   const pension = grade.half;
   const health = healthHalfShare(input.standard, input.healthRate);
-  const childSupport = input.childContributionsEffective ? childSupportHalfShare(input.standard) : 0n;
+  const childSupport = input.childContributionsEffective
+    ? childSupportHalfShare(input.standard)
+    : 0n;
   const childSupportEmployer = childSupport;
-  const childCareEmployer = input.childContributionsEffective ? childCareEmployerLevy(input.standard) : 0n;
+  const childCareEmployer = input.childContributionsEffective
+    ? childCareEmployerLevy(input.standard)
+    : 0n;
   const residentBase = input.grossMonthly - pension - health - childSupport;
   if (input.taxResidence === "resident" && residentBase < 0n) {
     fail(
-      `gensen base is negative (gross ${input.grossMonthly} − pension ${pension} − health ${health} `
-      + `− child support ${childSupport}): `
-      + "premiums exceed pay — refusing rather than looking up a negative amount",
+      `gensen base is negative (gross ${input.grossMonthly} − pension ${pension} − health ${health} ` +
+        `− child support ${childSupport}): ` +
+        "premiums exceed pay — refusing rather than looking up a negative amount",
     );
   }
-  const gensenBase = input.taxResidence === "resident"
-    ? residentBase
-    : input.taxResidence === "nonresident_japan_source" ? input.grossMonthly : 0n;
-  const gensen = input.taxResidence === "resident"
-    ? input.dependents === null
-      ? lookupGensenOtsu(gensenBase)
-      : lookupGensenKo(gensenBase, input.dependents)
-    : input.taxResidence === "nonresident_japan_source"
-    ? nonresidentJapanSourceWithholding(gensenBase)
-    : 0n;
+  const gensenBase =
+    input.taxResidence === "resident"
+      ? residentBase
+      : input.taxResidence === "nonresident_japan_source"
+        ? input.grossMonthly
+        : 0n;
+  const gensen =
+    input.taxResidence === "resident"
+      ? input.dependents === null
+        ? lookupGensenOtsu(gensenBase)
+        : lookupGensenKo(gensenBase, input.dependents)
+      : input.taxResidence === "nonresident_japan_source"
+        ? nonresidentJapanSourceWithholding(gensenBase)
+        : 0n;
   return {
     pension,
     pensionEmployer: pension,

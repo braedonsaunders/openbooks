@@ -38,7 +38,9 @@ const REHEARSAL = "scripts/upgrade-rehearsal";
 // The rehearsal workflow and any local action it uses are rehearsal inputs;
 // the rest of .github (other workflows, the repository card, templates) is not.
 const REHEARSAL_WORKFLOW = ".github/workflows/upgrade-rehearsal.yml";
-const rehearsalActions = [...readFileSync(REHEARSAL_WORKFLOW, "utf8").matchAll(/uses:\s*\.\/(\S+)/g)].map((match) => match[1]);
+const rehearsalActions = [
+  ...readFileSync(REHEARSAL_WORKFLOW, "utf8").matchAll(/uses:\s*\.\/(\S+)/g),
+].map((match) => match[1]);
 
 // `namedBy` recognizes a string in code that names a path of the category.
 // Test files have none: only the test runner ever loads one.
@@ -48,8 +50,9 @@ const CATEGORIES = [
     holds: (file) => file.startsWith("docs/") || file.endsWith(".md"),
     // A bare "name.md" counts only when it is a repository file: the rehearsal
     // also names the markdown reports it writes.
-    namedBy: (literal) => /^(\.{1,2}\/)*docs(\/|$)/.test(literal)
-      || (/\.md$/.test(literal) && existsSync(literal.replace(/^(\.{1,2}\/)+/, ""))),
+    namedBy: (literal) =>
+      /^(\.{1,2}\/)*docs(\/|$)/.test(literal) ||
+      (/\.md$/.test(literal) && existsSync(literal.replace(/^(\.{1,2}\/)+/, ""))),
   },
   {
     name: "test",
@@ -58,7 +61,10 @@ const CATEGORIES = [
   },
   {
     name: "repository automation",
-    holds: (file) => file.startsWith(".github/") && file !== REHEARSAL_WORKFLOW && !rehearsalActions.some((action) => file.startsWith(action)),
+    holds: (file) =>
+      file.startsWith(".github/") &&
+      file !== REHEARSAL_WORKFLOW &&
+      !rehearsalActions.some((action) => file.startsWith(action)),
     namedBy: (literal) => /^(\.{1,2}\/)*\.github(\/|$)/.test(literal),
   },
   {
@@ -80,8 +86,12 @@ function git(...args) {
 /** What the rehearsal runs from the candidate checkout. */
 function entryPoints() {
   const runner = readFileSync(join(REHEARSAL, "rehearse.mjs"), "utf8");
-  const scripts = [...runner.matchAll(/["'](scripts\/[\w./-]+\.(?:ts|mts|mjs|js))["']/g)].map((match) => match[1]);
-  const harness = JSON.parse(readFileSync("engine/package.json", "utf8")).scripts?.harness?.match(/\b(src\/\S+\.ts)\b/)?.[1];
+  const scripts = [...runner.matchAll(/["'](scripts\/[\w./-]+\.(?:ts|mts|mjs|js))["']/g)].map(
+    (match) => match[1],
+  );
+  const harness = JSON.parse(readFileSync("engine/package.json", "utf8")).scripts?.harness?.match(
+    /\b(src\/\S+\.ts)\b/,
+  )?.[1];
   if (scripts.length === 0 || !harness) {
     refuse("cannot tell what the rehearsal runs from rehearse.mjs and the engine harness script");
   }
@@ -91,19 +101,27 @@ function entryPoints() {
   const self = relative(process.cwd(), fileURLToPath(import.meta.url));
   const own = readdirSync(REHEARSAL, { recursive: true })
     .map((file) => String(file))
-    .filter((file) => /\.[cm]?[jt]s$/.test(file) && !/\.test\./.test(file) && !file.startsWith("seeders"))
+    .filter(
+      (file) => /\.[cm]?[jt]s$/.test(file) && !/\.test\./.test(file) && !file.startsWith("seeders"),
+    )
     .map((file) => join(REHEARSAL, file))
     .filter((file) => file !== self);
   const entries = [...new Set([...scripts, join("engine", harness), ...own])];
   const missing = entries.filter((file) => !existsSync(file));
-  if (missing.length > 0) refuse(`the rehearsal names files that do not exist: ${missing.join(", ")}`);
+  if (missing.length > 0)
+    refuse(`the rehearsal names files that do not exist: ${missing.join(", ")}`);
   return entries;
 }
 
 /** Workspace package names: imports of these are followed, every other package is external. */
 function workspacePackages() {
   const names = new Set();
-  const dirs = ["engine", "schema", "web", ...readdirSync("packages").map((name) => join("packages", name))];
+  const dirs = [
+    "engine",
+    "schema",
+    "web",
+    ...readdirSync("packages").map((name) => join("packages", name)),
+  ];
   for (const dir of dirs) {
     const manifest = join(dir, "package.json");
     if (existsSync(manifest)) names.add(JSON.parse(readFileSync(manifest, "utf8")).name);
@@ -124,24 +142,35 @@ async function importGraph(entries) {
       format: "esm",
       outdir: "rehearsal-reuse-graph",
       logLevel: "silent",
-      plugins: [{
-        name: "repository-only",
-        setup(builder) {
-          builder.onResolve({ filter: /^[^./]/ }, (args) => {
-            // web's "@/" alias resolves through web/tsconfig.json.
-            if (args.path.startsWith("@/")) return undefined;
-            const name = args.path.split("/").slice(0, args.path.startsWith("@") ? 2 : 1).join("/");
-            return workspace.has(name) ? undefined : { external: true };
-          });
+      plugins: [
+        {
+          name: "repository-only",
+          setup(builder) {
+            builder.onResolve({ filter: /^[^./]/ }, (args) => {
+              // web's "@/" alias resolves through web/tsconfig.json.
+              if (args.path.startsWith("@/")) return undefined;
+              const name = args.path
+                .split("/")
+                .slice(0, args.path.startsWith("@") ? 2 : 1)
+                .join("/");
+              return workspace.has(name) ? undefined : { external: true };
+            });
+          },
         },
-      }],
+      ],
     });
   } catch (error) {
-    refuse(`cannot compute the rehearsal's import graph: ${error.errors?.[0]?.text ?? error.message}`);
+    refuse(
+      `cannot compute the rehearsal's import graph: ${error.errors?.[0]?.text ?? error.message}`,
+    );
   }
   const inputs = result.metafile.inputs;
   const files = new Set(Object.keys(inputs).filter((file) => existsSync(file)));
-  const specifiers = new Set(Object.values(inputs).flatMap((input) => input.imports.map((edge) => edge.original).filter(Boolean)));
+  const specifiers = new Set(
+    Object.values(inputs).flatMap((input) =>
+      input.imports.map((edge) => edge.original).filter(Boolean),
+    ),
+  );
   return { files, specifiers };
 }
 
@@ -149,12 +178,15 @@ async function importGraph(entries) {
 function categoriesNamedByPath({ files, specifiers }) {
   const named = new Map();
   for (const file of files) {
-    const code = readFileSync(file, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/[^\n]*/g, "$1");
+    const code = readFileSync(file, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:"'`\\])\/\/[^\n]*/g, "$1");
     for (const [, literal] of code.matchAll(/["'`]([^"'`\n]*)["'`]/g)) {
       // A path has no whitespace; a message that mentions one is not a read.
       if (specifiers.has(literal) || /\s/.test(literal)) continue;
       for (const category of CATEGORIES) {
-        if (category.namedBy(literal) && !named.has(category.name)) named.set(category.name, `${file} names "${literal}"`);
+        if (category.namedBy(literal) && !named.has(category.name))
+          named.set(category.name, `${file} names "${literal}"`);
       }
     }
   }
@@ -163,7 +195,9 @@ function categoriesNamedByPath({ files, specifiers }) {
 
 const [rehearsed, candidate] = process.argv.slice(2);
 if (!rehearsed || !candidate) {
-  console.error("usage: node scripts/upgrade-rehearsal/reuse.mjs <rehearsed-commit> <candidate-commit>");
+  console.error(
+    "usage: node scripts/upgrade-rehearsal/reuse.mjs <rehearsed-commit> <candidate-commit>",
+  );
   process.exit(2);
 }
 if (git("rev-parse", "HEAD") !== git("rev-parse", `${candidate}^{commit}`)) {
@@ -175,13 +209,18 @@ try {
   refuse(`${rehearsed} is not an ancestor of ${candidate}`);
 }
 
-const changed = git("diff", "--name-only", "--no-renames", rehearsed, candidate).split("\n").filter(Boolean);
+const changed = git("diff", "--name-only", "--no-renames", rehearsed, candidate)
+  .split("\n")
+  .filter(Boolean);
 const graph = await importGraph(entryPoints());
 const namedByPath = categoriesNamedByPath(graph);
 for (const file of changed) {
   const category = CATEGORIES.find((candidateCategory) => candidateCategory.holds(file));
   if (!category) refuse(`${file} may change what the rehearsal runs`);
   if (graph.files.has(file)) refuse(`${file} is imported by what the rehearsal runs`);
-  if (namedByPath.has(category.name)) refuse(`${file} is ${category.name}, and ${namedByPath.get(category.name)}`);
+  if (namedByPath.has(category.name))
+    refuse(`${file} is ${category.name}, and ${namedByPath.get(category.name)}`);
 }
-console.log(`the rehearsal of ${rehearsed} covers ${candidate}: ${changed.length} changed file(s), none of them rehearsal inputs (graph of ${graph.files.size} files)`);
+console.log(
+  `the rehearsal of ${rehearsed} covers ${candidate}: ${changed.length} changed file(s), none of them rehearsal inputs (graph of ${graph.files.size} files)`,
+);

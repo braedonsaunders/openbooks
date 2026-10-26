@@ -1,8 +1,8 @@
-import 'server-only'
+import "server-only";
 
-import { redirect } from 'next/navigation'
-import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { currentUser } from '../../../../lib/auth'
+import { redirect } from "next/navigation";
+import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
+import { currentUser } from "../../../../lib/auth";
 
 /**
  * The sign-in security page, split into a loader and a spec.
@@ -28,20 +28,20 @@ import { currentUser } from '../../../../lib/auth'
  */
 
 /** No server-rendered content: the loader runs the gate and binds nothing. */
-export type SecurityData = Record<string, unknown>
+export type SecurityData = Record<string, unknown>;
 
 export async function loadSecurity(): Promise<SecurityData> {
   // Native page.tsx, verbatim: unauthenticated readers bounce to /login.
-  const user = await currentUser()
-  if (!user) redirect('/login')
-  return {}
+  const user = await currentUser();
+  if (!user) redirect("/login");
+  return {};
 }
 
 export function securitySpec(): PageSpec {
   return page({
-    route: '/settings/security',
-    layout: 'bare',
+    route: "/settings/security",
+    layout: "bare",
     header: [],
-    body: [widgetBlock('security-panel')],
-  })
+    body: [widgetBlock("security-panel")],
+  });
 }

@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from 'react'
+import type { KeyboardEvent } from "react";
 
 /**
  * APG menu keyboard support for the Popover-based list menus (FilterChips,
@@ -8,20 +8,20 @@ import type { KeyboardEvent } from 'react'
  * enabled menuitems. Escape-to-close is already handled by the Popover.
  */
 export function menuArrowKeys(e: KeyboardEvent<HTMLElement>) {
-  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Home' && e.key !== 'End') return
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Home" && e.key !== "End") return;
   const items = Array.from(
     e.currentTarget.querySelectorAll<HTMLElement>(
       ':is([role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]):not(:disabled):not([aria-disabled="true"])',
     ),
-  )
-  if (items.length === 0) return
-  e.preventDefault()
-  const at = items.indexOf(document.activeElement as HTMLElement)
-  let next: number
-  if (e.key === 'Home') next = 0
-  else if (e.key === 'End') next = items.length - 1
-  else if (e.key === 'ArrowDown') next = at < 0 ? 0 : (at + 1) % items.length
-  else next = at < 0 ? items.length - 1 : (at - 1 + items.length) % items.length
-  const target = items[next]
-  if (target) target.focus()
+  );
+  if (items.length === 0) return;
+  e.preventDefault();
+  const at = items.indexOf(document.activeElement as HTMLElement);
+  let next: number;
+  if (e.key === "Home") next = 0;
+  else if (e.key === "End") next = items.length - 1;
+  else if (e.key === "ArrowDown") next = at < 0 ? 0 : (at + 1) % items.length;
+  else next = at < 0 ? items.length - 1 : (at - 1 + items.length) % items.length;
+  const target = items[next];
+  if (target) target.focus();
 }
