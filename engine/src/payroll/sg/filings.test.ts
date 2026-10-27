@@ -28,10 +28,10 @@ test("the IR8A row grammar is a bare employee id, in both directions", () => {
 
 test("a year the pack has not transcribed refuses by name before the ledger", async () => {
   const filing = ir8a();
-  // 2025 has no transcribed CPF table (rates.ts: 2026 only), so a 2025
-  // IR8A cannot price compulsory CPF — the refusal must say so, naming
+  // 2023 has no transcribed CPF table (rates.ts: 2024, 2025 and 2026), so a
+  // 2023 IR8A cannot price compulsory CPF — the refusal must say so, naming
   // the year, rather than reporting an empty slip.
-  await assert.rejects(() => filing.population("org", 2025), /2025/);
+  await assert.rejects(() => filing.population("org", 2023), /no transcribed CPF tables for 2023/);
 });
 
 test("the IR8A amendment refusal names the real IRAS correction remedy", () => {

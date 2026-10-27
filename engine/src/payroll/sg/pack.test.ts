@@ -155,7 +155,7 @@ test("the SG filings declare the CPF programme and refusing IR8A + IR21 filings"
   // The 2026 population reads committed stubs (database-owned: proven in
   // `./ir8a.integration.test.ts`). An untranscribed year refuses by name
   // before touching the ledger, so it is assertable with no database.
-  await assert.rejects(() => ir8a.population("org", 2025), /2025/);
+  await assert.rejects(() => ir8a.population("org", 2023), /no transcribed CPF tables for 2023/);
   await assert.rejects(() => ir21.population("org", 2026), /no IR21 builder/);
 });
 
