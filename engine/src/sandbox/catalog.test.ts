@@ -237,6 +237,31 @@ test("sandbox insertion orders trigger-required parents inside a deferrable FK c
   );
 });
 
+test("sandbox insertion keeps deferrable parents first for tables downstream of a cycle", () => {
+  // Every row references its author, and the author references a party that
+  // references the author back: everything below is downstream of that cycle.
+  // A pay stub's filing account is a deferrable reference whose ownership
+  // trigger still checks the parent row at INSERT time.
+  const refs: Record<string, Record<string, string>> = {
+    users: { party_id: "parties" },
+    parties: { created_by: "users" },
+    pay_stubs: { filing_account_id: "payroll_filing_accounts", created_by: "users" },
+    payroll_filing_accounts: { created_by: "users" },
+  };
+  const tables = Object.entries(refs).map(([name, fks]) => {
+    const t = table("NO ACTION");
+    t.name = name;
+    t.fks = fks;
+    t.hardFks = {};
+    return t;
+  });
+  const order = insertionOrder({ tables, tenantTables: tables, rebaseSet: new Set() });
+  assert.deepEqual([...order].sort(), Object.keys(refs).sort());
+  assert.ok(order.indexOf("payroll_filing_accounts") < order.indexOf("pay_stubs"));
+  assert.ok(order.indexOf("users") < order.indexOf("payroll_filing_accounts"));
+  assert.ok(order.indexOf("parties") < order.indexOf("pay_stubs"));
+});
+
 test("sandbox insertion resolves budget ownership inside deferred source cycles", () => {
   const refs: Record<string, Record<string, string>> = {
     budget_lines: {

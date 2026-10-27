@@ -1,8 +1,14 @@
 /** Order strongly connected dependency groups without discarding their outgoing edges.
- * Row-level constraints remain authoritative within each structural cycle. */
+ * Row-level constraints remain authoritative within each structural cycle.
+ *
+ * `memberEdges`, when given, orders the members of each group by that stricter
+ * graph instead of by name. The groups themselves follow `edges`, so every
+ * reference outside a genuine cycle keeps its parent first even when it is not
+ * one of the immediate dependencies `memberEdges` describes. */
 export function orderDependencyComponents(
   names: readonly string[],
   edges: ReadonlyMap<string, ReadonlySet<string>>,
+  memberEdges?: ReadonlyMap<string, ReadonlySet<string>>,
 ): string[] {
   const order: string[] = [];
   let nextIndex = 0;
@@ -66,7 +72,19 @@ export function orderDependencyComponents(
     .sort((a, b) => componentOrder(a) - componentOrder(b));
   while (componentQueue.length) {
     const component = componentQueue.shift()!;
-    order.push(...components[component]!.sort((a, b) => names.indexOf(a) - names.indexOf(b)));
+    const members = components[component]!.sort((a, b) => names.indexOf(a) - names.indexOf(b));
+    if (memberEdges && members.length > 1) {
+      const inComponent = new Set(members);
+      const within = new Map(
+        members.map((member) => [
+          member,
+          new Set([...(memberEdges.get(member) ?? [])].filter((child) => inComponent.has(child))),
+        ]),
+      );
+      order.push(...orderDependencyComponents(members, within));
+    } else {
+      order.push(...members);
+    }
     for (const child of componentChildren.get(component) ?? []) {
       componentIndeg.set(child, componentIndeg.get(child)! - 1);
       if (componentIndeg.get(child) === 0) {

@@ -769,11 +769,14 @@ export function insertionOrder(cat: Catalog): string[] {
       if ((indeg.get(child) ?? 0) === 0) queue.push(child);
     }
   }
-  // A deferrable FK cycle can leave a large tail. Sorting that tail in catalog
-  // order loses immediate trigger dependencies even though their parent rows
-  // must already exist when each BEFORE trigger runs. Re-sort the remainder
-  // using only non-deferrable FKs and declared trigger parents; the remaining
-  // cycles in this stricter graph retain their outgoing dependency order.
+  // A deferrable FK cycle leaves every table downstream of it in a tail that
+  // Kahn's pass cannot order. Most of those tables are not themselves cyclic,
+  // and many of their deferrable references are still checked row by row by
+  // BEFORE INSERT ownership triggers, so their parents must be copied first.
+  // Order the tail by the strongly connected groups of the full reference
+  // graph, which keeps every acyclic reference parent-first; only members of
+  // one genuine cycle fall back to the stricter graph of non-deferrable FKs and
+  // declared trigger parents below.
   const cyclicTail = names.filter((n) => !seen.has(n));
   const tailSet = new Set(cyclicTail);
   const immediateChildren = new Map(cyclicTail.map((n) => [n, new Set<string>()]));
@@ -792,10 +795,18 @@ export function insertionOrder(cat: Catalog): string[] {
       if (ref) addImmediateEdge(ref, t.name);
     }
   }
-  // Collapse genuine immediate-dependency cycles so that acyclic dependants
-  // of such a cycle still follow it. A plain Kahn pass followed by catalog
-  // order would otherwise strand a trigger child beside its cyclic parents.
-  order.push(...orderDependencyComponents(cyclicTail, immediateChildren));
+  // The full graph includes every immediate edge, so ordering groups by it
+  // never places an immediate child before its parent.
+  const referenceChildren = new Map(
+    cyclicTail.map((n) => [
+      n,
+      new Set([
+        ...[...(children.get(n) ?? [])].filter((child) => tailSet.has(child)),
+        ...immediateChildren.get(n)!,
+      ]),
+    ]),
+  );
+  order.push(...orderDependencyComponents(cyclicTail, referenceChildren, immediateChildren));
 
   return order;
 }
