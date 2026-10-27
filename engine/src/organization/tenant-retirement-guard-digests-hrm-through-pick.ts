@@ -137,7 +137,7 @@ export const HRM_THROUGH_PICK_GUARD_DIGESTS = [
   },
   {
     name: "landed_cost_voucher_target_guard",
-    sha256: "01b7005a5cb772deb0302368945eab9cba4865e787e5863a28b5fcc673b12828",
+    sha256: "55d4c114c058a704758aaaf2ef26467e618fa9f5b3505a63d31d5c86c3168fed",
   },
   {
     name: "lease_agreement_revision_guard",

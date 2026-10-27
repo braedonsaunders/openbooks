@@ -27,7 +27,7 @@ export const ACCOUNTING_THROUGH_HRM_GUARD_DIGESTS = [
   },
   {
     name: "allocation_rule_target_guard",
-    sha256: "a76d7247d768665eb76f5455831eaaf96cda4045865a3d571681ba645a564b81",
+    sha256: "c1532d7d81ecec622eb83e04bfc1e511c53371004560c4c1fbe4df60d899ea48",
   },
   {
     name: "application_evidence_guard",

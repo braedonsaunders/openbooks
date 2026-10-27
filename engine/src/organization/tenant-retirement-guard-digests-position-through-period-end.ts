@@ -67,7 +67,7 @@ export const POSITION_THROUGH_PERIOD_END_GUARD_DIGESTS = [
   },
   {
     name: "rate_adjustment_target_version_guard",
-    sha256: "8d3662d80c3bbe419040a4b302211223f9e705d11686af3932a044b41528f682",
+    sha256: "d4e6224d35afe0c180501cf596318d97d6bcd3ea6c8486df21b1d5ce90428ed0",
   },
   {
     name: "rate_book_currency_guard",
@@ -175,7 +175,7 @@ export const POSITION_THROUGH_PERIOD_END_GUARD_DIGESTS = [
   },
   {
     name: "subscription_version_component_immutable_guard",
-    sha256: "02be1977312662234c76201fb184116c3faf3134152b42e2493f50ab37aad750",
+    sha256: "00da288c92e9f55b5cacadd042ee2182ddc13d5b4cd3bd922291e3982576adbe",
   },
   {
     name: "subsidiary_tree_guard",
