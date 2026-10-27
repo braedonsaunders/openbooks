@@ -15,7 +15,10 @@ import { createSandbox, deleteSandbox, refreshSandbox } from "./lifecycle.ts";
 
 installEngineSeams();
 const DB = !!process.env.OPENBOOKS_DB_URL;
-const adjustmentTables = ["project_financial_adjustments", "project_overhead_adjustments"] as const;
+const ADJUSTMENT_TABLES = [
+  "project_financial_adjustments",
+  "project_overhead_adjustments",
+] as const;
 
 for (const masked of [false, true])
   test(
@@ -43,7 +46,7 @@ for (const masked of [false, true])
           1,
         );
 
-        for (const table of adjustmentTables) {
+        for (const table of ADJUSTMENT_TABLES) {
           // Imported identifiers need not increase with time. Insert valid history
           // in lineage order with descending identifiers to expose ID-order copies.
           const ids = [randomUUID(), randomUUID(), randomUUID()].sort().reverse();
@@ -72,7 +75,7 @@ for (const masked of [false, true])
         }
         const source = async () =>
           Promise.all(
-            adjustmentTables.map(
+            ADJUSTMENT_TABLES.map(
               async (table) =>
                 await db.execute(
                   sql`select to_jsonb(a) as row from ${sql.raw(table)} a
@@ -110,7 +113,7 @@ for (const masked of [false, true])
             ).length,
             1,
           );
-          for (const table of adjustmentTables) {
+          for (const table of ADJUSTMENT_TABLES) {
             const actual = await db.execute(
               sql`select to_jsonb(a) as row from ${sql.raw(table)} a
             where org_id=${target} order by id`,
@@ -156,7 +159,7 @@ for (const masked of [false, true])
           );
         };
         await assertCopy();
-        for (const table of adjustmentTables) {
+        for (const table of ADJUSTMENT_TABLES) {
           const row = (
             await db.execute<{ id: string; amount: string }>(
               sql`select id,amount::text as amount
@@ -217,7 +220,7 @@ for (const masked of [false, true])
         });
         await assertCopy();
         await deleteSandbox(created.sandboxId, { actorId });
-        for (const table of [...adjustmentTables, "projects"])
+        for (const table of [...ADJUSTMENT_TABLES, "projects"])
           assert.equal(
             (
               await db.execute(

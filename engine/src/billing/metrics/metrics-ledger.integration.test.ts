@@ -306,6 +306,7 @@ test(
     `,
         "objects",
       );
+      assert.equal(rows.length, 5, "one movement row per seeded subscription");
       const byId = new Map(rows.map((row) => [row.subscription_id, row]));
       assert.equal(byId.get(ids.new)?.movement, "new");
       assert.equal(byId.get(ids.expansion)?.movement, "expansion");

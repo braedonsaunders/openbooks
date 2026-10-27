@@ -168,6 +168,7 @@ async function offeredKinds(orgId: string): Promise<string[]> {
   );
   assert.equal(res.status, 200, `profiles status: ${res.status}`);
   const body = (await res.json()) as { profiles: { subjectKind: string; labelKey: string }[] };
+  assert.ok(body.profiles.length > 0, "the catalog offers at least one subject");
   for (const profile of body.profiles) {
     assert.ok(profile.labelKey, `${profile.subjectKind} carries a catalog label key`);
   }
