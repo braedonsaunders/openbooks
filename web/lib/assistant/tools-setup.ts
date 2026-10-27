@@ -37,7 +37,7 @@ const listSetupEntitiesTool: AssistantToolDef = {
   gate: { mode: "public" },
   inputSchema: z.object({
     query: z.string().max(120).optional().describe("Match entity key or group"),
-    offset: z.number().int().min(0).optional(),
+    offset: z.number().int().min(0).optional().describe("Entities to skip for paging (default 0)"),
     limit: z.number().int().min(1).max(50).optional().describe("Page size, default 50"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
