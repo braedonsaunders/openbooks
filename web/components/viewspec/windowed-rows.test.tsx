@@ -15,7 +15,10 @@ registerHooks({
 const React = await import("react");
 const { renderToStaticMarkup } = await import("react-dom/server");
 const { BlockView } = await import("./blocks");
-const { rowsRenderInBrowser, WINDOWED_ROWS_FROM } = await import("./windowed-rows");
+const { pickScope, rowsRenderInBrowser, WINDOWED_ROWS_FROM } = await import("./windowed-rows");
+const { PathnameContext, SearchParamsContext } =
+  await import("next/dist/shared/lib/hooks-client-context.shared-runtime");
+const { prerenderToNodeStream } = await import("react-dom/static");
 
 function reportTable(rows: number, cells: Record<string, unknown>[]): Block {
   return {
@@ -86,11 +89,6 @@ test("short tables and tables needing the page scope render every row on the ser
     "widgets only the server registry renders keep the table on the server",
   );
 });
-
-const { pickScope } = await import("./windowed-rows");
-const { PathnameContext, SearchParamsContext } =
-  await import("next/dist/shared/lib/hooks-client-context.shared-runtime");
-const { prerenderToNodeStream } = await import("react-dom/static");
 
 /** Drill links read the current address, which a Next request provides. */
 function renderInRequest(node: React.ReactNode): string {
