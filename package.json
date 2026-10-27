@@ -42,7 +42,7 @@
     "fast-uri": "3.1.9",
     "body-parser": "2.4.0",
     "ip-address": "10.7.5",
-    "qs": "6.16.0",
+    "qs": "6.16.2",
     "dompurify": "3.4.17",
     "undici": "8.12.3",
     "@tailwindcss/typography": {
