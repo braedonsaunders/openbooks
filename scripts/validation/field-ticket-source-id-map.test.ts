@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { is, StringChunk } from "drizzle-orm";
 
 /**
  * The org id must cross into SQL as a bound value, never as statement text:
@@ -14,9 +15,9 @@ const captured: unknown[] = [];
 (globalThis as Record<string, unknown>).__sourceIdMapCapture = captured;
 
 function splitQuery(query: unknown): { text: string; values: unknown[] } {
-  // This repo's drizzle shapes chunks as: literal SQL text in StringChunk
-  // { value: [...] } wrappers, bound values as bare inline strings (never
-  // statement text), and nested fragments as SQL { queryChunks }.
+  // Drizzle shapes chunks as: literal SQL text in StringChunk wrappers, bound
+  // values as bare inline primitives (never statement text), and nested
+  // fragments as SQL { queryChunks }.
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
   const textParts: string[] = [];
   const values: unknown[] = [];
@@ -31,9 +32,9 @@ function splitQuery(query: unknown): { text: string; values: unknown[] } {
       return;
     }
     if (chunk && typeof chunk === "object") {
-      const record = chunk as { value?: unknown; queryChunks?: unknown[] };
-      if (Array.isArray(record.value) && record.value.every((part) => typeof part === "string")) {
-        textParts.push(record.value.join(""));
+      const record = chunk as { queryChunks?: unknown[] };
+      if (is(chunk, StringChunk)) {
+        textParts.push(chunk.value);
         return;
       }
       if (Array.isArray(record.queryChunks)) {

@@ -21,13 +21,9 @@ function sqlText(query: unknown): string {
   if (!Array.isArray(chunks)) return "";
   let out = "";
   for (const chunk of chunks) {
-    if (
-      chunk &&
-      typeof chunk === "object" &&
-      Array.isArray((chunk as { value?: unknown[] }).value)
-    ) {
-      out += (chunk as { value: string[] }).value.join("");
-    }
+    const value = chunk && typeof chunk === "object" ? (chunk as { value?: unknown }).value : null;
+    if (typeof value === "string") out += value;
+    else if (Array.isArray(value)) out += value.join("");
   }
   return out;
 }
