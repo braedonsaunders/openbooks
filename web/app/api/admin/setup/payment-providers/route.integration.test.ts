@@ -40,9 +40,11 @@ registerHooks({
         context.parentURL?.includes("setup/payment-providers")) ||
       // The route factory resolves its session gate through the "@/lib/authz"
       // spelling at request time; it must see the same test session as the
-      // route file's relative import. Both spellings resolve to the same real
-      // module, so they share one double instance.
-      specifier === "@/lib/authz"
+      // route file's relative import, as must the feature gate's relative
+      // "./authz" import in web/lib/feature-gates.ts. Every spelling resolves
+      // to the same real module, so they share one double instance.
+      specifier === "@/lib/authz" ||
+      (specifier === "./authz" && context.parentURL?.includes("/web/lib/feature-gates.ts"))
     ) {
       // Re-export the REAL authz module and override only the session gate,
       // so scope guards under test (guardUnrestrictedScope, guardSubsidiaryScope)
