@@ -270,8 +270,11 @@ export async function loadApprovals(
   // otherwise My tasks when tasks are waiting — never an "all clear" page
   // beside a badge that counts tasks.
   const ctx = await inboxContext(authz);
-  const [counts, approvalFlowsConfigured] = await Promise.all([
-    inboxCounts(authz, ctx),
+  // One source cache for the request: task sources the badge count lists
+  // are not read a second time when the My tasks tab renders their rows.
+  const sourceCache = new Map<string, InboxItem[]>();
+  const [counts, approvalFlowsConfigured, delegateUsers] = await Promise.all([
+    inboxCounts(authz, ctx, sourceCache),
     // Any enabled Flow whose graph carries an approval gate, for any record.
     db
       .execute<{ configured: boolean }>(
@@ -287,6 +290,15 @@ export async function loadApprovals(
         "objects",
       )
       .then((result) => result[0]?.configured === true),
+    // Delegate targets (row delegation + out-of-office picker).
+    db.execute<DelegateOption>(
+      sql`
+    select id, name from users
+     where org_id = ${orgId} and is_active and id <> ${user.id}
+     order by name limit 500
+  `,
+      "objects",
+    ),
   ]);
   const rawTab = pickString(sp.tab);
   const tab: Tab =
@@ -378,24 +390,25 @@ export async function loadApprovals(
     query,
     overdue: overdueOnly,
   };
-  const unionPage =
+  // Gates awaiting ANOTHER approver for this viewer (SoD-blocked) are counted
+  // separately from actionable items — My approvals keeps its headline total
+  // while the awaiting rows render without decision actions under their own
+  // figure in the table. The organization view marks each such row itself.
+  // The page and that count are independent reads, so they run together.
+  const [unionPage, awaitingOthers] = await Promise.all([
     tab === "all"
-      ? await approvalWorklistOrganizationPageForAuthz(authz, window)
+      ? approvalWorklistOrganizationPageForAuthz(authz, window)
       : mayApprove && tab === "mine"
-        ? await approvalWorklistPageForAuthz(authz, window)
+        ? approvalWorklistPageForAuthz(authz, window)
         : {
             items: [] as ApprovalWorklistItem[],
             total: 0,
             kindCounts: new Map<string, number>(),
-          };
+          },
+    mayApprove && tab === "mine" ? approvalWorklistAwaitingForAuthz(authz) : 0,
+  ]);
   const unified: ApprovalWorklistItem[] = unionPage.items;
   const unionTotal = unionPage.total;
-  // Gates awaiting ANOTHER approver for this viewer (SoD-blocked): counted
-  // separately from actionable items — My approvals keeps its headline total
-  // while the awaiting rows render without decision actions under their own
-  // figure in the table. The organization view marks each such row itself.
-  const awaitingOthers =
-    mayApprove && tab === "mine" ? await approvalWorklistAwaitingForAuthz(authz) : 0;
   // Chips ignore the kind filter, so their counts sum to the unfiltered
   // total (drives the mine bubble and the empty state).
   let unfilteredTotal = 0;
@@ -403,15 +416,6 @@ export async function loadApprovals(
 
   // Flow names for the gate rows (WorklistGate carries only flowId).
   const flowIds = [...new Set(unified.flatMap((i) => (i.kind === "flow_gate" ? [i.flowId] : [])))];
-  const flowNames = new Map<string, string>();
-  if (flowIds.length > 0) {
-    const rows = await db
-      .select({ id: schema.flows.id, name: schema.flows.name })
-      .from(schema.flows)
-      .where(inArray(schema.flows.id, flowIds));
-    for (const r of rows) flowNames.set(r.id, r.name);
-  }
-
   // Display names for gate assignees on the organization view: the user a
   // gate names, else the role it is routed to (the union carries ids/keys).
   const assigneeIds = [
@@ -430,26 +434,46 @@ export async function loadApprovals(
       ),
     ),
   ];
-  const assigneeNames = new Map<string, string>();
-  const roleNames = new Map<string, string>();
-  if (tab === "all" && assigneeIds.length > 0) {
-    const rows = await db.execute<Record<string, unknown>>(
-      sql`
+  // The row decorations are independent reads over the page's own ids.
+  const [flowRows, assigneeRows, roleRows, subjectDetails] = await Promise.all([
+    flowIds.length > 0
+      ? db
+          .select({ id: schema.flows.id, name: schema.flows.name })
+          .from(schema.flows)
+          .where(inArray(schema.flows.id, flowIds))
+      : [],
+    tab === "all" && assigneeIds.length > 0
+      ? db.execute<Record<string, unknown>>(
+          sql`
       select id, name from users where org_id = ${orgId} and id = any(${pgTextArrayLiteral(assigneeIds)}::uuid[])
     `,
-      "objects",
-    );
-    for (const r of rows) assigneeNames.set(String(r.id), String(r.name));
-  }
-  if (tab === "all" && assigneeRoles.length > 0) {
-    const rows = await db.execute<Record<string, unknown>>(
-      sql`
+          "objects",
+        )
+      : [],
+    tab === "all" && assigneeRoles.length > 0
+      ? db.execute<Record<string, unknown>>(
+          sql`
       select key, name from app_roles where org_id = ${orgId} and key = any(${pgTextArrayLiteral(assigneeRoles)}::text[])
     `,
-      "objects",
-    );
-    for (const r of rows) roleNames.set(String(r.key), String(r.name));
-  }
+          "objects",
+        )
+      : [],
+    // Subject-kind detail for flow gates (party + decision summary): one
+    // batched, org-scoped read through the per-kind registry — unresolvable
+    // subjects stay absent and their rows keep the id fallback.
+    resolveApprovalSubjects(
+      orgId,
+      unified.flatMap((item) =>
+        item.kind === "flow_gate" ? [{ kind: item.subjectKind, subjectId: item.subjectId }] : [],
+      ),
+      th,
+    ),
+  ]);
+  const flowNames = new Map<string, string>(flowRows.map((r) => [r.id, r.name]));
+  const assigneeNames = new Map<string, string>(
+    assigneeRows.map((r) => [String(r.id), String(r.name)]),
+  );
+  const roleNames = new Map<string, string>(roleRows.map((r) => [String(r.key), String(r.name)]));
   const assigneeOf = (item: ApprovalWorklistItem): string | null => {
     if (tab !== "all" || item.kind !== "flow_gate") return null;
     if (item.assigneeUserId != null) return assigneeNames.get(item.assigneeUserId) ?? null;
@@ -458,16 +482,6 @@ export async function loadApprovals(
       : null;
   };
 
-  // Subject-kind detail for flow gates (party + decision summary): one
-  // batched, org-scoped read through the per-kind registry — unresolvable
-  // subjects stay absent and their rows keep the id fallback.
-  const subjectDetails = await resolveApprovalSubjects(
-    orgId,
-    unified.flatMap((item) =>
-      item.kind === "flow_gate" ? [{ kind: item.subjectKind, subjectId: item.subjectId }] : [],
-    ),
-    th,
-  );
   // Amounts a subject carries format in their own currency (the shared
   // formatter stays the org-base fallback) — one cached formatter per
   // currency on the page, never one per row.
@@ -659,17 +673,6 @@ export async function loadApprovals(
     submittedRows = submittedRows.slice(offset, offset + perPage);
   }
 
-  // Delegate targets (row delegation + out-of-office picker).
-  const usersRes = await db.execute<DelegateOption>(
-    sql`
-    select id, name from users
-     where org_id = ${orgId} and is_active and id <> ${user.id}
-     order by name limit 500
-  `,
-    "objects",
-  );
-  const delegateUsers = usersRes;
-
   // ---- Kind filters (mine/all tabs) -----------------------------------------
   // Counts come from the union aggregates (unfiltered by kind, sorted by code
   // so dropdown order is stable across locales); the rows arrive kind-filtered
@@ -694,6 +697,7 @@ export async function loadApprovals(
   const { filters: taskFilters, notices: listNotices } = await inboxTaskFilters(
     ctx,
     tab === "tasks",
+    sourceCache,
   );
   for (const notice of listNotices) taskNoticeByKind.set(notice.kind, notice);
   const tasksActive = taskFilters[filter];

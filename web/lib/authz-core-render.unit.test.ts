@@ -30,7 +30,8 @@ test("re-resolved actor authority is shared within a server render and live ever
       const state = {reads: [], active: true};
       globalThis[Symbol.for('openbooks.actor-render-test')] = state;
       const database = 'data:text/javascript,' + encodeURIComponent(
-        'export const db={execute:async()=>{throw new Error("Unexpected query: super admins resolve without role reads")}};'
+        'export const db={execute:async()=>{throw new Error("Unexpected query: super admins resolve without role reads")}};' +
+        'export function pinnedTransactionExecutor(){return undefined;}'
       );
       const principal = 'data:text/javascript,' + encodeURIComponent(
         'export async function actorPrincipal(runner,orgId,userId){' +

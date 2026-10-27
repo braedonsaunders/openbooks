@@ -1,3 +1,4 @@
+import { pinnedTransactionExecutor } from "../platform/db.ts";
 import {
   gateDecisionCapability,
   worklistGateKindCounts,
@@ -114,16 +115,61 @@ export async function worklistApprovalsPage(
     kindCounts,
   };
 }
+export type GateDecisionCapability = Awaited<ReturnType<typeof gateDecisionCapability>>;
+/** Evaluates one gate's capability; a surface may pass a request-memoized gateDecisionCapability. */
+export type GateCapabilityEvaluator = (
+  gateId: string,
+  userId: string,
+) => Promise<GateDecisionCapability>;
+
+/**
+ * Native decision checks a worklist surface runs at once on the pool. Each
+ * check is a short chain of reads, so a long worklist resolves in a fraction
+ * of the serial time while leaving most of the connection pool to the rest
+ * of the request. Inside a pinned transaction (one pg client) they run one
+ * at a time.
+ */
+const CAPABILITY_CONCURRENCY = 4;
+
+/**
+ * The viewer's decision capability for each gate, through the native
+ * per-gate check (gateDecisionCapability) and keyed by gate id. Checks run
+ * concurrently up to CAPABILITY_CONCURRENCY; the first failure rejects the
+ * whole read.
+ */
+export async function gateDecisionCapabilities(
+  gateIds: readonly string[],
+  userId: string,
+  evaluate: GateCapabilityEvaluator = gateDecisionCapability,
+): Promise<Map<string, GateDecisionCapability>> {
+  const unique = [...new Set(gateIds)];
+  const capabilities = new Map<string, GateDecisionCapability>();
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < unique.length) {
+      const gateId = unique[next++]!;
+      capabilities.set(gateId, await evaluate(gateId, userId));
+    }
+  };
+  const lanes = pinnedTransactionExecutor() ? 1 : CAPABILITY_CONCURRENCY;
+  await Promise.all(Array.from({ length: Math.min(lanes, unique.length) }, () => worker()));
+  return capabilities;
+}
+
 export async function worklistGatesAwaitingAnotherApprover(
   orgId: string,
   userId: string,
   roles?: Iterable<string>,
   allowedSubsidiaryIds?: GateSubsidiaryScope,
+  evaluate?: GateCapabilityEvaluator,
 ): Promise<string[]> {
-  const blocked: string[] = [];
-  for (const gate of await worklistGates(orgId, userId, roles, allowedSubsidiaryIds))
-    if ((await gateDecisionCapability(gate.id, userId)).sodBlocked) blocked.push(gate.id);
-  return blocked;
+  const gates = await worklistGates(orgId, userId, roles, allowedSubsidiaryIds);
+  const capabilities = await gateDecisionCapabilities(
+    gates.map((gate) => gate.id),
+    userId,
+    evaluate,
+  );
+  return gates.filter((gate) => capabilities.get(gate.id)?.sodBlocked === true).map((g) => g.id);
 }
 export async function worklistApprovalById(
   orgId: string,

@@ -85,10 +85,16 @@ export const INBOX_TASK_KINDS: InboxKind[] = [
 export type InboxTaskFilter = "all" | "my_tasks" | "signatures" | "notices" | "overdue";
 
 /** The selected task view reads one live population for every presentation filter.
- * Other views retain native badge counts without materializing hidden task rows. */
-export async function inboxTaskFilters(ctx: InboxListContext, selected = true) {
+ * Other views retain native badge counts without materializing hidden task rows.
+ * `cache` is the request's source cache: rows a count in the same request
+ * already listed are served from it instead of read twice. */
+export async function inboxTaskFilters(
+  ctx: InboxListContext,
+  selected = true,
+  cache?: Map<string, InboxItem[]>,
+) {
   const notices: InboxSourceNotice[] = [];
-  const items = selected ? await listInbox(ctx, { kinds: INBOX_TASK_KINDS, notices }) : [];
+  const items = selected ? await listInbox(ctx, { kinds: INBOX_TASK_KINDS, notices, cache }) : [];
   const filters: Record<InboxTaskFilter, InboxItem[]> = {
     all: items,
     my_tasks: items.filter((item) => INBOX_FILTER_KINDS.my_tasks!.includes(item.kind)),
@@ -104,8 +110,14 @@ export async function inboxTaskFilters(ctx: InboxListContext, selected = true) {
  * My Approvals and My Tasks tabs, independent of the active tab or filters.
  * Every decision is a native Flow gate. The approval worklist owns gates
  * when available; dedicated task adapters serve module-scoped approvers.
+ * `cache` (one per request) keeps the rows of sources counted by listing, so
+ * the request's task list reuses them.
  */
-export async function inboxCounts(authz: Authz, ctx: InboxListContext) {
+export async function inboxCounts(
+  authz: Authz,
+  ctx: InboxListContext,
+  cache?: Map<string, InboxItem[]>,
+) {
   const notices: InboxSourceNotice[] = [];
   const [approvals, tasks] = await Promise.all([
     maySeeUnion(authz)
@@ -113,7 +125,7 @@ export async function inboxCounts(authz: Authz, ctx: InboxListContext) {
           approvalWorklistCountForAuthz(authz),
         )
       : Promise.resolve(0),
-    countInbox(ctx, { kinds: INBOX_TASK_KINDS, notices }),
+    countInbox(ctx, { kinds: INBOX_TASK_KINDS, notices, cache }),
   ]);
   return { approvals, tasks, count: approvals + tasks, notices };
 }

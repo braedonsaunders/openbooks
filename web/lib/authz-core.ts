@@ -2,7 +2,11 @@ import { actorPrincipal } from "@openbooks/engine/organization/actor-permissions
 import "server-only";
 import { cache } from "react";
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "@openbooks/engine/platform/database";
+import {
+  db,
+  pinnedTransactionExecutor,
+  type SqlExecutor,
+} from "@openbooks/engine/platform/database";
 import {
   denyInactiveExtensionPermissions,
   extensionPermissionAvailability,
@@ -24,34 +28,57 @@ export async function resolveUserAuthz(
   user: SessionUser,
   runner: SqlExecutor = db,
 ): Promise<Authz> {
-  const modulePermissions = await extensionPermissionAvailability(user.orgId, runner);
-  const inactivePermissions = modulePermissions.inactive;
   // Super admins hold every permission in whatever org they're currently in.
   if (user.isSuperAdmin) {
+    const modulePermissions = await extensionPermissionAvailability(user.orgId, runner);
     return {
       user,
-      permissions: denyInactiveExtensionPermissions(new Set<string>(["*"]), inactivePermissions),
+      permissions: denyInactiveExtensionPermissions(
+        new Set<string>(["*"]),
+        modulePermissions.inactive,
+      ),
       allowedSubsidiaryIds: null,
     };
   }
-  // Sequential reads: callers inside an org transaction pass its single
-  // pg client as runner, so fanning out queues concurrent queries on it.
-  const assignments = await runner.execute<{ permissions: string[] }>(
-    sql`
+  const readModulePermissions = () => extensionPermissionAvailability(user.orgId, runner);
+  const readAssignments = () =>
+    runner.execute<{ permissions: string[] }>(
+      sql`
       select r.permissions
         from role_assignments a
         join app_roles r on r.id = a.role_id and r.org_id = a.org_id
        where a.user_id = ${user.id} and a.org_id = ${user.orgId}`,
-    "objects",
-  );
-  const overrides = await runner.execute<{ permission: string; effect: "grant" | "deny" }>(
-    sql`
+      "objects",
+    );
+  const readOverrides = () =>
+    runner.execute<{ permission: string; effect: "grant" | "deny" }>(
+      sql`
       select permission, effect
         from user_permission_overrides
        where user_id = ${user.id} and org_id = ${user.orgId}`,
-    "objects",
-  );
-  const allowedSubs = await allowedSubsidiaryIds(user.id, user.orgId, runner);
+      "objects",
+    );
+  const readAllowedSubs = () => allowedSubsidiaryIds(user.id, user.orgId, runner);
+  // The four grant sources are independent reads. On the shared pool they run
+  // together, because every request resolves its authority before anything
+  // else renders. A transaction (the caller's runner, or the one `db` is
+  // pinned to) is one pg client, so its reads stay sequential rather than
+  // queueing concurrently on that client.
+  const [modulePermissions, assignments, overrides, allowedSubs] =
+    runner === db && !pinnedTransactionExecutor()
+      ? await Promise.all([
+          readModulePermissions(),
+          readAssignments(),
+          readOverrides(),
+          readAllowedSubs(),
+        ])
+      : [
+          await readModulePermissions(),
+          await readAssignments(),
+          await readOverrides(),
+          await readAllowedSubs(),
+        ];
+  const inactivePermissions = modulePermissions.inactive;
   const permissions = resolveEffectivePermissions({
     additionalKnownPermissions: modulePermissions.active,
     rolePermissionSets: assignments.map((r) => (Array.isArray(r.permissions) ? r.permissions : [])),

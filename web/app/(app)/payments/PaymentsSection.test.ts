@@ -35,6 +35,7 @@ const mockSources = new Map<string, string>([
       export function withBypassContext(_ctx, fn) { return fn() }
       export function currentRequestOrgResolver() { return null }
       export function registerRequestOrgResolver() {}
+      export function pinnedTransactionExecutor() { return undefined }
     `,
   ],
   [

@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { isCivilDate } from "../temporal.ts";
 import { isUuid } from "../../platform/uuid.ts";
 import { sql } from "drizzle-orm";
-import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import {
+  actorHasPermission,
+  createActorPermissionRead,
+} from "../../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import {
   subsidiaryScopeAllows,
@@ -1065,11 +1068,13 @@ async function assertFlagReadScope(
   payroll: boolean;
   time: boolean;
 }> {
-  // Sequential checks: transaction callers pass one pg client as exec, so
-  // checking every permission at once queues concurrent queries on it.
-  const payrollPermission = await actorHasPermission(exec, orgId, actorId, "payroll.manage");
-  const timePermission = await actorHasPermission(exec, orgId, actorId, "time.approve");
-  const employmentRead = await actorHasPermission(exec, orgId, actorId, "hrm.employment.read");
+  // One read of the actor's authority answers all three grants instead of
+  // reading the actor, roles and overrides once per grant. The checks stay
+  // sequential: transaction callers pass one pg client as exec.
+  const can = createActorPermissionRead(exec, orgId, actorId);
+  const payrollPermission = await can("payroll.manage");
+  const timePermission = await can("time.approve");
+  const employmentRead = await can("hrm.employment.read");
   const payroll =
     payrollPermission && (await orgFeatureEnabled(orgId, anomalyFeatureKey(false), exec));
   const time =

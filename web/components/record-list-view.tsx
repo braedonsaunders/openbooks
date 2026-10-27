@@ -109,14 +109,16 @@ export async function RecordListView({
   /** Action shown in the empty state (usually the New button). */
   emptyAction?: ReactNode;
 }) {
-  const { money } = await getMoneyFormatter();
   const meta = getRecordType(recordType);
   if (!listSource(recordType) || !meta)
     throw new Error(`no list source registered for record type "${recordType}"`);
   // A record type whose Features switch is off lists nothing and reads no
   // rows: the body becomes the shared feature-unavailable canvas naming the
   // switch, and the page header's create actions are withdrawn with it.
-  const source = await enabledListSource(orgId, recordType);
+  const [{ money }, source] = await Promise.all([
+    getMoneyFormatter(),
+    enabledListSource(orgId, recordType),
+  ]);
   if (!source) {
     const feature = recordTypeFeatureKey(recordType);
     if (!feature) notFound();
@@ -128,9 +130,18 @@ export async function RecordListView({
     });
   }
 
-  const t = await getTranslations();
-  const tCommon = await getTranslations("common");
-  const tCustom = await getTranslations("customization");
+  // The field definitions, the viewer's legal-entity boundary and the owner scope are
+  // independent reads; the list waits for the slowest, not their sum.
+  const [t, tCommon, tCustom, headerDefs, allowedSubs, ownerFilter] = await Promise.all([
+    getTranslations(),
+    getTranslations("common"),
+    getTranslations("customization"),
+    loadFieldDefs("documents", recordType),
+    // Role-based subsidiary visibility (null = unrestricted).
+    allowedSubsidiaryIds(userId, orgId),
+    // A viewer limited to their own records sees only those, in every count too.
+    source.ownerScope ? source.ownerScope(orgId, userId) : null,
+  ]);
   const label = (key: string) => {
     try {
       return t(key as never);
@@ -146,7 +157,6 @@ export async function RecordListView({
     );
 
   // Custom (cf_*) list columns come from the field defs with showInList set.
-  const headerDefs = await loadFieldDefs("documents", recordType);
   const showInListDefs = headerDefs.filter((d) => d.config.showInList);
 
   let resolvedView;
@@ -217,11 +227,7 @@ export async function RecordListView({
   );
   const joins = source.joins ?? sql``;
   const fromClause = sql`documents d left join parties p on p.id = d.party_id and p.org_id = d.org_id ${joins}`;
-  // Role-based subsidiary visibility (null = unrestricted).
-  const allowedSubs = await allowedSubsidiaryIds(userId, orgId);
   const baseWhereBuilder = source.where ?? documentWhere;
-  // A viewer limited to their own records sees only those, in every count too.
-  const ownerFilter = source.ownerScope ? await source.ownerScope(orgId, userId) : null;
   const whereBuilder: typeof baseWhereBuilder = ownerFilter
     ? (...args) => sql`(${baseWhereBuilder(...args)}) and ${ownerFilter}`
     : baseWhereBuilder;
@@ -256,31 +262,63 @@ export async function RecordListView({
   );
   const orderExpr = source.sorts[params.sort] ?? sql`d.document_date`;
 
-  const [rowsRes, statusCounts, totalRow] = await Promise.all([
-    db.execute(
-      sql`
+  // Rows, counts, quick-filter options, kind chips and the bulk grants are
+  // independent reads over the same scope, so the list waits for one round.
+  const [rowsRes, statusCounts, totalRow, extraQuickFilters, kindCounts, bulkAuthz] =
+    await Promise.all([
+      db.execute(
+        sql`
       select d.id, d.kind, d.currency, d.status as "__status", d.document_number as "__number"${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
         from ${fromClause}
        where ${where}
        order by ${listOrderClause(orderExpr, params.dir)}
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `,
-      "objects",
-    ),
-    db.execute(
-      sql`
+        "objects",
+      ),
+      db.execute(
+        sql`
       select d.status, count(*) as n from ${fromClause}
        where ${statusCountWhere}
        group by d.status`,
-      "objects",
-    ),
-    db.execute<{ n: string }>(
-      sql`
+        "objects",
+      ),
+      db.execute<{ n: string }>(
+        sql`
       select count(*) as n from ${fromClause}
        where ${where}`,
-      "objects",
-    ),
-  ]);
+        "objects",
+      ),
+      Promise.all(
+        (source.quickFilters ?? []).map(async (quick) => {
+          const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey);
+          const options = quick.loadOptions
+            ? await quick.loadOptions(orgId, allowedSubs, ownerFilter)
+            : (filterMeta?.options ?? []).map((option) => ({
+                value: option.value,
+                label: option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, " "),
+              }));
+          return {
+            ...quick,
+            label: filterMeta ? label(filterMeta.labelKey) : quick.filterKey.replace(/_/g, " "),
+            options,
+          };
+        }),
+      ),
+      // Optional kind chips for mixed-kind lists (e.g. bills + credits).
+      source.multiKind
+        ? db.execute(
+            sql`
+      select d.kind, count(*) as n from ${fromClause}
+       where ${kindCountWhere}
+       group by d.kind`,
+            "objects",
+          )
+        : null,
+      // Bulk lifecycle actions follow the reader's own grants for every kind the
+      // list shows; the actions route re-checks each document as it runs.
+      BULK_LIFECYCLE_RECORD_TYPES.has(recordType) ? resolveAuthzByUserId(orgId, userId) : null,
+    ]);
   const rows = rowsRes as Record<string, unknown>[];
   const filteredTotal = Number(totalRow[0]?.n ?? 0);
   // The genuinely-empty list teaches; a filtered one keeps the shared generic.
@@ -305,33 +343,8 @@ export async function RecordListView({
     count: countByStatus.get(value) ?? 0,
   }));
 
-  const extraQuickFilters = await Promise.all(
-    (source.quickFilters ?? []).map(async (quick) => {
-      const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey);
-      const options = quick.loadOptions
-        ? await quick.loadOptions(orgId, allowedSubs, ownerFilter)
-        : (filterMeta?.options ?? []).map((option) => ({
-            value: option.value,
-            label: option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, " "),
-          }));
-      return {
-        ...quick,
-        label: filterMeta ? label(filterMeta.labelKey) : quick.filterKey.replace(/_/g, " "),
-        options,
-      };
-    }),
-  );
-
-  // Optional kind chips for mixed-kind lists (e.g. bills + credits).
   let kindOptions: { value: string; label: string; count: number }[] = [];
-  if (source.multiKind) {
-    const kindCounts = await db.execute(
-      sql`
-      select d.kind, count(*) as n from ${fromClause}
-       where ${kindCountWhere}
-       group by d.kind`,
-      "objects",
-    );
+  if (kindCounts) {
     const countByKind = new Map(kindCounts.map((r) => [r.kind, Number(r.n)]));
     kindOptions = source.kinds.map((k) => ({
       value: k,
@@ -340,18 +353,13 @@ export async function RecordListView({
     }));
   }
 
-  // Bulk lifecycle actions follow the reader's own grants for every kind the
-  // list shows; the actions route re-checks each document as it runs.
   let bulkActions: BulkListActions | null = null;
-  if (BULK_LIFECYCLE_RECORD_TYPES.has(recordType)) {
-    const authz = await resolveAuthzByUserId(orgId, userId);
-    if (authz) {
-      const actions = {
-        submit: source.kinds.every((kind) => can(authz, createPermission(kind))),
-        post: source.kinds.every((kind) => can(authz, postPermission(kind))),
-      };
-      bulkActions = actions.submit || actions.post ? actions : null;
-    }
+  if (bulkAuthz) {
+    const actions = {
+      submit: source.kinds.every((kind) => can(bulkAuthz, createPermission(kind))),
+      post: source.kinds.every((kind) => can(bulkAuthz, postPermission(kind))),
+    };
+    bulkActions = actions.submit || actions.post ? actions : null;
   }
 
   const openHref = (id: string) => buildListDrawerHref(basePath, sp, source.drawerParam, id);

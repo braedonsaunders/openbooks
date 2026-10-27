@@ -326,13 +326,12 @@ export const resolveListView = cache(
     showInListDefs: CustomFieldDef[];
   }): Promise<ResolvedListView> => {
     const { orgId, userId, recordType, viewId, showInListDefs } = args;
-    const context: ListViewContext = {
-      multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
-      multiBook: await isFeatureEnabled(orgId, "multiBookAccounting"),
-    };
-
-    const rows = await db.execute<ListViewRow & { config: unknown }>(
-      sql`
+    // The feature context and the saved views are independent reads.
+    const [multiSubsidiary, multiBook, rows] = await Promise.all([
+      subsidiaryFeatureEnabled(orgId),
+      isFeatureEnabled(orgId, "multiBookAccounting"),
+      db.execute<ListViewRow & { config: unknown }>(
+        sql`
       select id, name, record_type as "recordType", scope, owner_id as "ownerId",
              is_default as "isDefault", is_active as "isActive", config,
              created_at as "createdAt", updated_at as "updatedAt"
@@ -341,8 +340,10 @@ export const resolveListView = cache(
          and (scope = 'org' or owner_id = ${userId})
        order by scope asc, is_default desc, name
     `,
-      "objects",
-    );
+        "objects",
+      ),
+    ]);
+    const context: ListViewContext = { multiSubsidiary, multiBook };
 
     const available: ListViewRow[] = rows.map((r) => ({
       id: r.id,

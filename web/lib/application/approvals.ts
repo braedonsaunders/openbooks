@@ -1,5 +1,7 @@
 import "server-only";
+import { cache } from "react";
 import {
+  gateDecisionCapabilities,
   worklistApprovals,
   worklistApprovalsCount,
   worklistApprovalsPage,
@@ -33,6 +35,15 @@ export type ApprovalWorklistItem = {
   /** The viewer may hand this gate to another user (delegateGate's rule). */
   canDelegate?: boolean;
 } & WorklistGate;
+
+/**
+ * One render evaluates each gate's decision capability once: the rows of the
+ * My approvals page are also gates its awaiting-another-approver count
+ * checks. Outside a render every call evaluates live.
+ */
+const renderGateCapability = cache((gateId: string, userId: string) =>
+  gateDecisionCapability(gateId, userId),
+);
 
 /** One tenant Flow gate population feeds the worklist and dashboard counts. */
 export async function listApprovalWorklist(
@@ -101,25 +112,37 @@ export async function approvalWorklistPageForAuthz(
       overdue: window.overdue,
     },
   );
-  const out: ApprovalWorklistItem[] = [];
-  for (const item of page.items) {
-    if (item.kind === "flow_gate") {
-      // Resolve the SoD outcome per row through the native gate check, so
-      // the page renders "awaiting another approver" instead of offering an
-      // Approve that refuses on click. Bounded by the page window.
-      if (mayFlows) {
-        const capability = await gateDecisionCapability(item.gate.id, authz.user.id);
-        out.push({
-          ...item.gate,
-          kind: "flow_gate",
-          canDecide: capability.canAct,
-          awaitingAnotherApprover: capability.sodBlocked,
-          canDelegate: capability.canDelegate,
-        });
-      }
-    }
-  }
-  return { items: out, total: page.total, kindCounts: page.kindCounts };
+  // Resolve the SoD outcome per row through the native gate check, so the
+  // page renders "awaiting another approver" instead of offering an Approve
+  // that refuses on click. Bounded by the page window.
+  return {
+    items: mayFlows ? await withDecisionCapability(page.items, authz.user.id) : [],
+    total: page.total,
+    kindCounts: page.kindCounts,
+  };
+}
+
+/** Page rows carrying the viewer's native decision capability, in page order. */
+async function withDecisionCapability(
+  items: Awaited<ReturnType<typeof worklistApprovalsPage>>["items"],
+  userId: string,
+): Promise<ApprovalWorklistItem[]> {
+  const gates = items.flatMap((item) => (item.kind === "flow_gate" ? [item.gate] : []));
+  const capabilities = await gateDecisionCapabilities(
+    gates.map((gate) => gate.id),
+    userId,
+    renderGateCapability,
+  );
+  return gates.map((gate) => {
+    const capability = capabilities.get(gate.id)!;
+    return {
+      ...gate,
+      kind: "flow_gate",
+      canDecide: capability.canAct,
+      awaitingAnotherApprover: capability.sodBlocked,
+      canDelegate: capability.canDelegate,
+    };
+  });
 }
 
 /** Oversight lists all live tenant gates inside the viewer's entity scope.
@@ -153,21 +176,12 @@ export async function approvalWorklistOrganizationPageForAuthz(
       overdue: window.overdue,
     },
   );
-  const out: ApprovalWorklistItem[] = [];
-  for (const item of page.items) {
-    if (item.kind === "flow_gate") {
-      // Bounded by the page window, like the caller reader's SoD check.
-      const capability = await gateDecisionCapability(item.gate.id, authz.user.id);
-      out.push({
-        ...item.gate,
-        kind: "flow_gate",
-        canDecide: capability.canAct,
-        awaitingAnotherApprover: capability.sodBlocked,
-        canDelegate: capability.canDelegate,
-      });
-    }
-  }
-  return { items: out, total: page.total, kindCounts: page.kindCounts };
+  // Bounded by the page window, like the caller reader's SoD check.
+  return {
+    items: await withDecisionCapability(page.items, authz.user.id),
+    total: page.total,
+    kindCounts: page.kindCounts,
+  };
 }
 
 /**
@@ -185,6 +199,7 @@ export async function approvalWorklistAwaitingForAuthz(authz: Authz): Promise<nu
       authz.user.id,
       authz.user.roles.map((role) => role.key),
       authz.allowedSubsidiaryIds,
+      renderGateCapability,
     )
   ).length;
 }

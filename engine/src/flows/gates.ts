@@ -282,7 +282,16 @@ function hasGateDecisionAuthority(gate: GateRow, userId: string): Promise<boolea
 
 async function canActOnGate(gate: GateRow, userId: string): Promise<boolean> {
   if (!(await hasLiveApprovalRun(gate))) return false;
-  if (!(await hasGateDecisionAuthority(gate, userId))) return false;
+  return canActOnLiveGate(gate, userId, () => hasGateDecisionAuthority(gate, userId));
+}
+
+/** Decision authority plus direct or role assignment, on a gate already known to be live. */
+async function canActOnLiveGate(
+  gate: GateRow,
+  userId: string,
+  authority: () => Promise<boolean>,
+): Promise<boolean> {
+  if (!(await authority())) return false;
   if (gate.assigneeUserId === userId) return true;
   const roles = await userRoleKeys(gate.orgId, userId);
   return !!gate.assigneeRole && roles.has(gate.assigneeRole);
@@ -363,16 +372,21 @@ export async function gateDecisionCapability(
   if (!gate || gate.status !== "pending" || !(await hasLiveApprovalRun(gate))) {
     return { canAct: false, signatureRequired: false, sodBlocked: false, canDelegate: false };
   }
+  // One capability read resolves the viewer's decision authority over this
+  // live gate once, however many of the checks below consult it. Deciding
+  // re-resolves liveness and authority from scratch (decideGate).
+  let authorityRead: Promise<boolean> | undefined;
+  const authority = () => (authorityRead ??= hasGateDecisionAuthority(gate, userId));
   const canDelegate =
     gate.assigneeUserId === userId
-      ? await hasGateDecisionAuthority(gate, userId)
+      ? await authority()
       : !!(await verifyUser(gate.orgId, userId)) &&
         (await actorHasPermission(db, gate.orgId, userId, "flows.manage"));
-  let authorized = await canActOnGate(gate, userId);
+  let authorized = await canActOnLiveGate(gate, userId, authority);
   let onBehalfOf: ResolvedUser | null = null;
   if (!authorized && gate.assigneeUserId) {
     onBehalfOf = await activeDelegationPrincipal(gate.orgId, gate.assigneeUserId, userId);
-    authorized = onBehalfOf !== null && (await hasGateDecisionAuthority(gate, userId));
+    authorized = onBehalfOf !== null && (await authority());
   }
   if (!authorized) {
     return {
