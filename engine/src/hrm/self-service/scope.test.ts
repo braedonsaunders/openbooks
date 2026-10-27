@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SqlExecutor } from "../../platform/db.ts";
+import { drizzleSqlParts } from "../../testing/sql-text.ts";
 
 // Static imports evaluate before the module body, so in-file assignments
 // cannot guard the import-time database-environment resolution in db.ts.
@@ -39,22 +40,7 @@ function fakeExec(fx: Fixtures): SqlExecutor {
     execute: (async (query: unknown, mode?: string) => {
       const inMode = <T extends { rows: unknown }>(result: T) =>
         mode === "objects" ? result.rows : result;
-      const chunks = (query as { queryChunks?: unknown[] } | null)?.queryChunks;
-      let text = "";
-      const params: unknown[] = [];
-      if (Array.isArray(chunks)) {
-        for (const c of chunks) {
-          if (typeof c === "string") {
-            params.push(c);
-            continue;
-          }
-          if (c && typeof c === "object" && "value" in c) {
-            const v = (c as { value: unknown }).value;
-            if (Array.isArray(v)) text += (v as string[]).join("");
-            else params.push(v);
-          }
-        }
-      }
+      const { text, params } = drizzleSqlParts(query);
       if (/from users/i.test(text)) {
         const userId = String(params[1]);
         const partyId = fx.userParty.has(userId) ? fx.userParty.get(userId) : undefined;

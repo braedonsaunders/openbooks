@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import type { SqlExecutor } from "../platform/db.ts";
+import { drizzleSqlParts } from "../testing/sql-text.ts";
 
 // Static imports evaluate before the module body, so in-file assignments
 // cannot guard the import-time database-environment resolution in db.ts.
@@ -63,39 +64,6 @@ function emptyState(): FakeState {
   };
 }
 
-/** Literal SQL text from a drizzle query (same approach as revenue-recognition.test.ts). */
-function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] } | null)?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  let out = "";
-  for (const c of chunks) {
-    if (c && typeof c === "object" && Array.isArray((c as { value?: unknown }).value)) {
-      out += (c as { value: string[] }).value.join("");
-    }
-  }
-  return out;
-}
-
-/** Bound parameter values, in order, from a drizzle query. */
-function sqlParams(query: unknown): unknown[] {
-  const chunks = (query as { queryChunks?: unknown[] } | null)?.queryChunks;
-  if (!Array.isArray(chunks)) return [];
-  const out: unknown[] = [];
-  for (const c of chunks) {
-    // This drizzle version inlines interpolated values as raw strings
-    // between StringChunks; keep the older Param-object shape too.
-    if (typeof c === "string") {
-      out.push(c);
-      continue;
-    }
-    if (c && typeof c === "object" && "value" in c) {
-      const v = (c as { value: unknown }).value;
-      if (!Array.isArray(v)) out.push(v);
-    }
-  }
-  return out;
-}
-
 function str(params: unknown[], index: number): string {
   const v = params[index];
   assert.equal(typeof v, "string");
@@ -108,8 +76,7 @@ function fakeExec(state: FakeState): SqlExecutor {
     execute: (async (query: unknown, mode?: string) => {
       const inMode = <T extends { rows: unknown }>(result: T) =>
         mode === "objects" ? result.rows : result;
-      const text = sqlText(query);
-      const params = sqlParams(query);
+      const { text, params } = drizzleSqlParts(query);
       if (/from users/i.test(text)) {
         if (/party_id/i.test(text)) {
           const person = state.users.get(str(params, 1));

@@ -12,6 +12,7 @@ import {
   type DaemonConfig,
 } from "./manager.ts";
 import type { SqlExecutor } from "../platform/db.ts";
+import { drizzleSqlText as sqlText } from "../testing/sql-text.ts";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -119,23 +120,6 @@ test("a successful cutover binds the new port before the old listener closes", a
   );
   assert.deepEqual(sftpListenerState(), { listening: false, port: null });
 });
-
-/**
- * Flatten a drizzle SQL chunk enough to classify select vs insert. Same
- * approach as the other engine unit doubles that inspect `queryChunks`.
- */
-function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  return chunks
-    .map((chunk) => {
-      if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
-      if (Array.isArray(value)) return value.map(String).join("");
-      return (chunk as { queryChunks?: unknown[] })?.queryChunks ? sqlText(chunk) : "";
-    })
-    .join("");
-}
 
 function asRunner(execute: (query: unknown) => Promise<{ rows: unknown[] }>): SqlExecutor {
   // 'objects' mode resolves to the rows themselves, raw mode to the result.

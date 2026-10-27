@@ -12,6 +12,7 @@ import {
 } from "./employment-read.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import type { SqlExecutor } from "../platform/db.ts";
+import { drizzleSqlParams as sqlParams, drizzleSqlText as sqlText } from "../testing/sql-text.ts";
 import { AmbiguousRevisionError } from "./temporal.ts";
 
 // Unit proof for the HRM read-surface loaders (headcount, episodes,
@@ -20,35 +21,6 @@ import { AmbiguousRevisionError } from "./temporal.ts";
 // queries — so these tests pin behavior, not stubs. Public-boundary
 // transactions and the feature gate are covered DB-backed in
 // employment-read-surface.integration.test.ts.
-
-function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] } | null)?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  let out = "";
-  for (const c of chunks) {
-    if (c && typeof c === "object" && Array.isArray((c as { value?: unknown }).value)) {
-      out += (c as { value: string[] }).value.join("");
-    }
-  }
-  return out;
-}
-
-function sqlParams(query: unknown): unknown[] {
-  const chunks = (query as { queryChunks?: unknown[] } | null)?.queryChunks;
-  if (!Array.isArray(chunks)) return [];
-  const out: unknown[] = [];
-  for (const c of chunks) {
-    if (typeof c === "string") {
-      out.push(c);
-      continue;
-    }
-    if (c && typeof c === "object" && "value" in c) {
-      const v = (c as { value: unknown }).value;
-      if (!Array.isArray(v)) out.push(v);
-    }
-  }
-  return out;
-}
 
 function str(params: unknown[], index: number): string {
   const v = params[index];

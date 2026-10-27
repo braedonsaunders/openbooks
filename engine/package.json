@@ -949,6 +949,7 @@
     "./testing/sandbox/catalog": "./src/sandbox/catalog.ts",
     "./testing/sandbox/tenant-table-policies": "./src/sandbox/tenant-table-policies.ts",
     "./testing/schedule-boards/distribution-report": "./src/schedule-boards/distribution-report.ts",
+    "./testing/sql-text": "./src/testing/sql-text.ts",
     "./testing/sync/migrate": "./src/sync/migrate.ts",
     "./testing/sync/mirror-schedule": "./src/sync/mirror-schedule.ts",
     "./testing/sync/party-merges": "./src/sync/party-merges.ts",

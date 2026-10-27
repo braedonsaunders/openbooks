@@ -10,6 +10,7 @@ import {
 } from "./employment-read.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import type { SqlExecutor } from "../platform/db.ts";
+import { drizzleSqlParams as sqlParams, drizzleSqlText as sqlText } from "../testing/sql-text.ts";
 import {
   AmbiguousRevisionError,
   InvalidCivilDateError,
@@ -17,38 +18,6 @@ import {
   NoRevisionError,
   TemporalError,
 } from "./temporal.ts";
-
-// Literal-SQL routing helpers copied from authorization.test.ts so the fake
-// runner below serves the REAL requireHrmEmploymentRead SQL, not a stubbed
-// authorizer: production has no callback to swap, and neither do these tests.
-function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] } | null)?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  let out = "";
-  for (const c of chunks) {
-    if (c && typeof c === "object" && Array.isArray((c as { value?: unknown }).value)) {
-      out += (c as { value: string[] }).value.join("");
-    }
-  }
-  return out;
-}
-
-function sqlParams(query: unknown): unknown[] {
-  const chunks = (query as { queryChunks?: unknown[] } | null)?.queryChunks;
-  if (!Array.isArray(chunks)) return [];
-  const out: unknown[] = [];
-  for (const c of chunks) {
-    if (typeof c === "string") {
-      out.push(c);
-      continue;
-    }
-    if (c && typeof c === "object" && "value" in c) {
-      const v = (c as { value: unknown }).value;
-      if (!Array.isArray(v)) out.push(v);
-    }
-  }
-  return out;
-}
 
 function str(params: unknown[], index: number): string {
   const v = params[index];

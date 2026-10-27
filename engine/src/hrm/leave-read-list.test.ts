@@ -2,20 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import type { SqlExecutor } from "../platform/db.ts";
+import { drizzleSqlText as sqlText } from "../testing/sql-text.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
 import { listOrgLeaveRequests } from "./leave-read.ts";
-
-function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] } | null)?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  let out = "";
-  for (const chunk of chunks) {
-    if (chunk && typeof chunk === "object" && Array.isArray((chunk as { value?: unknown }).value)) {
-      out += (chunk as { value: string[] }).value.join("");
-    }
-  }
-  return out;
-}
 
 type FakeOptions = {
   permission: boolean;
