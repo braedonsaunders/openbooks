@@ -29,7 +29,7 @@ registerHooks({
       "../../../components/module-home/group-tabs":
         'async function tabs(){globalThis.__cockpitLoadTest.events.push("tabs");return []}export const customerGroupTabs=tabs;export const groupTabs=tabs',
       "../../../lib/cash/ar-position":
-        'export async function arPosition(...args){globalThis.__cockpitLoadTest.events.push("position");globalThis.__cockpitLoadTest.positionArgs=args;return {weeks:[],timeline:[],worklist:[]}}',
+        'export async function arPosition(...args){globalThis.__cockpitLoadTest.events.push("position");globalThis.__cockpitLoadTest.positionArgs=args;return {weeks:[],timeline:[],worklist:[],notForecast:{horizonDays:90,count:0,total:"0.00",entries:[]}}}',
       "../../../lib/cash/ap-position":
         'export async function apPosition(...args){globalThis.__cockpitLoadTest.events.push("position");globalThis.__cockpitLoadTest.positionArgs=args;return {weeks:[],timeline:[]}}',
     };
