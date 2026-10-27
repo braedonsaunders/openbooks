@@ -271,7 +271,8 @@ test("an explicitly disabled feature stays off in the close context even when it
     return chunks
       .map((chunk) => {
         if (typeof chunk === "string") return chunk;
-        const value = (chunk as { value?: unknown[] })?.value;
+        const value = (chunk as { value?: unknown })?.value;
+        if (typeof value === "string") return value;
         if (Array.isArray(value)) return value.map(String).join("");
         return "";
       })
