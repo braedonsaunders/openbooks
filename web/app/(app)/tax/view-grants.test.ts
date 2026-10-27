@@ -35,7 +35,8 @@ function sqlText(query: unknown): string {
   return chunks
     .map((c) => {
       if (typeof c === "string") return c;
-      const value = (c as { value?: unknown[] })?.value;
+      const value = (c as { value?: unknown })?.value;
+      if (typeof value === "string") return value;
       if (Array.isArray(value)) return value.map(String).join("");
       if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c);
       return "";
@@ -104,16 +105,20 @@ const mockSources = new Map<string, string>([
   [
     "mock:db",
     `
-      export const db = {
-        async execute(query) {
+      function rowsFor(query) {
           const text = (${sqlText.toString()})(query)
           const state = globalThis[Symbol.for('openbooks.tax-view-grants-test')]
-          if (text.includes('from tax_return_forms')) return { rows: state.forms }
-          if (text.includes('where id')) return { rows: [{ ...${JSON.stringify(FILING_ROW)}, adjustments: state.adjustments }] }
-          if (text.includes('from users')) return { rows: [{id: '11111111-1111-4111-8111-111111111111', name: 'Tax preparer'}] }
-          if (text.includes('count(*)') && text.includes('tax_filings')) return { rows: [{ count: state.filingCount }] }
-          if (text.includes('count(*)')) return { rows: [{ count: state.failedCount }] }
-          return { rows: [] }
+          if (text.includes('from tax_return_forms')) return state.forms
+          if (text.includes('where id')) return [{ ...${JSON.stringify(FILING_ROW)}, adjustments: state.adjustments }]
+          if (text.includes('from users')) return [{id: '11111111-1111-4111-8111-111111111111', name: 'Tax preparer'}]
+          if (text.includes('count(*)') && text.includes('tax_filings')) return [{ count: state.filingCount }]
+          if (text.includes('count(*)')) return [{ count: state.failedCount }]
+          return []
+      }
+      export const db = {
+        async execute(query, mode) {
+          const rows = rowsFor(query)
+          return mode === 'objects' ? rows : { rows }
         },
       }
       export function ambientTenantOrgId() { return null }

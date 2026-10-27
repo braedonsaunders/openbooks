@@ -21,7 +21,7 @@ stubModules({
   extra: {
     "server-only": `export {}`,
     "@openbooks/engine/platform/db":
-      `export const db = { execute: async (q) => {` +
+      `const read = (q) => {` +
       `const s = JSON.stringify(q); globalThis.__recoverySql.push(s);` +
       `if (s.includes('needs_authentication')) return { rows: [] };` +
       `if (s.includes("decline_kind = 'hard'")) return { rows: [] };` +
@@ -34,7 +34,8 @@ stubModules({
       `providerRef: null, methodLabel: null, status: 'failed', declineCode: 'd1',` +
       `declineKind: 'hard', retryPosition: 0, nextRetryOn: null, authUrl: null,` +
       `usedBackup: false, receiptId: null, attemptedAt: '2026-09-01T00:00:00Z' }] };` +
-      `return { rows: [] } } }`,
+      `return { rows: [] } };` +
+      `export const db = { execute: async (q, mode) => { const result = read(q); return mode === 'objects' ? result.rows : result } }`,
     "@openbooks/engine/payments/autopay":
       `export async function findCardsExpiringSoon(){return [` +
       `{ methodId: 'm1', partyId: 'p1', partyName: 'Billed Co', provider: 'stripe', brand: 'Visa', last4: '4242', expMonth: 10, expYear: 2026, expiresOn: '2026-10-31' },` +
