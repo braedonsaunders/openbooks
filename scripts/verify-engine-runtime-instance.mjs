@@ -27,16 +27,10 @@ if (inlined.length > 0) {
 
 const specifier = "@openbooks/engine/composition/install";
 const external = files.filter((file) => readFileSync(file, "utf8").includes(specifier));
-const routeExternal = external.filter((file) => file.includes("/app/") || file.includes("/pages/"));
 if (external.length === 0) {
   console.error(
     "no server chunk imports @openbooks/engine/composition/install from the package. The composition root is missing from the external load path.",
   );
-  process.exit(1);
-}
-if (routeExternal.length > 0) {
-  console.error("composition install is still a traced import in route bundles:");
-  for (const file of routeExternal) console.error(`  ${file}`);
   process.exit(1);
 }
 

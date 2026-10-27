@@ -18,6 +18,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { copyStandaloneRuntime } from "./copy-standalone-runtime.mjs";
 import {
   SERVER_RUNTIME_PACKAGES,
   conditionalExport,
@@ -251,6 +252,9 @@ let code = 0;
 rewriteExports();
 try {
   code = runCommand();
+  if (code === 0 && command[0] === "next" && command.includes("build")) {
+    copyStandaloneRuntime();
+  }
 } finally {
   if (keepExports) {
     console.log(

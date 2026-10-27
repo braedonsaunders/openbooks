@@ -12,11 +12,7 @@ export function loadFlowModule() {
 }
 
 export function loadEngineComposition() {
-  // The specifier is computed so the file tracer does not walk the composition
-  // root from every route. Instrumentation imports that module by name so the
-  // standalone server still contains it.
-  const specifier = ["@openbooks/engine", "composition/install"].join("/");
-  return import(/* webpackIgnore: true */ specifier);
+  return import(/* webpackIgnore: true */ "@openbooks/engine/composition/install");
 }
 
 export function loadScheduleNoticeHooks() {

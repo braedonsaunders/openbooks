@@ -9,6 +9,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   SERVER_RUNTIME_PACKAGE_NAMES,
+  SERVER_RUNTIME_PACKAGES,
   serverRuntimeExportsActive,
 } from "../scripts/server-runtime-packages.mjs";
 
@@ -197,6 +198,20 @@ const config = {
           resolveAlias: {
             "@/lib/engine-composition": "./lib/engine-composition.external.ts",
           },
+        },
+      }
+    : {}),
+  // The file tracer must not walk these packages from every route. The build
+  // copies their dist trees and production dependencies into standalone
+  // afterward. The key matches Next's server-trace ignore gate.
+  ...(externalEngine
+    ? {
+        outputFileTracingExcludes: {
+          "*": SERVER_RUNTIME_PACKAGES.flatMap((pkg) => [
+            `**/node_modules/${pkg.name}/**`,
+            `**/${pkg.dir}/dist/**`,
+            `**/${pkg.dir}/src/**`,
+          ]),
         },
       }
     : {}),

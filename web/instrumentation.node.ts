@@ -50,11 +50,7 @@ export async function registerNodeInstrumentation() {
   await ensureSftpServer();
 
   // Engine and web hooks for this module graph; request handlers install the
-  // same set in their own graph (see lib/process-seams.ts). This literal
-  // import is the standalone trace for the composition root. Request bundles
-  // load it through a computed specifier so the tracer does not walk that
-  // root once per route.
-  await import("@openbooks/engine/composition/install");
+  // same set in their own graph (see lib/process-seams.ts).
   const { installWebProcessSeams } = await import("./lib/process-seams");
   await installWebProcessSeams();
 }
