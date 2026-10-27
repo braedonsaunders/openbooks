@@ -25,6 +25,12 @@ import { sameCurrencyAllocation, type AllocationInput } from "./settlement-polic
 import { type CreditAllocationInput } from "./payment-contracts.ts";
 import { nextNumber, createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
 import { storedPaymentWithholdings } from "../contractor-withholding/service.ts";
+import {
+  claimScheduleOccurrence,
+  paymentRunMethod,
+  readPaymentBankProfile,
+  refuseUnselectableBills,
+} from "./run-creation-steps.ts";
 // ---------------------------------------------------------------------------
 // Payment runs
 // ---------------------------------------------------------------------------
@@ -181,54 +187,9 @@ async function createPaymentRunWithinTransaction(
   // winner aborted, so this insert wins) or adopts the winner's committed run.
   let occurrenceId: string | null = null;
   if (opts.sourceOccurrence) {
-    const claim = await db.execute<{ id: string }>(
-      sql`
-      insert into payment_schedule_occurrences (org_id, schedule_id, occurrence_at, status)
-      values (${opts.orgId}, ${opts.sourceOccurrence.scheduleId}, ${opts.sourceOccurrence.occurrenceAt}, ${opts.sourceOccurrence.status})
-      -- A repeated schedule occurrence adopts the committed payment run selected below.
-      on conflict (org_id, schedule_id, occurrence_at) do nothing
-      returning id
-    `,
-      "objects",
-    );
-    const claimedRow = claim[0];
-    if (claimedRow) {
-      occurrenceId = claimedRow.id;
-    } else {
-      const existing = (
-        await db.execute<{ id: string; paymentRunId: string | null }>(
-          sql`
-        select id::text as id, payment_run_id::text as "paymentRunId"
-          from payment_schedule_occurrences
-         where org_id = ${opts.orgId} and schedule_id = ${opts.sourceOccurrence.scheduleId}
-           and occurrence_at = ${opts.sourceOccurrence.occurrenceAt}
-         for update
-      `,
-          "objects",
-        )
-      )[0];
-      if (!existing) {
-        throw new PaymentError("payment schedule occurrence disappeared while being claimed");
-      }
-      if (existing.paymentRunId) {
-        const prior = (
-          await db.execute<{ id: string; runNumber: string }>(
-            sql`
-          select id::text as id, run_number as "runNumber"
-            from payment_runs
-           where id = ${existing.paymentRunId} and org_id = ${opts.orgId}
-        `,
-            "objects",
-          )
-        )[0];
-        if (!prior)
-          throw new PaymentError("a claimed payment schedule occurrence names a missing run");
-        return prior;
-      }
-      // An unlinked occurrence (for example a raced empty tick): this
-      // transaction now owns it and links the run below.
-      occurrenceId = existing.id;
-    }
+    const claim = await claimScheduleOccurrence(opts.orgId, opts.sourceOccurrence);
+    if ("prior" in claim) return claim.prior;
+    occurrenceId = claim.occurrenceId;
   }
 
   // Lock-free profile read for bill selection only. Taking the row lock here
@@ -236,30 +197,7 @@ async function createPaymentRunWithinTransaction(
   // concurrent run touching this profile (the claim-fence proof parks there
   // deliberately). The authoritative locked re-read after numbering
   // revalidates the selection fields before the run insert.
-  const prefilter = (
-    await db.execute<{
-      id: string;
-      bank_account_id: string;
-      bank_subsidiary_id: string | null;
-      subsidiary_id: string | null;
-      currency: string;
-      settings: Record<string, unknown>;
-      rail: string;
-      direction: string;
-    }>(
-      sql`
-    select p.id, p.bank_account_id, p.subsidiary_id, a.subsidiary_id as bank_subsidiary_id,
-           p.currency, p.settings,
-           f.rail, f.direction
-      from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
-      join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
-                        and a.type = 'asset_bank' and a.is_active and not a.is_summary
-     where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
-  `,
-      "objects",
-    )
-  )[0];
+  const prefilter = await readPaymentBankProfile(opts.orgId, opts.paymentBankProfileId, false);
   if (!prefilter) throw new PaymentError("payment bank profile was not found or is inactive");
 
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, opts.orgId));
@@ -319,36 +257,7 @@ async function createPaymentRunWithinTransaction(
 
   const found = new Set(bills.map((b) => b.document_id));
   const missing = opts.billDocumentIds.filter((id) => !found.has(id));
-  if (missing.length > 0) {
-    // Name the bills held by another live run (bill + holding run number)
-    // instead of failing the whole selection behind the generic guard,
-    // so the operator can see exactly which selection to drop.
-    const reserved = await db.execute<{ billId: string; billNumber: string; runNumber: string }>(
-      sql`
-      select distinct i.source_document_id as "billId", d.document_number as "billNumber", r.run_number as "runNumber"
-        from payment_run_items i
-        join payment_runs r on r.id = i.payment_run_id and r.org_id = i.org_id
-        join documents d on d.id = i.source_document_id and d.org_id = i.org_id
-       where i.org_id = ${opts.orgId}
-         and i.source_document_id = any(${`{${missing.join(",")}}`}::uuid[])
-         and i.status = 'selected'
-    `,
-      "objects",
-    );
-    if (reserved.length > 0) {
-      const pairs = reserved.map((row) => `${row.billNumber} (${row.runNumber})`);
-      const rest = missing.length - new Set(reserved.map((row) => row.billId)).size;
-      throw new PaymentError(
-        `${pairs.join(", ")} ${pairs.length === 1 ? "is" : "are"} already selected in another live payment run` +
-          (rest > 0
-            ? "; other selected bills are held, closed, or do not match the profile currency and subsidiary"
-            : ""),
-      );
-    }
-    throw new PaymentError(
-      "some selected bills are held, closed, already selected in another live payment run, or do not match the profile currency and subsidiary",
-    );
-  }
+  if (missing.length > 0) await refuseUnselectableBills(opts.orgId, missing);
   const payable = bills.filter((b) => cmp(b.open, "0") > 0);
   if (payable.length === 0) throw new PaymentError("all selected bills are already fully paid");
   if (opts.maximumRunAmount != null) {
@@ -416,30 +325,7 @@ async function createPaymentRunWithinTransaction(
   // using them. This sits after numbering so a creation parked on the
   // sequence holds no profile row lock. Refuse when the selection fields
   // moved under the filter — bills were matched on the prefilter read.
-  const profiles = await db.execute<{
-    id: string;
-    bank_account_id: string;
-    bank_subsidiary_id: string | null;
-    subsidiary_id: string | null;
-    currency: string;
-    settings: Record<string, unknown>;
-    rail: string;
-    direction: string;
-  }>(
-    sql`
-    select p.id, p.bank_account_id, p.subsidiary_id, a.subsidiary_id as bank_subsidiary_id,
-           p.currency, p.settings,
-           f.rail, f.direction
-      from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id and f.is_active
-      join accounts a on a.id = p.bank_account_id and a.org_id = p.org_id
-                        and a.type = 'asset_bank' and a.is_active and not a.is_summary
-     where p.id = ${opts.paymentBankProfileId} and p.org_id = ${opts.orgId} and p.is_active
-     for update of p, a
-  `,
-    "objects",
-  );
-  const profile = profiles[0];
+  const profile = await readPaymentBankProfile(opts.orgId, opts.paymentBankProfileId, true);
   if (!profile) throw new PaymentError("payment bank profile was not found or is inactive");
   if (
     profile.currency !== prefilter.currency ||
@@ -468,19 +354,7 @@ async function createPaymentRunWithinTransaction(
     opts.billDocumentIds.map((id) => ({ kind: "document" as const, id })),
     opts.allowedSubsidiaryIds,
   );
-  const method = ["cpa005_credit", "rbc_std152_credit"].includes(profile.rail)
-    ? "eft"
-    : profile.rail === "nacha_credit"
-      ? "ach"
-      : profile.rail === "sepa_credit"
-        ? "sepa"
-        : profile.rail === "positive_pay"
-          ? "positive_pay"
-          : profile.rail === "custom"
-            ? "custom"
-            : profile.rail === "cheque"
-              ? "cheque"
-              : "wire";
+  const method = paymentRunMethod(profile.rail);
 
   const run = (
     await db
@@ -492,7 +366,7 @@ async function createPaymentRunWithinTransaction(
         paymentBankProfileId: profile.id,
         subsidiaryId: profile.subsidiary_id,
         sourceScheduleId: opts.sourceScheduleId ?? null,
-        method: method as "eft" | "ach" | "sepa" | "wire" | "cheque" | "positive_pay" | "custom",
+        method,
         direction: "outbound",
         purpose: "vendor_payments",
         currency: profile.currency,

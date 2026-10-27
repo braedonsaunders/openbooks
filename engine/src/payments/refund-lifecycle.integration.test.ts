@@ -32,10 +32,10 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import {
   approveDisputeReview,
-  rejectDisputeReview,
   processProviderDisputeEvent,
   processProviderRefundEvent,
 } from "./psp-refund-automation.ts";
+import { rejectDisputeReview } from "./psp-return-review.ts";
 import {
   settleHarness,
   settle,

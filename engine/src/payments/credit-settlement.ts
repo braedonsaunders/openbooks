@@ -1,16 +1,20 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
-import { canonicalJson } from "../platform/canonical-json.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { cmp, fromUnits, isZero, neg, sum, toUnits } from "../money/money.ts";
 import { postEntry, markEntryReversed } from "../journal/post-entry.ts";
 import { carryingAmountForSettlement, realizedFxControlAdjustment } from "./settlement-policy.ts";
 import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
-import { CreditApplicationConflictError, PaymentError } from "../payments-core/payment-errors.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
 import { paymentBookId, paymentControlDeps } from "./payment-accounts.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
 import { assertNoForeignRunReservation } from "./payment-queries.ts";
+import {
+  lockSettlementEndpoints,
+  replayCreditSettlementClaim,
+  type CreditSettlementResult,
+} from "./credit-settlement-claims.ts";
 import { type CreditAllocationInput, type OpenItemSide } from "./payment-contracts.ts";
 import {
   ScopeNotFoundError,
@@ -57,6 +61,7 @@ const PAYMENT_SOURCE_KINDS: ReadonlySet<string> = new Set(["customer_payment", "
 
 /** One credit memo line settling one invoice/bill line, in their shared transaction currency. */
 export type CreditSettlementInput = CreditAllocationInput;
+export type { CreditSettlementResult } from "./credit-settlement-claims.ts";
 
 export interface CreditSettlementState {
   /** The credit's open-item line, or null when the credit is not posted. */
@@ -170,24 +175,6 @@ export async function creditSettlementState(
   });
 }
 
-export interface CreditSettlementResult {
-  /** Ids of the `applications` rows written, in input order. */
-  applicationIds: string[];
-  /** Total settled, in the credits' transaction currency. */
-  amount: string;
-}
-
-interface EndpointRow extends Record<string, unknown> {
-  id: string;
-  document_kind: string | null;
-  account_id: string;
-  subsidiary_id: string;
-  book_id: string;
-  document_subsidiary_id: string | null;
-  posting_date: string;
-  entry_number: string;
-}
-
 /**
  * Apply posted credits to posted open items with no cash leg.
  *
@@ -229,37 +216,7 @@ export async function applyStandaloneCredits(
     const endpointIds = [
       ...new Set(input.credits.flatMap((credit) => [credit.fromLineId, credit.toLineId])),
     ];
-    const endpoints = await db.execute<EndpointRow>(
-      sql`
-      select jl.id, jl.account_id, jl.subsidiary_id, je.book_id,
-             endpoint_document.kind as document_kind,
-             endpoint_document.subsidiary_id as document_subsidiary_id,
-             je.posting_date::text as posting_date,
-             coalesce(endpoint_document.document_number, je.entry_number) as entry_number
-        from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-        left join documents endpoint_document on endpoint_document.id = je.source_document_id and endpoint_document.org_id = je.org_id
-       where jl.org_id = ${orgId} and jl.id in ${endpointIds}
-       order by jl.id
-       for update of jl
-    `,
-      "objects",
-    );
-    if (endpoints.length !== endpointIds.length) {
-      throw new PaymentError(
-        "a credit or open item in this settlement no longer exists; reload the credits and reselect",
-      );
-    }
-    if (
-      endpoints.some(
-        (row) =>
-          !subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id) ||
-          (row.document_subsidiary_id !== null &&
-            !subsidiaryScopeAllows(allowedSubsidiaryIds, row.document_subsidiary_id)),
-      )
-    ) {
-      throw new ScopeNotFoundError();
-    }
+    const endpoints = await lockSettlementEndpoints(orgId, endpointIds, allowedSubsidiaryIds);
     // The request-controlled image a retry must equal under canonical JSON.
     // Results are excluded: a genuine retry replays them, never compares.
     // This follows web/lib/api/idempotency.ts's claimSetupCreate contract —
@@ -278,53 +235,8 @@ export async function applyStandaloneCredits(
         sourceDocumentId: credit.sourceDocumentId,
       })),
     };
-    // The claim reads ACROSS organizations through the sanctioned bypass
-    // context: under RLS the ambient org filter hides another tenant's
-    // application row, so without this the foreign-key detection never fires
-    // and the collision surfaces later as a raw primary-key violation — a
-    // correct refusal arriving as an internal error instead of the named
-    // 409. The row is never returned to the caller; only its org_id is.
-    // bypass: cross-org-by-design — an idempotency key owned by another organization must be seen to be refused by name.
-    const priorOwner = await withBypassContext(
-      async () =>
-        (
-          await db.execute<{ org_id: string }>(
-            sql`
-        select org_id from applications where id = ${input.idempotencyKey}
-      `,
-            "objects",
-          )
-        )[0]?.org_id,
-    );
-    if (priorOwner !== undefined) {
-      if (priorOwner !== orgId) throw new CreditApplicationConflictError("foreign-key");
-      const prior = (
-        await db.execute<{ match: unknown; result: unknown }>(
-          sql`
-          select changes->'match' as match, (changes->'after'->'result') as result
-            from audit_log
-           where org_id = ${orgId} and table_name = 'applications'
-             and row_id = ${input.idempotencyKey} and request_id = ${input.idempotencyKey}
-             and action = 'insert'
-           order by at asc
-           limit 1
-        `,
-          "objects",
-        )
-      )[0];
-      if (
-        !prior ||
-        !prior.match ||
-        typeof prior.match !== "object" ||
-        canonicalJson(prior.match) !== canonicalJson(matchImage) ||
-        !prior.result ||
-        typeof prior.result !== "object" ||
-        !Array.isArray((prior.result as CreditSettlementResult).applicationIds)
-      ) {
-        throw new CreditApplicationConflictError("changed-payload");
-      }
-      return prior.result as CreditSettlementResult;
-    }
+    const replayed = await replayCreditSettlementClaim(orgId, input.idempotencyKey, matchImage);
+    if (replayed) return replayed;
     // A settlement cannot predate the balances it settles: applying a credit
     // before it or its open item was posted would age and report a
     // settlement that did not yet exist.
