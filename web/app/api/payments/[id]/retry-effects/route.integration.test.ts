@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { NextResponse } from "next/server";
 import { db, withBypassContext, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
@@ -27,7 +28,12 @@ const session = {
   permissions: new Set<string>(),
   allowed: null as Set<string> | null,
 };
-Object.assign(globalThis, { __paymentEffectRouteSession: session });
+// The route factory treats only a NextResponse from an authorizer as a
+// refusal, so the scope double answers with the real response class.
+Object.assign(globalThis, {
+  __paymentEffectRouteSession: session,
+  __paymentEffectRouteNextResponse: NextResponse,
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "@/lib/authz" || specifier.endsWith("/lib/authz"))
@@ -38,7 +44,7 @@ registerHooks({
           encodeURIComponent(`
       export async function getAuthz(){const s=globalThis.__paymentEffectRouteSession;return {user:s.user,permissions:s.permissions,allowedSubsidiaryIds:s.allowed}};
       export function can(a,p){return a.permissions.has(p)};
-      export function guardSubsidiaryScope(a,id){if(a.allowedSubsidiaryIds===null||a.allowedSubsidiaryIds.has(id))return null;return Response.json({error:'not_found'},{status:404})}
+      export function guardSubsidiaryScope(a,id){if(a.allowedSubsidiaryIds===null||a.allowedSubsidiaryIds.has(id))return null;return globalThis.__paymentEffectRouteNextResponse.json({error:'not_found'},{status:404})}
     `),
       };
     return next(specifier, context);
