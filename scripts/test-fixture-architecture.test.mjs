@@ -7,8 +7,8 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 
-const fixtures = readFileSync(
-  new URL("../engine/src/testing/fixtures.ts", import.meta.url),
+const fixtureDatabase = readFileSync(
+  new URL("../engine/src/testing/fixture-database.ts", import.meta.url),
   "utf8",
 );
 const runner = readFileSync(new URL("./test-suite.mjs", import.meta.url), "utf8");
@@ -19,8 +19,8 @@ test("the canonical integration runner owns fixture pool setup and shutdown", ()
   assert.match(runner, /test-fixture-lifecycle/);
   assert.match(runner, /OPENBOOKS_TEST_FIXTURE_OWNER_PORT/);
   assert.match(runner, /test-concurrency=1/);
-  assert.match(runner, /suite === 'integration'/);
-  assert.match(runner, /suite === 'unit'/);
+  assert.match(runner, /suite === ["']integration["']/);
+  assert.match(runner, /suite === ["']unit["']/);
 });
 
 test("suite harness propagates child failure and always records the owner receipt", async (t) => {
@@ -134,7 +134,7 @@ test("CI marks its database isolated and reports fixture lifecycle counts", () =
 // Read the canonical prefix out of the source of truth rather than restating
 // it, so a change to hasEphemeralDatabaseMarker cannot leave this guard
 // asserting a prefix the pool no longer accepts.
-const CANONICAL_MARKER_PREFIX = /startsWith\("([a-z-]+)"\)/.exec(fixtures)?.[1];
+const CANONICAL_MARKER_PREFIX = /startsWith\("([a-z-]+)"\)/.exec(fixtureDatabase)?.[1];
 
 // Derive the entrypoints that actually reach the suite from package.json, so a
 // script that stops running it cannot leave this guard demanding a fixture
@@ -161,6 +161,10 @@ test("every workflow job that runs the integration suite claims its database as 
   // pool refuses to bootstrap tenants without BOTH the intent flag and the
   // database-side marker, so a job missing them fails at fixture-owner startup
   // AFTER a full unit run -- which is exactly how the release path broke.
+  assert.ok(
+    CANONICAL_MARKER_PREFIX,
+    "hasEphemeralDatabaseMarker must declare its canonical marker prefix",
+  );
   const dir = new URL("../.github/workflows/", import.meta.url);
   for (const file of readdirSync(dir).filter((name) => name.endsWith(".yml"))) {
     const source = readFileSync(new URL(file, dir), "utf8");
