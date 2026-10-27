@@ -88,6 +88,31 @@ const actor = () => ({
   allowedSubsidiaryIds: null,
 });
 
+/** Filing storage rows for the fixture org; a refused worksheet read adds none. */
+async function filingRowCount(): Promise<number> {
+  const rows = await withBypassContext(() =>
+    db.execute<{ n: number }>(
+      sql`select ((select count(*) from information_return_filings where org_id = ${state.orgId})
+        + (select count(*) from information_return_recipients where org_id = ${state.orgId}))::int as n`,
+      "objects",
+    ),
+  );
+  return rows[0]!.n;
+}
+
+/**
+ * A disabled feature answers the route factory's uniform 404 refusal: no
+ * worksheet data reaches the caller and nothing is written.
+ */
+async function assertWorksheetRefused(): Promise<void> {
+  const before = await filingRowCount();
+  const res = await get();
+  assert.equal(res.status, 404);
+  const body = (await res.json()) as Record<string, unknown>;
+  assert.deepEqual(body, { error: "not_found" });
+  assert.equal(await filingRowCount(), before, "a refused worksheet read writes no filing rows");
+}
+
 test("worksheet lists with the tax switch on and subcontractor compliance off", async () => {
   const { org } = await fixture({ informationReturns: true });
   try {
@@ -98,29 +123,19 @@ test("worksheet lists with the tax switch on and subcontractor compliance off", 
   }
 });
 
-test("worksheet refuses with the tax switch off, naming the feature", async () => {
+test("with the tax switch off the worksheet answers the not-found refusal and writes nothing", async () => {
   const { org } = await fixture({});
   try {
-    const res = await get();
-    assert.equal(res.status, 404);
-    assert.equal(
-      ((await res.json()) as { error: string }).error,
-      "information returns feature is disabled",
-    );
+    await assertWorksheetRefused();
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
 
-test("worksheet refuses on subcontractor compliance alone", async () => {
+test("subcontractor compliance alone leaves the worksheet behind the not-found refusal and writes nothing", async () => {
   const { org } = await fixture({ subcontractorCompliance: true });
   try {
-    const res = await get();
-    assert.equal(res.status, 404);
-    assert.equal(
-      ((await res.json()) as { error: string }).error,
-      "information returns feature is disabled",
-    );
+    await assertWorksheetRefused();
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }
