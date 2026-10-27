@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { resolveEngineSpecifier } from "../../../../../../testing/engine-resolve-hooks";
 import { stubModules } from "../../../../../../testing/stub-modules";
 import test from "node:test";
 import { NextResponse } from "next/server";
@@ -24,29 +25,10 @@ stubModules({
   intl: false,
   authz: false,
   features: false,
-  extra: {
-    "@/lib/authz": `
-      const state = globalThis[Symbol.for("openbooks.information-return-export-route-test")]
-      const NextResponse = globalThis.openbooksInformationReturnExportNextResponse
-      export async function guardPermission() {
-        if (!state.authz) return NextResponse.json({ error: "forbidden" }, { status: 403 })
-        return state.authz
-      }
-      export function guardSubsidiaryScope(authz, subsidiaryId) {
-        const scope = authz?.allowedSubsidiaryIds ?? null
-        if (scope === null) return null
-        if (subsidiaryId && scope.has(subsidiaryId)) return null
-        return NextResponse.json({ error: "not_found" }, { status: 404 })
-      }
-    `,
-    "@/lib/compliance": `
-      export async function guardInformationReturnsFeature() { return null }
-      export async function loadInformationReturnFilingScope() { return { subsidiaryId: null } }
-    `,
-    "@openbooks/engine/platform/business-date/module": `
-      export async function businessToday() { return "2026-08-28" }
-    `,
-    "@openbooks/engine/platform/db": `
+  // The export's filing and recipient reads live in the engine, which
+  // imports the platform database by relative path.
+  database: `
+      export * from "${resolveEngineSpecifier("@openbooks/engine/platform/db")}?information-return-export-route-test"
       const state = globalThis[Symbol.for("openbooks.information-return-export-route-test")]
       export const db = {
         async execute(_query, mode) {
@@ -85,6 +67,37 @@ stubModules({
           throw new Error("unexpected database query")
         },
       }
+    `,
+  extra: {
+    "@/lib/authz": `
+      const state = globalThis[Symbol.for("openbooks.information-return-export-route-test")]
+      const NextResponse = globalThis.openbooksInformationReturnExportNextResponse
+      export async function guardPermission() {
+        if (!state.authz) return NextResponse.json({ error: "forbidden" }, { status: 403 })
+        return state.authz
+      }
+      export function guardSubsidiaryScope(authz, subsidiaryId) {
+        const scope = authz?.allowedSubsidiaryIds ?? null
+        if (scope === null) return null
+        if (subsidiaryId && scope.has(subsidiaryId)) return null
+        return NextResponse.json({ error: "not_found" }, { status: 404 })
+      }
+    `,
+    // The route factory gates the permission and the Information returns
+    // feature through the shared feature gate.
+    "@/lib/feature-gates": `
+      const state = globalThis[Symbol.for("openbooks.information-return-export-route-test")]
+      const NextResponse = globalThis.openbooksInformationReturnExportNextResponse
+      export async function guardFeaturePermission() {
+        if (!state.authz) return NextResponse.json({ error: "forbidden" }, { status: 403 })
+        return state.authz
+      }
+    `,
+    "@/lib/compliance": `
+      export async function loadInformationReturnFilingScope() { return { subsidiaryId: null } }
+    `,
+    "@openbooks/engine/platform/business-date/module": `
+      export async function businessToday() { return "2026-08-28" }
     `,
     "@openbooks/engine/compliance/information-returns": `
       export function formDefinition() {
