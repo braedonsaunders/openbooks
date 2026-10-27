@@ -208,6 +208,18 @@ function scan(file: string): { missing: Finding[]; shadowedCalls: number } {
     fileNamespaces.add(match[2]!);
   }
 
+  // `ReturnType<typeof useTranslations<"ns">>`, written inline or through a
+  // type alias declared in this file, names the translator's namespace.
+  const TYPED_TRANSLATOR = /useTranslations<\s*["']([^"']+)["']\s*>/;
+  const translatorAliases = new Map<string, string>();
+  for (const match of text.matchAll(
+    /type\s+(\w+)\s*=\s*ReturnType<\s*typeof\s+useTranslations<\s*["']([^"']+)["']\s*>\s*>/g,
+  )) {
+    translatorAliases.set(match[1]!, match[2]!);
+  }
+  const typedNamespace = (type: string): string | null =>
+    TYPED_TRANSLATOR.exec(type)?.[1] ?? translatorAliases.get(type.trim()) ?? null;
+
   const declaresScope = (node: ts.Node): boolean =>
     ts.isFunctionDeclaration(node) ||
     ts.isFunctionExpression(node) ||
@@ -220,8 +232,9 @@ function scan(file: string): { missing: Finding[]; shadowedCalls: number } {
     const opened = declaresScope(node) && !ts.isSourceFile(node);
     if (opened) scopes.push({ translators: new Map(), params: new Set(), locals: new Set() });
 
-    // Parameters shadow an outer translator of the same name, and we cannot
-    // know what namespace the caller passed.
+    // Parameters shadow an outer translator of the same name. A parameter
+    // typed with its translator's namespace is checked against exactly that
+    // namespace; otherwise we cannot know what namespace the caller passed.
     if (
       ts.isFunctionDeclaration(node) ||
       ts.isFunctionExpression(node) ||
@@ -230,7 +243,10 @@ function scan(file: string): { missing: Finding[]; shadowedCalls: number } {
     ) {
       const scope = scopes[scopes.length - 1]!;
       for (const parameter of node.parameters) {
-        if (ts.isIdentifier(parameter.name)) scope.params.add(parameter.name.text);
+        if (!ts.isIdentifier(parameter.name)) continue;
+        const namespace = parameter.type ? typedNamespace(parameter.type.getText(source)) : null;
+        if (namespace !== null) scope.translators.set(parameter.name.text, namespace);
+        else scope.params.add(parameter.name.text);
       }
     }
 
