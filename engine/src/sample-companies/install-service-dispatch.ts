@@ -293,7 +293,9 @@ export async function installServiceDispatch(c: DemoContext): Promise<void> {
     name: "Office manager",
     selectedOptionalLineIds: [id("document_lines", "service-estimate-rooftop-2")],
   });
-  const install = addCalendarDays(today, 3);
+  // Two days out stays inside the normal 72-hour response target from any time
+  // of day the demonstration installs, so the assignment needs no override.
+  const install = addCalendarDays(today, 2);
   const installation = await convertServiceQuote({
     ...actor,
     id: id("service_jobs", "rooftop"),
