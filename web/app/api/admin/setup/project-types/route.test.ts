@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { Param, StringChunk } from "drizzle-orm";
 
 // Route-boundary regressions for project-type financial policy publication.
 // The scripted transaction fake keeps the test deterministic without requiring
@@ -54,14 +55,18 @@ const routeState: RouteState = {
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
+// Raw SQL text lives in string chunks (a string `value`, or a string array in
+// older Drizzle releases); bound parameters are Param chunks and never text.
 function sqlText(query: unknown): string {
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
   if (!Array.isArray(chunks)) return "";
   return chunks
     .map((chunk) => {
       if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
-      if (Array.isArray(value)) return value.map(String).join("");
+      if (chunk instanceof StringChunk) {
+        const value = chunk.value as string | string[];
+        return Array.isArray(value) ? value.join("") : value;
+      }
       if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
     })
@@ -81,8 +86,7 @@ function sqlParams(query: unknown): string[] {
       out.push(...sqlParams(chunk));
       continue;
     }
-    const value = (chunk as { value?: unknown })?.value;
-    if (!Array.isArray(value)) out.push(String(value));
+    if (chunk instanceof Param) out.push(String(chunk.value));
   }
   return out;
 }
