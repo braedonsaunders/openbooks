@@ -30,8 +30,11 @@ import type { RecentRef, SearchGroup, SearchHit, SearchRecordType } from "./sear
 /**
  * Global search over the operational records beyond the core ledger
  * entities (lib/search.ts): fixed assets, equipment, opportunities,
- * activities, timesheets, subscriptions, manufacturing work orders, custom
- * records, files, dashboards, locations and warehouses.
+ * activities, timesheets, subscriptions, manufacturing work orders, service
+ * requests, jobs, visits and agreements, channel orders, stored-value
+ * accounts, item families, leases, revenue contracts, budgets, provisions,
+ * funds, grants, fund releases, encumbrances, custom records, files,
+ * dashboards, locations and warehouses.
  *
  * Every leg answers to the page that opens its result. A result is offered
  * only when that page is in the reader's navigation (permission and
@@ -82,6 +85,134 @@ type ListSourceSearch = {
   iconKey: string;
   validId?: (id: string) => boolean;
 };
+
+/**
+ * Module records found through their list sources, shown after the
+ * workspace legs above. Each reads through its list's own WHERE (grant,
+ * Features switch, subsidiary fence and query text) like those legs.
+ */
+const MODULE_LIST_SOURCE_SEARCHES: ListSourceSearch[] = [
+  {
+    type: "service_request",
+    labelKey: "serviceRequests",
+    recordType: "service_request",
+    title: "title",
+    subtitle: "number",
+    iconKey: "inbox",
+  },
+  {
+    type: "service_job",
+    labelKey: "serviceJobs",
+    recordType: "service_job",
+    title: "title",
+    subtitle: "number",
+    iconKey: "wrench",
+  },
+  {
+    type: "service_visit",
+    labelKey: "serviceVisits",
+    recordType: "service_visit",
+    title: "title",
+    subtitle: "number",
+    iconKey: "truck",
+  },
+  {
+    type: "service_agreement",
+    labelKey: "serviceAgreements",
+    recordType: "service_agreement",
+    title: "title",
+    subtitle: "number",
+    iconKey: "handshake",
+  },
+  {
+    type: "channel_order",
+    labelKey: "channelOrders",
+    recordType: "channel_order",
+    title: "number",
+    subtitle: "customer",
+    iconKey: "package",
+  },
+  {
+    type: "stored_value",
+    labelKey: "storedValue",
+    recordType: "stored_value_account",
+    title: "code",
+    subtitle: "customer_name",
+    iconKey: "gift",
+  },
+  {
+    type: "item_family",
+    labelKey: "itemFamilies",
+    recordType: "item_family",
+    title: "name",
+    subtitle: "code",
+    iconKey: "layers",
+  },
+  {
+    type: "lease",
+    labelKey: "leases",
+    recordType: "lease_agreement",
+    title: "description",
+    subtitle: "lease_number",
+    iconKey: "scroll",
+  },
+  {
+    type: "revenue_contract",
+    labelKey: "revenueContracts",
+    recordType: "revenue_contract",
+    title: "contract_number",
+    subtitle: "customer_name",
+    iconKey: "receipt",
+  },
+  {
+    type: "budget",
+    labelKey: "budgets",
+    recordType: "budget_scenario",
+    title: "name",
+    subtitle: "fiscal_year",
+    iconKey: "target",
+  },
+  {
+    type: "provision",
+    labelKey: "provisions",
+    recordType: "provision_obligation",
+    title: "name",
+    subtitle: "subsidiary",
+    iconKey: "shield",
+  },
+  {
+    type: "fund",
+    labelKey: "funds",
+    recordType: "fund",
+    title: "name",
+    subtitle: "code",
+    iconKey: "landmark",
+  },
+  {
+    type: "grant",
+    labelKey: "grants",
+    recordType: "grant",
+    title: "name",
+    subtitle: "sponsor",
+    iconKey: "award",
+  },
+  {
+    type: "fund_release",
+    labelKey: "fundReleases",
+    recordType: "fund_release",
+    title: "release_number",
+    subtitle: "from_fund",
+    iconKey: "coins",
+  },
+  {
+    type: "encumbrance",
+    labelKey: "encumbrances",
+    recordType: "encumbrance",
+    title: "number",
+    subtitle: "account",
+    iconKey: "wallet",
+  },
+];
 
 const LIST_SOURCE_SEARCHES: ListSourceSearch[] = [
   {
@@ -530,6 +661,7 @@ const LEGS: Leg[] = [
   subscriptionLeg,
   ...LIST_SOURCE_SEARCHES.slice(2).map(listSourceLeg),
   workOrderLeg,
+  ...MODULE_LIST_SOURCE_SEARCHES.map(listSourceLeg),
   customRecordLeg,
   fileLeg,
   dashboardLeg,

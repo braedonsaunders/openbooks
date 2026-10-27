@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
+import { memoizedRead } from "../platform/read-memo.ts";
 import { featureEnabled, type FeatureState } from "./feature-registry.ts";
 import { dataDependentFeatureDefault, withDataDependentDefaults } from "./feature-defaults.ts";
 
@@ -11,11 +12,17 @@ export async function orgFeatureState(
   orgId: string,
   executor: SqlExecutor = db,
 ): Promise<FeatureState> {
-  const r = await executor.execute<{ f: FeatureState | null }>(
-    sql`select settings->'features' as f from orgs where id = ${orgId}`,
-    "objects",
-  );
-  return r[0]?.f ?? {};
+  const load = async () => {
+    const r = await executor.execute<{ f: FeatureState | null }>(
+      sql`select settings->'features' as f from orgs where id = ${orgId}`,
+      "objects",
+    );
+    return r[0]?.f ?? {};
+  };
+  // A read-only scope (withReadMemo) asks this once per organization; a
+  // caller's own transaction always reads live.
+  if (executor !== db) return load();
+  return { ...(await memoizedRead(`org-feature-state:${orgId}`, load)) };
 }
 
 /** Server helper for route guards: is this feature on for the org? Resolves

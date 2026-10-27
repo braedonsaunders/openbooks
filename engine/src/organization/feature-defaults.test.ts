@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SqlExecutor } from "../platform/db.ts";
-import { dataDependentRequirementsOf, withDataDependentDefaults } from "./feature-defaults.ts";
+import { withReadMemo } from "../platform/read-memo.ts";
+import {
+  dataDependentFeatureDefault,
+  dataDependentRequirementsOf,
+  withDataDependentDefaults,
+} from "./feature-defaults.ts";
 import { FEATURE_BY_KEY, featureEnabled } from "./feature-registry.ts";
 
 /** The subsidiary-count probe answered as a database would; anything else fails the test. */
@@ -85,4 +90,15 @@ test("features that reach no data-dependent parent are resolved without a probe"
   const resolved = await withDataDependentDefaults(runner, ORG, { banking: true }, ["banking"]);
   assert.equal(runner.calls, 0);
   assert.deepEqual(resolved, { banking: true });
+});
+
+test("a caller's own transaction probes live even inside a read-only scope", async () => {
+  // A command deciding inside its transaction must see that transaction's
+  // subsidiaries, never an answer remembered from an earlier read.
+  const runner = subsidiaryCountRunner(2);
+  await withReadMemo(async () => {
+    assert.equal(await dataDependentFeatureDefault(runner, ORG, "multiSubsidiary", {}), true);
+    assert.equal(await dataDependentFeatureDefault(runner, ORG, "multiSubsidiary", {}), true);
+  });
+  assert.equal(runner.calls, 2);
 });

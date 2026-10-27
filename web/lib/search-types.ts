@@ -21,6 +21,21 @@ export const SEARCH_RECORD_TYPES = [
   "location",
   "warehouse",
   "work_order",
+  "service_request",
+  "service_job",
+  "service_visit",
+  "service_agreement",
+  "channel_order",
+  "stored_value",
+  "item_family",
+  "lease",
+  "revenue_contract",
+  "budget",
+  "provision",
+  "fund",
+  "grant",
+  "fund_release",
+  "encumbrance",
 ] as const;
 
 export const SEARCH_CATALOG_TYPES = ["report", "setting", "help"] as const;

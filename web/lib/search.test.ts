@@ -108,6 +108,9 @@ const UNMAPPED_DOCUMENT: SearchFixture = {
 };
 
 const stateKey = Symbol.for("openbooks.search-permission-test");
+
+/** A documents candidate leg: it selects ids for the final read to hydrate. */
+const DOCUMENT_CANDIDATE = /select (?:d\.id|dl\.document_id as id) from (?:documents d|document_lines dl|\()/;
 const JE_POSTED: JournalEntryFixture = {
   id: "je-posted",
   entry_number: "JE-26188661",
@@ -171,6 +174,7 @@ const mockSources = new Map<string, string>([
     "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.search-permission-test')]
+      const DOCUMENT_CANDIDATE = ${DOCUMENT_CANDIDATE}
 
       export const db = {
         async execute(query, mode) {
@@ -209,7 +213,9 @@ const mockSources = new Map<string, string>([
             }
             return inMode({ rows })
           }
-          if (!query.text.includes('with cand as')) return inMode({ rows: [] })
+          // Candidate legs return document ids; the final read above
+          // hydrates them under the same allowlists.
+          if (!DOCUMENT_CANDIDATE.test(query.text)) return inMode({ rows: [] })
 
           const knownKinds = new Set(state.documents.map((row) => row.kind))
           const boundKinds = new Set(query.values.filter((value) => knownKinds.has(value)))
@@ -226,7 +232,7 @@ const mockSources = new Map<string, string>([
           if (query.text.includes('d.subsidiary_id') && subsidiaryIds.size > 0) {
             rows = rows.filter((row) => subsidiaryIds.has(row.subsidiary_id))
           }
-          return inMode({ rows })
+          return inMode({ rows: rows.map((row) => ({ id: row.id })) })
         },
       }
 
@@ -367,10 +373,23 @@ function transactionHitIds(response: Awaited<ReturnType<typeof globalSearch>>): 
   return transactionHits(response).map((hit) => hit.id);
 }
 
+/** Every documents statement one search issued: its candidate legs and the final read. */
+function documentQueries(): CapturedQuery[] {
+  return state.queries.filter(
+    (query) =>
+      !query.text.includes("from journal_entries") &&
+      (DOCUMENT_CANDIDATE.test(query.text) || query.text.includes("and d.id = any(")),
+  );
+}
+
+/** The search's documents statements as one text and value list, so every leg is checked together. */
 function transactionQuery(): CapturedQuery {
-  const matches = state.queries.filter((query) => query.text.includes("with cand as"));
-  assert.equal(matches.length, 1, "global search must issue exactly one transaction query");
-  return matches[0]!;
+  const matches = documentQueries();
+  assert.ok(matches.length > 0, "global search must query documents");
+  return {
+    text: matches.map((query) => query.text).join("\n;\n"),
+    values: matches.flatMap((query) => query.values),
+  };
 }
 
 function boundKinds(query: CapturedQuery): string[] {
@@ -448,7 +467,7 @@ test("search follows shared navigation policy and metadata instead of a private 
     reset({ documents: [fixture("vendor_payment")] });
     const stalePermission = await globalSearch(authz("ap.pay"), "needle");
     assert.deepEqual(transactionHitIds(stalePermission), []);
-    assert.equal(state.queries.filter((query) => query.text.includes("with cand as")).length, 0);
+    assert.equal(documentQueries().length, 0);
 
     reset({ documents: [fixture("vendor_payment")] });
     const sharedPermission = await globalSearch(authz("ar.pay"), "needle");
@@ -609,7 +628,7 @@ test("field tickets require time access and their feature before linking to the 
   reset({ features: { fieldTickets: false } });
   const disabled = await globalSearch(authz("time.read"), "needle");
   assert.deepEqual(transactionHitIds(disabled), []);
-  assert.equal(state.queries.filter((query) => query.text.includes("with cand as")).length, 0);
+  assert.equal(documentQueries().length, 0);
 
   reset();
   const enabled = await globalSearch(authz("time.read"), "needle");
@@ -632,7 +651,7 @@ test("banking-off suppresses only Banking search results through navigation visi
   reset({ features: { banking: false } });
   const bankingOnly = await globalSearch(authz("banking.read"), "needle");
   assert.deepEqual(transactionHitIds(bankingOnly), []);
-  assert.equal(state.queries.filter((query) => query.text.includes("with cand as")).length, 0);
+  assert.equal(documentQueries().length, 0);
   assert.ok(state.featureChecks.includes("banking"));
 
   reset();

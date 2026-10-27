@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import type { SqlExecutor } from "../platform/db.ts";
+import { db, type SqlExecutor } from "../platform/db.ts";
+import { memoizedRead } from "../platform/read-memo.ts";
 import { FEATURE_BY_KEY, featureRequirements, type FeatureState } from "./feature-registry.ts";
 
 export type DataDependentFeatureKey = "multiSubsidiary" | "multiCurrency";
@@ -27,6 +28,19 @@ export async function dataDependentFeatureDefault(
 ): Promise<boolean> {
   const v = state?.[key];
   if (typeof v === "boolean") return v;
+  // The probe answers from the organization's data, not its switches, so a
+  // read-only scope shares it; a caller's transaction always probes live.
+  if (runner !== db) return probeDataDependentDefault(runner, orgId, key);
+  return memoizedRead(`feature-default:${key}:${orgId}`, () =>
+    probeDataDependentDefault(runner, orgId, key),
+  );
+}
+
+async function probeDataDependentDefault(
+  runner: SqlExecutor,
+  orgId: string,
+  key: DataDependentFeatureKey,
+): Promise<boolean> {
   if (key === "multiSubsidiary") {
     const r = await runner.execute<{ n: number }>(
       sql`

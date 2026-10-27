@@ -55,14 +55,20 @@ export function timesheetWeekWhere(
   const parts: SQL[] = [sql`tw.org_id = ${orgId}`];
   parts.push(subsidiaryVisibleFilter(sql`employee.subsidiary_id`, allowedSubsidiaryIds ?? null));
   // A week is one approval unit. Hide it in full if any target is outside the viewer's current resource scope.
-  parts.push(sql`and not exists (
-    select 1 from time_entries entry
-    left join projects project on project.org_id=entry.org_id and project.id=entry.project_id
-    left join mfg_work_orders work on work.org_id=entry.org_id and work.id=entry.work_order_id
-    where entry.org_id=tw.org_id and entry.employee_party_id=tw.employee_party_id
-      and entry.worked_on>=tw.week_start and entry.worked_on<tw.week_start+7
-      and ((entry.project_id is not null and (project.id is null or not (true ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, allowedSubsidiaryIds ?? null)})))
-        or (entry.work_order_id is not null and (work.id is null or not (true ${subsidiaryVisibleFilter(sql`work.subsidiary_id`, allowedSubsidiaryIds ?? null)} ${orderResourcesVisible(allowedSubsidiaryIds ?? null, "work")}))))
+  // The hidden weeks are one set, probed by hash: correlating per week would
+  // rescan the organization's time entries once for every week listed. Weeks
+  // start on Sunday (a timesheet_weeks check), so an entry's week is the
+  // same expression the derived table groups by; every compared column is
+  // NOT NULL, so NOT IN carries no null hazard.
+  parts.push(sql`and (tw.employee_party_id, tw.week_start) not in (
+    select entry.employee_party_id,
+           (entry.worked_on - ((extract(dow from entry.worked_on))::int) * interval '1 day')::date
+      from time_entries entry
+      left join projects project on project.org_id=entry.org_id and project.id=entry.project_id
+      left join mfg_work_orders work on work.org_id=entry.org_id and work.id=entry.work_order_id
+     where entry.org_id = ${orgId}
+       and ((entry.project_id is not null and (project.id is null or not (true ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, allowedSubsidiaryIds ?? null)})))
+         or (entry.work_order_id is not null and (work.id is null or not (true ${subsidiaryVisibleFilter(sql`work.subsidiary_id`, allowedSubsidiaryIds ?? null)} ${orderResourcesVisible(allowedSubsidiaryIds ?? null, "work")}))))
   )`);
   for (const filter of view.filters) {
     if (pushCustomFieldFilter(parts, filter, null)) continue;

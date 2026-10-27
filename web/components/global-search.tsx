@@ -243,7 +243,8 @@ export function GlobalSearch({
           setFailed(true);
         }
       } finally {
-        setLoading(false);
+        // A superseded search leaves the indicator to the one replacing it.
+        if (!ctrl.signal.aborted) setLoading(false);
       }
     }, 180);
     return () => {

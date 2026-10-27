@@ -24,22 +24,27 @@ import {
 /**
  * Global search — one query fans out across every primary entity (contacts,
  * transactions, accounts, items, projects, journal entries) in parallel and
- * returns grouped, ranked hits. Matching is trigram-fuzzy (`col % q`,
- * typo-tolerant via pg_trgm) OR substring (`ILIKE`), ranked by
+ * returns grouped, ranked hits. Names (parties, accounts, items, projects)
+ * match trigram-fuzzy (`col % q`, typo-tolerant via pg_trgm) OR substring
+ * (`ILIKE`); document and journal text matches by substring. Hits rank by
  * `similarity()`; a numeric query also matches transaction totals and
  * document numbers. An exact document/entry number always wins: it bypasses
- * the recency-capped fuzzy candidate legs (which can exclude an old exact
- * row on a large tenant) and orders first. Contacts are also found through
- * their people, phone numbers and migrated-system ids; documents through
- * their line descriptions and integrator references; items through their
- * barcodes and customer part numbers. Org-scoped and permission-filtered.
- * The operational records, reports, settings and help that complete the
- * header search live in search-records.ts and search-catalog.ts.
+ * the recency-capped candidate legs (which can exclude an old exact row on a
+ * large tenant) and orders first. Contacts are also found through their
+ * people, phone numbers and migrated-system ids; documents through their
+ * line descriptions and integrator references; items through their barcodes
+ * and customer part numbers. Org-scoped and permission-filtered. The
+ * operational records, reports, settings and help that complete the header
+ * search live in search-records.ts and search-catalog.ts.
  *
- * The pg_trgm GIN indexes (the baseline's party, document, account, item
- * and project indexes, plus migration 0567's document-line and contact
- * indexes) make the `%` / ILIKE predicates and the similarity ordering fast
- * at scale.
+ * Row-level security decides the cost model. `%`, LIKE and ILIKE are not
+ * LEAKPROOF, so under a tenant policy they can never become index conditions
+ * and every text predicate is evaluated row by row across the tenant; only
+ * equality and range comparisons (exact numbers, ids) use an index. Large
+ * tables are therefore matched by substring alone — a per-row trigram
+ * similarity costs several times the scan — in capped legs that run as
+ * separate statements, side by side; fuzzy matching stays on the small
+ * master-data tables.
  */
 
 export type {
@@ -501,14 +506,14 @@ async function searchTransactions(
   // matches any transaction that HAS a line of that amount (±sign), and every
   // result shows the summed positive line total.
   // Candidate ids come from independent capped legs: document text, party-name
-  // matches via parties→documents_party, line descriptions, and line amounts.
-  // A single OR spanning both documents and the parties join forced a full
-  // hash join + filter over every document in the tenant per keystroke. The line
-  // subqueries carry an explicit org filter — the RLS policy's
-  // current_setting() comparison is not sargable on its own. Note the amount
-  // leg is a bounded scan by design: numeric_eq is not LEAKPROOF, so under
-  // RLS a numeric predicate can never become a btree index condition — an
-  // (org_id, amount) index cannot help any tenant-scoped query.
+  // matches via parties→documents_party, line descriptions, line amounts and
+  // exact numbers. One OR across them would join and filter every document
+  // in the tenant per keystroke. Every leg carries an explicit org filter —
+  // the RLS policy's current_setting() comparison is not sargable on its
+  // own. The amount leg is a bounded scan by design: numeric_eq is not
+  // LEAKPROOF, so under RLS a numeric predicate can never become a btree
+  // index condition — an (org_id, amount) index cannot help any
+  // tenant-scoped query.
   //
   // Visibility is the shared POSITIVE kind allowlist: every candidate leg
   // and the final sensitive-field read repeat the same allowlist — a shared
@@ -552,51 +557,69 @@ async function searchTransactions(
   }
 
   const { q, like, amount } = match;
-  const amtLeg =
-    amount != null
-      ? sql`
-        union
-        (select dl.document_id as id from document_lines dl
+  const fence = sql`${visibleKindFilter}${documentSubsidiaryFilter}`;
+  const candidates = async (query: SQL): Promise<string[]> =>
+    (await db.execute<{ id: string }>(query, "objects")).map((row) => row.id);
+  // Each capped leg is its own statement, so the legs run side by side and
+  // the slowest one alone sets the latency; one statement would run them
+  // one after another. Text predicates cannot use an index under row-level
+  // security, so the header leg matches by substring only: a per-row
+  // trigram similarity over every document number cost several times the
+  // whole scan, and ranking below still orders by similarity.
+  const legs: Promise<string[]>[] = [
+    candidates(sql`
+      select d.id from documents d
+       where d.org_id = ${orgId} ${fence}
+         and (d.document_number ilike ${like} or d.reference_number ilike ${like} or d.memo ilike ${like})
+       order by d.created_at desc limit 200`),
+    // A counterparty's documents: the best-matching parties first, then each
+    // one's newest documents through its own index, so a name shared by
+    // every party in a large tenant never sorts the whole ledger.
+    candidates(sql`
+      select d.id from (
+        select p.id from parties p
+         where p.org_id = ${orgId} ${partySubsidiaryFilter}
+           and (p.display_name % ${q} or p.display_name ilike ${like})
+         order by similarity(p.display_name, ${q}) desc, p.id
+         limit 20) p
+      cross join lateral (
+        select d.id from documents d
+         where d.org_id = ${orgId} and d.party_id = p.id ${fence}
+         order by d.created_at desc limit 20) d`),
+    // Line descriptions name what was bought or sold ("forklift rental"),
+    // which neither the number nor the header memo carries.
+    candidates(sql`
+      select dl.document_id as id from document_lines dl
+        join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+       where dl.org_id = ${orgId} and dl.description ilike ${like} ${fence}
+       limit 200`),
+    // Exact document numbers bypass the recency-capped legs: on a large
+    // tenant the newest-200 cap can exclude an old exact row (and admit a
+    // different neighbor set as new documents arrive), so an exact query
+    // would miss its record and rank unstably. A channel's or integrator's
+    // own reference for the document (its order, invoice or payment id) is
+    // an exact number too.
+    candidates(sql`
+      select d.id from documents d
+       where d.org_id = ${orgId} ${fence}
+         and (d.document_number = ${q} or d.external_ref = ${q})
+       limit 5`),
+  ];
+  if (amount != null) {
+    legs.push(
+      candidates(sql`
+        select dl.document_id as id from document_lines dl
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-          where dl.org_id = ${orgId} and dl.amount in (${amount}::numeric, ${`-${amount}`}::numeric) ${visibleKindFilter}${documentSubsidiaryFilter}
-          limit 200)`
-      : sql``;
+         where dl.org_id = ${orgId} and dl.amount in (${amount}::numeric, ${`-${amount}`}::numeric) ${fence}
+         limit 200`),
+    );
+  }
+  const ids = [...new Set((await Promise.all(legs)).flat())];
+  if (ids.length === 0) return [];
   const numOrder = amount != null ? sql`(${amtExpr} = ${amount}::numeric) desc, ` : sql``;
-  // Exact document numbers bypass the recency-capped fuzzy legs: on a large
-  // tenant the newest-200 cap can exclude an old exact row (and admit a
-  // different neighbor set as new documents arrive), so an exact query
-  // missed its record and ranked unstably. A channel's or integrator's own
-  // reference for the document (its order, invoice or payment id) is an
-  // exact number too. Equality carries the same kind and subsidiary
-  // allowlists as every other leg.
-  const exactLeg = sql`
-        union
-        (select d.id from documents d
-          where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter}
-            and (d.document_number = ${q} or d.external_ref = ${q})
-          limit 5)`;
-  // Line descriptions name what was bought or sold ("forklift rental"),
-  // which neither the number nor the header memo carries.
-  const lineLeg = sql`
-        union
-        (select dl.document_id as id from document_lines dl
-          join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-          where dl.org_id = ${orgId} and dl.description ilike ${like} ${visibleKindFilter}${documentSubsidiaryFilter}
-          limit 200)`;
+  // Every visible field is read here, under the same allowlists as the legs.
   const r = await db.execute<SearchTransactionRow>(
     sql`
-    with cand as (
-      (select d.id from documents d
-        where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter}
-          and (d.document_number % ${q} or d.document_number ilike ${like}
-               or d.reference_number ilike ${like} or d.memo ilike ${like})
-        order by d.created_at desc limit 200)
-      union
-      (select d.id from documents d
-        where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter} and d.party_id in (
-          select p.id from parties p where p.org_id = ${orgId} ${partySubsidiaryFilter} and p.display_name % ${q})
-        order by d.created_at desc limit 200)${lineLeg}${amtLeg}${exactLeg}
-    )
     select d.id, d.kind, d.document_number, d.reference_number, d.memo, d.status, d.project_id,
            pr.display_name as party_name,
            ${amtExpr} as amount,
@@ -608,10 +631,9 @@ async function searchTransactions(
                     similarity(coalesce(d.memo, ''), ${q}),
                     similarity(coalesce(pr.display_name, ''), ${q})) as sim
       from documents d
-      join cand on cand.id = d.id
       left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id ${resultPartySubsidiaryFilter}
-     where true ${visibleKindFilter}${documentSubsidiaryFilter}
-     order by (d.document_number = ${q} or d.external_ref = ${q}) desc, ${numOrder}sim desc, d.created_at desc
+     where d.org_id = ${orgId} and d.id = any(${uuidArray(ids)}) ${fence}
+     order by (d.document_number = ${q} or d.external_ref = ${q}) desc, ${numOrder}sim desc, d.created_at desc, d.id
      limit ${PER_GROUP + 2}`,
     "objects",
   );
@@ -715,23 +737,33 @@ async function searchJournalEntries(
     return journalHits(r);
   }
   const { q, like } = match;
-  // UNION forbids expression ORDER BY, so the merged legs sit in a
+  const textMatch = sql`(e.entry_number ilike ${like} or e.memo ilike ${like})`;
+  // The fuzzy scope is two small sets, each read from its own index: entries
+  // posted by journal and pay-run documents, and GL-native entries with no
+  // source document. Matching text across every entry first would scan the
+  // whole ledger — the text predicates cannot use an index under row-level
+  // security. UNION forbids expression ORDER BY, so the merged legs sit in a
   // subquery and the exact-first ordering applies outside it.
   const r = await db.execute<SearchJournalEntryRow>(
     sql`
     select u.id, u.entry_number, u.memo, u.status, u.created_at from (
       select e.id, e.entry_number, e.memo, e.status, e.created_at
+        from documents d
+        join journal_entries e on e.org_id = d.org_id and e.id = d.posted_entry_id
+       where d.org_id = ${orgId} and d.kind in ('journal', 'pay_run')
+         and ${visibility}
+         and ${textMatch}
+      union
+      select e.id, e.entry_number, e.memo, e.status, e.created_at
         from journal_entries e
        where ${visibility}
-         and (e.entry_number % ${q} or e.entry_number ilike ${like} or e.memo ilike ${like})
-         and (exists (select 1 from documents d
-                       where d.posted_entry_id = e.id and d.org_id = e.org_id and d.kind in ('journal', 'pay_run'))
-              or (not exists (select 1 from documents d
-                               where d.posted_entry_id = e.id and d.org_id = e.org_id)
-                  and e.origin in (${sql.join(
-                    JOURNAL_GL_NATIVE_ORIGINS.map((origin) => sql`${origin}`),
-                    sql`, `,
-                  )})))
+         and e.origin in (${sql.join(
+           JOURNAL_GL_NATIVE_ORIGINS.map((origin) => sql`${origin}`),
+           sql`, `,
+         )})
+         and not exists (select 1 from documents d
+                          where d.posted_entry_id = e.id and d.org_id = e.org_id)
+         and ${textMatch}
       union
       (select e.id, e.entry_number, e.memo, e.status, e.created_at
          from journal_entries e
