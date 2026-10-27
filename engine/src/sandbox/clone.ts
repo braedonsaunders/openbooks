@@ -1202,6 +1202,18 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       // so the clone declares it transaction-locally beside the flags above.
       await db.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
       const pacer = await createClonePacer(pacing, walPositionReader(await canReadWalPosition()));
+      // Clone admissions prove each copied row equals its rebased source row.
+      // The rebase is one-way, so they look the source up through this
+      // transaction-local record of which source row each copied row came
+      // from; without it they rehash every source row for each copied row.
+      // A temporary table writes no write-ahead log.
+      await db.execute(sql`
+        create temporary table if not exists openbooks_clone_source_map (
+          relation regclass not null,
+          target_id uuid not null,
+          source_id uuid not null,
+          primary key (relation, target_id)
+        ) on commit drop`);
       for (const t of selected) {
         const stmt = generateCopySql(t, opts, rebaseSet, retainedTenantTables, masking, cutoff);
         if (!stmt) continue;
@@ -1215,6 +1227,13 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
             );
           }
           await validateVendorRetainageSourcesForClone(opts);
+        }
+        if (t.hasOrgId && t.columns.some((c) => c.name === "id" && c.isUuid)) {
+          await db.execute(sql`
+            insert into pg_temp.openbooks_clone_source_map (relation, target_id, source_id)
+            select ${`public.${t.name}`}::regclass, ob_rebase(id, ${opts.seed}::uuid), id
+              from ${sql.identifier(t.name)}
+             where org_id = ${opts.productionOrgId}`);
         }
         let n = 0;
         if (copyIsSliceable(t)) {
