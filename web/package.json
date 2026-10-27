@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "next dev -p 4780",
     "typecheck": "node ../scripts/typecheck-web.mjs",
-    "build": "next build --webpack",
-    "start": "next start -p 4780"
+    "build": "node ../scripts/emit-server-runtime.mjs -- next build --webpack",
+    "start": "node --import ../scripts/server-runtime-resolver.mjs ../node_modules/next/dist/bin/next start -p 4780"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "3.0.97",

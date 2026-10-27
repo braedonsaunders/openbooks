@@ -3,6 +3,11 @@ import { registerHooks } from "node:module";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import pg from "pg";
+import {
+  SERVER_RUNTIME_PACKAGES,
+  matchExportSource,
+  packageNameAndSubpath,
+} from "./server-runtime-packages.mjs";
 
 const EMPTY_MODULE = "openbooks:test-hooks:empty";
 const CSS_MODULE = "openbooks:test-hooks:css-module";
@@ -39,14 +44,52 @@ function engineContractUrl(specifier) {
     } catch {}
     engineExportMaps.set(engineDir, exportsMap);
   }
-  const target = engineExportMaps.get(engineDir)?.[`./${subpath}`];
+  const raw = engineExportMaps.get(engineDir)?.[`./${subpath}`];
+  const target =
+    typeof raw === "string"
+      ? raw
+      : raw && typeof raw === "object"
+        ? (raw.development ?? raw.default)
+        : null;
   return typeof target === "string" ? pathToFileURL(resolvePath(engineDir, target)).href : null;
+}
+
+const runtimePackages = new Map(SERVER_RUNTIME_PACKAGES.map((pkg) => [pkg.name, pkg]));
+const runtimeManifests = new Map();
+
+function workspaceSourceUrl(specifier) {
+  const { name, subpath } = packageNameAndSubpath(specifier);
+  const pkg = runtimePackages.get(name);
+  if (!pkg) return null;
+  if (!runtimeManifests.has(name)) {
+    runtimeManifests.set(
+      name,
+      JSON.parse(readFileSync(join(REPOSITORY_ROOT, pkg.dir, "package.json"), "utf8")),
+    );
+  }
+  const manifest = runtimeManifests.get(name);
+  const direct = manifest.exports?.[subpath];
+  const conditional =
+    (direct && typeof direct === "object") ||
+    Object.entries(manifest.exports ?? {}).some(
+      ([key, value]) => key.includes("*") && typeof value === "object",
+    );
+  if (!conditional) return null;
+  let source = matchExportSource(manifest.exports, subpath);
+  if (!source && subpath === "." && typeof manifest.main === "string") {
+    source = manifest.main.startsWith("./") ? manifest.main : `./${manifest.main}`;
+  }
+  if (typeof source !== "string" || !source.startsWith("./")) return null;
+  const abs = resolvePath(REPOSITORY_ROOT, pkg.dir, source);
+  return existsSync(abs) ? pathToFileURL(abs).href : null;
 }
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
     const contract = engineContractUrl(specifier);
     if (contract) return nextResolve(contract, context);
+    const source = workspaceSourceUrl(specifier);
+    if (source) return nextResolve(source, context);
     if (specifier.endsWith(".module.css")) {
       return { url: CSS_MODULE, shortCircuit: true };
     }
