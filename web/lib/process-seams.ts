@@ -1,15 +1,22 @@
 import "server-only";
 
+import {
+  loadBusinessDate,
+  loadEngineComposition,
+  loadFlowModule,
+  loadScheduleNoticeHooks,
+} from "@/lib/engine-composition";
+
 /**
  * Engine and web hooks a module graph needs before it posts, edits or voids
  * documents, runs scripts or resolves flow approvals: the engine composition
  * root plus the hooks only the web process can fill.
  *
- * Next.js compiles instrumentation and request handlers into separate module
- * graphs, each with its own copy of the engine's registries, so hooks
- * installed at instrumentation are invisible to a request. Instrumentation
- * calls this for its graph, and every request handler and page awaits
- * ensureRequestSeams() for its own. Every registration is idempotent.
+ * The production server loads @openbooks/engine once, from the prebuilt
+ * package, so a route bundle does not contain the composition graph. The dev
+ * server still compiles that package per graph. Registration is idempotent,
+ * and instrumentation, pages, and request handlers all install for the graph
+ * they run in.
  */
 export async function installWebProcessSeams(): Promise<void> {
   // Flow emails with `attachPdf` render through the web-only record-PDF
@@ -17,7 +24,7 @@ export async function installWebProcessSeams(): Promise<void> {
   // engine can't import web/lib, so it exposes a renderer hook this process
   // fills at boot; the standalone worker has no renderer and degrades to
   // sending without the attachment.
-  const { registerFlowPdfRenderer } = await import("@openbooks/engine/flows/module");
+  const { registerFlowPdfRenderer } = await loadFlowModule();
 
   // Web-owned approval releases (field tickets, timesheet weeks, crew time
   // batches): the engine owns routing and gate decisions; these web hooks
@@ -27,10 +34,9 @@ export async function installWebProcessSeams(): Promise<void> {
 
   // Engine seams (script journal writer, ...): the web process posts and
   // runs scripts, so install the composition root beside the web handlers.
-  const { installEngineSeams } = await import("@openbooks/engine/composition/install");
+  const { installEngineSeams } = await loadEngineComposition();
   installEngineSeams();
-  const { registerScheduleNoticeDelivery } =
-    await import("@openbooks/engine/schedule-boards/distribution-hooks");
+  const { registerScheduleNoticeDelivery } = await loadScheduleNoticeHooks();
   const { deliverScheduleNotices } = await import("./scheduling/notify");
   registerScheduleNoticeDelivery(async (args) => {
     await deliverScheduleNotices(args);
@@ -49,7 +55,7 @@ export async function installWebProcessSeams(): Promise<void> {
       import("./pdf-templates/store"),
       import("./pdf-templates/values"),
       import("./pdf-templates/render"),
-      import("@openbooks/engine/platform/business-date/module"),
+      loadBusinessDate(),
     ]);
     const [tpl, record] = await Promise.all([
       resolvePdfTemplate(orgId, subjectKind, null),
