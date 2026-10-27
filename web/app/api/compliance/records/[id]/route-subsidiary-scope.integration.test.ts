@@ -47,10 +47,13 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("@openbooks/engine/testing/fixtures");
+const { setFeatures } = await import("@openbooks/engine/testing/hrm-harness");
 const { PATCH } = await import("./route.ts");
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
+  // The route factory gates the PATCH on the organization's compliance feature.
+  await withBypassContext(() => setFeatures(org.orgId, { subcontractorCompliance: true }));
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   state.orgId = org.orgId;
   state.actorId = actorId;
