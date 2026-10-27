@@ -17,6 +17,11 @@ import { getProfile } from "./profiles/index.ts";
 import { runSaasUsageDay, saasUsageMonthInvariant } from "./saas-usage.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { wipeSimOrg } from "./world.ts";
+import { installEngineSeams } from "../composition/install.ts";
+
+// A simulated company posts through the same domain contributors as the
+// running product, which installs them at process start.
+installEngineSeams();
 
 async function simulate(root: string) {
   const run = await provisionRun({
