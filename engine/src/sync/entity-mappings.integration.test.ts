@@ -4,6 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { NETSUITE_BRIDGE_MIN_VERSION } from "../connectors/netsuite-bridge.ts";
 import { entityMappingMetadata } from "./entity-mapping-contract.ts";
 import {
   connectionEntityMappingMetadata,
@@ -521,29 +522,46 @@ test(
                       memo: sourceMemo,
                     },
                   ]
-                : q.includes("from recentactivity")
-                  ? [
-                      {
-                        id: "300",
-                        entity: "100",
-                        type: "Note : 9",
-                        typecode: "Note : 9",
-                        createddate: org.date,
-                        details: "Source site visit",
-                        subdetails: "Source note",
-                      },
-                    ]
-                  : [];
+                : [];
           return Response.json({ items, hasMore: false });
         }
-        if (url.includes("/record/v1/")) return Response.json({ items: [], hasMore: false });
+        if (url.includes("/app/site/hosting/restlet.nl")) {
+          const params = JSON.parse(String(init?.body)) as { action: string; recordType: string };
+          if (params.action === "health")
+            return Response.json({
+              ok: true,
+              schemaVersion: 1,
+              bridgeVersion: NETSUITE_BRIDGE_MIN_VERSION,
+              accountId: "123456",
+            });
+          assert.equal(params.action, "crmActivities");
+          return Response.json({
+            schemaVersion: 1,
+            recordType: params.recordType,
+            hasMore: false,
+            rows:
+              params.recordType === "note"
+                ? [
+                    {
+                      id: "300",
+                      fields: {
+                        title: "Source site visit",
+                        note: "Source note",
+                        entity: "100",
+                        notedate: org.date,
+                      },
+                    },
+                  ]
+                : [],
+          });
+        }
         throw new Error("An unexpected external CRM read was requested");
       };
       await withOrgContext(org.orgId, async () => {
         const first = await importNetSuiteCrm(org.orgId, connectionId, transport, { actorId });
         assert.equal(first.accounts, 1);
         assert.equal(first.opportunities, 1);
-        assert.equal(first.activities.recentActivityNote, 1);
+        assert.equal(first.activities.note, 1);
         const profile = (
           await db.execute<{ lifecycle_stage: string; custom: Record<string, unknown> }>(
             sql`select lifecycle_stage,custom from crm_account_profiles where org_id=${org.orgId} and party_id=${org.customerId}`,
