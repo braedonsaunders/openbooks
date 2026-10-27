@@ -282,7 +282,7 @@ function summaryOf(result: ReturnType<typeof summarizeResourcingRows>): Map<stri
   return new Map(result.summary.map((item) => [item.label, item.value]));
 }
 
-test("engagement summaries suppress blended money while exact single-currency totals stay", () => {
+test("engagement summaries suppress blended money, fail closed on every money-derived summary without a financial basis, and keep exact single-currency totals", () => {
   const plan = RESOURCING_REPORT_PLANS.engagement(formulas, "project");
 
   const mixed = summarizeResourcingRows(
@@ -348,14 +348,19 @@ test("engagement summaries suppress blended money while exact single-currency to
     plan,
   );
   const nothingPricedSummary = summaryOf(nothingPriced);
-  assert.equal(
-    nothingPricedSummary.get("Total margin"),
-    "No revenue recorded",
-    "the zero-priced refusal still speaks",
-  );
+  // With no financial basis every money-derived summary is withheld, guarded
+  // formulas included: no margin card, not even its named refusal, and no
+  // blended revenue or cost figure.
   assert.ok(
     ![...nothingPricedSummary.keys()].some((label) =>
-      /forecast revenue|forecast cost/i.test(label),
+      /forecast revenue|forecast cost|margin/i.test(label),
     ),
+    `nothing priced must publish no money-derived summary, got ${[...nothingPricedSummary.keys()].join(", ")}`,
   );
+  assert.ok(
+    ![...nothingPricedSummary.values()].includes("No revenue recorded"),
+    "a guarded money formula is suppressed, not explained, without a financial basis",
+  );
+  assert.equal(nothingPricedSummary.get("Total sum of hours"), "1.00", "safe hours still total");
+  assert.equal(nothingPricedSummary.get("Total unpriced assignments"), 1);
 });
