@@ -964,6 +964,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       };
     },
   },
+  "/ap/bills/batch": {
+    route: "/ap/bills/batch",
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import("../app/(app)/ap/bills/batch/view");
+      return {
+        load: () => m.loadBatchBillEntry(),
+        spec: (data) => m.batchBillEntrySpec(data as never),
+      };
+    },
+  },
   "/ap/capture": {
     route: "/ap/capture",
     segments: [],
