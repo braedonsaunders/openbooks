@@ -69,6 +69,58 @@ export function resultWithHref(value: unknown, href: string): Record<string, unk
   return { ok: true, result: value, href };
 }
 
+/** Expose action unions as an object schema while retaining branch validation at execution. */
+function providerInput<T extends ZodTypeAny>(schema: T): ZodTypeAny {
+  const candidate = schema as T & {
+    def?: { discriminator?: string };
+    options?: readonly ZodTypeAny[];
+  };
+  if (typeof candidate.def?.discriminator !== "string" || !Array.isArray(candidate.options))
+    return schema;
+
+  const byField = new Map<string, { schemas: ZodTypeAny[]; count: number }>();
+  for (const option of candidate.options) {
+    const shape = (option as ZodTypeAny & { shape?: Record<string, ZodTypeAny> }).shape;
+    if (!shape) return schema;
+    for (const [key, value] of Object.entries(shape)) {
+      const fields = byField.get(key) ?? { schemas: [], count: 0 };
+      fields.count += 1;
+      if (!fields.schemas.includes(value)) fields.schemas.push(value);
+      byField.set(key, fields);
+    }
+  }
+
+  const shape: Record<string, ZodTypeAny> = {};
+  for (const [key, fields] of byField) {
+    const branches = fields.count === candidate.options.length;
+    const fieldSchema =
+      fields.schemas.length === 1
+        ? fields.schemas[0]!
+        : z.union(fields.schemas as [ZodTypeAny, ZodTypeAny, ...ZodTypeAny[]]);
+    const description = fields.schemas
+      .map((fieldSchema) => fieldSchema.description)
+      .filter((value): value is string => typeof value === "string")
+      .filter((value, index, all) => all.indexOf(value) === index)
+      .join(" / ");
+    const described = description ? fieldSchema.describe(description) : fieldSchema;
+    shape[key] =
+      branches && !fields.schemas.some((value) => value.isOptional())
+        ? described
+        : described.optional();
+  }
+
+  return z.strictObject(shape).superRefine((input, validation) => {
+    const parsed = schema.safeParse(input);
+    if (parsed.success) return;
+    const issue = parsed.error.issues[0];
+    validation.addIssue({
+      code: "custom",
+      path: issue?.path ?? [],
+      message: issue?.message ?? "Input does not match the selected action.",
+    });
+  });
+}
+
 /** Preserve the domain refusal's public message, status, remedy, and evidence. */
 export async function settleCapitalRefusal(error: unknown): Promise<never> {
   if (error instanceof Error && error.constructor !== Error) {
@@ -132,11 +184,12 @@ export function capitalMutation<T extends ZodTypeAny>(args: {
   destructive?: boolean;
   execute: (context: ApplicationContext, input: z.infer<T>) => Promise<Record<string, unknown>>;
 }): ApplicationToolDefinition {
+  const inputSchema = providerInput(args.inputSchema);
   return definition({
     name: args.name,
     title: args.title,
     description: args.description,
-    inputSchema: args.inputSchema,
+    inputSchema,
     readOnly: false,
     destructive: args.destructive ?? false,
     openWorld: false,
@@ -149,7 +202,14 @@ export function capitalMutation<T extends ZodTypeAny>(args: {
         requirePermission(context, permission);
       }
       try {
-        return await args.execute(context, input);
+        const parsed = args.inputSchema.safeParse(input);
+        if (!parsed.success) {
+          const issue = parsed.error.issues[0];
+          throw invalidInput(issue?.message ?? "Invalid command input.", {
+            field: issue?.path.map(String).join("."),
+          });
+        }
+        return await args.execute(context, parsed.data as z.infer<T>);
       } catch (error) {
         return await settleCapitalRefusal(error);
       }

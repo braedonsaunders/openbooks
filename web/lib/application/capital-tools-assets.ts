@@ -396,7 +396,7 @@ export const CAPITAL_ASSET_TOOLS = [
       bookId: field(UUID.nullable().optional(), "Active depreciation book to preview."),
       periodId: field(UUID.nullable().optional(), "Open accounting period for posting."),
       assetIds: field(
-        z.array(UUID).optional(),
+        z.array(UUID).max(500).optional(),
         "Assets to include; omit to preview all visible due assets.",
       ),
     }),
@@ -455,9 +455,12 @@ export const CAPITAL_ASSET_TOOLS = [
         CALENDAR_DATE.nullable().optional(),
         "Journal posting date, if different from the through date.",
       ),
-      assetIds: field(z.array(UUID).optional(), "Exact asset selection pinned by a preview."),
+      assetIds: field(
+        z.array(UUID).max(500).optional(),
+        "Exact asset selection pinned by a preview.",
+      ),
       fingerprint: field(
-        z.string().min(1).optional(),
+        z.string().min(1).max(200).optional(),
         "Fingerprint returned by preview_asset_depreciation; required to confirm a selected batch.",
       ),
       idempotencyKey: IDEMPOTENCY_KEY,
@@ -1351,7 +1354,7 @@ export const CAPITAL_ASSET_TOOLS = [
       ),
       status: field(z.enum(["active", "cancelled"]), "Policy status."),
       expectedUpdatedAt: field(
-        z.string().min(1),
+        z.string().min(1).max(200),
         "Exact current update token from the policy read.",
       ),
       idempotencyKey: IDEMPOTENCY_KEY,
@@ -1629,7 +1632,7 @@ export const CAPITAL_ASSET_TOOLS = [
     featureKey: "fixedAssets",
     inputSchema: z.strictObject({
       regime: field(
-        z.string().trim().min(1).optional(),
+        z.string().trim().min(1).max(100).optional(),
         "Installed tax regime code; if omitted, use the first available regime as the route does.",
       ),
       taxYear: field(z.number().int().min(1000).max(9999), "Four-digit tax year."),

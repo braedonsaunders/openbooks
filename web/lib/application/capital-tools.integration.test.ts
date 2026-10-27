@@ -77,7 +77,10 @@ function leaseInput(
     paymentTiming: "arrears",
     paymentAmount: "1000.0000",
     annualDiscountRatePercent: "6",
-    classificationInputs: {},
+    classificationInputs: {
+      termThresholdPercent: "75",
+      pvThresholdPercent: "75",
+    },
     accounts: {
       rouAsset: org.accounts.invAsset!,
       leaseLiability: org.accounts.deferred!,
@@ -98,6 +101,7 @@ test("capital commands create and replay lease and fund workflows", { skip: !DB 
     const context = contextFor(org.orgId, actors.adminId, [
       "assets.manage",
       "assets.read",
+      "assistant.use",
       "funds.manage",
       "funds.read",
       "admin.setup.manage",
@@ -117,7 +121,7 @@ test("capital commands create and replay lease and fund workflows", { skip: !DB 
     const leaseRead = await withOrgContext(org.orgId, () =>
       executeAssistantTool(context.authz, "get_lease_agreement", { id: leaseId }),
     );
-    assert.equal(leaseRead.ok, true);
+    assert.equal(leaseRead.ok, true, JSON.stringify(leaseRead));
     if (!leaseRead.ok) throw new Error(leaseRead.error);
     assert.equal((leaseRead.data as { lease: { status: string } }).lease.status, "draft");
 
@@ -189,7 +193,7 @@ test(
               ...leaseInput(first, "capital-lease-feature", `L-${randomUUID().slice(0, 8)}`),
             }),
           ),
-          /fixedAssets|fixed assets|not found/i,
+          /accounting capability|Company Settings/i,
         );
       } finally {
         await setFeatures(first.orgId, { fixedAssets: true });

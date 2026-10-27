@@ -10,8 +10,10 @@ import {
 } from "@openbooks/engine/revenue/leases";
 import { proposeLeaseChange } from "@openbooks/engine/revenue/lease-changes";
 import { leaseChangeSchema, leasePostSchema, leaseSchema } from "../../app/api/leases/_schema";
+import { compareDecimal } from "../exact-decimal";
 import {
   capitalMutation,
+  DATE,
   describeObjectFields,
   field,
   IDEMPOTENCY_KEY,
@@ -20,51 +22,168 @@ import {
 } from "./capital-tools-common";
 import { notFound } from "./errors";
 
-const createLeaseInput = describeObjectFields(
-  leaseSchema.extend({ idempotencyKey: IDEMPOTENCY_KEY }),
-  {
-    subsidiaryId: "Legal entity that owns the lease.",
-    leaseNumber: "Unique lease number within the organization.",
-    description: "Lease description.",
-    commencementOn: "Lease commencement date.",
-    termPeriods: "Number of payment periods in the lease term.",
-    paymentFrequency: "Monthly, quarterly, or annual payment interval.",
-    paymentTiming: "Payments in advance or arrears.",
-    paymentAmount: "Exact periodic payment amount as a decimal string.",
-    annualDiscountRatePercent: "Exact annual discount rate as a decimal string.",
-    classificationInputs: "Inputs supporting the lease classification assessment.",
-    exemption: "Short-term or low-value exemption, if elected.",
-    initialDirectCosts: "Exact initial direct costs as a decimal string.",
-    prepayments: "Exact payments made before commencement as a decimal string.",
-    incentives: "Exact lease incentives as a decimal string.",
-    costClearingAccountId: "Account for initial direct costs, when applicable.",
-    openingBalances:
-      "Opening lease liability and right-of-use balances when adopting an existing lease.",
-    accounts: "Required right-of-use asset, liability, expense and payment accounts.",
-    departmentId: "Department dimension.",
-    projectId: "Project dimension.",
-    locationId: "Location dimension.",
-    idempotencyKey: "Unique retry key for this lease creation.",
-  },
-);
-const changeLeaseInput = describeObjectFields(
-  leaseChangeSchema.extend({ idempotencyKey: IDEMPOTENCY_KEY }),
-  {
-    operation: "Modification, remeasurement, termination or separate lease.",
-    effectiveOn: "Effective date of the change.",
-    reason: "Reason recorded with the change.",
-    idempotencyKey: "Unique retry key for this lease change.",
-    scopeReductionPercent: "Exact scope reduction percentage as a decimal string.",
-    settlementPayment: "Exact settlement payment as a decimal string.",
-    gainLossAccountId: "Account for any termination or remeasurement gain or loss.",
-    assessment: "Accounting assessment supporting the proposed change.",
-    remainingTerms: "Updated remaining term and payment terms for a modification.",
-    separateLease: "New agreement terms when the change creates a separate lease.",
-  },
-);
+const LEASE_DECIMAL = z
+  .string()
+  .max(64)
+  .regex(/^-?\d+(?:\.\d+)?$/, "Enter an exact decimal as text.");
+const leasePercent = (description: string) =>
+  field(
+    LEASE_DECIMAL.refine(
+      (value) => compareDecimal(value, "0") >= 0 && compareDecimal(value, "100") <= 0,
+      "Enter a percentage from 0 through 100.",
+    ),
+    description,
+  );
+const leaseClassificationInput = z.strictObject({
+  transfersOwnership: field(z.boolean().optional(), "Whether ownership transfers by lease end."),
+  purchaseOptionReasonablyCertain: field(
+    z.boolean().optional(),
+    "Whether exercise of the purchase option is reasonably certain.",
+  ),
+  leaseTermMonths: field(z.number().int().nonnegative().optional(), "Lease term in months."),
+  economicLifeMonths: field(
+    z.number().int().nonnegative().optional(),
+    "Underlying asset economic life in months.",
+  ),
+  termThresholdPercent: leasePercent("Term threshold percentage from 0 to 100."),
+  pvOfPayments: field(LEASE_DECIMAL.optional(), "Exact present value of lease payments as text."),
+  fairValue: field(LEASE_DECIMAL.optional(), "Exact underlying asset fair value as text."),
+  pvThresholdPercent: leasePercent("Present-value threshold percentage from 0 to 100."),
+  specializedAsset: field(
+    z.boolean().optional(),
+    "Whether the asset is specialized to the lessee.",
+  ),
+});
+const leaseCreateFields = z.strictObject({
+  subsidiaryId: field(UUID, "Legal entity that owns the lease."),
+  leaseNumber: field(
+    z.string().trim().min(1).max(100),
+    "Unique lease number within the organization.",
+  ),
+  description: field(z.string().max(1000).optional(), "Lease description."),
+  commencementOn: field(DATE, "Lease commencement date."),
+  termPeriods: field(z.number().int().positive(), "Number of payment periods in the lease term."),
+  paymentFrequency: field(z.enum(["monthly", "quarterly", "annual"]), "Payment frequency."),
+  paymentTiming: field(
+    z.enum(["advance", "arrears"]),
+    "Whether payments are in advance or arrears.",
+  ),
+  paymentAmount: field(LEASE_DECIMAL, "Exact periodic payment amount as a decimal string."),
+  annualDiscountRatePercent: field(
+    z.string().max(25),
+    "Exact annual discount rate as a decimal string.",
+  ),
+  classificationInputs: field(
+    leaseClassificationInput,
+    "Inputs supporting the lease classification assessment.",
+  ),
+  exemption: field(
+    z.enum(["short_term", "low_value"]).nullable().optional(),
+    "Short-term or low-value exemption, if elected.",
+  ),
+  initialDirectCosts: field(
+    LEASE_DECIMAL.optional(),
+    "Exact initial direct costs as a decimal string.",
+  ),
+  prepayments: field(
+    LEASE_DECIMAL.optional(),
+    "Exact payments made before commencement as a decimal string.",
+  ),
+  incentives: field(LEASE_DECIMAL.optional(), "Exact lease incentives as a decimal string."),
+  costClearingAccountId: field(
+    UUID.nullable().optional(),
+    "Account for initial direct costs, when applicable.",
+  ),
+  openingBalances: field(
+    z
+      .strictObject({
+        liability: field(LEASE_DECIMAL, "Opening lease liability as an exact decimal string."),
+        rouCarrying: field(
+          LEASE_DECIMAL,
+          "Opening right-of-use carrying amount as an exact decimal string.",
+        ),
+        asOf: field(DATE, "Cutover date for opening balances."),
+      })
+      .nullable()
+      .optional(),
+    "Opening lease balances when adopting an existing lease.",
+  ),
+  accounts: field(
+    z.strictObject({
+      rouAsset: field(UUID, "Right-of-use asset account."),
+      leaseLiability: field(UUID, "Lease liability account."),
+      interestExpense: field(UUID, "Interest expense account."),
+      amortizationExpense: field(UUID, "Right-of-use amortization expense account."),
+      leaseExpense: field(UUID, "Operating lease expense account."),
+      payment: field(UUID, "Lease payment account."),
+    }),
+    "Required right-of-use asset, liability, expense and payment accounts.",
+  ),
+  departmentId: field(UUID.nullable().optional(), "Department dimension."),
+  projectId: field(UUID.nullable().optional(), "Project dimension."),
+  locationId: field(UUID.nullable().optional(), "Location dimension."),
+});
+const createLeaseInput = z.strictObject({
+  ...leaseCreateFields.shape,
+  idempotencyKey: field(IDEMPOTENCY_KEY, "Unique retry key for this lease creation."),
+});
+const remainingTerms = z.strictObject({
+  periods: field(z.number().int().positive(), "Remaining payment periods."),
+  payment: field(LEASE_DECIMAL, "Exact remaining periodic payment as text."),
+  paymentFrequency: field(
+    z.enum(["monthly", "quarterly", "annual"]),
+    "Remaining payment frequency.",
+  ),
+  paymentTiming: field(
+    z.enum(["advance", "arrears"]),
+    "Whether remaining payments are in advance or arrears.",
+  ),
+  annualRatePercent: field(z.string().max(25), "Exact annual discount rate as text."),
+  classificationInputs: field(
+    leaseClassificationInput,
+    "Classification inputs for the remaining term.",
+  ),
+});
+const changeLeaseInput = z.strictObject({
+  operation: field(
+    z.enum(["modification", "remeasurement", "termination", "separate_lease"]),
+    "Modification, remeasurement, termination or separate lease.",
+  ),
+  effectiveOn: field(DATE, "Effective date of the change."),
+  reason: field(z.string().trim().min(8).max(1000), "Reason recorded with the change."),
+  idempotencyKey: field(IDEMPOTENCY_KEY, "Unique retry key for this lease change."),
+  scopeReductionPercent: field(
+    LEASE_DECIMAL,
+    "Exact scope reduction percentage as a decimal string.",
+  ),
+  settlementPayment: field(LEASE_DECIMAL, "Exact settlement payment as a decimal string."),
+  gainLossAccountId: field(UUID, "Account for any termination or remeasurement gain or loss."),
+  assessment: field(
+    z.string().trim().min(8).max(4000),
+    "Accounting assessment supporting the proposed change.",
+  ),
+  remainingTerms: field(
+    remainingTerms.optional(),
+    "Updated remaining term and payment terms for a modification.",
+  ),
+  separateLease: field(
+    z
+      .strictObject({
+        additionalRightOfUse: field(z.literal(true), "Whether the change adds a right of use."),
+        commensurateStandalonePrice: field(
+          z.literal(true),
+          "Whether the added right is priced at a standalone rate.",
+        ),
+        agreement: field(leaseCreateFields, "Terms of the separate lease agreement."),
+      })
+      .optional(),
+    "New agreement terms when the change creates a separate lease.",
+  ),
+});
 const postLeaseInput = describeObjectFields(
-  leasePostSchema.extend({
+  z.strictObject({
     leaseId: UUID,
+    asOfDate: DATE,
     idempotencyKey: IDEMPOTENCY_KEY,
   }),
   {
@@ -86,7 +205,11 @@ export const CAPITAL_LEASE_TOOLS = [
     execute: async (context, input) => {
       const { idempotencyKey: _key, ...body } = input;
       return resultWithHref(
-        await createLeaseAgreement(context.authz.user.orgId, context.authz.user.id, body),
+        await createLeaseAgreement(
+          context.authz.user.orgId,
+          context.authz.user.id,
+          leaseSchema.parse(body),
+        ),
         "/assets/leases",
       );
     },
@@ -106,7 +229,12 @@ export const CAPITAL_LEASE_TOOLS = [
     execute: async (context, input) => {
       const { leaseId, ...body } = input;
       return resultWithHref(
-        await proposeLeaseChange(context.authz.user.orgId, leaseId, context.authz.user.id, body),
+        await proposeLeaseChange(
+          context.authz.user.orgId,
+          leaseId,
+          context.authz.user.id,
+          leaseChangeSchema.parse(body),
+        ),
         `/assets/leases?lease=${leaseId}`,
       );
     },
@@ -151,7 +279,7 @@ export const CAPITAL_LEASE_TOOLS = [
         throw notFound("lease");
       const result = await postDueLeaseSchedules(
         context.authz.user.orgId,
-        input.asOfDate,
+        leasePostSchema.parse({ asOfDate: input.asOfDate }).asOfDate,
         context.authz.user.id,
         { leaseId: input.leaseId },
       );

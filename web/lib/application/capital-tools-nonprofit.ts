@@ -71,7 +71,7 @@ const postingAccounts = z.strictObject({
   exchangeRevenueAccountId: field(UUID, "Exchange transaction revenue account id."),
 });
 const grantChanges = z.strictObject({
-  name: field(z.string().optional(), "Replacement grant name."),
+  name: field(z.string().max(200).optional(), "Replacement grant name."),
   sponsorPartyId: field(UUID.optional(), "Replacement sponsor party."),
   sponsorKind: field(
     z.enum(["government", "foundation", "corporate"]).optional(),
@@ -81,12 +81,15 @@ const grantChanges = z.strictObject({
     z.enum(["contribution_unconditional", "contribution_conditional", "exchange"]).optional(),
     "Replacement accounting determination.",
   ),
-  barrier: field(z.string().nullable().optional(), "Replacement conditional contribution barrier."),
+  barrier: field(
+    z.string().max(4000).nullable().optional(),
+    "Replacement conditional contribution barrier.",
+  ),
   rightOfReturn: field(z.boolean().optional(), "Whether the agreement includes a right of return."),
   awardAmount: field(MONEY.optional(), "Replacement exact grant award amount."),
   periodFrom: field(DATE.optional(), "Replacement period start date."),
   periodTo: field(DATE.optional(), "Replacement period end date."),
-  indirectRate: field(z.string().optional(), "Replacement exact indirect cost rate."),
+  indirectRate: field(z.string().max(80).optional(), "Replacement exact indirect cost rate."),
   indirectBase: field(
     z.enum(["direct_costs", "modified_total_direct"]).optional(),
     "Replacement indirect cost base.",
@@ -286,7 +289,7 @@ export const CAPITAL_NONPROFIT_TOOLS = [
         z
           .union([
             z.enum(["draft", "awarded", "active", "closed_out", "closed", "void"]),
-            z.array(z.enum(["draft", "awarded", "active", "closed_out", "closed", "void"])),
+            z.array(z.enum(["draft", "awarded", "active", "closed_out", "closed", "void"])).max(6),
           ])
           .optional(),
         "Grant status filter.",
@@ -328,7 +331,7 @@ export const CAPITAL_NONPROFIT_TOOLS = [
           "Accounting determination.",
         ),
         barrier: field(
-          z.string().nullable().optional(),
+          z.string().max(4000).nullable().optional(),
           "Conditional contribution barrier, if applicable.",
         ),
         rightOfReturn: field(
@@ -338,7 +341,7 @@ export const CAPITAL_NONPROFIT_TOOLS = [
         awardAmount: amountText,
         periodFrom: field(CALENDAR_DATE, "Grant period start date."),
         periodTo: field(CALENDAR_DATE, "Grant period end date."),
-        indirectRate: field(z.string().optional(), "Exact indirect cost rate as text."),
+        indirectRate: field(z.string().max(80).optional(), "Exact indirect cost rate as text."),
         indirectBase: field(
           z.enum(["direct_costs", "modified_total_direct"]).optional(),
           "Indirect cost base.",
@@ -505,7 +508,7 @@ export const CAPITAL_NONPROFIT_TOOLS = [
       z.strictObject({
         action: field(z.literal("award"), "Post a grant award."),
         grantId: field(UUID, "Grant to award."),
-        accounts: postingAccounts,
+        accounts: field(postingAccounts, "Required accounts for the grant posting."),
         postingDate: field(CALENDAR_DATE, "Posting date."),
         idempotencyKey: IDEMPOTENCY_KEY,
       }),
@@ -515,7 +518,7 @@ export const CAPITAL_NONPROFIT_TOOLS = [
         drawdownId: field(UUID.optional(), "Existing drawdown record, when applicable."),
         amount: amountText,
         kind: field(z.enum(["advance", "reimbursement", "final"]), "Drawdown classification."),
-        accounts: postingAccounts,
+        accounts: field(postingAccounts, "Required accounts for the drawdown posting."),
         postingDate: field(CALENDAR_DATE, "Posting date."),
         idempotencyKey: IDEMPOTENCY_KEY,
       }),
@@ -538,7 +541,7 @@ export const CAPITAL_NONPROFIT_TOOLS = [
         grantId: field(UUID, "Grant to amend."),
         reason,
         changes: field(grantChanges, "Only supply grant terms that should change."),
-        accounts: postingAccounts,
+        accounts: field(postingAccounts, "Required accounts for the grant amendment posting."),
         postingDate: field(CALENDAR_DATE, "Posting date."),
         idempotencyKey: IDEMPOTENCY_KEY,
       }),
@@ -652,7 +655,10 @@ export const CAPITAL_NONPROFIT_TOOLS = [
     inputSchema: z.strictObject({
       status: field(
         z
-          .union([z.enum(["open", "closed", "void"]), z.array(z.enum(["open", "closed", "void"]))])
+          .union([
+            z.enum(["open", "closed", "void"]),
+            z.array(z.enum(["open", "closed", "void"])).max(3),
+          ])
           .optional(),
         "Encumbrance status filter.",
       ),
@@ -851,7 +857,10 @@ export const CAPITAL_NONPROFIT_TOOLS = [
         "Dated installment schedule that totals the pledge amount.",
       ),
       reason,
-      custom: field(z.record(z.string(), z.json()).optional(), "Configured custom pledge fields."),
+      custom: field(
+        z.record(z.string(), z.unknown()).optional(),
+        "Configured custom pledge fields.",
+      ),
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
     execute: async (context, input) => {
