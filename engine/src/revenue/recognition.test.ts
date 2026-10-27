@@ -1180,9 +1180,9 @@ function sqlText(query: unknown): string {
   if (!Array.isArray(chunks)) return "";
   let out = "";
   for (const c of chunks) {
-    if (c && typeof c === "object" && Array.isArray((c as { value?: unknown[] }).value)) {
-      out += (c as { value: string[] }).value.join("");
-    }
+    const value = c && typeof c === "object" ? (c as { value?: unknown }).value : null;
+    if (typeof value === "string") out += value;
+    else if (Array.isArray(value)) out += value.join("");
   }
   return out;
 }
