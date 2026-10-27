@@ -20,9 +20,11 @@ registerHooks({
   resolve(specifier, context, next) {
     // The route factory imports the gate by @/ alias at request time, from
     // web/lib/api/route.ts rather than the route directory; serve it the
-    // same intended session as the route's own import.
+    // same intended session as the route's own import, and as the shared
+    // feature gate's own relative import.
     if (
       specifier === "@/lib/authz" ||
+      (specifier === "./authz" && context.parentURL?.endsWith("/web/lib/feature-gates.ts")) ||
       (specifier.endsWith("/lib/authz") &&
         context.parentURL?.includes("/api/admin/setup/project-types/"))
     ) {

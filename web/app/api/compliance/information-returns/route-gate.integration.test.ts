@@ -18,7 +18,12 @@ const virtual = (source: string) => ({
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/navigation") return virtual("export function redirect() {}");
-    if (specifier === "@/lib/authz")
+    // The route factory's shared feature gate reads the session through its
+    // own relative import; the feature switches themselves stay real.
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier === "./authz" && context.parentURL?.endsWith("/web/lib/feature-gates.ts"))
+    )
       return virtual(`
       export async function guardPermission() {
         const s = globalThis.__infoReturnsGateState;

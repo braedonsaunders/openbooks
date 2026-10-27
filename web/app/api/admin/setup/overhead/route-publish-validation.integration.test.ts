@@ -23,7 +23,9 @@ registerHooks({
   resolve(specifier, context, next) {
     if (
       specifier === "../../../../../lib/authz" ||
-      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")) ||
+      // The shared feature gate reads the session through its own import.
+      (specifier === "./authz" && context.parentURL?.endsWith("/web/lib/feature-gates.ts"))
     )
       return virtual(`
       export async function guardPermission() {

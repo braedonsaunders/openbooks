@@ -59,7 +59,12 @@ const hooks = registerHooks({
     // load under the plain runner (same seam as the navigation route test).
     // Both routes of this surface share the authz seam; guardPermission and
     // getAuthz/can are stubbed together.
-    if (specifier === "@/lib/authz") {
+    // The route factory's shared feature gate reads the session through its
+    // own relative import.
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier === "./authz" && context.parentURL?.endsWith("/web/lib/feature-gates.ts"))
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
     // Forward Next.js-style aliases to the real modules they point at,

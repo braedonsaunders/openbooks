@@ -55,7 +55,12 @@ const mockPdf = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@/lib/authz") {
+    // The route factory's shared feature gate reads the session through its
+    // own relative import.
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier === "./authz" && context.parentURL?.endsWith("/web/lib/feature-gates.ts"))
+    ) {
       return { url: "mock:ir-copies-authz", shortCircuit: true };
     }
     if (specifier === "@/lib/information-return-pdf") {

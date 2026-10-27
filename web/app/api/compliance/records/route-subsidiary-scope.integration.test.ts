@@ -21,7 +21,12 @@ registerHooks({
       return virtual(
         "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
       );
-    if (specifier.endsWith("/lib/authz"))
+    // The route factory's shared feature gate reads the session through its
+    // own relative import.
+    if (
+      specifier.endsWith("/lib/authz") ||
+      (specifier === "./authz" && context.parentURL?.endsWith("/web/lib/feature-gates.ts"))
+    )
       return virtual(`
         export async function guardPermission() {
           const s = globalThis.__complianceRecordScopeState;
@@ -50,6 +55,14 @@ const { POST } = await import("./route.ts");
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+  // The route factory gates Subcontractor compliance for real, so the scope
+  // refusals below are proven with the feature on rather than by its 404.
+  await withBypassContext(() =>
+    db.execute(sql`
+    update orgs set settings = jsonb_set(settings, '{features}',
+      coalesce(settings->'features', '{}'::jsonb) || '{"subcontractorCompliance": true}'::jsonb)
+     where id = ${org.orgId}`),
+  );
   state.orgId = org.orgId;
   state.actorId = actorId;
   const branchId = randomUUID();

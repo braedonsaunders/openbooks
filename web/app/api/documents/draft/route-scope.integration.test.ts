@@ -31,8 +31,9 @@ const hooks = registerHooks({
     // too — serving the same fixture session through getAuthz, which is the
     // gate the public-session factory path calls.
     if (
-      specifier === "../../../../lib/authz" ||
-      (specifier === "@/lib/authz" && (context.parentURL ?? "").includes("/lib/api/route")) ||
+      (specifier === "@/lib/authz" &&
+        ((context.parentURL ?? "").includes("/lib/api/route") ||
+          (context.parentURL ?? "").includes("/api/documents/draft/"))) ||
       (specifier === "./authz" && (context.parentURL ?? "").includes("/web/lib/"))
     ) {
       const real = nextResolve(specifier, context).url;

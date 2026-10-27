@@ -33,9 +33,31 @@ const hooks = registerHooks({
     ) {
       return { url: "mock:order-line-warehouse-feature-gates", shortCircuit: true };
     }
+    // The purchase-order route authorizes its own create grant and leaves
+    // the Orders feature to the route factory, so its session gate is
+    // doubled alongside the shared feature gate.
+    if (
+      specifier === "@/lib/authz" &&
+      /\/purchase-orders\/.*\/assign-warehouse\/route/.test(String(context.parentURL ?? ""))
+    ) {
+      return { url: "mock:order-line-warehouse-authz", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
+    if (url === "mock:order-line-warehouse-authz") {
+      return {
+        format: "module",
+        source: `
+          const state = globalThis[Symbol.for('openbooks.order-line-warehouse-route-gate')]
+          export async function guardPermission() {
+            if (!state.authz) return new Response(null, { status: 403 })
+            return state.authz
+          }
+        `,
+        shortCircuit: true,
+      };
+    }
     if (url === "mock:order-line-warehouse-feature-gates") {
       return {
         format: "module",
