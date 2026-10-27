@@ -214,7 +214,6 @@ const mockSources = new Map<string, string>([
       export async function businessToday(_orgId) { return state.today }
     `,
   ],
-  ["mock:project-types-gate", "export async function guardProjectsFeature(_orgId) { return null }"],
   [
     "mock:project-types-features",
     "export async function isFeatureEnabled(_orgId, _key) { return true }",
@@ -223,19 +222,28 @@ const mockSources = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    const parent = context.parentURL ?? "";
+    // The route factory gates permission and the `projects` feature through
+    // the real feature gate, which reads its session and feature state from
+    // its own relative imports; doubling those keeps the gate composition
+    // under test while the session and settings stay deterministic.
+    if (parent.includes("/web/lib/feature-gates.ts")) {
+      if (specifier === "./authz") return { url: "mock:project-types-authz", shortCircuit: true };
+      if (specifier === "./features") {
+        return { url: "mock:project-types-features", shortCircuit: true };
+      }
+    }
     if (
-      context.parentURL?.includes("setup/project-types") ||
-      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
+      parent.includes("setup/project-types") ||
+      (specifier === "@/lib/authz" && parent.includes("/web/lib/api/route.ts"))
     ) {
       const modules: Record<string, string> = {
         "@openbooks/engine/platform/db": "mock:project-types-db",
         "@openbooks/engine/projects/financial-profile-versions":
           "mock:project-types-financial-profile",
         "@openbooks/engine/platform/business-date/module": "mock:project-types-business-date",
-        "../../../../../lib/authz": "mock:project-types-authz",
         "@/lib/authz": "mock:project-types-authz",
-        "../../../../../lib/projects-gate": "mock:project-types-gate",
-        "../../../../../lib/features": "mock:project-types-features",
+        "@/lib/features": "mock:project-types-features",
       };
       const url = modules[specifier];
       if (url) return { url, shortCircuit: true };

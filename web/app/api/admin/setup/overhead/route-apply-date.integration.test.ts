@@ -48,9 +48,12 @@ const mockAuthz = `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The route factory gates through the real feature gate, which reads its
+    // session from its own relative `./authz` import.
     if (
       (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/overhead")) ||
-      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts")) ||
+      (specifier === "./authz" && context.parentURL?.includes("/web/lib/feature-gates.ts"))
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
