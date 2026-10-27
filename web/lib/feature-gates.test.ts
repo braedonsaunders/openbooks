@@ -230,7 +230,7 @@ test("every API route serving a feature consults a gate", () => {
           );
           assert.match(
             correction,
-            /feature:\s*\{none:["']Correcting posted OCI remains available when its creation features are disabled["']\}/,
+            /feature:\s*\{\s*none:\s*["']Correcting posted OCI remains available when its creation features are disabled\.?["'],?\s*\}/,
           );
           continue;
         }
