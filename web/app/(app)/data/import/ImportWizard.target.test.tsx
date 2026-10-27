@@ -118,7 +118,8 @@ test("search plus Enter selects the filtered target", async () => {
       await tick();
     });
     await act(async () => {
-      document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      // Enter lands on the focused search box, which owns the picker's keys.
+      search.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
       await tick();
       await tick();
     });
