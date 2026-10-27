@@ -125,7 +125,20 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
       canCreate,
       canPost,
     });
-  const renderFormAction = (key: string) => {
+  const layoutShows = (key: string) =>
+    actionLayout.find((action) => action.key === key)?.visible !== false;
+  const nextStepAction =
+    mode === "edit"
+      ? null
+      : layoutShows("post") && lifecycleAction("post")
+        ? "post"
+        : layoutShows("submit") && lifecycleAction("submit")
+          ? "submit"
+          : null;
+  // The header shows a saved record's next lifecycle step as its own button,
+  // so posting or submitting never hides behind the Actions menu.
+  const compactAction = "h-8 px-2.5 text-xs";
+  const renderFormAction = (key: string, placement: "menu" | "header" = "menu") => {
     switch (key) {
       case "customize":
         return customizeHref ? (
@@ -160,6 +173,8 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
       case "submit":
         return lifecycleAction("submit") ? (
           <Button
+            size={placement === "header" ? "sm" : undefined}
+            className={placement === "header" ? compactAction : undefined}
             disabled={
               busy ||
               (config.partyRole ? !partyId : false) ||
@@ -173,6 +188,8 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
       case "post":
         return lifecycleAction("post") ? (
           <Button
+            size={placement === "header" ? "sm" : undefined}
+            className={placement === "header" ? compactAction : undefined}
             disabled={busy || (isDraft && !positiveAmount(effectiveTotals.total))}
             onClick={() => act("post")}
           >
@@ -301,81 +318,84 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
       }
       description={mode === "edit" ? t("drawer.editingHint") : (doc.party_name ?? undefined)}
       primaryAction={
-        canEditStatus ? (
-          mode === "edit" ? (
-            <>
-              <FormShortcuts
-                enabled={!busy}
-                actions={{
-                  save: () => void save(),
-                  saveAndNew: freshFormHref ? () => void save("new") : undefined,
-                  saveAndClose: () => void save("close"),
-                  postAndNew: canSaveAndPost
-                    ? () => void save(freshFormHref ? "postNew" : "post")
-                    : undefined,
-                  post: canSaveAndPost ? () => void save("post") : undefined,
-                }}
-              />
+        canEditStatus && mode === "edit" ? (
+          <>
+            <FormShortcuts
+              enabled={!busy}
+              actions={{
+                save: () => void save(),
+                saveAndNew: freshFormHref ? () => void save("new") : undefined,
+                saveAndClose: () => void save("close"),
+                postAndNew: canSaveAndPost
+                  ? () => void save(freshFormHref ? "postNew" : "post")
+                  : undefined,
+                post: canSaveAndPost ? () => void save("post") : undefined,
+              }}
+            />
+            <Button
+              size="sm"
+              variant={canSaveAndPost ? "outline" : "default"}
+              className="h-8 px-2.5 text-xs"
+              disabled={busy}
+              title={tEntry("buttons.saveHint")}
+              onClick={() => void save()}
+            >
+              {busy
+                ? tCommon("actions.saving")
+                : canSaveAndPost
+                  ? tEntry("buttons.saveDraft")
+                  : tCommon("actions.save")}
+            </Button>
+            {freshFormHref ? (
               <Button
                 size="sm"
-                variant={canSaveAndPost ? "outline" : "default"}
-                className="h-8 px-2.5 text-xs"
-                disabled={busy}
-                title={tEntry("buttons.saveHint")}
-                onClick={() => void save()}
-              >
-                {busy
-                  ? tCommon("actions.saving")
-                  : canSaveAndPost
-                    ? tEntry("buttons.saveDraft")
-                    : tCommon("actions.save")}
-              </Button>
-              {freshFormHref ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-8 px-2.5 text-xs"
-                  disabled={busy}
-                  title={tEntry("buttons.saveAndNewHint")}
-                  onClick={() => void save("new")}
-                >
-                  {tEntry("buttons.saveAndNew")}
-                </Button>
-              ) : null}
-              {canSaveAndPost ? (
-                <Button
-                  size="sm"
-                  className="h-8 px-2.5 text-xs"
-                  disabled={busy}
-                  title={
-                    freshFormHref ? tEntry("buttons.postAndNewHint") : tEntry("buttons.postHint")
-                  }
-                  onClick={() => void save(freshFormHref ? "postNew" : "post")}
-                >
-                  {freshFormHref ? tEntry("buttons.postAndNew") : tEntry("buttons.post")}
-                </Button>
-              ) : null}
-              <Button
                 variant="outline"
+                className="h-8 px-2.5 text-xs"
+                disabled={busy}
+                title={tEntry("buttons.saveAndNewHint")}
+                onClick={() => void save("new")}
+              >
+                {tEntry("buttons.saveAndNew")}
+              </Button>
+            ) : null}
+            {canSaveAndPost ? (
+              <Button
                 size="sm"
                 className="h-8 px-2.5 text-xs"
                 disabled={busy}
-                onClick={cancelWithConfirm}
+                title={
+                  freshFormHref ? tEntry("buttons.postAndNewHint") : tEntry("buttons.postHint")
+                }
+                onClick={() => void save(freshFormHref ? "postNew" : "post")}
               >
-                {tCommon("actions.cancel")}
+                {freshFormHref ? tEntry("buttons.postAndNew") : tEntry("buttons.post")}
               </Button>
-            </>
-          ) : editActionVisible ? (
+            ) : null}
             <Button
               variant="outline"
               size="sm"
               className="h-8 px-2.5 text-xs"
               disabled={busy}
-              onClick={() => setMode("edit")}
+              onClick={cancelWithConfirm}
             >
-              {tCommon("actions.edit")}
+              {tCommon("actions.cancel")}
             </Button>
-          ) : null
+          </>
+        ) : nextStepAction || (canEditStatus && editActionVisible) ? (
+          <>
+            {nextStepAction ? renderFormAction(nextStepAction, "header") : null}
+            {canEditStatus && editActionVisible ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2.5 text-xs"
+                disabled={busy}
+                onClick={() => setMode("edit")}
+              >
+                {tCommon("actions.edit")}
+              </Button>
+            ) : null}
+          </>
         ) : null
       }
       actionsMenuHeader={
@@ -424,7 +444,10 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
         ) : (
           <>
             {actionLayout
-              .filter((action) => action.visible && action.key !== "edit")
+              .filter(
+                (action) =>
+                  action.visible && action.key !== "edit" && action.key !== nextStepAction,
+              )
               .map((action) => (
                 <Fragment key={action.key}>{renderFormAction(action.key)}</Fragment>
               ))}

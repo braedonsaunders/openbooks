@@ -265,18 +265,7 @@ function postButton(): HTMLButtonElement {
 }
 
 async function clickPost() {
-  // The record actions live behind the Actions popover.
-  // The drawer shell portals to document.body, outside the mount host.
-  const labels = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim());
-  const actions = [...document.querySelectorAll("button")].find((b) =>
-    b.textContent?.includes("Actions"),
-  );
-  assert.ok(actions, `Actions menu must render (buttons: ${JSON.stringify(labels)})`);
-  await act(async () => {
-    actions.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    await tick();
-  });
-  await tick();
+  // A saved record's next lifecycle step renders in the drawer header.
   const post = postButton();
   await act(async () => {
     post.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
@@ -285,6 +274,19 @@ async function clickPost() {
   await tick();
   await tick();
 }
+
+test("an approved bill offers Post in the header, not only behind the Actions menu", async (t) => {
+  const { host, root } = await mountApprovedBill();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  postButton();
+  await openActionsMenu();
+  postButton();
+});
 
 /** Posting-refusal persistence: the typed 422 reason must persist as a
  * drawer-header role=alert until the next action, in addition to the toast. */
