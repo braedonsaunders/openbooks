@@ -1,0 +1,1 @@
+Replaces one clone admission function with the same parent checks evaluated in a single statement; it changes no rows and has no data precondition.
