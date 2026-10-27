@@ -4,10 +4,15 @@ import { businessToday } from "@openbooks/engine/platform/business-date";
 import { page, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
 import { can, requirePermission } from "../../../../../lib/authz";
 import { orgInfo } from "../../../../../lib/data";
-import { DOC_KINDS, createPermission, postPermission } from "../../../../../lib/document-kinds";
+import {
+  DOC_KINDS,
+  DOC_KIND_FEATURE,
+  createPermission,
+  postPermission,
+} from "../../../../../lib/document-kinds";
+import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
 import {
   accountOptions,
-  isDocKindEnabled,
   partyOptions,
   taxCodeOptions,
   taxGroupOptions,
@@ -29,7 +34,8 @@ export type BatchBillEntryData = BatchBillEntryProps;
 export async function loadBatchBillEntry(): Promise<BatchBillEntryData> {
   const authz = await requirePermission(createPermission(BATCH_BILL_KIND));
   const orgId = authz.user.orgId;
-  if (!(await isDocKindEnabled(orgId, BATCH_BILL_KIND))) notFound();
+  const kindFeature = DOC_KIND_FEATURE[BATCH_BILL_KIND];
+  if (kindFeature) await requireFeatureEnabled(orgId, kindFeature);
   const scope = authz.allowedSubsidiaryIds;
   const [org, today, vendors, accounts, taxCodes, taxGroups, multiSubsidiary] = await Promise.all([
     orgInfo(orgId),
