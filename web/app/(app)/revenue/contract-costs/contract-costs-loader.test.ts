@@ -25,14 +25,15 @@ stubModules({
   extra: {
     "server-only": `export {}`,
     "@openbooks/engine/platform/database":
-      `export const db = { execute: async (q) => {` +
+      `const read = (q) => {` +
       `const s = JSON.stringify(q);` +
       `if (s.includes('journal_lines')) return { rows: [{ carrying: '0' }] };` +
       `if (s.includes('contract_cost_amortization')) return { rows: [] };` +
       `if (s.includes('from currencies')) return { rows: [{ minor_units: 2 }] };` +
       `if (s.includes('from orgs')) return { rows: [{ base_currency: 'USD' }] };` +
       `if (s.includes('count(*)')) return { rows: [{ n: '0' }] };` +
-      `return { rows: [] } } }`,
+      `return { rows: [] } };` +
+      `export const db = { execute: async (q, mode) => { const result = read(q); return mode === 'objects' ? result.rows : result } }`,
     "../../../../lib/setup/ref-options":
       `export async function loadAccounts(orgId){` +
       `globalThis.__contractCostsLoaderState.loadAccountsOrg = orgId;` +

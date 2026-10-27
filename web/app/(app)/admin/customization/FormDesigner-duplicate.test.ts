@@ -50,12 +50,12 @@ registerHooks({
         source: `
           const state = globalThis[Symbol.for('openbooks.customization-duplicate-guard')]
           export const db = {
-            execute: async (query) => {
+            execute: async (query, mode) => {
               state.statements.push(query)
               const rows = JSON.stringify(query).includes(${JSON.stringify(SOURCE_ID)})
                 ? [{ id: ${JSON.stringify(SOURCE_ID)}, name: 'Source', description: null, isDefault: true, isActive: true, allowedRoles: null, layout: {}, recordType: 'vendor_bill' }]
                 : []
-              return { rows }
+              return mode === 'objects' ? rows : { rows }
             },
             transaction: async (fn) => fn({ execute: async (query, mode) => { const inMode = (result) => (mode === 'objects' ? result.rows : result); state.statements.push(query); return inMode({ rows: [] }) } }),
           }

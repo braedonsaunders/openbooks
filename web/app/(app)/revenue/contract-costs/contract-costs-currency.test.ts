@@ -8,7 +8,7 @@ function runner(rows: { minor_units: unknown }[]) {
   return new Proxy(db, {
     get(_target, property) {
       assert.equal(property, "execute", "the currency read uses the SQL executor boundary");
-      return async () => ({ rows });
+      return async (_query: unknown, mode?: string) => (mode === "objects" ? rows : { rows });
     },
   });
 }

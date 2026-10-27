@@ -36,7 +36,7 @@ stubModules({
   extra: {
     "server-only": `export {}`,
     "@openbooks/engine/platform/database":
-      `export const db = { execute: async (q) => {` +
+      `const read = (q) => {` +
       `const s = JSON.stringify(q);` +
       `if (s.includes('journal_lines')) return { rows: [{ carrying: '0' }] };` +
       `if (s.includes('contract_cost_amortization')) return { rows: [] };` +
@@ -44,7 +44,8 @@ stubModules({
       `if (s.includes('from orgs')) return { rows: globalThis.__costViewsState.org };` +
       `if (s.includes('not p.is_adjustment')) return { rows: globalThis.__costViewsState.periods };` +
       `if (s.includes('count(*)')) return { rows: [{ n: '0' }] };` +
-      `return { rows: [] } } }`,
+      `return { rows: [] } };` +
+      `export const db = { execute: async (q, mode) => { const result = read(q); return mode === 'objects' ? result.rows : result } }`,
     "../../../../lib/setup/ref-options": `export async function loadAccounts(){return []}`,
     "@openbooks/engine/revenue":
       `export class ContractCostError extends Error {` +
