@@ -131,6 +131,13 @@ export interface LineRow extends Record<string, unknown> {
   distributionKey: string;
   /** Promotion code carried by a discount line; blank on ordinary lines. */
   promotionCode: string;
+  /**
+   * Coding the party default placed on this line (client-only, never
+   * serialized). A field still holding this value was carried in, not chosen
+   * by the operator, so it alone does not make the line contentful; a later
+   * party change may re-code it.
+   */
+  partyDefault?: { accountId: string; taxProfileId: string };
 }
 
 /** The distribution slice of a grid row: server line → row, row → collapse. */

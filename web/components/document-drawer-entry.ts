@@ -204,8 +204,8 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
   // Each line takes the party default once: when it first appears without
   // an item or account, or when the party changes while the line still
   // carries the previous party's default. A line the clerk recoded keeps
-  // the clerk's choice.
-  const applied = useRef(new Map<string, { accountId: string; taxProfileId: string }>());
+  // the clerk's choice. The line records what it was given (`partyDefault`)
+  // so the coding alone never makes an otherwise untouched line contentful.
   const appliedParty = useRef<string | null>(null);
   useEffect(() => {
     if (!editable || !lineSide || config.kind === "project_charge") return;
@@ -213,13 +213,12 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
     if (!partyLine && !partyChanged) return;
     let changed = false;
     const next = rows.map((row) => {
-      const previous = applied.current.get(row.clientKey);
+      const previous = row.partyDefault;
       // An item codes its own line: release a party default the line still holds.
       if (row.itemId) {
         if (previous && row.accountId === previous.accountId && row.accountId !== "") {
-          applied.current.delete(row.clientKey);
           changed = true;
-          return { ...row, accountId: "" };
+          return { ...row, accountId: "", partyDefault: undefined };
         }
         return row;
       }
@@ -233,10 +232,17 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
       if (follows(row.accountId, previous?.accountId)) accountId = defaultAccount;
       if (config.hasTax && follows(row.taxProfileId, previous?.taxProfileId))
         taxProfileId = defaultTax;
-      applied.current.set(row.clientKey, { accountId, taxProfileId });
-      if (accountId === row.accountId && taxProfileId === row.taxProfileId) return row;
+      // A default that placed nothing leaves the line exactly as untouched.
+      const given = accountId || taxProfileId ? { accountId, taxProfileId } : undefined;
+      if (
+        accountId === row.accountId &&
+        taxProfileId === row.taxProfileId &&
+        given?.accountId === previous?.accountId &&
+        given?.taxProfileId === previous?.taxProfileId
+      )
+        return row;
       changed = true;
-      return { ...row, accountId, taxProfileId };
+      return { ...row, accountId, taxProfileId, partyDefault: given };
     });
     if (partyLine) appliedParty.current = partyId;
     if (changed) setRows(next);
@@ -284,9 +290,8 @@ export function useDocumentDrawerEntry(scope: DocumentDrawerPickersScope) {
       if (!source.currency || source.currency !== currency) return;
       const undo = { ...latest.current };
       const next = recentToRows(source);
-      appliedParty.current = forParty;
       // Recalled coding belongs to the source lines, never to party defaults.
-      applied.current.clear();
+      appliedParty.current = forParty;
       setRows(next);
       if (!undo.memo && source.memo) setMemo(source.memo);
       setRecall({ key: `${forParty}:${source.id}`, documentNumber: source.documentNumber, undo });

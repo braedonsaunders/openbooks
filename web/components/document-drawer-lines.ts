@@ -63,24 +63,41 @@ function isBlankDrawerCell(value: unknown): boolean {
   return false;
 }
 
+/** An amount-like cell that is blank or an exact zero carries no figure. */
+function isZeroOrBlankFigure(value: unknown): boolean {
+  if (isBlankDrawerCell(value)) return true;
+  return typeof value === "string" && parseLineDecimal(value)?.units === 0n;
+}
+
 /**
- * The only rows the footer and the save payload may drop: truly blank
- * placeholder rows with no user-entered content in ANY field. Every other
- * row rides to the server, where validateEditableDocumentLines names the
- * line and refuses what cannot book (a missing account, a malformed
- * amount). Dropping a contentful row here used to book something other
- * than the reviewed footer — a $200 invoice line vanished while the save
- * reported success (OM-09). Missing keys count as blank so partial test
- * rows behave like an untouched grid row.
+ * The only rows the footer and the save payload may drop: placeholder rows
+ * with no user-entered content in ANY field. Every other row rides to the
+ * server, where validateEditableDocumentLines names the line and refuses
+ * what cannot book (a missing account, a malformed amount), so the booked
+ * lines always match the reviewed footer. Missing keys count as blank so
+ * partial rows behave like an untouched grid row.
+ *
+ * Two things a placeholder may hold without becoming content: an exact zero
+ * (or blank) amount, quantity or unit price, which prices nothing; and the
+ * party's default account and tax code the drawer carried in by itself
+ * (`partyDefault`), which the operator never chose. Any value the operator
+ * changed, and any other field, is content.
  */
 export function isBlankDrawerLine(row: Record<string, unknown>): boolean {
+  const carried =
+    row.partyDefault && typeof row.partyDefault === "object"
+      ? (row.partyDefault as { accountId?: unknown; taxProfileId?: unknown })
+      : null;
+  for (const key of ["amount", "quantity", "unitPrice"]) {
+    if (!isZeroOrBlankFigure(row[key])) return false;
+  }
+  if (!isBlankDrawerCell(row.accountId) && row.accountId !== carried?.accountId) return false;
+  if (!isBlankDrawerCell(row.taxProfileId) && row.taxProfileId !== carried?.taxProfileId)
+    return false;
   for (const key of [
-    "accountId",
     "itemId",
     "description",
-    "quantity",
     "unit",
-    "unitPrice",
     "costRate",
     "billRate",
     "billAmount",
@@ -95,8 +112,6 @@ export function isBlankDrawerLine(row: Record<string, unknown>): boolean {
     "amortizationStartOn",
     "amortizationEndOn",
     "returnSourceMovementId",
-    "taxProfileId",
-    "amount",
     "taxInputAmount",
     "taxAmount",
     "withholdingTreatment",
