@@ -305,6 +305,43 @@ export function SetupWizard(props: {
     setSampleFailure({ industry, refusal: read.refusal });
     toast.error(sampleCompanyRefusalText(sampleT, read.refusal));
   });
+  const sampleRetryLocked = useRef(false);
+  const [sampleRetrying, setSampleRetrying] = useState(false);
+  /**
+   * Ask again after a known outcome (nothing started, or a finished run that
+   * failed). The new run replaces the finished one and is followed like the
+   * first; the failure stays visible until the new request is answered.
+   */
+  async function retrySample(industry: string) {
+    if (sampleRetryLocked.current) return;
+    sampleRetryLocked.current = true;
+    setSampleRetrying(true);
+    let refusal: SampleCompanyRefusal = {};
+    try {
+      const installed = await readSampleCompanyResponse(
+        await fetch("/api/data/sample-companies", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ industry }),
+        }),
+      );
+      if (installed.ok) {
+        setSampleFailure(null);
+        if ("run" in installed) setSampleRun({ industry, run: installed.run });
+        else setSampleOrgId(installed.orgId);
+        return;
+      }
+      refusal = installed.refusal;
+    } catch {
+      // A lost response leaves readiness unconfirmed: only a status check is offered.
+    } finally {
+      sampleRetryLocked.current = false;
+      setSampleRetrying(false);
+    }
+    sampleAttempts.current.set(industry, refusal);
+    setSampleFailure({ industry, refusal });
+    toast.error(sampleCompanyRefusalText(sampleT, refusal));
+  }
   const installablePacks = props.payrollPacks ?? [];
   const [payrollPack, setPayrollPack] = useState<PayrollPack>(
     initialPayrollPack(installablePacks, props.initial.country),
@@ -827,6 +864,16 @@ export function SetupWizard(props: {
           <p>{sampleCompanyRefusalText(sampleT, sampleFailure.refusal)}</p>
           {sampleFailure.refusal.requestId && (
             <p>{sampleT("requestReference", { requestId: sampleFailure.refusal.requestId })}</p>
+          )}
+          {sampleFailure.refusal.retryable && (
+            <button
+              type="button"
+              disabled={sampleRetrying}
+              onClick={() => void retrySample(sampleFailure.industry)}
+              className="mr-3 mt-2 rounded-md border border-rose-300 bg-white px-3 py-1.5 font-medium text-rose-800 hover:bg-rose-100 disabled:opacity-60 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200 dark:hover:bg-rose-900"
+            >
+              {sampleRetrying ? sampleT("preparing") : sampleT("retry")}
+            </button>
           )}
           <Link
             href="/admin/setup/company#sample-companies"

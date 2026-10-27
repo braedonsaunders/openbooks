@@ -12,6 +12,7 @@ import { SAMPLE_COMPANY_BY_INDUSTRY, SAMPLE_COMPANY_PROFILES } from "./catalog.t
 import {
   SampleCompanyError,
   SampleCompanyPreconditionError,
+  SampleCompanyStrandedOrgError,
   runProvisioningStage,
   type SampleCompanyProvisioningStage,
 } from "./provisioning-failures.ts";
@@ -25,7 +26,11 @@ import { sampleCompanyFeatures } from "./features.ts";
 import { createPreviewActor } from "./preview-actor.ts";
 import { verifyAndRegisterDemoAccounting } from "./accounting.ts";
 
-export { SampleCompanyError, SampleCompanyPreconditionError } from "./provisioning-failures.ts";
+export {
+  SampleCompanyError,
+  SampleCompanyPreconditionError,
+  SampleCompanyStrandedOrgError,
+} from "./provisioning-failures.ts";
 export {
   SampleCompanyProvisioningError,
   sampleCompanyStageMessage,
@@ -1032,7 +1037,7 @@ async function sweepStaleTemplateAttempts(
     }
   }
   if (stuck.length > 0) {
-    throw new SampleCompanyPreconditionError(
+    throw new SampleCompanyStrandedOrgError(
       `sample template preparation for profile "${profileId}" found an incomplete previous attempt ` +
         `(org ${stuck.join(", ")}) that could not be removed automatically; ` +
         `remove the SIM-tagged attempt org with \`npm run sim -- reset-org ${stuck[0]}\`, then retry`,
@@ -1056,7 +1061,7 @@ async function compensateTemplateAttempt(
     await wipe(orgId);
   } catch (error) {
     console.error(`[sample-company] could not remove failed template attempt ${orgId}`, error);
-    throw new SampleCompanyPreconditionError(
+    throw new SampleCompanyStrandedOrgError(
       `sample template preparation for profile "${profileId}" left an incomplete attempt ` +
         `(org ${orgId}) that could not be removed automatically; ` +
         `remove the SIM-tagged attempt org with \`npm run sim -- reset-org ${orgId}\`, then retry`,
@@ -1633,7 +1638,7 @@ async function compensateFailedClone(input: CreateSampleCompanyInput): Promise<v
     await deletePartialSampleOrg(partial.id);
   } catch (error) {
     console.error(`[sample-company] could not remove failed clone shell ${partial.id}`, error);
-    throw new SampleCompanyPreconditionError(
+    throw new SampleCompanyStrandedOrgError(
       `sample company clone failed and its incomplete shell (org ${partial.id}) could not be removed automatically; ` +
         `remove the shell org manually, then retry`,
       { cause: error },
@@ -1752,7 +1757,16 @@ export async function createSampleCompany(
           templateGenerated: prepared.generated,
         };
       }
-      await deletePartialSampleOrg(partial.id);
+      await deletePartialSampleOrg(partial.id).catch((error: unknown) => {
+        // A refused removal names the partial organization and its remedy;
+        // it is a stranded organization, so no further attempt is offered.
+        if (
+          error instanceof SampleCompanyError &&
+          !(error instanceof SampleCompanyStrandedOrgError)
+        )
+          throw new SampleCompanyStrandedOrgError(error.message, { cause: error });
+        throw error;
+      });
     }
 
     // OM-13b: a failed clone still commits its shell (org + sandbox row),

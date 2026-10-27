@@ -744,8 +744,119 @@ for (const outcome of ["refused", "transport", "background"] as const) {
       1,
       "a failed sample request is never replayed",
     );
+    assert.equal(
+      buttonsNamed("Try again").length,
+      outcome === "background" ? 1 : 0,
+      "only a finished run with a known failure offers another attempt",
+    );
   });
 }
+
+test("a failed background sample offers Try again and follows the new run to entry", async (t) => {
+  const { host, root } = mount();
+  const requests: string[] = [];
+  let statusReads: Record<string, unknown>[] = [
+    {
+      existingOrgId: null,
+      provisioning: {
+        state: "failed",
+        failure: {
+          error: "sample-company-clone-failed",
+          stage: "clone",
+          message: "Copying requires a compatible schema.",
+          requestId: "9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9",
+        },
+      },
+    },
+  ];
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    requests.push(url);
+    if (url === "/api/data/sample-companies") {
+      return Response.json(
+        { ok: true, provisioning: { state: "queued", stage: null } },
+        { status: 202 },
+      );
+    }
+    if (url === "/api/data/sample-companies?industry=manufacturing") {
+      return Response.json({
+        industryKey: "manufacturing",
+        ...(statusReads.length > 1 ? statusReads.shift() : statusReads[0]),
+      });
+    }
+    return Response.json({ ok: true });
+  }) as typeof fetch;
+  t.after(async () => {
+    globalThis.fetch = prior;
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await renderWizard(host, root);
+  await cont();
+  await cont();
+  const industry = [...document.querySelectorAll("button[aria-pressed]")].find((button) =>
+    button.textContent?.includes("Manufacturing"),
+  )!;
+  await act(async () => {
+    industry.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+  await cont();
+  await cont();
+  await cont();
+  const sample = [...document.querySelectorAll("button[aria-pressed]")].find((button) =>
+    button.textContent?.includes("Create an industry sample company"),
+  )!;
+  await act(async () => {
+    sample.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+  await cont();
+  await act(async () => {
+    buttonsNamed("Set up my books")[0]!.dispatchEvent(
+      new window.MouseEvent("click", { bubbles: true }),
+    );
+  });
+  await tick(STEP_WAIT);
+  await tick(STEP_WAIT);
+  await waitForSampleReads(() => requests, 1);
+  const failure = () => document.querySelector('[role="alert"]')?.textContent ?? "";
+  assert.match(failure(), /Copying requires a compatible schema/);
+  assert.match(failure(), /Support reference: 9cfa2170/);
+  const retry = buttonsNamed("Try again");
+  assert.equal(retry.length, 1, "a finished failed run offers another attempt");
+
+  statusReads = [
+    { existingOrgId: null, provisioning: { state: "running", stage: "clone" } },
+    { existingOrgId: "00000000-0000-4000-8000-000000000003", provisioning: null },
+  ];
+  await act(async () => {
+    retry[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  await tick();
+  assert.equal(requests.filter((url) => url === "/api/data/sample-companies").length, 2);
+  assert.equal(failure(), "", "the new run replaces the failure notice");
+  const progress = () => document.querySelector('[role="status"]')?.textContent ?? "";
+  assert.match(progress(), /Waiting for the background worker to start/);
+  await waitForSampleReads(() => requests, 1);
+  assert.match(progress(), /Step 2 of 3: Copying the template’s posted history/);
+  await waitForSampleReads(() => requests, 1);
+  assert.equal(progress(), "");
+  const enter = buttonsNamed("Explore a separate demo company");
+  assert.equal(enter.length, 1);
+  await act(async () => {
+    enter[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  });
+  assert.equal(
+    (globalThis as { __wizardEnteredOrg?: string }).__wizardEnteredOrg,
+    "00000000-0000-4000-8000-000000000003",
+  );
+  assert.equal(requests.filter((url) => url === "/api/admin/setup/wizard").length, 1);
+  assert.equal(requests.filter((url) => url === "/api/data/sample-companies").length, 2);
+});
 
 const switchNamed = (label: string) =>
   document.querySelector(

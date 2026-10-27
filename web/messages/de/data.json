@@ -98,6 +98,7 @@
       "createFailedFinalize": "Das Beispielunternehmen konnte nicht erstellt werden. Die Fertigstellung des neuen Unternehmens ist fehlgeschlagen. Die Betriebsbereitschaft des Unternehmens ist nicht bestätigt. Prüfen Sie in der Unternehmenseinrichtung, ob ein Beispielunternehmen verfügbar ist. Falls nicht, wenden Sie sich an den Support, bevor Sie eine weitere Kopie erstellen.",
       "createFailedNumbering": "Das Beispielunternehmen konnte nicht erstellt werden. Der Abgleich der Belegnummerierung ist fehlgeschlagen. Die Betriebsbereitschaft des Unternehmens ist nicht bestätigt. Prüfen Sie in der Unternehmenseinrichtung, ob ein Beispielunternehmen verfügbar ist. Falls nicht, wenden Sie sich an den Support, bevor Sie eine weitere Kopie erstellen.",
       "checkStatus": "Unternehmensstatus prüfen",
+      "retry": "Erneut versuchen",
       "requestReference": "Supportreferenz: {requestId}",
       "setupSaved": "Die Unternehmenseinrichtung wurde gespeichert. Die Betriebsbereitschaft des optionalen Beispielunternehmens ist nicht bestätigt.",
       "createFailedWorker": "Beispielunternehmen werden vom Hintergrundprozess vorbereitet, der nicht läuft. Die Vorbereitung wurde daher nicht gestartet. Bitten Sie Ihre Administration, den Hintergrundprozess zu starten, und versuchen Sie es dann erneut.",

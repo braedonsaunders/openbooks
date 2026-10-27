@@ -126,8 +126,30 @@ test("status reads settle on a ready company or the recorded staged failure", as
       stage: "finalize",
       message: "Sample company preparation stopped: finalizing the new company failed.",
       requestId,
+      retryable: true,
     },
   });
+  const stranded = await readSampleCompanyStatus(
+    Response.json({
+      existingOrgId: null,
+      provisioning: {
+        state: "failed",
+        failure: {
+          error: "sample-company-stranded-org",
+          message: "remove the shell org manually, then retry",
+          requestId,
+        },
+      },
+    }),
+  );
+  assert.equal(stranded.kind, "failed");
+  if (stranded.kind !== "failed") throw new Error("expected a failure");
+  assert.equal(stranded.refusal.code, "sample-company-stranded-org");
+  assert.equal(
+    stranded.refusal.retryable,
+    undefined,
+    "a stranded organization needs support first",
+  );
 });
 
 test("a watched run that vanished leaves readiness unconfirmed; an outage proves nothing", async () => {
@@ -138,6 +160,7 @@ test("a watched run that vanished leaves readiness unconfirmed; an outage proves
   if (vanished.kind !== "failed") throw new Error("expected an unconfirmed outcome");
   assert.equal(vanished.refusal.message, undefined);
   assert.equal(vanished.refusal.code, undefined);
+  assert.equal(vanished.refusal.retryable, undefined, "an unconfirmed outcome is only re-read");
   assert.deepEqual(
     await readSampleCompanyStatus(new Response("<html>bad gateway</html>", { status: 502 })),
     { kind: "unavailable" },

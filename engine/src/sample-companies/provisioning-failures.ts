@@ -85,7 +85,8 @@ export function sampleCompanyProvisioningBody(error: SampleCompanyProvisioningEr
  * The operator-facing outcome of a provisioning run that ended in a failure,
  * recorded where the operator reads progress. A staged failure carries its
  * stable code, stage and fixed message; a known refusal carries its specific
- * message (it names the condition and its remedy); anything else carries only
+ * message (it names the condition and its remedy), and a stranded
+ * organization also carries its own code; anything else carries only
  * the support reference, so the reader shows the unconfirmed-readiness
  * guidance. The full cause stays in the server log under the same reference.
  */
@@ -103,6 +104,9 @@ export function sampleCompanyFailureBody(
   if (error instanceof SampleCompanyProvisioningError) {
     return { ...sampleCompanyProvisioningBody(error), requestId };
   }
+  if (error instanceof SampleCompanyStrandedOrgError) {
+    return { error: error.code, message: error.message, requestId };
+  }
   if (error instanceof SampleCompanyError) return { message: error.message, requestId };
   return { requestId };
 }
@@ -115,7 +119,20 @@ export function sampleCompanyFailureBody(
  * relabelling them into the fixed per-stage string would hide both.
  */
 export class SampleCompanyPreconditionError extends SampleCompanyError {
-  override readonly name = "SampleCompanyPreconditionError";
+  override readonly name: string = "SampleCompanyPreconditionError";
+}
+
+export const SAMPLE_COMPANY_STRANDED_ORG_CODE = "sample-company-stranded-org";
+
+/**
+ * A previous attempt left an organization that could not be removed
+ * automatically. Provisioning again cannot succeed until it is removed, so
+ * this refusal carries a stable code that tells the reader not to offer
+ * another attempt; its message names the organization and the removal remedy.
+ */
+export class SampleCompanyStrandedOrgError extends SampleCompanyPreconditionError {
+  override readonly name: string = "SampleCompanyStrandedOrgError";
+  readonly code = SAMPLE_COMPANY_STRANDED_ORG_CODE;
 }
 
 /**

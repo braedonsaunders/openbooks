@@ -99,6 +99,7 @@
       "createFailedFinalize": "Sample company preparation stopped: finalizing the new company failed. Company readiness is unconfirmed. Check Company Setup for an available sample company; if none is available, contact support before creating another copy.",
       "createFailedNumbering": "Sample company preparation stopped: reconciling document numbering failed. Company readiness is unconfirmed. Check Company Setup for an available sample company; if none is available, contact support before creating another copy.",
       "checkStatus": "Check company status",
+      "retry": "Try again",
       "requestReference": "Support reference: {requestId}",
       "setupSaved": "Company setup was saved. The optional sample company is not confirmed ready.",
       "createFailedWorker": "Sample companies are prepared by the background worker, which is not running, so preparation did not start. Ask your administrator to start the background worker, then try again.",

@@ -5,6 +5,7 @@ import {
   SampleCompanyError,
   SampleCompanyPreconditionError,
   SampleCompanyProvisioningError,
+  SampleCompanyStrandedOrgError,
   runProvisioningStage,
   sampleCompanyFailureBody,
   sampleCompanyStageMessage,
@@ -219,6 +220,23 @@ test("a background run records the staged body, a known refusal, or only its ref
     message: precondition.message,
     requestId,
   });
+
+  const stranded = new SampleCompanyStrandedOrgError(
+    "sample company clone failed and its incomplete shell (org 3f0c) could not be removed automatically; remove the shell org manually, then retry",
+  );
+  assert.ok(stranded instanceof SampleCompanyPreconditionError);
+  assert.deepEqual(sampleCompanyFailureBody(stranded, requestId), {
+    error: "sample-company-stranded-org",
+    message: stranded.message,
+    requestId,
+  });
+  await assert.rejects(
+    runProvisioningStage("clone", async () => {
+      throw stranded;
+    }),
+    (error: unknown) => error === stranded,
+    "a stranded organization passes the stage wrapper with its remedy",
+  );
 
   assert.deepEqual(sampleCompanyFailureBody(SQL_LADEN_DB_ERROR, requestId), { requestId });
 });

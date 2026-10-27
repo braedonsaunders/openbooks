@@ -14,16 +14,6 @@ import {
 /** How often an in-progress sample company is re-read while it is shown. */
 export const SAMPLE_COMPANY_POLL_MS = 1500;
 
-/**
- * Codes for requests the server refused before any preparation started. The
- * outcome is certain, so asking again is safe; every other failure leaves
- * readiness unconfirmed and is only re-read.
- */
-export const SAMPLE_COMPANY_NOT_STARTED_CODES: ReadonlySet<string> = new Set([
-  "sample-company-worker-unavailable",
-  "sample-company-queue-unavailable",
-]);
-
 // Authored server remedies take precedence. A code-only response uses the
 // localized description of its code without inferring any company identity.
 const FAILURE_COPY: Record<string, string> = {

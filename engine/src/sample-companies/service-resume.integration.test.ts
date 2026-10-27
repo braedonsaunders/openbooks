@@ -8,6 +8,7 @@ import {
   generateTemplate,
   SampleCompanyPreconditionError,
   SampleCompanyProvisioningError,
+  SampleCompanyStrandedOrgError,
   sampleCompanyStageMessage,
 } from "./service.ts";
 import {
@@ -470,6 +471,9 @@ test(
           // The blocked refusal is NOT staged: its specific message names
           // the stranded org and the remedy that clears it.
           assert.ok(error instanceof SampleCompanyPreconditionError);
+          // A stranded organization carries its own code, so no reader
+          // offers another attempt until it is removed.
+          assert.ok(error instanceof SampleCompanyStrandedOrgError);
           assert.match(String((error as Error).message), new RegExp(staleId));
           assert.match(String((error as Error).message), /npm run sim -- reset-org/);
           return true;

@@ -257,7 +257,7 @@ function sampleSelect(): HTMLSelectElement {
 
 function createButton(): HTMLButtonElement {
   const button = [...document.querySelectorAll("button")].find((candidate) =>
-    /Create sample company|Open sample company|Check company status|Opening|Preparing/.test(
+    /Create sample company|Open sample company|Check company status|Try again|Opening|Preparing/.test(
       (candidate.textContent ?? "").trim(),
     ),
   ) as HTMLButtonElement | undefined;
@@ -485,7 +485,59 @@ test("a started company shows its stage while it prepares and offers to open it 
   assert.equal(script.samplePosts, 1, "opening the ready company never provisions again");
 });
 
-test("a failed background run shows its staged message and reference, then only re-reads", async (t) => {
+const RECORDED_CLONE_FAILURE = {
+  existingOrgId: null,
+  provisioning: {
+    state: "failed",
+    failure: {
+      error: "sample-company-clone-failed",
+      stage: "clone",
+      message:
+        "Sample company preparation stopped: copying the template's posted history failed. Company readiness is unconfirmed.",
+      requestId: "9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9",
+    },
+  },
+};
+
+test("a failed background run keeps its staged message and offers Try again through to ready", async (t) => {
+  await mountWizard(t, true);
+  script.postStatus = 202;
+  script.statusReads = [RECORDED_CLONE_FAILURE];
+  await clickCreate();
+  await waitForPolls(1);
+  const alert = document.querySelector('[role="alert"]')?.textContent ?? "";
+  assert.match(alert, /copying the template's posted history failed/);
+  assert.match(alert, /Company readiness is unconfirmed/);
+  assert.match(alert, /Support reference: 9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9/);
+  assert.equal(progressText(), "");
+  assert.match(createButton().textContent ?? "", /Try again/);
+  assert.equal(createButton().disabled, false);
+  const reads = script.statusGets;
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 1700));
+  });
+  assert.equal(script.statusGets, reads, "a finished run is no longer re-read");
+
+  script.statusReads = [
+    { existingOrgId: null, provisioning: { state: "running", stage: "clone" } },
+    { existingOrgId: NEW_ORG_ID, provisioning: null },
+  ];
+  await clickCreate();
+  assert.equal(script.samplePosts, 2, "Try again starts a new run");
+  assert.equal(document.querySelector('[role="alert"]'), null);
+  assert.match(createButton().textContent ?? "", /Preparing company/);
+  assert.equal(createButton().disabled, true, "a running retry cannot be started again");
+  await waitForPolls(1);
+  assert.match(progressText(), /Step 2 of 3: Copying the template’s posted history/);
+  await waitForPolls(1);
+  assert.equal(progressText(), "");
+  assert.match(createButton().textContent ?? "", /Open sample company/);
+  await clickCreate();
+  assert.deepEqual(globalThis.__sampleTestEnteredOrgs, [NEW_ORG_ID]);
+  assert.equal(script.samplePosts, 2);
+});
+
+test("a run that stranded an organization keeps its remedy and never offers another attempt", async (t) => {
   await mountWizard(t, true);
   script.postStatus = 202;
   script.statusReads = [
@@ -494,10 +546,9 @@ test("a failed background run shows its staged message and reference, then only 
       provisioning: {
         state: "failed",
         failure: {
-          error: "sample-company-clone-failed",
-          stage: "clone",
+          error: "sample-company-stranded-org",
           message:
-            "Sample company preparation stopped: copying the template's posted history failed. Company readiness is unconfirmed.",
+            "sample company clone failed and its incomplete shell (org 3f0c) could not be removed automatically; remove the shell org manually, then retry",
           requestId: "9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9",
         },
       },
@@ -505,16 +556,14 @@ test("a failed background run shows its staged message and reference, then only 
   ];
   await clickCreate();
   await waitForPolls(1);
-  const alert = document.querySelector('[role="alert"]')?.textContent ?? "";
-  assert.match(alert, /copying the template's posted history failed/);
-  assert.match(alert, /Company readiness is unconfirmed/);
-  assert.match(alert, /Support reference: 9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9/);
-  assert.equal(progressText(), "");
+  assert.match(
+    document.querySelector('[role="alert"]')?.textContent ?? "",
+    /could not be removed automatically; remove the shell org manually/,
+  );
   assert.match(createButton().textContent ?? "", /Check company status/);
-  const reads = script.statusGets;
   await clickCreate();
-  assert.equal(script.samplePosts, 1, "a failed run is re-read, never provisioned again");
-  assert.equal(script.statusGets, reads, "the failure stops background status reads");
+  assert.equal(script.samplePosts, 1, "a stranded organization is only re-read");
+  assert.ok(document.querySelector('[role="alert"]'));
 });
 
 test("a request refused before anything started explains why and may be asked again", async (t) => {
@@ -526,13 +575,26 @@ test("a request refused before anything started explains why and may be asked ag
     document.querySelector('[role="alert"]')?.textContent ?? "",
     /background worker, which is not running, so preparation did not start/,
   );
-  assert.match(createButton().textContent ?? "", /Create sample company/);
+  assert.match(createButton().textContent ?? "", /Try again/);
   script.postStatus = 202;
   script.statusReads = [{ existingOrgId: null, provisioning: { state: "running", stage: null } }];
   await clickCreate();
   assert.equal(script.samplePosts, 2, "nothing started, so the request may be made again");
   assert.equal(document.querySelector('[role="alert"]'), null);
   assert.match(progressText(), /Waiting for the background worker to start/);
+});
+
+test("a failure recorded before the panel opened is shown with Try again", async (t) => {
+  script.listProvisioning = RECORDED_CLONE_FAILURE.provisioning;
+  t.after(() => {
+    script.listProvisioning = null;
+  });
+  await mountWizard(t, true);
+  assert.match(
+    document.querySelector('[role="alert"]')?.textContent ?? "",
+    /copying the template's posted history failed/,
+  );
+  assert.match(createButton().textContent ?? "", /Try again/);
 });
 
 test("a run already in progress when the panel opens is followed without a new start", async (t) => {

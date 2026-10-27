@@ -98,6 +98,7 @@
       "createFailedFinalize": "La société exemple n’a pas pu être créée. La finalisation de la nouvelle société a échoué. La disponibilité de la société n’est pas confirmée. Vérifiez dans la configuration de la société si une société exemple est disponible ; sinon, contactez l’assistance avant de créer une autre copie.",
       "createFailedNumbering": "La société exemple n’a pas pu être créée. Le rapprochement de la numérotation des documents a échoué. La disponibilité de la société n’est pas confirmée. Vérifiez dans la configuration de la société si une société exemple est disponible ; sinon, contactez l’assistance avant de créer une autre copie.",
       "checkStatus": "Vérifier l’état de la société",
+      "retry": "Réessayer",
       "requestReference": "Référence d’assistance : {requestId}",
       "setupSaved": "La configuration de la société a été enregistrée. La disponibilité de la société exemple facultative n’est pas confirmée.",
       "createFailedWorker": "Les sociétés exemples sont préparées par le processus d’arrière-plan, qui n’est pas en cours d’exécution ; la préparation n’a donc pas démarré. Demandez à votre administrateur de démarrer le processus d’arrière-plan, puis réessayez.",

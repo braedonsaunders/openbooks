@@ -98,6 +98,7 @@
       "createFailedFinalize": "No se pudo crear la empresa de ejemplo. Falló la finalización de la nueva empresa. No se ha confirmado que la empresa esté lista. Compruebe en la configuración de la empresa si hay una empresa de ejemplo disponible; si no la hay, contacte con soporte antes de crear otra copia.",
       "createFailedNumbering": "No se pudo crear la empresa de ejemplo. Falló la conciliación de la numeración de documentos. No se ha confirmado que la empresa esté lista. Compruebe en la configuración de la empresa si hay una empresa de ejemplo disponible; si no la hay, contacte con soporte antes de crear otra copia.",
       "checkStatus": "Comprobar estado de empresa",
+      "retry": "Volver a intentarlo",
       "requestReference": "Referencia de soporte: {requestId}",
       "setupSaved": "La configuración de la empresa se guardó. No se ha confirmado que la empresa de ejemplo opcional esté lista.",
       "createFailedWorker": "Las empresas de ejemplo las prepara el proceso en segundo plano, que no está en ejecución, por lo que la preparación no se inició. Pida a su administrador que inicie el proceso en segundo plano y vuelva a intentarlo.",

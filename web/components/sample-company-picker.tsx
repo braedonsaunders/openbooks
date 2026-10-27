@@ -19,7 +19,6 @@ import {
   type SampleCompanyStatusRead,
 } from "../lib/sample-company-response";
 import {
-  SAMPLE_COMPANY_NOT_STARTED_CODES,
   SampleCompanyProgress,
   sampleCompanyRefusalText,
   useSampleCompanyWatch,
@@ -150,12 +149,9 @@ export function SampleCompanyPicker() {
       // After an uncertain attempt, perform only a read. An accessible ready
       // company may be opened and a run in progress is followed; an absent
       // list entry does not prove no partial company exists and never
-      // authorizes another POST here. A request refused before anything
-      // started may be asked again.
-      const uncertain =
-        sampleError &&
-        !(sampleError.code && SAMPLE_COMPANY_NOT_STARTED_CODES.has(sampleError.code));
-      if (uncertain && !orgId) {
+      // authorizes another POST here. A known outcome — nothing started, or
+      // a finished run that failed — may be tried again.
+      if (sampleError && !sampleError.retryable && !orgId) {
         const response = await fetch("/api/data/sample-companies");
         if (!response.ok)
           throw new Error(await readApiErrorMessage(response, t("import.sample.error")));
@@ -180,7 +176,8 @@ export function SampleCompanyPicker() {
         }
         if ("run" in result) {
           // Preparation continues in the background; the progress panel
-          // follows it and offers the company once it is ready.
+          // follows it and offers the company once it is ready. A retry's
+          // new run replaces the failure it answers.
           setError(industry, null);
           setRun(industry, result.run);
           return;
@@ -280,10 +277,11 @@ export function SampleCompanyPicker() {
             ? t("import.sample.preparing")
             : selectedSample?.existingOrgId
               ? t("import.sample.open")
-              : sampleError &&
-                  !(sampleError.code && SAMPLE_COMPANY_NOT_STARTED_CODES.has(sampleError.code))
-                ? t("import.sample.checkStatus")
-                : t("import.sample.create")}
+              : sampleError?.retryable
+                ? t("import.sample.retry")
+                : sampleError
+                  ? t("import.sample.checkStatus")
+                  : t("import.sample.create")}
         </Button>
       </div>
       <p className="px-4 pb-4 text-xs leading-relaxed text-muted-foreground">

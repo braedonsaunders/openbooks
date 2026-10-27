@@ -7,7 +7,23 @@ export interface SampleCompanyRefusal {
   message?: string;
   requestId?: string;
   status?: number;
+  /**
+   * The outcome is known: either nothing was started, or the recorded run has
+   * finished with this failure. Another attempt may be requested; it replaces
+   * the finished run and resumes or compensates any partial company. Absent
+   * when the outcome is unconfirmed or the failure needs support first.
+   */
+  retryable?: boolean;
 }
+
+/** Refusals given before any preparation started. */
+const NOT_STARTED_CODES = new Set([
+  "sample-company-worker-unavailable",
+  "sample-company-queue-unavailable",
+]);
+
+/** A previous attempt left an organization that must be removed before another attempt. */
+export const SAMPLE_COMPANY_STRANDED_ORG_CODE = "sample-company-stranded-org";
 
 export type SampleCompanyStage = "template" | "clone" | "finalize" | "numbering";
 
@@ -52,11 +68,18 @@ export function sampleCompanyRun(value: unknown): SampleCompanyRun | null {
   return { state: record.state, stage };
 }
 
-/** The recorded failure of a finished run, read like a refusal body. */
+/**
+ * The recorded failure of a finished run, read like a refusal body. The run
+ * is known to have ended, so another attempt may be offered — except when it
+ * stranded an organization that support must remove first.
+ */
 function failedRun(value: unknown): SampleCompanyRefusal | null {
   const record = asRecord(value);
   if (!record || record.state !== "failed") return null;
-  return sampleCompanyRefusal(record.failure, null);
+  const refusal = sampleCompanyRefusal(record.failure, null);
+  return refusal.code === SAMPLE_COMPANY_STRANDED_ORG_CODE
+    ? refusal
+    : { ...refusal, retryable: true };
 }
 
 /** A stage identifies where execution stopped, not whether a company exists. */
@@ -134,5 +157,6 @@ function sampleCompanyRefusal(body: unknown, response: Response | null): SampleC
     message,
     requestId: isUuid(requestId) ? requestId : undefined,
     ...(response ? { status: response.status } : {}),
+    ...(code && NOT_STARTED_CODES.has(code) ? { retryable: true } : {}),
   };
 }
