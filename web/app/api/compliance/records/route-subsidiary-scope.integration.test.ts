@@ -65,6 +65,11 @@ async function fixture() {
   );
   state.orgId = org.orgId;
   state.actorId = actorId;
+  await withBypassContext(() =>
+    db.execute(
+      sql`update orgs set settings = settings || '{"features": {"subcontractorCompliance": true}}'::jsonb where id = ${org.orgId}`,
+    ),
+  );
   const branchId = randomUUID();
   const hiddenPartyId = randomUUID();
   const visiblePartyId = randomUUID();
