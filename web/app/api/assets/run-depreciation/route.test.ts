@@ -310,6 +310,10 @@ const mockDb = `
     if (text.includes('update journal_entries')) {
       return { rows: [{ id: '00000000-0000-4000-8000-00000000e100' }] }
     }
+    // The posting kernel verifies its audit record was retained.
+    if (text.includes('insert into audit_log')) {
+      return { rows: [{ id: '00000000-0000-4000-8000-00000000e301' }] }
+    }
     if (text.includes('from depreciation_schedule_lines') && text.includes('for update') && !text.includes('for update of l')) {
       // Batch-gate reload: claim-shaped rows — planned amounts plus posted
       // state — so the lock-time comparison runs over realistic values.
