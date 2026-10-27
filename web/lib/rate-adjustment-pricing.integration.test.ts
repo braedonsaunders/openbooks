@@ -44,12 +44,14 @@ test("concurrent surcharge saves commit one rule and return the documented confl
   const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
       // The route factory resolves its session gate lazily through the
-      // @/lib/authz alias on every request, so the hook must cover that
-      // alias in addition to the route's relative import.
+      // @/lib/authz alias on every request, and its feature gate through the
+      // relative "./authz" import in web/lib/feature-gates.ts, so the hook
+      // must cover both in addition to the route's relative import.
       if (
         (specifier === "../../../../../lib/authz" &&
           context.parentURL?.includes("setup/payment-providers")) ||
-        (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route"))
+        (specifier === "@/lib/authz" && context.parentURL?.includes("/lib/api/route")) ||
+        (specifier === "./authz" && context.parentURL?.includes("/web/lib/feature-gates.ts"))
       ) {
         return { url: "mock:payment-surcharge-authz", shortCircuit: true };
       }
