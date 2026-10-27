@@ -89,7 +89,11 @@ export async function ensureRetirementAuthorityOwnership(): Promise<void> {
       );
     }
     // Use the same catalog-driven business ownership boundary as native test
-    // provisioning. Private authority and the bypass predicate stay untouched.
+    // provisioning. Private authority stays untouched. The bypass predicate
+    // recognizes the installer by ownership, so it passes to the business
+    // owner (never the runtime role, which owns nothing) and later bootstraps
+    // that run as that owner keep their installation-wide context. Only a
+    // privileged session can reassign it from the maintenance login.
     const objects = await client.query<{ statement: string }>(
       `select
       (case c.relkind when 'v' then 'alter view ' when 'm' then 'alter materialized view '
@@ -105,9 +109,9 @@ export async function ensureRetirementAuthorityOwnership(): Promise<void> {
       union all select 'alter function '||p.oid::regprocedure::text||' owner to '||quote_ident($1::text)
       from pg_proc p join pg_namespace n on n.oid=p.pronamespace
       where n.nspname in ('public','openbooks_query') and p.proowner<>(select oid from pg_roles where rolname=$1)
-        and not(n.nspname='public' and p.proname='app_bypass_rls_active')
+        and not(n.nspname='public' and p.proname='app_bypass_rls_active' and not $2::boolean)
         and not exists(select 1 from pg_depend d where d.classid='pg_proc'::regclass and d.objid=p.oid and d.deptype='e')`,
-      [roleName],
+      [roleName, state.privileged],
     );
     for (const row of objects.rows) await client.query(row.statement);
     await client.query(`alter schema public owner to ${quotedOwner}`);
