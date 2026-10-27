@@ -40,7 +40,7 @@ test("clone pacing refuses malformed overrides instead of running unthrottled", 
       OPENBOOKS_SANDBOX_CLONE_DUTY_CYCLE: "0.25",
       OPENBOOKS_SANDBOX_CLONE_CHUNK_ROWS: "1000",
     }),
-    { walBytesPerSecond: 1048576, dutyCycle: 0.25, chunkRows: 1000 },
+    { paced: true, walBytesPerSecond: 1048576, dutyCycle: 0.25, chunkRows: 1000 },
   );
 });
 
@@ -48,7 +48,7 @@ test("clone pacer holds write-ahead-log volume to its budget", async () => {
   const { clock, sleeps, advance } = fakeClock();
   let position = 1_000n;
   const pacer = await createClonePacer(
-    { walBytesPerSecond: 1_000_000, dutyCycle: 1, chunkRows: 5000 },
+    { paced: true, walBytesPerSecond: 1_000_000, dutyCycle: 1, chunkRows: 5000 },
     async () => position,
     clock,
   );
@@ -67,7 +67,7 @@ test("clone pacer holds write-ahead-log volume to its budget", async () => {
 test("clone pacer yields the primary for its duty cycle even without log access", async () => {
   const { clock, sleeps, advance } = fakeClock();
   const pacer = await createClonePacer(
-    { walBytesPerSecond: 1_000_000, dutyCycle: 0.5, chunkRows: 5000 },
+    { paced: true, walBytesPerSecond: 1_000_000, dutyCycle: 0.5, chunkRows: 5000 },
     async () => null,
     clock,
   );
@@ -80,7 +80,7 @@ test("clone pacer bounds a single pause", async () => {
   const { clock, sleeps, advance } = fakeClock();
   let position = 0n;
   const pacer = await createClonePacer(
-    { walBytesPerSecond: 1, dutyCycle: 1, chunkRows: 5000 },
+    { paced: true, walBytesPerSecond: 1, dutyCycle: 1, chunkRows: 5000 },
     async () => position,
     clock,
   );
@@ -88,4 +88,29 @@ test("clone pacer bounds a single pause", async () => {
   position += 10_000_000n;
   await pacer.afterStatement();
   assert.deepEqual(sleeps, [30_000]);
+});
+
+test("clone pacing can be turned off, and only by an explicit on or off", async () => {
+  const off = readClonePacing({ OPENBOOKS_SANDBOX_CLONE_PACING: "off" });
+  assert.equal(off.paced, false);
+  assert.equal(off.dutyCycle, 1);
+  assert.equal(readClonePacing({ OPENBOOKS_SANDBOX_CLONE_PACING: "on" }).paced, true);
+  assert.throws(
+    () => readClonePacing({ OPENBOOKS_SANDBOX_CLONE_PACING: "fast" }),
+    /OPENBOOKS_SANDBOX_CLONE_PACING/,
+  );
+  const { clock, sleeps, advance } = fakeClock();
+  let reads = 0;
+  const pacer = await createClonePacer(
+    off,
+    async () => {
+      reads += 1;
+      return 0n;
+    },
+    clock,
+  );
+  advance(5000);
+  await pacer.afterStatement();
+  assert.deepEqual(sleeps, []);
+  assert.equal(reads, 0);
 });

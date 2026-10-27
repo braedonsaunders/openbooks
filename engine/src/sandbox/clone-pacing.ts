@@ -9,6 +9,8 @@
  */
 
 export interface ClonePacing {
+  /** False when the operator has turned pacing off: the clone copies as fast as the primary allows. */
+  paced: boolean;
   /** Write-ahead-log bytes per second the clone may produce on average. */
   walBytesPerSecond: number;
   /** Largest share of wall time the clone may spend executing statements, in (0, 1]. */
@@ -18,6 +20,7 @@ export interface ClonePacing {
 }
 
 export const DEFAULT_CLONE_PACING: Readonly<ClonePacing> = {
+  paced: true,
   walBytesPerSecond: 4 * 1024 * 1024,
   dutyCycle: 0.5,
   chunkRows: 5000,
@@ -36,8 +39,19 @@ function positiveNumber(env: NodeJS.ProcessEnv, name: string, fallback: number):
   return value;
 }
 
-/** Read the operator's pacing overrides. Malformed values refuse rather than unthrottle. */
+/**
+ * Read the operator's pacing overrides. Malformed values refuse rather than
+ * unthrottle. `OPENBOOKS_SANDBOX_CLONE_PACING=off` removes the write-ahead-log
+ * budget and the duty cycle, so a clone finishes sooner at the cost of
+ * slowing every other organization on the same primary while it runs.
+ */
 export function readClonePacing(env: NodeJS.ProcessEnv = process.env): ClonePacing {
+  const mode = env.OPENBOOKS_SANDBOX_CLONE_PACING?.trim();
+  if (mode !== undefined && mode !== "" && mode !== "on" && mode !== "off") {
+    throw new Error(
+      `OPENBOOKS_SANDBOX_CLONE_PACING must be "on" or "off"; received ${JSON.stringify(mode)}.`,
+    );
+  }
   const dutyCycle = positiveNumber(
     env,
     "OPENBOOKS_SANDBOX_CLONE_DUTY_CYCLE",
@@ -62,7 +76,11 @@ export function readClonePacing(env: NodeJS.ProcessEnv = process.env): ClonePaci
       )}.`,
     );
   }
+  if (mode === "off") {
+    return { paced: false, walBytesPerSecond: Number.POSITIVE_INFINITY, dutyCycle: 1, chunkRows };
+  }
   return {
+    paced: true,
     walBytesPerSecond: positiveNumber(
       env,
       "OPENBOOKS_SANDBOX_CLONE_WAL_BYTES_PER_SECOND",
@@ -94,6 +112,7 @@ export async function createClonePacer(
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   },
 ): Promise<ClonePacer> {
+  if (!pacing.paced) return { afterStatement: async () => {} };
   let startedAt = clock.now();
   let startPosition = await readWalPosition();
   return {
