@@ -86,11 +86,13 @@ test("worker internal-token requests refuse every redirect class at both call si
   const originalDbExecute = db.execute;
   const originalPoolConnect = pool.connect;
   let dbExecuteCalls = 0;
-  Reflect.set(db, "execute", async () => {
+  Reflect.set(db, "execute", async (_query: unknown, mode?: string) => {
     dbExecuteCalls += 1;
-    return dbExecuteCalls % 2 === 1
-      ? { rows: [{ id: "redirect-test-org", cadence: "monthly" }] }
-      : { rows: [{ time_zone: "UTC" }] };
+    const rows =
+      dbExecuteCalls % 2 === 1
+        ? [{ id: "redirect-test-org", cadence: "monthly" }]
+        : [{ time_zone: "UTC" }];
+    return mode === "objects" ? rows : { rows };
   });
   const fakeClient = {
     async query(text: string) {
