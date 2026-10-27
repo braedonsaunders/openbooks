@@ -13,6 +13,7 @@ stubModules({
   navigation: {
     source:
       "export function useRouter(){return {push(){},refresh(){},replace(){}}}" +
+      "export function usePathname(){return window.location.pathname}" +
       "export function useSearchParams(){return new URLSearchParams(window.location.search)}",
   },
   intl: false,

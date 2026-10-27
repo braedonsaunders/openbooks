@@ -11,7 +11,10 @@ await bootJsdomEnvironment({ url: "http://localhost:4800/payroll/opening-balance
 
 stubModules({
   navigation: {
-    source: "export function useRouter(){return {refresh(){}}}",
+    source:
+      "export function useRouter(){return {refresh(){}}}" +
+      "export function usePathname(){return window.location.pathname}" +
+      "export function useSearchParams(){return new URLSearchParams(window.location.search)}",
   },
   intl: false,
   authz: false,

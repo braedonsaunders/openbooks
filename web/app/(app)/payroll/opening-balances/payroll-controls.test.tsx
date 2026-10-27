@@ -7,7 +7,7 @@ await bootJsdomEnvironment({ matchMediaMatches: false });
 stubModules({
   navigation: {
     source:
-      "export function useRouter(){return {push(){},refresh(){}}}export function useSearchParams(){return new URLSearchParams(window.location.search)}",
+      "export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return window.location.pathname}export function useSearchParams(){return new URLSearchParams(window.location.search)}",
   },
   intl: false,
   authz: false,

@@ -5,7 +5,12 @@ const React = await import("react");
 Object.assign(globalThis, { React });
 const { registerHooks } = await import("node:module");
 const { stubModules } = await import("../../../../testing/stub-modules");
-stubModules({ navigation: "export function useRouter(){return {refresh(){},push(){}}}" });
+stubModules({
+  navigation:
+    "export function useRouter(){return {refresh(){},push(){}}}" +
+    "export function usePathname(){return window.location.pathname}" +
+    "export function useSearchParams(){return new URLSearchParams(window.location.search)}",
+});
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/link") {
