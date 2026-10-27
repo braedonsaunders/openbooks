@@ -30,7 +30,8 @@ const sendRecordBody = z
  * authority and is never authorized by read access alone. Keys mirror
  * PDF_RECORD_TYPE_BY_KEY (an unmapped type fails closed below); each value
  * reuses the family's existing gate: document/order creates (ar.create,
- * ap.create), payment drafts (ar.pay / ap.pay), journals post (gl.post),
+ * ap.create), payment drafts (ar.pay / ap.pay), journals and bank deposits
+ * and transfers post (gl.post, their document create grant),
  * expense submit (expenses.create), field-ticket manage (time.manage),
  * payroll run delivery (payroll.run) for pay stubs and payroll administration
  * (payroll.manage) for issued cheques, whose print already needs payroll.run
@@ -54,6 +55,8 @@ const RECORD_TYPE_SEND_PERMISSION: Record<string, string> = {
   check: "ap.create",
   card_charge: "ap.create",
   card_refund: "ap.create",
+  deposit: "gl.post",
+  transfer: "gl.post",
   expense_report: "expenses.create",
   field_ticket: "time.manage",
   shipment: "ar.create",
