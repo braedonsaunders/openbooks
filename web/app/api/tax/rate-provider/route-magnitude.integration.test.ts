@@ -19,14 +19,18 @@ const virtual = (source: string) => ({
   shortCircuit: true as const,
   url: "data:text/javascript," + encodeURIComponent(source),
 });
-// The test session both the route and the factory authenticate against.
+// The test session both the route and the factory authenticate against,
+// including the factory's unrestricted-scope guard for PUT.
 const sessionSource = `
   export async function guardPermission() {
     const s = globalThis.__taxQuoteMagnitudeState;
     return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: s.allowed };
   }
+  export function guardUnrestrictedScope(authz) {
+    if (authz.allowedSubsidiaryIds === null) return null;
+    return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 });
+  }
 `;
-const sessionUrl = virtual(sessionSource).url;
 registerHooks({
   resolve(specifier, context, next) {
     // Bare @openbooks/engine/* resolves cross-checkout to main; pin the
@@ -34,20 +38,8 @@ registerHooks({
     if (specifier.startsWith("@openbooks/engine/")) {
       return next(new URL(specifier.slice("@openbooks/engine/".length), engineRoot).href, context);
     }
-    if (specifier === "../../../../lib/authz")
-      return virtual(`
-      ${sessionSource}
-      export function guardUnrestrictedScope(authz) {
-        if (authz.allowedSubsidiaryIds === null) return null;
-        return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 });
-      }
-    `);
-    // The route factory authenticates through the `@/lib/authz` alias, which
-    // the relative-only condition above never matches: without this edge the
-    // factory loads the real cookie session instead of the test session.
-    if (specifier === "@/lib/authz" && (context.parentURL ?? "").includes("/lib/api/route")) {
-      return { shortCircuit: true, url: sessionUrl };
-    }
+    if (specifier === "@/lib/authz" || specifier === "../../../../lib/authz")
+      return virtual(sessionSource);
     return next(specifier, context);
   },
 });
