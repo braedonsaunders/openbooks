@@ -112,7 +112,7 @@ const mockSources = new Map<string, string>([
          return inMode({ rows: [{ f: features, features }] });
        }
        const chunks = query?.queryChunks ?? [];
-       const text = chunks.map((c) => typeof c === 'string' ? c : (Array.isArray(c?.value) ? c.value.join('') : '')).join(' ').slice(0, 200);
+       const text = chunks.map((c) => typeof c === 'string' ? c : (typeof c?.value === 'string' ? c.value : Array.isArray(c?.value) ? c.value.join('') : '')).join(' ').slice(0, 200);
        // The selected book resolves to itself; this export has no book set.
        if (compiled.sql.includes('public.reporting_book_ids(')) {
          return inMode({ rows: [{ id: compiled.params[1] }] });
