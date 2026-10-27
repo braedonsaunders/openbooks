@@ -5,7 +5,7 @@ import {
   INVENTORY_ACTION_PERMISSIONS,
   INVENTORY_ADVANCED_ACTION_PERMISSIONS,
 } from "@openbooks/engine/organization/permissions";
-import { stubModules } from "../testing/stub-modules.ts";
+import { stubModules, withPlatformDbTestSurface } from "../testing/stub-modules.ts";
 import {
   BUILT_IN_ROLES,
   PERMISSION_CATALOGUE,
@@ -271,7 +271,8 @@ function provisionSqlText(query: unknown): string {
   return chunks
     .map((c) => {
       if (typeof c === "string") return c;
-      const value = (c as { value?: unknown[] })?.value;
+      const value = (c as { value?: unknown })?.value;
+      if (typeof value === "string") return value;
       if (Array.isArray(value)) return value.map(String).join("");
       if ((c as { queryChunks?: unknown[] })?.queryChunks) return provisionSqlText(c);
       return "";
@@ -284,7 +285,7 @@ function provisionSqlText(query: unknown): string {
 const provisionPostSources = new Map<string, string>([
   [
     "mock:provision-post-db",
-    `
+    withPlatformDbTestSurface(`
       const state = globalThis[Symbol.for('openbooks.provision-post-test')]
       const sqlText = globalThis.openbooksProvisionPostSqlText
       export const db = {
@@ -314,7 +315,7 @@ const provisionPostSources = new Map<string, string>([
       export const pool = {}
       export const env = {}
       export function registerRequestOrgResolver() {}
-    `,
+    `),
   ],
   [
     // The instrumented kernel boundary: every GL mutation this route can cause
@@ -356,7 +357,8 @@ const provisionPostHooks = registerHooks({
       specifier === "@openbooks/engine/platform/db" ||
       specifier === "@openbooks/engine/platform/database" ||
       (specifier === "../platform/db.ts" &&
-        context.parentURL?.endsWith("/organization/extension-permission-availability.ts"))
+        (context.parentURL?.endsWith("/organization/extension-permission-availability.ts") ||
+          context.parentURL?.endsWith("/tax-returns/income-tax-provision-queries.ts")))
     ) {
       return { url: "mock:provision-post-db", shortCircuit: true };
     }
@@ -387,6 +389,10 @@ const provisionPostRouteUrl = "../app/api/tax/provisions/[id]/post/route.ts?prov
 const { POST: postProvisionRoute } = (await import(
   provisionPostRouteUrl
 )) as typeof import("../app/api/tax/provisions/[id]/post/route.ts");
+// The route factory imports the real gate lazily on the first request. Load it
+// now, while its session and subsidiary siblings resolve to the scripted
+// doubles, so that request reuses this instance instead of reading cookies.
+await import("./authz.ts");
 provisionPostHooks.deregister();
 
 function resetProvisionPost(): void {
