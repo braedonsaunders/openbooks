@@ -39,7 +39,7 @@ test("every effective sandbox-wipe guard reads the GUC the wipe source sets", ()
   // drifted name, silently stops honoring wipes (or honors forged ones).
   const schemaSources = releaseSchemaFiles().map(({ path }) => readFileSync(path, "utf8"));
   const lifecycleSource = readFileSync("engine/src/sandbox/lifecycle.ts", "utf8");
-  const fixtureWipeSource = readFileSync("engine/src/testing/fixtures.ts", "utf8");
+  const fixtureWipeSource = readFileSync("engine/src/testing/tenant-teardown.ts", "utf8");
   const setterMatch = lifecycleSource.match(
     /set_config\('([a-z0-9_.]+\.sandbox_wipe)', 'on', true\)/,
   );
