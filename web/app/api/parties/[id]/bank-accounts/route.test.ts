@@ -7,6 +7,7 @@ import {
 import { registerHooks } from "node:module";
 import test, { after } from "node:test";
 import { NextResponse } from "next/server";
+import { drizzleSqlParams, drizzleSqlText } from "@openbooks/engine/testing/sql-text";
 
 const PARTY_ID = "00000000-0000-4000-8000-000000000001";
 const TRUNCATED_REVISION = "2026-08-31T12:34:56.789Z";
@@ -46,6 +47,10 @@ const state: RouteState = {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksBankAccountsNextResponse =
   NextResponse;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksBankAccountsSql = {
+  text: drizzleSqlText,
+  params: drizzleSqlParams,
+};
 
 const mockSources = new Map<string, string>([
   [
@@ -111,25 +116,8 @@ const mockSources = new Map<string, string>([
       export const orgContext={getStore:()=>transactionScope.getStore()};
       export const pinnedTransactionExecutor=()=>transactionScope.getStore()?.executor;
       const state = globalThis[Symbol.for('openbooks.bank-accounts-route-test')]
-      function queryText(query) {
-        const chunks = query?.queryChunks
-        if (!Array.isArray(chunks)) return ''
-        return chunks.map((chunk) => {
-          if (typeof chunk === 'string') return ''
-          const value = chunk?.value
-          if (Array.isArray(value)) return value.map(String).join('')
-          if (chunk?.queryChunks) return queryText(chunk)
-          return ''
-        }).join('')
-      }
-      function queryParams(query) {
-        const chunks = query?.queryChunks
-        if (!Array.isArray(chunks)) return []
-        return chunks.filter((chunk) => {
-          if (!chunk || typeof chunk !== 'object') return true
-          return !('value' in chunk || 'queryChunks' in chunk)
-        })
-      }
+      const queryText = globalThis.openbooksBankAccountsSql.text
+      const queryParams = globalThis.openbooksBankAccountsSql.params
       export async function withOrgTransaction(orgId, work) { return transactionScope.run({orgId,executor:db},work) }
       import * as schema from '${import.meta.resolve("@openbooks/schema")}';export {schema}
       export async function withOrg(_orgId, work) { return work() }

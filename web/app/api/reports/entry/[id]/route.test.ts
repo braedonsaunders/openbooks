@@ -3,6 +3,7 @@ import { registerHooks } from "node:module";
 import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 import { NextResponse } from "next/server";
+import { drizzleSqlText as sqlText } from "@openbooks/engine/testing/sql-text";
 
 // An intercompany journal entry whose header is visible may still carry lines for subsidiaries outside
 // the caller's scope. The line query must enforce the same scope as the header.
@@ -64,19 +65,6 @@ const reportsEntryAuthzStub = `
 `;
 
 /** Flatten a drizzle SQL chunk into its template text for scripted DB replies. */
-function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  return chunks
-    .map((chunk) => {
-      if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
-      if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
-      return "";
-    })
-    .join("");
-}
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksReportsEntrySqlText = sqlText;
 
 stubModules({

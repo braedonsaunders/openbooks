@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { stubModules } from "../../../../../../testing/stub-modules";
 import test from "node:test";
+import { drizzleSqlText } from "@openbooks/engine/testing/sql-text";
 
 // C-74: the attach and detach UPDATEs never checked rowCount, so a form row
 // vanishing between the existence select and the UPDATE (or an RLS zero
@@ -31,6 +32,8 @@ const routeState: RouteState = {
   deletedFiles: [],
   restricted: false,
 };
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextOfficialPdf =
+  drizzleSqlText;
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 stubModules({
@@ -72,18 +75,7 @@ stubModules({
     `,
     "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.tax-official-pdf-route-test')]
-      const sqlText = (query) => {
-        const chunks = query?.queryChunks
-        if (!Array.isArray(chunks)) return ''
-        return chunks
-          .map((c) => {
-            if (typeof c === 'string') return c
-            if (Array.isArray(c?.value)) return c.value.map(String).join('')
-            if (c?.queryChunks) return sqlText(c)
-            return ''
-          })
-          .join('')
-      }
+      const sqlText = globalThis.openbooksSqlTextOfficialPdf
       const tx = {
         async execute(query, mode) {
           const inMode = (result) => (mode === 'objects' ? result.rows : result)

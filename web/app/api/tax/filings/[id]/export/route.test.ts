@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { stubModules } from "../../../../../../testing/stub-modules";
 import test from "node:test";
 import { NextResponse } from "next/server";
+import { drizzleSqlText as sqlText } from "@openbooks/engine/testing/sql-text";
 
 // Route boundary suite for the frozen-filing export (D2): the reprint must
 // denominate the frozen boxes in the filing's FROZEN currency and carry its
@@ -30,19 +31,6 @@ const exportState: ExportState = {
   NextResponse;
 
 /** Flatten a drizzle SQL chunk into its raw text for query scripting. */
-function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  return chunks
-    .map((c) => {
-      if (typeof c === "string") return c;
-      const value = (c as { value?: unknown[] })?.value;
-      if (Array.isArray(value)) return value.map(String).join("");
-      if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c);
-      return "";
-    })
-    .join("");
-}
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextFilingExport = sqlText;
 
 stubModules({

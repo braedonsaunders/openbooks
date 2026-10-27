@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
+import { drizzleSqlText as sqlText } from "@openbooks/engine/testing/sql-text";
 
 // Route boundary suite: two overlapping PATCH requests exercise the same row
 // lock and exact revision fence production uses for dashboard autosave.
@@ -39,19 +40,6 @@ const routeState: RouteState = {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
 /** Flatten a drizzle SQL chunk into raw text for deterministic fake replies. */
-function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  return chunks
-    .map((chunk) => {
-      if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
-      if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
-      return "";
-    })
-    .join("");
-}
 (
   globalThis as typeof globalThis &
     Record<string, unknown> & { openbooksSqlTextDashboard?: unknown }

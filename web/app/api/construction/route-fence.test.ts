@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { drizzleSqlText as sqlText } from "@openbooks/engine/testing/sql-text";
 
 // Construction write fence: addSov/addChangeOrder gate Projects at the route
 // entry, then must recheck the gate INSIDE the write transaction. A disable
@@ -28,19 +29,6 @@ const fenceState: FenceState = {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = fenceState;
 
 /** Flatten a drizzle SQL chunk into its raw text for keyword assertions. */
-function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  return chunks
-    .map((c) => {
-      if (typeof c === "string") return c;
-      const value = (c as { value?: unknown[] })?.value;
-      if (Array.isArray(value)) return value.map(String).join("");
-      if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c);
-      return "";
-    })
-    .join("");
-}
 (
   globalThis as typeof globalThis &
     Record<string, unknown> & { openbooksSqlTextConstruction?: unknown }

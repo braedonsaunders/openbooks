@@ -14,19 +14,11 @@ const state: TaxReadState = { dbCalls: 0, formRows: [] };
   state;
 
 const dbUrl = new URL("../../../engine/src/platform/db.ts", import.meta.url).href;
+const sqlTextUrl = import.meta.resolve("@openbooks/engine/testing/sql-text");
 const mockDb = `
   export * from ${JSON.stringify(dbUrl)}
+  import { drizzleSqlText as sqlText } from ${JSON.stringify(sqlTextUrl)}
   const state = globalThis[Symbol.for('openbooks.tax-read-test')]
-  function sqlText(query) {
-    const chunks = query?.queryChunks
-    if (!Array.isArray(chunks)) return ""
-    return chunks.map((chunk) => {
-      if (typeof chunk === "string") return chunk
-      if (Array.isArray(chunk?.value)) return chunk.value.map(String).join("")
-      if (Array.isArray(chunk?.queryChunks)) return sqlText(chunk)
-      return ""
-    }).join("")
-  }
   export const db = {
     execute: async (query, mode) => {
       const inMode = (result) => (mode === 'objects' ? result.rows : result)

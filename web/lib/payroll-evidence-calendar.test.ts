@@ -1,26 +1,15 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { drizzleSqlText } from "@openbooks/engine/testing/sql-text";
 
 const STAMP = "2026-03-15";
 const evidenceKey = Symbol.for("openbooks.payroll-evidence-stamp-test");
 const evidenceState: { stamps: unknown[]; uploaded: unknown } = { stamps: [], uploaded: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[evidenceKey] = evidenceState;
 
-function sqlText(query: unknown): string {
-  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
-  if (!Array.isArray(chunks)) return "";
-  return chunks
-    .map((chunk) => {
-      if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
-      if (Array.isArray(value)) return value.map(String).join("");
-      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
-      return "";
-    })
-    .join("");
-}
-(globalThis as typeof globalThis & Record<string, unknown>).openbooksEvidenceSqlText = sqlText;
+(globalThis as typeof globalThis & Record<string, unknown>).openbooksEvidenceSqlText =
+  drizzleSqlText;
 
 // Absolute URL of pdf-lib: mock modules load from opaque `mock:` URLs with
 // no base, so bare specifiers inside them cannot resolve. Only pdf-lib is
