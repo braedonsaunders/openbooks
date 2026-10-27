@@ -1,3 +1,7 @@
+import {
+  isEngineModuleImport,
+  resolveEngineSpecifier,
+} from "../../../../testing/engine-resolve-hooks.ts";
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
@@ -30,7 +34,8 @@ function sqlText(query: unknown): string {
   return chunks
     .map((chunk) => {
       if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
+      const value = (chunk as { value?: unknown })?.value;
+      if (typeof value === "string") return value;
       if (Array.isArray(value)) return value.map(String).join("");
       if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
@@ -47,11 +52,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.custom-fields-route-test')]
       const sqlText = globalThis.openbooksSqlTextCustomFields
-      export const ambientTenantOrgId = () => null
-      export const currentRequestOrgResolver = () => null
-      export const registerRequestOrgResolver = () => {}
-      export const withBypass = (fn) => fn()
-      export const withBypassContext = (fn) => fn()
+      export * from '${resolveEngineSpecifier("@openbooks/engine/platform/db")}?custom-fields-route-test'
       export const db = {
         async transaction(run) { return run(db) },
         async execute(query, mode) {
@@ -89,15 +90,16 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/platform/db", "mock:db"],
   ["@openbooks/engine/flows/documents-adapter", "mock:documents-adapter"],
   ["../../../../lib/authz", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
-  ["../../../../lib/customization/gates", "mock:feature-gates"],
+  ["@/lib/customization/gates", "mock:feature-gates"],
 ]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (isEngineModuleImport(specifier, context.parentURL, "@openbooks/engine/platform/db"))
+      return { url: "mock:db", shortCircuit: true };
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier, context);
