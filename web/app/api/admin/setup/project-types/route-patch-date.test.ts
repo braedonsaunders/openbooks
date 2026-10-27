@@ -19,7 +19,8 @@ function sqlText(query: unknown): string {
   return chunks
     .map((chunk) => {
       if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
+      const value = (chunk as { value?: unknown })?.value;
+      if (typeof value === "string") return value;
       if (Array.isArray(value)) return value.map(String).join("");
       if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
@@ -72,16 +73,6 @@ stubModules({
     `,
     "@openbooks/engine/platform/business-date/module":
       "export async function businessToday() { return '2026-08-31' }",
-    "../../../../../lib/authz": `
-      export async function guardPermission() {
-        return {
-          user: { orgId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
-          permissions: new Set(['admin.setup.manage']),
-          allowedSubsidiaryIds: null,
-        };
-      }
-      export function guardUnrestrictedScope() { return null; }
-    `,
     "@/lib/authz": `
       export async function guardPermission() {
         return {
@@ -92,9 +83,18 @@ stubModules({
       }
       export function guardUnrestrictedScope() { return null; }
     `,
-    "../../../../../lib/projects-gate":
-      "export async function guardProjectsFeature() { return null }",
-    "../../../../../lib/features": "export async function isFeatureEnabled() { return true }",
+    // The route factory gates the permission and the Projects feature through
+    // the shared feature gate; the date refusal under test sits behind it.
+    "@/lib/feature-gates": `
+      export async function guardFeaturePermission() {
+        return {
+          user: { orgId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+          permissions: new Set(['admin.setup.manage']),
+          allowedSubsidiaryIds: null,
+        };
+      }
+    `,
+    "@/lib/features": "export async function isFeatureEnabled() { return true }",
   },
 });
 
