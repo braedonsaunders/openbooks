@@ -94,75 +94,92 @@ const payApplicationLine = z.strictObject({
     .optional(),
 });
 
-const postBodySchema0 = z.union([
-  z.discriminatedUnion("action", [
-    z.strictObject({
-      action: z.literal("addSov"),
-      projectId,
-      description: nonEmptyDescription,
-      scheduledValue: moneyField("Scheduled value"),
-      retainagePercent: optionalRetainage,
-      itemNo,
-      sortOrder,
-      incomeAccountId: optionalAccountId,
-    }),
-    z.strictObject({ action: z.literal("deleteSov"), id: rowId }),
-    z.strictObject({
-      action: z.literal("addChangeOrder"),
-      projectId,
-      number: z.string().trim().min(1, "number is required").max(80),
-      description: z.string().trim().max(2000).nullable().optional(),
-      amount: moneyField("Change-order amount"),
-      targetSovLineId: uuidString("The target schedule line must be a valid identifier")
-        .nullable()
-        .optional(),
-      incomeAccountId: optionalAccountId,
-    }),
-    z.strictObject({
-      action: z.literal("approveChangeOrder"),
-      id: rowId,
-      approvedOn: z
-        .union([isoDate("approvedOn must be a valid calendar date"), z.literal(""), z.null()])
-        .optional(),
-    }),
-    z.strictObject({ action: z.literal("voidChangeOrder"), id: rowId }),
-    z.strictObject({
-      action: z.literal("createPayApp"),
-      projectId,
-      periodEnd: isoDate("periodEnd must be a valid calendar date"),
-      retainagePercent: moneyField("Retainage percent").optional(),
-    }),
-    z.strictObject({
-      action: z.literal("submitPayApp"),
-      payApplicationId,
-      lines: z.array(payApplicationLine).max(1000).optional(),
-    }),
-    z.strictObject({ action: z.literal("approvePayApp"), payApplicationId }),
-    z.strictObject({ action: z.literal("voidPayApp"), payApplicationId }),
-    z.strictObject({ action: z.literal("billPayApp"), payApplicationId }),
-    z.strictObject({
-      action: z.literal("releaseRetainage"),
-      projectId,
-      periodEnd: isoDate("periodEnd must be a valid calendar date"),
-      amount: moneyField("Release amount"),
-    }),
-  ]),
-  z.union([
-    z.strictObject({
-      action: z.literal("updateSov"),
-      id: rowId,
-      incomeAccountId: z.union([uuidString("Income account must be a valid identifier"), z.null()]),
-    }),
-    z.strictObject({
-      action: z.literal("updateSov"),
-      id: rowId,
-      description: nonEmptyDescription,
-      scheduledValue: moneyField("Scheduled value"),
-      retainagePercent: optionalRetainage,
-      itemNo,
-      incomeAccountId: optionalAccountId,
-    }),
-  ]),
+// A schedule-line update is either an income-account-only change (the
+// recovery path for a line billing has locked) or a full line edit. One
+// action member covers both so a refused field is named, rather than
+// reported as a generic mismatch of two alternative shapes.
+const sovContractFields = ["description", "scheduledValue", "retainagePercent", "itemNo"] as const;
+const updateSovBody = z
+  .strictObject({
+    action: z.literal("updateSov"),
+    id: rowId,
+    description: nonEmptyDescription.optional(),
+    scheduledValue: moneyField("Scheduled value").optional(),
+    retainagePercent: optionalRetainage,
+    itemNo,
+    incomeAccountId: optionalAccountId,
+  })
+  .superRefine((value, context) => {
+    const lineEdit = sovContractFields.some((field) => value[field] !== undefined);
+    if (!lineEdit && value.incomeAccountId !== undefined) return;
+    if (value.description === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["description"],
+        message: "description is required",
+      });
+    }
+    if (value.scheduledValue === undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["scheduledValue"],
+        message: "Scheduled value must be sent as decimal text",
+      });
+    }
+  });
+
+const postBodySchema0 = z.discriminatedUnion("action", [
+  z.strictObject({
+    action: z.literal("addSov"),
+    projectId,
+    description: nonEmptyDescription,
+    scheduledValue: moneyField("Scheduled value"),
+    retainagePercent: optionalRetainage,
+    itemNo,
+    sortOrder,
+    incomeAccountId: optionalAccountId,
+  }),
+  z.strictObject({ action: z.literal("deleteSov"), id: rowId }),
+  z.strictObject({
+    action: z.literal("addChangeOrder"),
+    projectId,
+    number: z.string().trim().min(1, "number is required").max(80),
+    description: z.string().trim().max(2000).nullable().optional(),
+    amount: moneyField("Change-order amount"),
+    targetSovLineId: uuidString("The target schedule line must be a valid identifier")
+      .nullable()
+      .optional(),
+    incomeAccountId: optionalAccountId,
+  }),
+  z.strictObject({
+    action: z.literal("approveChangeOrder"),
+    id: rowId,
+    approvedOn: z
+      .union([isoDate("approvedOn must be a valid calendar date"), z.literal(""), z.null()])
+      .optional(),
+  }),
+  z.strictObject({ action: z.literal("voidChangeOrder"), id: rowId }),
+  z.strictObject({
+    action: z.literal("createPayApp"),
+    projectId,
+    periodEnd: isoDate("periodEnd must be a valid calendar date"),
+    retainagePercent: moneyField("Retainage percent").optional(),
+  }),
+  z.strictObject({
+    action: z.literal("submitPayApp"),
+    payApplicationId,
+    lines: z.array(payApplicationLine).max(1000).optional(),
+  }),
+  z.strictObject({ action: z.literal("approvePayApp"), payApplicationId }),
+  z.strictObject({ action: z.literal("voidPayApp"), payApplicationId }),
+  z.strictObject({ action: z.literal("billPayApp"), payApplicationId }),
+  z.strictObject({
+    action: z.literal("releaseRetainage"),
+    projectId,
+    periodEnd: isoDate("periodEnd must be a valid calendar date"),
+    amount: moneyField("Release amount"),
+  }),
+  updateSovBody,
 ]);
 
 export const runtime = "nodejs";
