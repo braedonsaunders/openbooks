@@ -7,6 +7,24 @@ const retainDevelopmentCompilation =
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  SERVER_RUNTIME_PACKAGE_NAMES,
+  serverRuntimeExportsActive,
+} from "../scripts/server-runtime-packages.mjs";
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+// The webpack compiler runs in a worker whose argv is the worker script, not
+// `next build --webpack`. That worker sets NEXT_PRIVATE_BUILD_WORKER.
+const webpackBuild =
+  process.argv.includes("--webpack") || process.env.NEXT_PRIVATE_BUILD_WORKER === "1";
+const productionBuild = process.argv.includes("build") || webpackBuild;
+// Active only while emit-server-runtime.mjs has pointed the node condition at
+// prebuilt JS. Dev and a bare `next build` keep compiling source.
+const externalEngine = productionBuild && serverRuntimeExportsActive(repoRoot);
+const compositionLoader = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "lib/engine-composition.external.ts",
+);
 
 /**
  * Version-skew protection. Each production build carries its own deployment
@@ -79,12 +97,37 @@ const config = {
       "@openbooks/customization",
       "@openbooks/reports",
       "@openbooks/ui",
-    ],
+    ].filter(
+      (name) => !(externalEngine && !webpackBuild && SERVER_RUNTIME_PACKAGE_NAMES.includes(name)),
+    ),
   },
-  webpack(webpackConfig, { dev }) {
+  webpack(webpackConfig, { dev, isServer, nextRuntime }) {
     if (!dev) {
       webpackConfig.parallelism = 1;
       webpackConfig.cache = false;
+    }
+    // One engine instance in the Node process. Route and page compilations
+    // must not parse @openbooks/engine; the composition root in particular
+    // pulls every domain module into each server bundle.
+    if (externalEngine && isServer && nextRuntime !== "edge") {
+      const runtimeRequest = (request) =>
+        typeof request === "string" &&
+        SERVER_RUNTIME_PACKAGE_NAMES.some(
+          (name) => request === name || request.startsWith(`${name}/`),
+        );
+      const externalize = ({ request }, callback) => {
+        if (runtimeRequest(request)) return callback(null, `module ${request}`);
+        callback();
+      };
+      const existing = webpackConfig.externals;
+      webpackConfig.externals = [
+        externalize,
+        ...(Array.isArray(existing) ? existing : existing ? [existing] : []),
+      ];
+      webpackConfig.resolve.alias = {
+        ...webpackConfig.resolve.alias,
+        "@/lib/engine-composition$": compositionLoader,
+      };
     }
     return webpackConfig;
   },
@@ -115,8 +158,15 @@ const config = {
       .map((origin) => origin.trim())
       .filter(Boolean),
   ],
-  transpilePackages: ["@openbooks/engine", "@openbooks/schema"],
+  // Webpack keeps these in transpilePackages so the client still compiles the
+  // few pure modules it imports. They cannot also sit in serverExternalPackages;
+  // the server compilation externalizes them in the webpack hook above.
+  // Turbopack has no webpack hook, so a turbopack production build lists them
+  // as server externals and relies on workspace transpilation for the client.
+  transpilePackages:
+    externalEngine && !webpackBuild ? [] : ["@openbooks/engine", "@openbooks/schema"],
   serverExternalPackages: [
+    ...(externalEngine && !webpackBuild ? SERVER_RUNTIME_PACKAGE_NAMES : []),
     "quickjs-emscripten-core",
     "xmllint-wasm",
     "pg",
@@ -141,11 +191,27 @@ const config = {
   // while `next start` keeps serving the live .next, then swap. Unset = default.
   distDir: process.env.NEXT_DIST_DIR || ".next",
   outputFileTracingRoot: join(dirname(fileURLToPath(import.meta.url)), ".."),
+  ...(externalEngine && !webpackBuild
+    ? {
+        turbopack: {
+          resolveAlias: {
+            "@/lib/engine-composition": "./lib/engine-composition.external.ts",
+          },
+        },
+      }
+    : {}),
   outputFileTracingIncludes: {
     "/api/documents/*/einvoice": [
       "../engine/src/einvoice/srgb-iec61966-2-1.icc",
       "../engine/src/einvoice/standards/**/*.xsd",
       "../engine/src/einvoice/standards/*manifest.json",
+      ...(externalEngine
+        ? [
+            "../engine/dist/einvoice/srgb-iec61966-2-1.icc",
+            "../engine/dist/einvoice/standards/**/*.xsd",
+            "../engine/dist/einvoice/standards/*manifest.json",
+          ]
+        : []),
     ],
   },
   async headers() {
