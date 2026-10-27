@@ -19,6 +19,11 @@ web/.next-*/
 
 engine/*.log
 
+# Prebuilt server runtime from scripts/emit-server-runtime.mjs. Not source.
+engine/dist/
+schema/dist/
+packages/*/dist/
+
 # local runtime artifacts
 dump.rdb
 .sftp-data/
