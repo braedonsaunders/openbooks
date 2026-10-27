@@ -9,7 +9,7 @@ import { liveReceiptQuantity } from "./return-quantities.ts";
 
 /**
  * The one definition of "received" every purchase-order matching reader
- * shares: the posting guard (documents-purchasing.ts), the Match dialog
+ * shares: the posting guard (bill-order-matching.ts), the Match dialog
  * and match action (payables/vendor-bill-matching.ts), and the bill
  * receipt drain (documents-purchasing.ts).
  *

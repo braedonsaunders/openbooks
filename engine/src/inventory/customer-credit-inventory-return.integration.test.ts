@@ -4,10 +4,8 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { getOnHand } from "./position.ts";
-import {
-  parseCustomerCreditInventoryReturnSelection,
-  restoredReturnCost,
-} from "./documents-customer-credits.ts";
+import { restoredReturnCost } from "./documents-customer-credits.ts";
+import { parseCustomerCreditInventoryReturnSelection } from "./customer-credit-return-lines.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";

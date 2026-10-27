@@ -26,9 +26,9 @@ import {
   applyBillInventoryReceipts,
   applyInventoryReceiptsForBill,
   assertBillReceiptsPostable,
-  autoMatchBillLinesToOrders,
   resolveBillInventoryAccounts,
 } from "./documents-purchasing.ts";
+import { autoMatchBillLinesToOrders } from "./bill-order-matching.ts";
 import { applyInventoryIssuesForInvoice, assertInvoiceIssuesPostable } from "./documents-sales.ts";
 import {
   applyInventoryReturnsForVendorCredit,
