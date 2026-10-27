@@ -262,6 +262,18 @@ async function fakeExecute(query: unknown): Promise<{ rows: Array<Record<string,
     return { rows: [clone(row)] };
   }
 
+  // Validation hooks: the stored columns an edit is judged against.
+  const currentColumnsMatch = t.match(
+    /^select ([\w, ]+) from (\w+) where id = \? and org_id = \?$/,
+  );
+  if (currentColumnsMatch) {
+    const [, columnList, table] = currentColumnsMatch as [string, string, string];
+    const row = harnessState.tables.get(table)?.get(str(values[0]));
+    if (!row || str(row.org_id) !== str(values[1])) return { rows: [] };
+    const columns = columnList.split(",").map((column) => column.trim());
+    return { rows: [Object.fromEntries(columns.map((column) => [column, row[column] ?? null]))] };
+  }
+
   // Book promotion reads.
   if (t.startsWith("select id from accounting_books") && t.includes("is_primary")) {
     return {
