@@ -9509,6 +9509,7 @@
     "none": "Noch keine Umgebungen vorhanden.",
     "statuses": {
       "ready": "Bereit",
+      "queued": "In Warteschlange",
       "provisioning": "Wird eingerichtet",
       "refreshing": "Wird aktualisiert",
       "deleting": "Wird gelöscht",
@@ -9538,7 +9539,10 @@
     "changeSetDefaultName": "Sandbox-Änderungen",
     "captureChanges": "Änderungen erfassen",
     "captureFailed": "Die Erfassung wurde nicht abgeschlossen. Prüfen Sie die Änderungssatzliste, bevor Sie es erneut versuchen.",
-    "captureTitle": "Konfigurationsänderungen zur Einreichung über Flows erfassen"
+    "captureTitle": "Konfigurationsänderungen zur Einreichung über Flows erfassen",
+    "queuedHint": "Wartet auf den Hintergrunddienst",
+    "createQueued": "„{name}“ steht in der Warteschlange. Die Umgebung wird im Hintergrund bereitgestellt und kann betreten werden, sobald der Status „Bereit“ lautet.",
+    "createFailed": "Die Sandbox konnte nicht in die Warteschlange gestellt werden. Versuchen Sie es gleich noch einmal."
   },
   "sandboxes": {
     "changeSets": {

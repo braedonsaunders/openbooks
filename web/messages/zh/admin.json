@@ -9509,6 +9509,7 @@
     "none": "暂无环境。",
     "statuses": {
       "ready": "就绪",
+      "queued": "排队中",
       "provisioning": "正在配置",
       "refreshing": "正在刷新",
       "deleting": "正在删除",
@@ -9538,7 +9539,10 @@
     "changeSetDefaultName": "沙箱变更",
     "captureChanges": "捕获变更",
     "captureFailed": "未能完成捕获。重试前请检查变更集列表。",
-    "captureTitle": "记录要通过Flows提交的配置更改"
+    "captureTitle": "记录要通过Flows提交的配置更改",
+    "queuedHint": "正在等待后台任务",
+    "createQueued": "“{name}”已加入队列。它会在后台准备，状态显示为“就绪”后即可进入。",
+    "createFailed": "无法将沙盒加入队列。请稍后重试。"
   },
   "sandboxes": {
     "changeSets": {

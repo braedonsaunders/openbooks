@@ -9509,6 +9509,7 @@
     "none": "No environments yet.",
     "statuses": {
       "ready": "Ready",
+      "queued": "Queued",
       "provisioning": "Provisioning",
       "refreshing": "Refreshing",
       "deleting": "Deleting",
@@ -9538,7 +9539,10 @@
     "changeSetDefaultName": "Sandbox changes",
     "captureChanges": "Capture changes",
     "captureFailed": "Capture did not complete. Check the change-set list before trying again.",
-    "captureTitle": "Capture configuration changes for submission through Flows"
+    "captureTitle": "Capture configuration changes for submission through Flows",
+    "queuedHint": "Waiting for the background worker",
+    "createQueued": "“{name}” is queued. It provisions in the background and is ready to enter when its status reads Ready.",
+    "createFailed": "The sandbox could not be queued. Try again in a moment."
   },
   "sandboxes": {
     "changeSets": {

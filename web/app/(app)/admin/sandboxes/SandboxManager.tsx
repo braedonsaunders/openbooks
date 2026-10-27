@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -46,11 +46,16 @@ const STATUS_VARIANT: Record<
   "default" | "warning" | "destructive" | "success" | "secondary"
 > = {
   ready: "success",
+  queued: "secondary",
   provisioning: "warning",
   refreshing: "warning",
   deleting: "warning",
   failed: "destructive",
 };
+
+/** Lifecycle states the worker is still moving; the list refreshes until they settle. */
+const IN_FLIGHT = new Set(["queued", "provisioning", "refreshing", "deleting"]);
+const IN_FLIGHT_REFRESH_MS = 4000;
 
 export function SandboxManager({
   sandboxes,
@@ -62,6 +67,7 @@ export function SandboxManager({
   const { dateTime, number } = useViewerFormat();
   const t = useTranslations("admin.sandboxManager");
   const tSwitch = useTranslations("shell.accountMenu");
+  const router = useRouter();
   const [name, setName] = useState("");
   const [tier, setTier] = useState("masked");
   const [asOfPeriodId, setAsOfPeriodId] = useState("");
@@ -82,6 +88,12 @@ export function SandboxManager({
   const rotateOpKey = (sandboxId: string): void => {
     opKeys.current[sandboxId] = crypto.randomUUID();
   };
+  const inFlight = sandboxes.some((s) => IN_FLIGHT.has(s.status));
+  useEffect(() => {
+    if (!inFlight) return;
+    const timer = setInterval(() => router.refresh(), IN_FLIGHT_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [inFlight, router]);
   // An as-of clone needs a period cutoff; block create until one is chosen.
   const needsPeriod = tier === "as_of" && !asOfPeriodId;
 
@@ -129,84 +141,87 @@ export function SandboxManager({
       key: "actions",
       header: <span className="sr-only">{t("enter")}</span>,
       className: "text-right",
-      cell: (s) => (
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button
-            variant="default"
-            size="sm"
-            disabled={s.status !== "ready"}
-            onClick={() =>
-              start(async () => {
-                try {
-                  await switchWorkspace(s.orgId);
-                } catch (error) {
-                  toast.error(tSwitch(workspaceSwitchMessageKey(error)));
-                }
-              })
-            }
-          >
-            {t("enter")}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={pending || s.status !== "ready"}
-            onClick={() =>
-              start(async () => {
-                await refreshSandboxAction(s.id, true, opKeyFor(s.id));
-                rotateOpKey(s.id);
-              })
-            }
-            title={t("refreshTitle")}
-          >
-            {t("refresh")}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={pending || s.status !== "ready"}
-            onClick={() =>
-              start(async () => {
-                if (await confirmDialog(t("resetConfirm"))) {
-                  await resetSandboxAction(s.id, opKeyFor(s.id));
+      cell: (s) =>
+        s.status === "queued" ? (
+          <span className="text-xs text-slate-500 dark:text-slate-400">{t("queuedHint")}</span>
+        ) : (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              variant="default"
+              size="sm"
+              disabled={s.status !== "ready"}
+              onClick={() =>
+                start(async () => {
+                  try {
+                    await switchWorkspace(s.orgId);
+                  } catch (error) {
+                    toast.error(tSwitch(workspaceSwitchMessageKey(error)));
+                  }
+                })
+              }
+            >
+              {t("enter")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending || s.status !== "ready"}
+              onClick={() =>
+                start(async () => {
+                  await refreshSandboxAction(s.id, true, opKeyFor(s.id));
                   rotateOpKey(s.id);
-                }
-              })
-            }
-          >
-            {t("reset")}
-          </Button>
-          <PromoteButton sandboxId={s.id} disabled={pending || s.status !== "ready"} />
-          <Select
-            aria-label={t("autoRefresh")}
-            className="h-8 w-28"
-            value={s.refreshSchedule ?? ""}
-            onChange={(e) =>
-              start(async () => void (await setScheduleAction(s.id, e.target.value || null)))
-            }
-          >
-            <option value="">{t("schedule.manual")}</option>
-            <option value="hourly">{t("schedule.hourly")}</option>
-            <option value="daily">{t("schedule.daily")}</option>
-            <option value="weekly">{t("schedule.weekly")}</option>
-          </Select>
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={pending}
-            onClick={() =>
-              start(async () => {
-                if (await confirmDialog(t("deleteConfirm", { name: s.name }))) {
-                  await deleteSandboxAction(s.id, opKeyFor(s.id));
-                  rotateOpKey(s.id);
-                }
-              })
-            }
-          >
-            {t("delete")}
-          </Button>
-        </div>
-      ),
+                })
+              }
+              title={t("refreshTitle")}
+            >
+              {t("refresh")}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending || s.status !== "ready"}
+              onClick={() =>
+                start(async () => {
+                  if (await confirmDialog(t("resetConfirm"))) {
+                    await resetSandboxAction(s.id, opKeyFor(s.id));
+                    rotateOpKey(s.id);
+                  }
+                })
+              }
+            >
+              {t("reset")}
+            </Button>
+            <PromoteButton sandboxId={s.id} disabled={pending || s.status !== "ready"} />
+            <Select
+              aria-label={t("autoRefresh")}
+              className="h-8 w-28"
+              value={s.refreshSchedule ?? ""}
+              onChange={(e) =>
+                start(async () => void (await setScheduleAction(s.id, e.target.value || null)))
+              }
+            >
+              <option value="">{t("schedule.manual")}</option>
+              <option value="hourly">{t("schedule.hourly")}</option>
+              <option value="daily">{t("schedule.daily")}</option>
+              <option value="weekly">{t("schedule.weekly")}</option>
+            </Select>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={pending}
+              onClick={() =>
+                start(async () => {
+                  if (await confirmDialog(t("deleteConfirm", { name: s.name }))) {
+                    await deleteSandboxAction(s.id, opKeyFor(s.id));
+                    rotateOpKey(s.id);
+                  }
+                })
+              }
+            >
+              {t("delete")}
+            </Button>
+          </div>
+        ),
     },
   ];
 
@@ -264,12 +279,20 @@ export function SandboxManager({
             disabled={pending || needsPeriod}
             onClick={() =>
               start(async () => {
-                await createSandboxAction({
-                  name,
-                  tier: tier as unknown as "masked" | "as_of" | "dev" | "full",
-                  asOfPeriodId: tier === "as_of" ? asOfPeriodId : null,
-                  clientOpKey: createKey.current,
-                });
+                const queuedName = name.trim() || "Sandbox";
+                try {
+                  await createSandboxAction({
+                    name,
+                    tier: tier as unknown as "masked" | "as_of" | "dev" | "full",
+                    asOfPeriodId: tier === "as_of" ? asOfPeriodId : null,
+                    clientOpKey: createKey.current,
+                  });
+                } catch {
+                  toast.error(t("createFailed"));
+                  return;
+                }
+                toast.success(t("createQueued", { name: queuedName }));
+                router.refresh();
                 setName("");
                 setAsOfPeriodId("");
                 createKey.current = crypto.randomUUID();

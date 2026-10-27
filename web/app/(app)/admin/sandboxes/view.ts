@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { getLocale, getTranslations } from "next-intl/server";
 import { db } from "@openbooks/engine/platform/db";
 import { listSandboxes } from "@openbooks/engine/sandbox/runtime";
+import { listPendingSandboxCreates } from "@openbooks/jobs";
 import { periodDisplayLabelSql } from "@openbooks/engine/periods/period-policy";
 import {
   page,
@@ -15,6 +16,7 @@ import {
 } from "@braedonsaunders/appkit-viewspec";
 import { requirePermission } from "../../../../lib/authz";
 import type { PeriodOption, SandboxRow } from "./SandboxManager";
+import { queuedSandboxRows } from "./queued-rows";
 
 /**
  * The sandbox (environments) admin page, split into a loader and a spec.
@@ -50,7 +52,10 @@ export async function loadSandboxes(): Promise<SandboxesData> {
   const authz = await requirePermission("admin.sandboxes.manage");
   const tHub = await getTranslations("admin.hub");
   // Always manage sandboxes against the home production org.
-  const rows = (await listSandboxes(authz.user.productionOrgId)) as unknown as SandboxRow[];
+  const [rows, pendingCreates] = await Promise.all([
+    listSandboxes(authz.user.productionOrgId) as unknown as Promise<SandboxRow[]>,
+    listPendingSandboxCreates(authz.user.productionOrgId),
+  ]);
 
   // Accounting periods for the as-of clone cutoff (most recently ending
   // first). The cutoff is a date, not an ordinal: each option carries its end
@@ -81,11 +86,14 @@ export async function loadSandboxes(): Promise<SandboxesData> {
     // The native path passes driver Dates through RSC serialization, which
     // emits ISO strings; normalize here so the spec path binds the same
     // presentation-ready strings.
-    sandboxes: rows.map((s) => ({
-      ...s,
-      lastRefreshAt: s.lastRefreshAt == null ? null : new Date(s.lastRefreshAt).toISOString(),
-      createdAt: new Date(s.createdAt).toISOString(),
-    })),
+    sandboxes: [
+      ...queuedSandboxRows(pendingCreates, rows),
+      ...rows.map((s) => ({
+        ...s,
+        lastRefreshAt: s.lastRefreshAt == null ? null : new Date(s.lastRefreshAt).toISOString(),
+        createdAt: new Date(s.createdAt).toISOString(),
+      })),
+    ],
     periods: periodsRes,
   };
 }

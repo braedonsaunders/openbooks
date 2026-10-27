@@ -51,3 +51,38 @@ export function getSandboxQueue(): Queue<SandboxJobData> {
 export async function enqueueSandboxOp(data: SandboxJobData, options?: JobsOptions) {
   return getSandboxQueue().add(data.op, data, options);
 }
+
+/** A create that is queued or running but may not have its sandbox row yet. */
+export interface PendingSandboxCreate {
+  jobId: string;
+  name: string;
+  tier: "dev" | "masked" | "full" | "as_of";
+  masked: boolean;
+  queuedAt: string;
+  state: "queued" | "active";
+}
+
+/**
+ * Creates for one production organization that the worker has not finished.
+ * The sandbox row is written only once the worker starts the clone, so the
+ * queue is the record of a create between submission and provisioning.
+ */
+export async function listPendingSandboxCreates(
+  productionOrgId: string,
+): Promise<PendingSandboxCreate[]> {
+  const jobs = await getSandboxQueue().getJobs(["active", "waiting", "paused", "delayed"], 0, 199);
+  const pending: PendingSandboxCreate[] = [];
+  for (const job of jobs) {
+    const data = job.data;
+    if (!job.id || data.op !== "create" || data.productionOrgId !== productionOrgId) continue;
+    pending.push({
+      jobId: job.id,
+      name: data.name,
+      tier: data.tier,
+      masked: data.masked,
+      queuedAt: new Date(job.timestamp).toISOString(),
+      state: (await job.isActive()) ? "active" : "queued",
+    });
+  }
+  return pending.sort((a, b) => b.queuedAt.localeCompare(a.queuedAt));
+}

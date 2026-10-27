@@ -9509,6 +9509,7 @@
     "none": "環境はまだありません。",
     "statuses": {
       "ready": "準備完了",
+      "queued": "待機中",
       "provisioning": "準備中",
       "refreshing": "更新中",
       "deleting": "削除中",
@@ -9538,7 +9539,10 @@
     "changeSetDefaultName": "サンドボックスの変更",
     "captureChanges": "変更を記録",
     "captureFailed": "記録を完了できませんでした。再試行する前に変更セット一覧を確認してください。",
-    "captureTitle": "Flowsに申請する設定変更を記録"
+    "captureTitle": "Flowsに申請する設定変更を記録",
+    "queuedHint": "バックグラウンド処理を待っています",
+    "createQueued": "「{name}」をキューに追加しました。バックグラウンドで準備され、ステータスが「準備完了」になると利用できます。",
+    "createFailed": "サンドボックスをキューに追加できませんでした。しばらくしてからもう一度お試しください。"
   },
   "sandboxes": {
     "changeSets": {

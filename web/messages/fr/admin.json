@@ -9509,6 +9509,7 @@
     "none": "Aucun environnement pour le moment.",
     "statuses": {
       "ready": "Prêt",
+      "queued": "En file d’attente",
       "provisioning": "En préparation",
       "refreshing": "Actualisation",
       "deleting": "Suppression",
@@ -9538,7 +9539,10 @@
     "changeSetDefaultName": "Modifications du bac à sable",
     "captureChanges": "Capturer les modifications",
     "captureFailed": "La capture n’a pas abouti. Consultez la liste des ensembles de modifications avant de réessayer.",
-    "captureTitle": "Capturer les modifications de configuration à soumettre via Flows"
+    "captureTitle": "Capturer les modifications de configuration à soumettre via Flows",
+    "queuedHint": "En attente du traitement en arrière-plan",
+    "createQueued": "« {name} » est en file d’attente. L’environnement est préparé en arrière-plan ; vous pourrez y entrer lorsque son statut indiquera Prêt.",
+    "createFailed": "Le bac à sable n’a pas pu être mis en file d’attente. Réessayez dans un instant."
   },
   "sandboxes": {
     "changeSets": {

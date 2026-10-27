@@ -9509,6 +9509,7 @@
     "none": "Ainda não há ambientes.",
     "statuses": {
       "ready": "Pronto",
+      "queued": "Na fila",
       "provisioning": "Provisionando",
       "refreshing": "Atualizando",
       "deleting": "Excluindo",
@@ -9538,7 +9539,10 @@
     "changeSetDefaultName": "Alterações do sandbox",
     "captureChanges": "Capturar alterações",
     "captureFailed": "A captura não foi concluída. Confira a lista de conjuntos de alterações antes de tentar novamente.",
-    "captureTitle": "Capturar alterações de configuração para envio pelos Flows"
+    "captureTitle": "Capturar alterações de configuração para envio pelos Flows",
+    "queuedHint": "Aguardando o processamento em segundo plano",
+    "createQueued": "“{name}” está na fila. Ele é provisionado em segundo plano e pode ser acessado quando o status indicar Pronto.",
+    "createFailed": "Não foi possível colocar o sandbox na fila. Tente novamente em instantes."
   },
   "sandboxes": {
     "changeSets": {

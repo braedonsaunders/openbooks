@@ -9509,6 +9509,7 @@
     "none": "Aún no hay entornos.",
     "statuses": {
       "ready": "Listo",
+      "queued": "En cola",
       "provisioning": "Preparando",
       "refreshing": "Actualizando",
       "deleting": "Eliminando",
@@ -9538,7 +9539,10 @@
     "changeSetDefaultName": "Cambios del sandbox",
     "captureChanges": "Capturar cambios",
     "captureFailed": "No se completó la captura. Revisa la lista de conjuntos de cambios antes de volver a intentarlo.",
-    "captureTitle": "Capturar cambios de configuración para enviarlos mediante Flows"
+    "captureTitle": "Capturar cambios de configuración para enviarlos mediante Flows",
+    "queuedHint": "Esperando al proceso en segundo plano",
+    "createQueued": "«{name}» está en cola. Se aprovisiona en segundo plano y podrá entrar cuando su estado indique Listo.",
+    "createFailed": "No se pudo poner el entorno de pruebas en cola. Vuelva a intentarlo en un momento."
   },
   "sandboxes": {
     "changeSets": {
