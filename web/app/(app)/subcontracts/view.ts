@@ -174,7 +174,7 @@ export async function loadSubcontracts(
     emptyTitle: t("register.emptyTitle"),
     emptyHint: t("register.emptyHint"),
     newButtonLabel: t("register.newButton"),
-    searchPlaceholder: common("search"),
+    searchPlaceholder: common("actions.search"),
     columns: {
       number: t("columns.number"),
       subcontract: t("columns.subcontract"),
@@ -190,7 +190,7 @@ export async function loadSubcontracts(
       {
         paramKey: "status",
         label: t("columns.status"),
-        allLabel: common("all"),
+        allLabel: common("labels.all"),
         options: STATUS_VALUES.map((value) => ({
           value,
           label: t(
