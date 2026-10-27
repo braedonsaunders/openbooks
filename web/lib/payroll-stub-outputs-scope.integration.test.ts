@@ -109,16 +109,9 @@ registerHooks({
     if (specifier === "@/lib/feature-gates" && parent.endsWith("/web/lib/api/route.ts")) {
       return { shortCircuit: true, url: gateMock };
     }
-    if (
-      specifier === "../../../../../../lib/feature-gates" &&
-      parent.endsWith("/api/payroll/runs/[id]/stubs-pdf/route.ts")
-    ) {
-      return { shortCircuit: true, url: gateMock };
-    }
-    if (
-      specifier === "../../../../../lib/feature-gates" &&
-      parent.endsWith("/api/payroll/runs/[id]/route.ts")
-    ) {
+    // The run action route authorizes itself before the factory's feature
+    // check, through the same alias.
+    if (specifier === "@/lib/feature-gates" && parent.endsWith("/api/payroll/runs/[id]/route.ts")) {
       return { shortCircuit: true, url: gateMock };
     }
     const resolved = next(specifier, context);
