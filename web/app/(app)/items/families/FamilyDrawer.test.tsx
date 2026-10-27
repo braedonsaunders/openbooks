@@ -19,7 +19,7 @@ stubModules({
   features: false,
   extra: {
     "next-intl":
-      'const t = (key) => key; export function useTranslations() { return t } export function useLocale() { return "en" }',
+      'const t = (key) => key; export function useTranslations() { return t } export function useLocale() { return "en" } export function useTimeZone() { return "UTC" }',
     sonner: "export const toast = { success() {}, error() {} }",
   },
 });
