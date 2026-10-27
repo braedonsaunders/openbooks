@@ -63,14 +63,9 @@ const gateAdapters = `
 const GATE_SELF = new URL(import.meta.url).href;
 const gateMock = (name: string) => `${GATE_SELF}?mock=${name}`;
 const gateMocks = new Map<string, string>([
-  ["../../../../../lib/authz", gateMock("authz")],
-  ["../../../../../lib/setup/agents", gateMock("adapters")],
-  ["../../../../../../lib/authz", gateMock("authz")],
-  ["../../../../../../lib/setup/agents", gateMock("adapters")],
-  ["../../../../../../../lib/feature-gates", gateMock("authz")],
   ["@/lib/feature-gates", gateMock("authz")],
   ["@/lib/authz", gateMock("authz")],
-  ["../../../../../../../lib/setup/agents", gateMock("adapters")],
+  ["@/lib/setup/agents", gateMock("adapters")],
 ]);
 const gateHooks = registerHooks({
   resolve(specifier, context, nextResolve) {

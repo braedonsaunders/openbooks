@@ -41,7 +41,8 @@ function sqlText(query: unknown): string {
   return chunks
     .map((chunk) => {
       if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
+      const value = (chunk as { value?: unknown })?.value;
+      if (typeof value === "string") return value;
       if (Array.isArray(value)) return value.map(String).join("");
       if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
@@ -64,6 +65,11 @@ const mockSources = new Map<string, string>([
         return { user: { orgId: 'org-1', id: 'user-1' }, permissions: state.granted, allowedSubsidiaryIds: null }
       }
     `,
+  ],
+  // The route factory confirms the run's feature after authorization.
+  [
+    "mock:features",
+    "export async function isFeatureEnabled(_orgId, key) { return key === 'payroll' }",
   ],
   [
     "mock:authz",
@@ -110,6 +116,7 @@ const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`;
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/feature-gates", mockUrl("feature-gates")],
   ["@/lib/feature-gates", mockUrl("feature-gates")],
+  ["@/lib/features", mockUrl("features")],
   ["../../../../../lib/authz", mockUrl("authz")],
   ["@/lib/authz", mockUrl("authz")],
   ["@openbooks/engine/platform/db", mockUrl("db")],

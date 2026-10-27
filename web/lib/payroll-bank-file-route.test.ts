@@ -28,7 +28,8 @@ function sqlText(query: unknown): string {
   return chunks
     .map((chunk) => {
       if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
+      const value = (chunk as { value?: unknown })?.value;
+      if (typeof value === "string") return value;
       if (Array.isArray(value)) return value.map(String).join("");
       if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
@@ -52,22 +53,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   ["mock:authz", "export function guardSubsidiaryScope() { return null }"],
-  [
-    "mock:db",
-    `
-      export * from '${dbUrl}'
-      const state = globalThis[Symbol.for('openbooks.bank-file-route-test')]
-      const sqlText = globalThis.openbooksBankFileSqlText
-      export const db = {
-        async execute(query, mode) {
-          const inMode = (result) => (mode === 'objects' ? result.rows : result)
-          const text = sqlText(query)
-          if (text.includes('from pay_runs r')) return inMode({ rows: [{ subsidiaryId: null }] })
-          throw new Error('bank-file paths must not issue SQL: ' + text.slice(0, 120))
-        },
-      }
-    `,
-  ],
   [
     "mock:bank-file",
     `
@@ -101,12 +86,31 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", mockUrl("feature-gates")],
   ["../../../../../../lib/authz", mockUrl("authz")],
   ["@/lib/authz", mockUrl("authz")],
-  ["@openbooks/engine/platform/db", mockUrl("db")],
   ["@openbooks/engine/payroll/bank-file", mockUrl("bank-file")],
   ["@openbooks/engine/payroll/bank-file-artifact", mockUrl("bank-file-artifact")],
 ]);
 
-stubModules({ intl: true, navigation: false, authz: false, features: false });
+// The database double also owns the engine readers' relative imports of the
+// platform module, so the run-scope read the route delegates is answered here.
+stubModules({
+  database: `
+      export * from '${dbUrl}'
+      const state = globalThis[Symbol.for('openbooks.bank-file-route-test')]
+      const sqlText = globalThis.openbooksBankFileSqlText
+      export const db = {
+        async execute(query, mode) {
+          const inMode = (result) => (mode === 'objects' ? result.rows : result)
+          const text = sqlText(query)
+          if (text.includes('from pay_runs r')) return inMode({ rows: [{ subsidiaryId: null }] })
+          throw new Error('bank-file paths must not issue SQL: ' + text.slice(0, 120))
+        },
+      }
+    `,
+  intl: true,
+  navigation: false,
+  authz: false,
+  features: { enabled: ["payroll"] },
+});
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
