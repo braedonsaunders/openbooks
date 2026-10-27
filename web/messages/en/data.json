@@ -100,7 +100,19 @@
       "createFailedNumbering": "Sample company preparation stopped: reconciling document numbering failed. Company readiness is unconfirmed. Check Company Setup for an available sample company; if none is available, contact support before creating another copy.",
       "checkStatus": "Check company status",
       "requestReference": "Support reference: {requestId}",
-      "setupSaved": "Company setup was saved. The optional sample company is not confirmed ready."
+      "setupSaved": "Company setup was saved. The optional sample company is not confirmed ready.",
+      "createFailedWorker": "Sample companies are prepared by the background worker, which is not running, so preparation did not start. Ask your administrator to start the background worker, then try again.",
+      "createFailedQueue": "The background job queue could not be reached, so preparation did not start. Try again shortly; if this continues, ask your administrator to check the background worker and its queue.",
+      "progress": {
+        "title": "Preparing your sample company",
+        "queued": "Waiting for the background worker to start…",
+        "starting": "Starting preparation…",
+        "template": "Preparing the verified industry template…",
+        "clone": "Copying the template’s posted history…",
+        "finalize": "Finalizing the new company…",
+        "step": "Step {current} of {total}: {label}",
+        "hint": "This usually takes a few minutes and continues in the background. You can leave this page; Company Setup shows its progress."
+      }
     },
     "sourceTitle": "Select records and upload a file",
     "sourceHint": "Choose the record type to import. Map its columns and preview the changes before importing.",

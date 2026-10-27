@@ -17,6 +17,7 @@ import { createCloseDeliveryWorker } from "./close-delivery-worker.ts";
 import { createStatementBatchWorker } from "./statement-batch-worker.ts";
 import { createMigrationWorker, startMirrorScheduler } from "./migration-worker.ts";
 import { createSandboxWorker } from "./sandbox-worker.ts";
+import { createSampleCompanyWorker } from "./sample-company-worker.ts";
 import { createScriptsWorker } from "./scripts-worker.ts";
 import { startReportScheduler } from "./scheduler.ts";
 import { startSandboxScheduler } from "./sandbox-scheduler.ts";
@@ -77,6 +78,7 @@ async function main(): Promise<void> {
     createStatementBatchWorker(),
     createMigrationWorker(),
     createSandboxWorker(),
+    createSampleCompanyWorker(),
     createScriptsWorker(),
     createApCaptureWorker(),
     createBackupWorker(),
@@ -98,7 +100,7 @@ async function main(): Promise<void> {
     );
   }
   console.log(
-    "[worker] online — queues: emails, reports, migration, sandbox, scripts, ap-capture, backup; scheduled ticks owned (scripts, feeds, billing, outbox, flows, close) + report + sandbox + backup schedulers ticking",
+    "[worker] online — queues: emails, reports, migration, sandbox, sample-company, scripts, ap-capture, backup; scheduled ticks owned (scripts, feeds, billing, outbox, flows, close) + report + sandbox + backup schedulers ticking",
   );
 
   const heartbeat = async () => {

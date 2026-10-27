@@ -49,7 +49,13 @@ import { readApiErrorMessage, refusalMessageFromBody } from "@/lib/api-error";
 import {
   readSampleCompanyResponse,
   type SampleCompanyRefusal,
+  type SampleCompanyRun,
 } from "@/lib/sample-company-response";
+import {
+  SampleCompanyProgress,
+  sampleCompanyRefusalText,
+  useSampleCompanyWatch,
+} from "@/components/sample-company-progress";
 import {
   recommendWorkspaceFeatures,
   type ComplexityLevel,
@@ -278,6 +284,27 @@ export function SetupWizard(props: {
     industry: string;
     refusal: SampleCompanyRefusal;
   } | null>(null);
+  // The optional sample company prepares in the background after setup is
+  // saved; the completion step follows it until it is ready or has failed.
+  const [sampleRun, setSampleRun] = useState<{ industry: string; run: SampleCompanyRun } | null>(
+    null,
+  );
+  useSampleCompanyWatch(sampleRun ? [sampleRun.industry] : [], (industry, read) => {
+    if (read.kind === "unavailable") return;
+    if (read.kind === "running") {
+      setSampleRun({ industry, run: read.run });
+      return;
+    }
+    setSampleRun(null);
+    if (read.kind === "ready") {
+      setSampleOrgId(read.orgId);
+      toast.success(sampleT("created"));
+      return;
+    }
+    sampleAttempts.current.set(industry, read.refusal);
+    setSampleFailure({ industry, refusal: read.refusal });
+    toast.error(sampleCompanyRefusalText(sampleT, read.refusal));
+  });
   const installablePacks = props.payrollPacks ?? [];
   const [payrollPack, setPayrollPack] = useState<PayrollPack>(
     initialPayrollPack(installablePacks, props.initial.country),
@@ -391,7 +418,7 @@ export function SetupWizard(props: {
   async function apply() {
     if (stepTransitionLocked.current || applyLocked.current) return;
     if (includeSampleCompany && industryKey && sampleAttempts.current.has(industryKey)) {
-      toast.error(sampleAttempts.current.get(industryKey)?.message ?? sampleT("createFailed"));
+      toast.error(sampleCompanyRefusalText(sampleT, sampleAttempts.current.get(industryKey) ?? {}));
       return;
     }
     applyLocked.current = true;
@@ -459,9 +486,10 @@ export function SetupWizard(props: {
         const installed = await readSampleCompanyResponse(sample);
         if (!installed.ok) {
           sampleAttempts.current.set(industryKey, installed.refusal);
-          throw new Error(installed.refusal.message ?? sampleT("createFailed"));
+          throw new Error(sampleCompanyRefusalText(sampleT, installed.refusal));
         }
-        setSampleOrgId(installed.orgId);
+        if ("run" in installed) setSampleRun({ industry: industryKey, run: installed.run });
+        else setSampleOrgId(installed.orgId);
       }
       // Keep the next action available until the operator chooses a destination.
       setStepIdx(steps.indexOf("done"));
@@ -472,7 +500,7 @@ export function SetupWizard(props: {
         // next steps rather than offering to apply the setup again.
         const refusal = sampleAttempts.current.get(attemptedSampleIndustry) ?? {};
         setSampleFailure({ industry: attemptedSampleIndustry, refusal });
-        toast.error(refusal.message ?? sampleT("createFailed"));
+        toast.error(sampleCompanyRefusalText(sampleT, refusal));
         setStepIdx(steps.indexOf("done"));
       } else {
         toast.error((e as Error).message);
@@ -796,7 +824,7 @@ export function SetupWizard(props: {
           className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
         >
           <p>{sampleT("setupSaved")}</p>
-          <p>{sampleFailure.refusal.message ?? sampleT("createFailed")}</p>
+          <p>{sampleCompanyRefusalText(sampleT, sampleFailure.refusal)}</p>
           {sampleFailure.refusal.requestId && (
             <p>{sampleT("requestReference", { requestId: sampleFailure.refusal.requestId })}</p>
           )}
@@ -876,6 +904,7 @@ export function SetupWizard(props: {
         <DoneStep
           t={t}
           sampleOrgId={sampleOrgId}
+          sampleRun={sampleRun?.run ?? null}
           bookStart={bookStart}
           actions={(props.launchActions ?? []).filter(
             (action) => action !== "statement" || featureChoices.banking,
@@ -2170,6 +2199,7 @@ function ApplyingStep({ t }: { t: ReturnType<typeof useTranslations<"admin.setup
 function DoneStep({
   t,
   sampleOrgId,
+  sampleRun,
   bookStart,
   actions,
   onNavigate,
@@ -2177,6 +2207,7 @@ function DoneStep({
   t: ReturnType<typeof useTranslations<"admin.setup.wizard">>;
   bookStart: BookStart;
   sampleOrgId: string | null;
+  sampleRun: SampleCompanyRun | null;
   actions: SetupLaunchAction[];
   onNavigate: (href: string) => void;
 }) {
@@ -2194,7 +2225,7 @@ function DoneStep({
   const preferred: SetupLaunchAction =
     bookStart === "migrate" ? (actions.includes("assistant") ? "assistant" : "migrate") : "invoice";
   const ordered = [preferred, ...actions.filter((action) => action !== preferred)].filter(
-    (action) => actions.includes(action) && !(sampleOrgId && action === "demo"),
+    (action) => actions.includes(action) && !((sampleOrgId || sampleRun) && action === "demo"),
   );
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -2229,6 +2260,7 @@ function DoneStep({
         {t("done.description")}
       </motion.p>
       <div className="mt-6 flex w-full max-w-md flex-col gap-3">
+        {sampleRun && <SampleCompanyProgress run={sampleRun} className="text-left" />}
         {sampleOrgId && (
           <button
             type="button"

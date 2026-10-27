@@ -99,7 +99,19 @@
       "createFailedNumbering": "Não foi possível criar a empresa de exemplo. A conciliação da numeração dos documentos falhou. Não foi confirmado que a empresa está pronta. Verifique na configuração da empresa se há uma empresa de exemplo disponível; caso não haja, contate o suporte antes de criar outra cópia.",
       "checkStatus": "Verificar status da empresa",
       "requestReference": "Referência de suporte: {requestId}",
-      "setupSaved": "A configuração da empresa foi salva. Não foi confirmado que a empresa de exemplo opcional está pronta."
+      "setupSaved": "A configuração da empresa foi salva. Não foi confirmado que a empresa de exemplo opcional está pronta.",
+      "createFailedWorker": "As empresas de exemplo são preparadas pelo processo em segundo plano, que não está em execução; por isso, a preparação não foi iniciada. Peça ao administrador que inicie o processo em segundo plano e tente novamente.",
+      "createFailedQueue": "Não foi possível acessar a fila de tarefas em segundo plano; por isso, a preparação não foi iniciada. Tente novamente em instantes; se continuar, peça ao administrador que verifique o processo em segundo plano e a fila.",
+      "progress": {
+        "title": "Preparando sua empresa de exemplo",
+        "queued": "Aguardando o início do processo em segundo plano…",
+        "starting": "Iniciando a preparação…",
+        "template": "Preparando o modelo verificado do setor…",
+        "clone": "Copiando o histórico lançado do modelo…",
+        "finalize": "Finalizando a nova empresa…",
+        "step": "Etapa {current} de {total}: {label}",
+        "hint": "Isso costuma levar alguns minutos e continua em segundo plano. Você pode sair desta página; a configuração da empresa mostra o progresso."
+      }
     },
     "loadFailed": "Não foi possível carregar os tipos de registro importáveis.",
     "sourceTitle": "Selecionar registros e carregar um arquivo",

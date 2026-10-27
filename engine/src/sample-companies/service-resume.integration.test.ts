@@ -10,8 +10,20 @@ import {
   SampleCompanyProvisioningError,
   sampleCompanyStageMessage,
 } from "./service.ts";
+import {
+  runSampleCompanyProvisioning,
+  type SampleCompanyProvisioningProgress,
+} from "./provisioning-job.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
-import { db, withBypass, withBypassContext, withOrgContext } from "../platform/db.ts";
+import {
+  currentRequestOrgResolver,
+  db,
+  registerRequestOrgResolver,
+  withBypass,
+  withBypassContext,
+  withOrgContext,
+} from "../platform/db.ts";
+import { UUID_RE } from "../platform/uuid.ts";
 import { loadRun } from "../sim/runner.ts";
 import type { RunManifest } from "../sim/manifest.ts";
 import { SIM_ORG_PREFIX } from "../sim/db-guard.ts";
@@ -723,6 +735,135 @@ test(
       );
       const after = await sampleOrgsFor(fixture.memberUserId);
       assert.deepEqual(after, [], "the failed clone must leave no shell behind");
+    } finally {
+      await dropFixture(fixture);
+    }
+  },
+);
+
+/**
+ * Run as the background worker does: no request scope, so every query the
+ * pipeline makes must sit inside a boundary it opens itself.
+ */
+async function asBackgroundWorker<T>(work: () => Promise<T>): Promise<T> {
+  const previous = currentRequestOrgResolver();
+  registerRequestOrgResolver(() => undefined);
+  try {
+    return await work();
+  } finally {
+    if (previous) registerRequestOrgResolver(previous);
+  }
+}
+
+function provisioningRequest(fixture: Fixture) {
+  const { industryKey, memberUserId, sourceOrgId, memberName } = fixture.input;
+  return { industryKey, memberUserId, sourceOrgId, memberName };
+}
+
+test(
+  "a background run publishes each stage, finishes ready, and a repeat request reuses it",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedFixture();
+    try {
+      const published: SampleCompanyProvisioningProgress[] = [];
+      const result = await asBackgroundWorker(() =>
+        runSampleCompanyProvisioning(
+          provisioningRequest(fixture),
+          async (progress) => {
+            published.push(progress);
+          },
+          stubTemplate(fixture),
+        ),
+      );
+      fixture.createdOrgIds.push(result.orgId);
+      assert.equal(result.created, true);
+      assert.deepEqual(
+        published.map((progress) => progress.stage),
+        ["template", "clone", "finalize", "numbering", "finalize"],
+      );
+      assert.ok(published.every((progress) => progress.failure === undefined));
+
+      const companies = await sampleOrgsFor(fixture.memberUserId);
+      assert.equal(companies.length, 1);
+      assert.equal(companies[0]!.id, result.orgId);
+      assert.equal(companies[0]!.stage, "ready");
+      assert.equal(companies[0]!.hasAccess, true);
+
+      const repeated: SampleCompanyProvisioningProgress[] = [];
+      const again = await asBackgroundWorker(() =>
+        runSampleCompanyProvisioning(
+          provisioningRequest(fixture),
+          async (progress) => {
+            repeated.push(progress);
+          },
+          stubTemplate(fixture),
+        ),
+      );
+      assert.equal(again.orgId, result.orgId, "a ready company is returned, never cloned again");
+      assert.equal(again.created, false);
+      assert.deepEqual(repeated, [], "a ready company runs no stage");
+      assert.equal((await sampleOrgsFor(fixture.memberUserId)).length, 1);
+    } finally {
+      await dropFixture(fixture);
+    }
+  },
+);
+
+test(
+  "a failed background run publishes its staged refusal and the next run resumes the company",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedFixture();
+    try {
+      const published: SampleCompanyProvisioningProgress[] = [];
+      await assert.rejects(
+        asBackgroundWorker(() =>
+          runSampleCompanyProvisioning(
+            provisioningRequest(fixture),
+            async (progress) => {
+              published.push(progress);
+            },
+            {
+              ...stubTemplate(fixture),
+              finalizeCompany: async () => {
+                throw new Error("simulated finalize outage");
+              },
+            },
+          ),
+        ),
+        (error: unknown) => error instanceof SampleCompanyProvisioningError,
+      );
+      const last = published.at(-1)!;
+      assert.equal(last.stage, "finalize");
+      assert.ok(last.failure, "the failed run publishes its failure body");
+      assert.equal(last.failure.error, "sample-company-finalize-failed");
+      assert.equal(last.failure.stage, "finalize");
+      assert.equal(last.failure.message, sampleCompanyStageMessage("finalize"));
+      assert.match(last.failure.requestId, UUID_RE);
+      assert.doesNotMatch(JSON.stringify(last.failure), /simulated finalize outage/);
+
+      const partials = await sampleOrgsFor(fixture.memberUserId);
+      assert.equal(partials.length, 1);
+      assert.equal(partials[0]!.hasAccess, false, "a failed run exposes no company");
+      fixture.createdOrgIds.push(partials[0]!.id);
+
+      // Progress is advisory: a run whose progress cannot be published still
+      // completes, resuming the partial company instead of cloning another.
+      const resumed = await asBackgroundWorker(() =>
+        runSampleCompanyProvisioning(
+          provisioningRequest(fixture),
+          async () => {
+            throw new Error("progress store unavailable");
+          },
+          stubTemplate(fixture),
+        ),
+      );
+      assert.equal(resumed.orgId, partials[0]!.id);
+      const after = await sampleOrgsFor(fixture.memberUserId);
+      assert.equal(after.length, 1);
+      assert.equal(after[0]!.stage, "ready");
+      assert.equal(after[0]!.hasAccess, true);
     } finally {
       await dropFixture(fixture);
     }

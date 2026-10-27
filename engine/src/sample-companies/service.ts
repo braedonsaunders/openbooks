@@ -13,6 +13,7 @@ import {
   SampleCompanyError,
   SampleCompanyPreconditionError,
   runProvisioningStage,
+  type SampleCompanyProvisioningStage,
 } from "./provisioning-failures.ts";
 import { isUuid } from "../platform/uuid.ts";
 import {
@@ -133,7 +134,9 @@ const TEMPLATE_MINIMUMS = {
  * assigned an RLS context. It returns only an authorization decision; no tenant
  * data leaves the boundary.
  */
-async function assertSampleRequestAccess(input: CreateSampleCompanyInput): Promise<void> {
+export async function assertSampleRequestAccess(
+  input: Pick<CreateSampleCompanyInput, "memberUserId" | "sourceOrgId">,
+): Promise<void> {
   // bypass: user-keyed-lookup — decides whether this person may request a sample from an organization they may not belong to.
   const allowed = await withBypassContext(async () => {
     const result = await db.execute<{ allowed: boolean }>(
@@ -601,6 +604,18 @@ async function existingFor(
     );
     return result[0] ?? null;
   });
+}
+
+/**
+ * The member's fully ready sample company for an industry, or null. This is
+ * the same lookup provisioning treats as success, so a caller that finds one
+ * may open it instead of starting another provisioning run.
+ */
+export async function readySampleCompany(
+  memberUserId: string,
+  industryKey: string,
+): Promise<{ id: string; name: string } | null> {
+  return existingFor(memberUserId, industryKey);
 }
 
 interface PartialSampleCompany {
@@ -1492,7 +1507,18 @@ export interface SampleCompanyProvisionDeps {
   ) => Promise<{ sandboxId: string; sandboxOrgId: string }>;
   finalizeCompany?: (args: FinalizeSampleCompanyArgs) => Promise<void>;
   reconcileNumbering?: (orgId: string) => Promise<unknown>;
+  /**
+   * Observe each provisioning stage as it starts, so a background run can
+   * publish truthful progress. A failure thrown here stops provisioning, so
+   * callers whose progress is best-effort catch their own reporting errors.
+   */
+  onStage?: (stage: SampleCompanyProvisioningStage) => void | Promise<void>;
 }
+
+type StageRunner = <T>(
+  stage: SampleCompanyProvisioningStage,
+  operation: () => Promise<T>,
+) => Promise<T>;
 
 /**
  * Clone the template into the member's company shell, birth-marked so a
@@ -1561,10 +1587,11 @@ async function resumePartialSampleCompany(args: {
   profileId: string;
   finalizeCompany: (step: FinalizeSampleCompanyArgs) => Promise<void>;
   reconcileNumbering: (orgId: string) => Promise<unknown>;
+  runStage: StageRunner;
 }): Promise<void> {
   const stage = args.partial.stage as SampleCompanyOrgStage;
   if (stage === "cloned") {
-    await runProvisioningStage("finalize", () =>
+    await args.runStage("finalize", () =>
       args.finalizeCompany({
         sandboxOrgId: args.partial.id,
         templateOrgId: args.partial.templateOrgId,
@@ -1575,10 +1602,10 @@ async function resumePartialSampleCompany(args: {
     );
   }
   if (stage === "cloned" || stage === "finalized") {
-    await runProvisioningStage("numbering", () => args.reconcileNumbering(args.partial.id));
+    await args.runStage("numbering", () => args.reconcileNumbering(args.partial.id));
     await setSampleCompanyStage(args.partial.id, "numbering_reconciled");
   }
-  await runProvisioningStage("finalize", () =>
+  await args.runStage("finalize", () =>
     restoreClonedSampleScenarios(args.partial.id, args.input.industryKey),
   );
   await grantSampleCompanyAccess({
@@ -1645,12 +1672,18 @@ export async function createSampleCompany(
   const reconcileNumbering =
     deps.reconcileNumbering ??
     ((orgId: string) => withOrgContext(orgId, () => reconcileDocumentSequences(db, orgId)));
+  // Every stage is announced before it runs so a background run reports
+  // where it is; the staged refusal semantics are unchanged.
+  const runStage: StageRunner = async (stage, operation) => {
+    await deps.onStage?.(stage);
+    return runProvisioningStage(stage, operation);
+  };
   // Template preparation has its own profile-wide lock. Complete it before
   // taking the member lock so a burst of first-use requests cannot exhaust the
   // connection pool while holding one advisory lock and waiting for another.
   // OM-14: every unexpected failure below is reported by its pipeline stage
   // with a stable code and a fixed operator-facing message — never SQL text.
-  const prepared = await runProvisioningStage("template", () => prepareTemplate(input.industryKey));
+  const prepared = await runStage("template", () => prepareTemplate(input.industryKey));
 
   const lockKey = `openbooks:sample-company:${input.memberUserId}:${input.industryKey}`;
   let lockClient = await pool.connect();
@@ -1710,6 +1743,7 @@ export async function createSampleCompany(
           profileId: profile.profileId,
           finalizeCompany,
           reconcileNumbering,
+          runStage,
         });
         return {
           orgId: partial.id,
@@ -1732,7 +1766,7 @@ export async function createSampleCompany(
     // marker is what the next retry resumes from — and what the compensation
     // below finds.
     const cloneCompany = deps.cloneCompany ?? cloneSampleCompanyTemplate;
-    const cloned = await runProvisioningStage("clone", () =>
+    const cloned = await runStage("clone", () =>
       cloneCompany({
         templateOrgId: prepared.templateOrgId,
         companyName: profile.companyName,
@@ -1759,7 +1793,7 @@ export async function createSampleCompany(
         templateGenerated: false,
       };
     }
-    await runProvisioningStage("finalize", () =>
+    await runStage("finalize", () =>
       finalizeCompany({
         sandboxOrgId: cloned.sandboxOrgId,
         templateOrgId: prepared.templateOrgId,
@@ -1772,9 +1806,9 @@ export async function createSampleCompany(
     // documents, so advance its canonical sequences past the highest cloned
     // number per kind even if the copy did not carry the reconciled counters.
     // Forward-only and idempotent — a no-op when the counters already lead.
-    await runProvisioningStage("numbering", () => reconcileNumbering(cloned.sandboxOrgId));
+    await runStage("numbering", () => reconcileNumbering(cloned.sandboxOrgId));
     await setSampleCompanyStage(cloned.sandboxOrgId, "numbering_reconciled");
-    await runProvisioningStage("finalize", () =>
+    await runStage("finalize", () =>
       restoreClonedSampleScenarios(cloned.sandboxOrgId, input.industryKey),
     );
     // Access is granted last: only a fully reconciled company becomes ready.

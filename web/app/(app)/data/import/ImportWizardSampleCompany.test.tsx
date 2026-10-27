@@ -85,6 +85,9 @@ const script = {
   postTransportFailure: false,
   postStatus: 500,
   postBody: { error: "sample-company-clone-failed", stage: "clone" } as Record<string, unknown>,
+  listProvisioning: null as unknown,
+  statusReads: [] as Record<string, unknown>[],
+  statusGets: 0,
   resources: [] as { key: string; label: string; group: string; supportsImport?: boolean }[],
   importRequests: [] as { mode?: string }[],
   importFailureMode: null as string | null,
@@ -102,13 +105,29 @@ function stubFetch(): void {
     if (url === "/api/data/resources" && method === "GET") {
       return Response.json({ resources: script.resources });
     }
+    if (url === "/api/data/sample-companies?industry=sim_atlas" && method === "GET") {
+      script.statusGets += 1;
+      const read =
+        script.statusReads.length > 1 ? script.statusReads.shift() : script.statusReads[0];
+      return Response.json({ industryKey: "sim_atlas", ...read });
+    }
     if (url === "/api/data/sample-companies" && method === "GET") {
       script.sampleGets += 1;
-      return Response.json({ profiles: [{ ...PROFILE, existingOrgId: script.readyOrgId }] });
+      return Response.json({
+        profiles: [
+          { ...PROFILE, existingOrgId: script.readyOrgId, provisioning: script.listProvisioning },
+        ],
+      });
     }
     if (url === "/api/data/sample-companies" && method === "POST") {
       script.samplePosts += 1;
       if (script.postTransportFailure) throw new Error("connection dropped");
+      if (script.postStatus === 202) {
+        return Response.json(
+          { ok: true, provisioning: { state: "queued", stage: null } },
+          { status: 202 },
+        );
+      }
       if (script.postStatus !== 200) {
         return new Response(JSON.stringify(script.postBody), {
           status: script.postStatus,
@@ -199,6 +218,8 @@ async function mountWizard(
   script.postTransportFailure = false;
   script.postStatus = 500;
   script.postBody = { error: "sample-company-clone-failed", stage: "clone" };
+  script.statusReads = [];
+  script.statusGets = 0;
   script.importRequests = [];
   script.importFailureMode = null;
   script.previewFailed = 0;
@@ -411,6 +432,118 @@ test("synchronous repeated clicks share one provisioning attempt", async (t) => 
   });
   assert.equal(script.samplePosts, 1);
   assert.deepEqual(globalThis.__sampleTestEnteredOrgs, [NEW_ORG_ID]);
+});
+
+/** Wait for the next background status reads to land. */
+async function waitForPolls(reads: number): Promise<void> {
+  const target = script.statusGets + reads;
+  for (let attempt = 0; attempt < 200 && script.statusGets < target; attempt++) {
+    await act(async () => {
+      await tick();
+    });
+  }
+  await act(async () => {
+    await tick();
+  });
+  assert.ok(script.statusGets >= target, `expected ${reads} more status reads`);
+}
+
+function progressText(): string {
+  return document.querySelector('[role="status"]')?.textContent ?? "";
+}
+
+test("a started company shows its stage while it prepares and offers to open it when ready", async (t) => {
+  await mountWizard(t, true);
+  script.postStatus = 202;
+  script.statusReads = [
+    { existingOrgId: null, provisioning: { state: "running", stage: "clone" } },
+    { existingOrgId: NEW_ORG_ID, provisioning: null },
+  ];
+  await clickCreate();
+  assert.equal(script.samplePosts, 1);
+  assert.match(progressText(), /Preparing your sample company/);
+  assert.match(progressText(), /Waiting for the background worker to start/);
+  assert.equal(createButton().disabled, true, "a running preparation cannot be started again");
+  assert.match(createButton().textContent ?? "", /Preparing company/);
+
+  await waitForPolls(1);
+  assert.match(progressText(), /Step 2 of 3: Copying the template’s posted history/);
+  assert.equal(document.querySelector('[role="alert"]'), null);
+
+  await waitForPolls(1);
+  assert.equal(progressText(), "", "a ready company ends the progress display");
+  assert.match(createButton().textContent ?? "", /Open sample company/);
+  assert.equal(createButton().disabled, false);
+  assert.ok(
+    (globalThis.__sampleTestToasts ?? []).some(
+      (toast) => toast.kind === "success" && /Sample company is ready/.test(toast.message),
+    ),
+  );
+  assert.deepEqual(globalThis.__sampleTestEnteredOrgs, [], "readiness never switches by itself");
+  await clickCreate();
+  assert.deepEqual(globalThis.__sampleTestEnteredOrgs, [NEW_ORG_ID]);
+  assert.equal(script.samplePosts, 1, "opening the ready company never provisions again");
+});
+
+test("a failed background run shows its staged message and reference, then only re-reads", async (t) => {
+  await mountWizard(t, true);
+  script.postStatus = 202;
+  script.statusReads = [
+    {
+      existingOrgId: null,
+      provisioning: {
+        state: "failed",
+        failure: {
+          error: "sample-company-clone-failed",
+          stage: "clone",
+          message:
+            "Sample company preparation stopped: copying the template's posted history failed. Company readiness is unconfirmed.",
+          requestId: "9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9",
+        },
+      },
+    },
+  ];
+  await clickCreate();
+  await waitForPolls(1);
+  const alert = document.querySelector('[role="alert"]')?.textContent ?? "";
+  assert.match(alert, /copying the template's posted history failed/);
+  assert.match(alert, /Company readiness is unconfirmed/);
+  assert.match(alert, /Support reference: 9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9/);
+  assert.equal(progressText(), "");
+  assert.match(createButton().textContent ?? "", /Check company status/);
+  const reads = script.statusGets;
+  await clickCreate();
+  assert.equal(script.samplePosts, 1, "a failed run is re-read, never provisioned again");
+  assert.equal(script.statusGets, reads, "the failure stops background status reads");
+});
+
+test("a request refused before anything started explains why and may be asked again", async (t) => {
+  await mountWizard(t, true);
+  script.postStatus = 503;
+  script.postBody = { error: "sample-company-worker-unavailable" };
+  await clickCreate();
+  assert.match(
+    document.querySelector('[role="alert"]')?.textContent ?? "",
+    /background worker, which is not running, so preparation did not start/,
+  );
+  assert.match(createButton().textContent ?? "", /Create sample company/);
+  script.postStatus = 202;
+  script.statusReads = [{ existingOrgId: null, provisioning: { state: "running", stage: null } }];
+  await clickCreate();
+  assert.equal(script.samplePosts, 2, "nothing started, so the request may be made again");
+  assert.equal(document.querySelector('[role="alert"]'), null);
+  assert.match(progressText(), /Waiting for the background worker to start/);
+});
+
+test("a run already in progress when the panel opens is followed without a new start", async (t) => {
+  script.listProvisioning = { state: "running", stage: "template" };
+  t.after(() => {
+    script.listProvisioning = null;
+  });
+  await mountWizard(t, true);
+  assert.match(progressText(), /Step 1 of 3: Preparing the verified industry template/);
+  assert.equal(script.samplePosts, 0);
+  assert.equal(createButton().disabled, true);
 });
 
 test("the durable server job preserves retry identity when session storage is unavailable", async (t) => {

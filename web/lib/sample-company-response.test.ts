@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readSampleCompanyResponse } from "./sample-company-response";
+import { readSampleCompanyResponse, readSampleCompanyStatus } from "./sample-company-response";
 
 const orgId = "8266d59c-2c23-4e6d-834e-54f463319196";
 const requestId = "9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9";
@@ -80,4 +80,66 @@ test("a validation refusal preserves its specific supported remedy", async () =>
     "A previous company setup remains incomplete. Contact support with its provisioning reference.",
   );
   assert.equal(result.refusal.code, undefined);
+});
+
+test("a started run is followed as a run, never mistaken for a company", async () => {
+  assert.deepEqual(
+    await readSampleCompanyResponse(
+      Response.json({ ok: true, provisioning: { state: "queued", stage: null } }, { status: 202 }),
+    ),
+    { ok: true, run: { state: "queued", stage: null } },
+  );
+});
+
+test("status reads settle on a ready company or the recorded staged failure", async () => {
+  assert.deepEqual(
+    await readSampleCompanyStatus(
+      Response.json({
+        existingOrgId: null,
+        provisioning: { state: "running", stage: "clone" },
+      }),
+    ),
+    { kind: "running", run: { state: "running", stage: "clone" } },
+  );
+  assert.deepEqual(
+    await readSampleCompanyStatus(Response.json({ existingOrgId: orgId, provisioning: null })),
+    { kind: "ready", orgId },
+  );
+  const failed = await readSampleCompanyStatus(
+    Response.json({
+      existingOrgId: null,
+      provisioning: {
+        state: "failed",
+        failure: {
+          error: "sample-company-finalize-failed",
+          stage: "finalize",
+          message: "Sample company preparation stopped: finalizing the new company failed.",
+          requestId,
+        },
+      },
+    }),
+  );
+  assert.deepEqual(failed, {
+    kind: "failed",
+    refusal: {
+      code: "sample-company-finalize-failed",
+      stage: "finalize",
+      message: "Sample company preparation stopped: finalizing the new company failed.",
+      requestId,
+    },
+  });
+});
+
+test("a watched run that vanished leaves readiness unconfirmed; an outage proves nothing", async () => {
+  const vanished = await readSampleCompanyStatus(
+    Response.json({ existingOrgId: null, provisioning: null }),
+  );
+  assert.equal(vanished.kind, "failed");
+  if (vanished.kind !== "failed") throw new Error("expected an unconfirmed outcome");
+  assert.equal(vanished.refusal.message, undefined);
+  assert.equal(vanished.refusal.code, undefined);
+  assert.deepEqual(
+    await readSampleCompanyStatus(new Response("<html>bad gateway</html>", { status: 502 })),
+    { kind: "unavailable" },
+  );
 });

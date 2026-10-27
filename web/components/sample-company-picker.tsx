@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Database, Sparkles } from "lucide-react";
@@ -13,8 +13,17 @@ import {
 import { readApiErrorMessage } from "../lib/api-error";
 import {
   readSampleCompanyResponse,
+  sampleCompanyStatusFromBody,
   type SampleCompanyRefusal,
+  type SampleCompanyRun,
+  type SampleCompanyStatusRead,
 } from "../lib/sample-company-response";
+import {
+  SAMPLE_COMPANY_NOT_STARTED_CODES,
+  SampleCompanyProgress,
+  sampleCompanyRefusalText,
+  useSampleCompanyWatch,
+} from "./sample-company-progress";
 
 interface SampleCompanyProfile {
   industryKey: string;
@@ -23,26 +32,23 @@ interface SampleCompanyProfile {
   focus: string[];
   templateReady: boolean;
   existingOrgId: string | null;
+  provisioning?: unknown;
 }
-
-// Authored server remedies take precedence. A code-only response uses the
-// localized stage description without inferring any company identity.
-export const SAMPLE_COMPANY_FAILURE_COPY: Record<string, string> = {
-  "sample-company-template-failed": "import.sample.createFailedTemplate",
-  "sample-company-clone-failed": "import.sample.createFailedClone",
-  "sample-company-finalize-failed": "import.sample.createFailedFinalize",
-  "sample-company-numbering-failed": "import.sample.createFailedNumbering",
-};
 
 export function SampleCompanyPicker() {
   const t = useTranslations("data");
+  const tSample = useTranslations("data.import.sample");
   const tSwitch = useTranslations("shell.accountMenu");
   const [sampleProfiles, setSampleProfiles] = useState<SampleCompanyProfile[]>([]);
   const [sampleIndustry, setSampleIndustry] = useState("");
   const [sampleBusy, setSampleBusy] = useState(false);
   const [sampleErrors, setSampleErrors] = useState<Record<string, SampleCompanyRefusal>>({});
+  // Runs preparing in the background, by industry. Each is re-read until it
+  // settles as a ready company or a recorded failure.
+  const [runs, setRuns] = useState<Record<string, SampleCompanyRun>>({});
   const inFlight = useRef(false);
   const sampleError = sampleErrors[sampleIndustry] ?? null;
+  const sampleRun = runs[sampleIndustry] ?? null;
   useEffect(() => {
     // The settings widget mounts after the route shell, so resolve its anchor
     // once the picker exists instead of relying on the initial navigation.
@@ -50,12 +56,47 @@ export function SampleCompanyPicker() {
       document.getElementById("sample-companies")?.scrollIntoView({ block: "start" });
     }
   }, []);
-  const sampleErrorText = (refusal: SampleCompanyRefusal): string => {
-    if (refusal.message && refusal.message.trim() !== "") return refusal.message;
-    const copyKey = refusal.code ? SAMPLE_COMPANY_FAILURE_COPY[refusal.code] : undefined;
-    if (copyKey) return t(copyKey);
-    return t("import.sample.createFailed");
-  };
+  const sampleErrorText = (refusal: SampleCompanyRefusal): string =>
+    sampleCompanyRefusalText(tSample, refusal);
+
+  const setRun = (industry: string, run: SampleCompanyRun | null) =>
+    setRuns((current) => {
+      const next = { ...current };
+      if (run) next[industry] = run;
+      else delete next[industry];
+      return next;
+    });
+  const setError = (industry: string, refusal: SampleCompanyRefusal | null) =>
+    setSampleErrors((current) => {
+      const next = { ...current };
+      if (refusal) next[industry] = refusal;
+      else delete next[industry];
+      return next;
+    });
+
+  /** Adopt what the server recorded for each profile: a run in progress or its failure. */
+  const adoptProfiles = useCallback((profiles: SampleCompanyProfile[]) => {
+    setSampleProfiles(profiles);
+    const recorded = profiles.map(
+      (profile) => [profile.industryKey, sampleCompanyStatusFromBody(profile)] as const,
+    );
+    setRuns((current) => {
+      const next = { ...current };
+      for (const [industry, read] of recorded) {
+        if (read.kind === "running") next[industry] = read.run;
+        else delete next[industry];
+      }
+      return next;
+    });
+    setSampleErrors((current) => {
+      const next = { ...current };
+      for (const [industry, read] of recorded) {
+        if (read.kind === "failed") next[industry] = read.refusal;
+        else if (read.kind !== "idle") delete next[industry];
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     fetch("/api/data/sample-companies")
@@ -65,13 +106,34 @@ export function SampleCompanyPicker() {
       })
       .then((d) => {
         const profiles = (d.profiles ?? []) as SampleCompanyProfile[];
-        setSampleProfiles(profiles);
+        adoptProfiles(profiles);
         setSampleIndustry((current) => current || profiles[0]?.industryKey || "");
       })
       .catch((e) => {
         toast.error((e as Error).message);
       });
-  }, [t]);
+  }, [t, adoptProfiles]);
+
+  useSampleCompanyWatch(Object.keys(runs), (industry: string, read: SampleCompanyStatusRead) => {
+    if (read.kind === "unavailable") return;
+    if (read.kind === "running") {
+      setRun(industry, read.run);
+      return;
+    }
+    setRun(industry, null);
+    if (read.kind === "ready") {
+      setSampleProfiles((profiles) =>
+        profiles.map((profile) =>
+          profile.industryKey === industry ? { ...profile, existingOrgId: read.orgId } : profile,
+        ),
+      );
+      setError(industry, null);
+      toast.success(t("import.sample.created"));
+      return;
+    }
+    setError(industry, read.refusal);
+    toast.error(sampleErrorText(read.refusal));
+  });
 
   const selectedSample = useMemo(
     () => sampleProfiles.find((profile) => profile.industryKey === sampleIndustry) ?? null,
@@ -79,22 +141,27 @@ export function SampleCompanyPicker() {
   );
 
   const createOrOpenSample = async () => {
-    if (!selectedSample || inFlight.current) return;
+    if (!selectedSample || inFlight.current || runs[selectedSample.industryKey]) return;
     inFlight.current = true;
     setSampleBusy(true);
     const industry = selectedSample.industryKey;
     let orgId = selectedSample.existingOrgId;
     try {
       // After an uncertain attempt, perform only a read. An accessible ready
-      // company may be opened; an absent list entry does not prove no partial
-      // company exists and never authorizes another POST here.
-      if (sampleError && !orgId) {
+      // company may be opened and a run in progress is followed; an absent
+      // list entry does not prove no partial company exists and never
+      // authorizes another POST here. A request refused before anything
+      // started may be asked again.
+      const uncertain =
+        sampleError &&
+        !(sampleError.code && SAMPLE_COMPANY_NOT_STARTED_CODES.has(sampleError.code));
+      if (uncertain && !orgId) {
         const response = await fetch("/api/data/sample-companies");
         if (!response.ok)
           throw new Error(await readApiErrorMessage(response, t("import.sample.error")));
         const data = (await response.json()) as { profiles?: SampleCompanyProfile[] };
         if (!Array.isArray(data.profiles)) throw new Error(t("import.sample.error"));
-        setSampleProfiles(data.profiles);
+        adoptProfiles(data.profiles);
         orgId =
           data.profiles.find((profile) => profile.industryKey === industry)?.existingOrgId ?? null;
         if (!orgId) return;
@@ -107,8 +174,15 @@ export function SampleCompanyPicker() {
         });
         const result = await readSampleCompanyResponse(response);
         if (!result.ok) {
-          setSampleErrors((current) => ({ ...current, [industry]: result.refusal }));
+          setError(industry, result.refusal);
           toast.error(sampleErrorText(result.refusal));
+          return;
+        }
+        if ("run" in result) {
+          // Preparation continues in the background; the progress panel
+          // follows it and offers the company once it is ready.
+          setError(industry, null);
+          setRun(industry, result.run);
           return;
         }
         orgId = result.orgId;
@@ -124,11 +198,7 @@ export function SampleCompanyPicker() {
         toast.success(result.created ? t("import.sample.created") : t("import.sample.ready"));
       }
       await switchWorkspace(orgId);
-      setSampleErrors((current) => {
-        const next = { ...current };
-        delete next[industry];
-        return next;
-      });
+      setError(industry, null);
     } catch (error) {
       const message =
         error instanceof WorkspaceSwitchError
@@ -183,6 +253,7 @@ export function SampleCompanyPicker() {
                 : ""}
             </p>
           )}
+          {sampleRun && <SampleCompanyProgress run={sampleRun} />}
           {sampleError && (
             <p
               id="sample-company-error"
@@ -201,15 +272,16 @@ export function SampleCompanyPicker() {
         <Button
           type="button"
           onClick={createOrOpenSample}
-          disabled={!selectedSample || sampleBusy}
+          disabled={!selectedSample || sampleBusy || Boolean(sampleRun)}
           className="sm:min-w-44"
         >
           <Database className="mr-2 h-4 w-4" />
-          {sampleBusy
+          {sampleBusy || sampleRun
             ? t("import.sample.preparing")
             : selectedSample?.existingOrgId
               ? t("import.sample.open")
-              : sampleError
+              : sampleError &&
+                  !(sampleError.code && SAMPLE_COMPANY_NOT_STARTED_CODES.has(sampleError.code))
                 ? t("import.sample.checkStatus")
                 : t("import.sample.create")}
         </Button>

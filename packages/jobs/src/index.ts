@@ -22,3 +22,4 @@ export * from "./queues/sandbox";
 export * from "./queues/scripts";
 export * from "./queues/ap-capture";
 export * from "./queues/backup";
+export * from "./queues/sample-company";

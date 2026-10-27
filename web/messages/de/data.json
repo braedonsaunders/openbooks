@@ -99,7 +99,19 @@
       "createFailedNumbering": "Das Beispielunternehmen konnte nicht erstellt werden. Der Abgleich der Belegnummerierung ist fehlgeschlagen. Die Betriebsbereitschaft des Unternehmens ist nicht bestätigt. Prüfen Sie in der Unternehmenseinrichtung, ob ein Beispielunternehmen verfügbar ist. Falls nicht, wenden Sie sich an den Support, bevor Sie eine weitere Kopie erstellen.",
       "checkStatus": "Unternehmensstatus prüfen",
       "requestReference": "Supportreferenz: {requestId}",
-      "setupSaved": "Die Unternehmenseinrichtung wurde gespeichert. Die Betriebsbereitschaft des optionalen Beispielunternehmens ist nicht bestätigt."
+      "setupSaved": "Die Unternehmenseinrichtung wurde gespeichert. Die Betriebsbereitschaft des optionalen Beispielunternehmens ist nicht bestätigt.",
+      "createFailedWorker": "Beispielunternehmen werden vom Hintergrundprozess vorbereitet, der nicht läuft. Die Vorbereitung wurde daher nicht gestartet. Bitten Sie Ihre Administration, den Hintergrundprozess zu starten, und versuchen Sie es dann erneut.",
+      "createFailedQueue": "Die Warteschlange für Hintergrundaufträge war nicht erreichbar. Die Vorbereitung wurde daher nicht gestartet. Versuchen Sie es in Kürze erneut; falls das Problem anhält, bitten Sie Ihre Administration, den Hintergrundprozess und seine Warteschlange zu prüfen.",
+      "progress": {
+        "title": "Ihr Beispielunternehmen wird vorbereitet",
+        "queued": "Warten auf den Start des Hintergrundprozesses…",
+        "starting": "Vorbereitung wird gestartet…",
+        "template": "Die geprüfte Branchenvorlage wird vorbereitet…",
+        "clone": "Die gebuchte Historie der Vorlage wird kopiert…",
+        "finalize": "Das neue Unternehmen wird abgeschlossen…",
+        "step": "Schritt {current} von {total}: {label}",
+        "hint": "Das dauert in der Regel einige Minuten und läuft im Hintergrund weiter. Sie können diese Seite verlassen; die Unternehmenseinrichtung zeigt den Fortschritt."
+      }
     },
     "loadFailed": "Importierbare Datensatztypen konnten nicht geladen werden.",
     "sourceTitle": "Datensätze auswählen und Datei hochladen",

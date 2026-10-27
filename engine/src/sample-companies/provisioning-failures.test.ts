@@ -6,6 +6,7 @@ import {
   SampleCompanyPreconditionError,
   SampleCompanyProvisioningError,
   runProvisioningStage,
+  sampleCompanyFailureBody,
   sampleCompanyStageMessage,
   type SampleCompanyProvisioningStage,
 } from "./provisioning-failures.ts";
@@ -193,4 +194,31 @@ test("a driver-wrapped guard refusal is still recognized as deterministic", asyn
       return true;
     },
   );
+});
+
+test("a background run records the staged body, a known refusal, or only its reference", async () => {
+  const requestId = "9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9";
+  const staged = await runProvisioningStage("clone", async () => {
+    throw SQL_LADEN_DB_ERROR;
+  }).catch((error: unknown) => error);
+  const body = sampleCompanyFailureBody(staged, requestId);
+  assert.deepEqual(body, {
+    error: "sample-company-clone-failed",
+    stage: "clone",
+    message: sampleCompanyStageMessage("clone"),
+    requestId,
+  });
+  for (const leak of ["duplicate key", "journal_entries", "INSERT", "STATEMENT", "DETAIL"]) {
+    assert.doesNotMatch(JSON.stringify(body), new RegExp(leak, "i"));
+  }
+
+  const precondition = new SampleCompanyPreconditionError(
+    "sample company clone failed and its incomplete shell could not be removed automatically; remove the shell org manually, then retry",
+  );
+  assert.deepEqual(sampleCompanyFailureBody(precondition, requestId), {
+    message: precondition.message,
+    requestId,
+  });
+
+  assert.deepEqual(sampleCompanyFailureBody(SQL_LADEN_DB_ERROR, requestId), { requestId });
 });

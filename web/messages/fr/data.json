@@ -99,7 +99,19 @@
       "createFailedNumbering": "La société exemple n’a pas pu être créée. Le rapprochement de la numérotation des documents a échoué. La disponibilité de la société n’est pas confirmée. Vérifiez dans la configuration de la société si une société exemple est disponible ; sinon, contactez l’assistance avant de créer une autre copie.",
       "checkStatus": "Vérifier l’état de la société",
       "requestReference": "Référence d’assistance : {requestId}",
-      "setupSaved": "La configuration de la société a été enregistrée. La disponibilité de la société exemple facultative n’est pas confirmée."
+      "setupSaved": "La configuration de la société a été enregistrée. La disponibilité de la société exemple facultative n’est pas confirmée.",
+      "createFailedWorker": "Les sociétés exemples sont préparées par le processus d’arrière-plan, qui n’est pas en cours d’exécution ; la préparation n’a donc pas démarré. Demandez à votre administrateur de démarrer le processus d’arrière-plan, puis réessayez.",
+      "createFailedQueue": "La file des tâches d’arrière-plan était inaccessible ; la préparation n’a donc pas démarré. Réessayez dans quelques instants ; si le problème persiste, demandez à votre administrateur de vérifier le processus d’arrière-plan et sa file.",
+      "progress": {
+        "title": "Préparation de votre société exemple",
+        "queued": "En attente du démarrage du processus d’arrière-plan…",
+        "starting": "Démarrage de la préparation…",
+        "template": "Préparation du modèle sectoriel vérifié…",
+        "clone": "Copie de l’historique comptabilisé du modèle…",
+        "finalize": "Finalisation de la nouvelle société…",
+        "step": "Étape {current} sur {total} : {label}",
+        "hint": "Cela prend généralement quelques minutes et se poursuit en arrière-plan. Vous pouvez quitter cette page ; la configuration de la société affiche la progression."
+      }
     },
     "loadFailed": "Impossible de charger les types d'enregistrement importables.",
     "sourceTitle": "Sélectionner les enregistrements et charger un fichier",

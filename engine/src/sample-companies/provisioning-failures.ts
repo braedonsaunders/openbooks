@@ -82,6 +82,32 @@ export function sampleCompanyProvisioningBody(error: SampleCompanyProvisioningEr
 }
 
 /**
+ * The operator-facing outcome of a provisioning run that ended in a failure,
+ * recorded where the operator reads progress. A staged failure carries its
+ * stable code, stage and fixed message; a known refusal carries its specific
+ * message (it names the condition and its remedy); anything else carries only
+ * the support reference, so the reader shows the unconfirmed-readiness
+ * guidance. The full cause stays in the server log under the same reference.
+ */
+export interface SampleCompanyFailureBody {
+  error?: string;
+  stage?: SampleCompanyProvisioningStage;
+  message?: string;
+  requestId: string;
+}
+
+export function sampleCompanyFailureBody(
+  error: unknown,
+  requestId: string,
+): SampleCompanyFailureBody {
+  if (error instanceof SampleCompanyProvisioningError) {
+    return { ...sampleCompanyProvisioningBody(error), requestId };
+  }
+  if (error instanceof SampleCompanyError) return { message: error.message, requestId };
+  return { requestId };
+}
+
+/**
  * A provisioning precondition that cannot proceed — e.g. a previous attempt
  * that could not be removed, so provisioning again would strand a second
  * org. Unlike unexpected stage failures these carry their specific message

@@ -521,17 +521,46 @@ test("review badges click-through defaults and spares deliberate choices", async
   );
 });
 
-test("optional industry data installs a separate workspace and offers direct entry", async (t) => {
+/** Let the sample company's background status reads land on the completion step. */
+async function waitForSampleReads(urls: () => string[], reads: number) {
+  const count = () =>
+    urls().filter((url) => url === "/api/data/sample-companies?industry=manufacturing").length;
+  const target = count() + reads;
+  for (let attempt = 0; attempt < 200 && count() < target; attempt++) {
+    await act(async () => {
+      await tick();
+    });
+  }
+  await act(async () => {
+    await tick();
+  });
+  assert.ok(count() >= target, `expected ${reads} more status reads`);
+}
+
+test("optional industry data finishes setup at once and follows the sample until it can be entered", async (t) => {
   const { host, root } = mount();
   const requests: { url: string; body: Record<string, unknown> }[] = [];
+  const statusReads: Record<string, unknown>[] = [
+    { existingOrgId: null, provisioning: { state: "running", stage: "clone" } },
+    { existingOrgId: "00000000-0000-4000-8000-000000000003", provisioning: null },
+  ];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    requests.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : {} });
-    return Response.json(
-      String(input) === "/api/data/sample-companies"
-        ? { ok: true, orgId: "00000000-0000-4000-8000-000000000003", created: true }
-        : { ok: true },
-    );
+    const url = String(input);
+    requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : {} });
+    if (url === "/api/data/sample-companies") {
+      return Response.json(
+        { ok: true, provisioning: { state: "queued", stage: null } },
+        { status: 202 },
+      );
+    }
+    if (url === "/api/data/sample-companies?industry=manufacturing") {
+      return Response.json({
+        industryKey: "manufacturing",
+        ...(statusReads.length > 1 ? statusReads.shift() : statusReads[0]),
+      });
+    }
+    return Response.json({ ok: true });
   }) as typeof fetch;
   t.after(async () => {
     globalThis.fetch = prior;
@@ -573,6 +602,22 @@ test("optional industry data installs a separate workspace and offers direct ent
   const installation = requests.filter((request) => request.url === "/api/data/sample-companies");
   assert.equal(installation.length, 1);
   assert.deepEqual(installation[0]!.body, { industry: "manufacturing" });
+  // Setup is complete while the sample prepares: the next steps are offered
+  // beside its live progress, and nothing enters the sample before it is ready.
+  const progress = () => document.querySelector('[role="status"]')?.textContent ?? "";
+  assert.match(progress(), /Preparing your sample company/);
+  assert.match(progress(), /Waiting for the background worker to start/);
+  assert.ok(buttonsNamed("Create your first invoice")[0], "setup finished without waiting");
+  assert.equal(buttonsNamed("Explore a separate demo company").length, 0);
+  await waitForSampleReads(() => requests.map((request) => request.url), 1);
+  assert.match(progress(), /Step 2 of 3: Copying the template’s posted history/);
+  await waitForSampleReads(() => requests.map((request) => request.url), 1);
+  assert.equal(progress(), "", "a ready sample ends the progress display");
+  assert.equal(
+    requests.filter((request) => request.url === "/api/data/sample-companies").length,
+    1,
+    "following the sample never starts it again",
+  );
   const entries = buttonsNamed("Explore a separate demo company");
   assert.equal(entries.length, 1, "completion offers one demo entry action");
   const enter = entries[0]!;
@@ -590,7 +635,7 @@ test("optional industry data installs a separate workspace and offers direct ent
   );
 });
 
-for (const outcome of ["refused", "transport"] as const) {
+for (const outcome of ["refused", "transport", "background"] as const) {
   test(`optional sample ${outcome} keeps saved setup and finishes without a repeated provisioning request`, async (t) => {
     const { host, root } = mount();
     const requests: string[] = [];
@@ -598,8 +643,29 @@ for (const outcome of ["refused", "transport"] as const) {
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       const url = String(input);
       requests.push(url);
+      if (url === "/api/data/sample-companies?industry=manufacturing") {
+        return Response.json({
+          industryKey: "manufacturing",
+          existingOrgId: null,
+          provisioning: {
+            state: "failed",
+            failure: {
+              error: "sample-company-clone-failed",
+              stage: "clone",
+              message: "Copying requires a compatible schema.",
+              requestId: "9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9",
+            },
+          },
+        });
+      }
       if (url === "/api/data/sample-companies") {
         if (outcome === "transport") throw new Error("connection dropped");
+        if (outcome === "background") {
+          return Response.json(
+            { ok: true, provisioning: { state: "running", stage: "template" } },
+            { status: 202 },
+          );
+        }
         return Response.json(
           {
             error: "sample-company-clone-failed",
@@ -647,11 +713,14 @@ for (const outcome of ["refused", "transport"] as const) {
     });
     await tick(STEP_WAIT);
     await tick(STEP_WAIT);
+    if (outcome === "background") {
+      await waitForSampleReads(() => requests, 1);
+    }
     assert.equal(requests.filter((url) => url === "/api/admin/setup/wizard").length, 1);
     assert.equal(requests.filter((url) => url === "/api/data/sample-companies").length, 1);
     const failure = document.querySelector('[role="alert"]')?.textContent ?? "";
     assert.match(failure, /Company setup was saved/);
-    if (outcome === "refused") {
+    if (outcome !== "transport") {
       assert.match(failure, /Copying requires a compatible schema/);
       assert.match(failure, /Support reference: 9cfa2170/);
     } else {
