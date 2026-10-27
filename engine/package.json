@@ -460,6 +460,7 @@
     "./nonprofit/funds": "./src/nonprofit/funds.ts",
     "./nonprofit/grants": "./src/nonprofit/grants.ts",
     "./nonprofit/releases": "./src/nonprofit/releases.ts",
+    "./nonprofit/pledges": "./src/nonprofit/pledges.ts",
     "./nonprofit/statements": "./src/nonprofit/statements.ts",
     "./organization/accounting-preferences": "./src/organization/accounting-preferences.ts",
     "./organization/actor-command-authority": "./src/organization/actor-command-authority.ts",

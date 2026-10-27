@@ -14,7 +14,7 @@ const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("@openbooks/engine/testing/fixtures");
-const { provisionFundAccounting } = await import("@openbooks/engine/nonprofit/provision");
+const { provisionFundAccounting } = await import("@openbooks/engine/testing/nonprofit/provision");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
 const { executeAssistantTool } = await import("../assistant/registry.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
