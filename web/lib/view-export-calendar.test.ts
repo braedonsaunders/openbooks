@@ -66,15 +66,14 @@ const mockSources = new Map<string, string>([
 const SELF_URL = new URL(import.meta.url).href;
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`;
 const mockUrls = new Map<string, string>([
-  ["../../../../../lib/authz", mockUrl("authz")],
   ["@/lib/authz", mockUrl("authz")],
-  ["../../../../../lib/report-authz", mockUrl("report-authz")],
-  ["../../../../../lib/views", mockUrl("views")],
-  ["../../../../../lib/report-pdf", mockUrl("report-pdf")],
+  ["@/lib/report-authz", mockUrl("report-authz")],
+  ["@/lib/views", mockUrl("views")],
+  ["@/lib/report-pdf", mockUrl("report-pdf")],
 ]);
 
 stubModules({
-  database: `export * from '${import.meta.resolve("@openbooks/engine/platform/db")}';export const db={execute:async (q, mode)=>{ const inMode = (result) => (mode === 'objects' ? result.rows : result);const text=JSON.stringify(q);if(text.includes('from currencies'))returninMode({rows:[{code:'EUR',minor_units:2},{code:'CAD',minor_units:2}]});if(text.includes('from orgs'))returninMode({rows:[{name:'Test Org',base_currency:'CAD',book:'Primary'}]});throw Error('unexpected export metadata query')}}`,
+  database: `export * from '${import.meta.resolve("@openbooks/engine/platform/db")}';export const db={execute:async (q, mode)=>{ const inMode = (result) => (mode === 'objects' ? result.rows : result);const text=JSON.stringify(q);if(text.includes('from currencies'))return inMode({rows:[{code:'EUR',minor_units:2},{code:'CAD',minor_units:2}]});if(text.includes('from orgs'))return inMode({rows:[{name:'Test Org',base_currency:'CAD',book:'Primary'}]});throw Error('unexpected export metadata query')}}`,
   intl: true,
   navigation: false,
   authz: false,
