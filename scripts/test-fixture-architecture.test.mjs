@@ -640,6 +640,8 @@ test(
         "documents",
         "journal_entries",
         "journal_lines",
+        // The open-item lines above maintain their balance projection.
+        "open_item_balances",
         "orgs",
         "parties",
         "role_assignments",
