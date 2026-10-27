@@ -55,7 +55,8 @@ function sqlText(query: unknown): string {
   return chunks
     .map((chunk) => {
       if (typeof chunk === "string") return chunk;
-      const value = (chunk as { value?: unknown[] })?.value;
+      const value = (chunk as { value?: unknown })?.value;
+      if (typeof value === "string") return value;
       if (Array.isArray(value)) return value.map(String).join("");
       if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";
@@ -82,7 +83,9 @@ function sqlParams(query: unknown): string[] {
       continue;
     }
     const value = (chunk as { value?: unknown })?.value;
-    if (!Array.isArray(value)) params.push(String(value));
+    // A StringChunk carries literal SQL text as a string or string list.
+    if (typeof value === "string" || Array.isArray(value)) continue;
+    params.push(String(value));
   }
   return params;
 }

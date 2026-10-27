@@ -53,7 +53,8 @@ function sqlText(query: unknown): string {
   return chunks
     .map((c) => {
       if (typeof c === "string") return c;
-      const value = (c as { value?: unknown[] })?.value;
+      const value = (c as { value?: unknown })?.value;
+      if (typeof value === "string") return value;
       if (Array.isArray(value)) return value.map(String).join("");
       if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c);
       return "";
@@ -65,7 +66,7 @@ function sqlText(query: unknown): string {
 ).openbooksSqlText = sqlText;
 
 /** Extract every bound parameter of a drizzle SQL chunk, stringified.
- * Drizzle stores literal SQL text in StringChunk objects ({value: string[]})
+ * Drizzle stores literal SQL text in StringChunk objects (`value` is a string or string list)
  * and keeps interpolated parameters as sibling chunk entries. */
 function sqlParams(query: unknown): string[] {
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
@@ -81,7 +82,9 @@ function sqlParams(query: unknown): string[] {
       continue;
     }
     const value = (c as { value?: unknown })?.value;
-    if (!Array.isArray(value)) out.push(String(value));
+    // A StringChunk carries literal SQL text as a string or string list.
+    if (typeof value === "string" || Array.isArray(value)) continue;
+    out.push(String(value));
   }
   return out;
 }

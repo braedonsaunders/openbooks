@@ -70,7 +70,8 @@ function sqlText(query: unknown): string {
       // `is_active = ` and untestable.
       if (typeof chunk === "number" || typeof chunk === "boolean" || typeof chunk === "bigint")
         return String(chunk);
-      const value = (chunk as { value?: unknown[] })?.value;
+      const value = (chunk as { value?: unknown })?.value;
+      if (typeof value === "string") return value;
       if (Array.isArray(value)) return value.map(String).join("");
       if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
       return "";

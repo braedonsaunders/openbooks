@@ -34,6 +34,7 @@ const mockSources = new Map<string, string>([
           const inMode = (result) => (mode === 'objects' ? result.rows : result)
           const staticText = (chunk) => {
             if (typeof chunk !== 'object' || chunk === null) return ''
+            if (typeof chunk.value === 'string') return chunk.value
             if (Array.isArray(chunk.value)) return chunk.value.join('')
             if (Array.isArray(chunk.queryChunks)) return chunk.queryChunks.map(staticText).join('')
             return ''

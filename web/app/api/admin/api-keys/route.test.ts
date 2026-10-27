@@ -69,7 +69,8 @@ function sqlText(query: unknown): string {
   return chunks
     .map((c) => {
       if (typeof c === "string") return c;
-      const value = (c as { value?: unknown[] })?.value;
+      const value = (c as { value?: unknown })?.value;
+      if (typeof value === "string") return value;
       if (Array.isArray(value)) return value.map(String).join("");
       if ((c as { queryChunks?: unknown[] })?.queryChunks) return sqlText(c);
       return "";

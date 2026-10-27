@@ -59,7 +59,8 @@ function sqlText(query: unknown): string {
     .map((chunk) => {
       if (typeof chunk === "string" || typeof chunk === "number" || typeof chunk === "boolean")
         return String(chunk);
-      const value = (chunk as { value?: unknown[] })?.value;
+      const value = (chunk as { value?: unknown })?.value;
+      if (typeof value === "string") return value;
       if (Array.isArray(value)) return value.map(String).join("");
       return (chunk as { queryChunks?: unknown[] })?.queryChunks ? sqlText(chunk) : "";
     })
