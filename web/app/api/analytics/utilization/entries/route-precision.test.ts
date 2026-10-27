@@ -30,6 +30,7 @@ stubModules({
          if (typeof value === "string") return value
          if (!value || typeof value !== "object") return ""
          if (Array.isArray(value.queryChunks)) return value.queryChunks.map(flatten).join("")
+         if (typeof value.value === "string") return value.value
          if (Array.isArray(value.value)) return value.value.map(String).join("")
          return ""
        }

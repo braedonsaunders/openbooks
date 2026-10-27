@@ -78,6 +78,7 @@ stubModules({
           const chunks = query?.queryChunks ?? []
           const text = chunks.map((chunk) => {
             if (typeof chunk === 'string') return chunk
+            if (typeof chunk?.value === 'string') return chunk.value
             if (Array.isArray(chunk?.value)) return chunk.value.map(String).join('')
             return ''
           }).join('')

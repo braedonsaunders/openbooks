@@ -103,6 +103,7 @@ stubModules({
         return chunks
           .map((c) => {
             if (typeof c === 'string') return c
+            if (typeof c?.value === 'string') return c.value
             if (Array.isArray(c?.value)) return c.value.map(String).join('')
             if (c?.queryChunks) return sqlText(c)
             return ''

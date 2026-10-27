@@ -39,8 +39,8 @@ const state: RouteState = {
 
 /**
  * Flatten a drizzle SQL chunk into raw text for deterministic fake replies.
- * Probed shape (drizzle-orm): SQL text lives in `{ value: ["..."] }`
- * wrappers; bound params are BARE chunk entries (strings, numbers, booleans,
+ * Probed shape (drizzle-orm): SQL text lives in StringChunk `{ value }`
+ * wrappers (a string; older releases: `["..."]`); bound params are BARE chunk entries (strings, numbers, booleans,
  * null, arrays); identifiers are `{ value: "name" }`; nested fragments carry
  * their own `queryChunks`. Bare strings are never text, so text extraction
  * skips them.
@@ -94,6 +94,12 @@ function paramsOf(query: unknown): unknown[] {
         walk(nested);
         continue;
       }
+      // SQL text is a StringChunk, whose value is a string in current
+      // drizzle releases too; only other string-valued chunks are captured.
+      const kind = (chunk.constructor as unknown as Record<symbol, unknown> | undefined)?.[
+        Symbol.for("drizzle:entityKind")
+      ];
+      if (kind === "StringChunk") continue;
       if ("value" in chunk) {
         const v = (chunk as { value?: unknown }).value;
         if (typeof v === "string") out.push(v);

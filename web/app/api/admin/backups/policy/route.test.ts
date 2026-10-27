@@ -16,7 +16,8 @@ const stateKey = Symbol.for("openbooks.backup-policy-route-test");
 (globalThis as Record<string, unknown>).backupPolicySqlText = (query: unknown): string => {
   const flatten = (part: unknown): string => {
     if (typeof part === "string") return part;
-    const value = (part as { value?: unknown[] })?.value;
+    const value = (part as { value?: unknown })?.value;
+    if (typeof value === "string") return value;
     if (Array.isArray(value)) return value.map(String).join("");
     const chunks = (part as { queryChunks?: unknown[] })?.queryChunks;
     return Array.isArray(chunks) ? chunks.map(flatten).join("") : "";

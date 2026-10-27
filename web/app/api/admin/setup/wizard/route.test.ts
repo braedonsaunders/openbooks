@@ -37,6 +37,7 @@ const mockDb = `
     if (!Array.isArray(chunks)) return ''
     return chunks.map((chunk) => {
       if (typeof chunk === 'string') return chunk
+      if (typeof chunk?.value === 'string') return chunk.value
       if (Array.isArray(chunk?.value)) return chunk.value.join('')
       if (Array.isArray(chunk?.queryChunks)) return sqlText(chunk)
       return ''
@@ -48,7 +49,7 @@ const mockDb = `
     if (!Array.isArray(chunks)) return []
     return chunks.flatMap((chunk) => {
       if (chunk && Array.isArray(chunk.queryChunks)) return sqlValues(chunk)
-      if (chunk && Array.isArray(chunk.value)) return []
+      if (chunk && (typeof chunk.value === 'string' || Array.isArray(chunk.value))) return []
       return [chunk]
     })
   }
