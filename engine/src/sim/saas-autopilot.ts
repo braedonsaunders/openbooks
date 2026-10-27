@@ -62,9 +62,11 @@ async function stampCollectible(world: SimOrg, invoiceId: string, today: string)
     update documents
        set due_date = coalesce(due_date, ${addCalendarDays(today, 30)}),
            expected_pay_date = coalesce(expected_pay_date, ${addCalendarDays(today, 32)}),
-           custom = jsonb_set(
-             jsonb_set(coalesce(custom, '{}'::jsonb), '{sim,payFraction}', '"1"'::jsonb, true),
-             '{sim,obligated}', 'true'::jsonb, true)
+           -- jsonb_set never creates the missing "sim" parent, so the flags are
+           -- merged into it explicitly; an unstamped invoice would otherwise be
+           -- rebuilt on every later simulated day.
+           custom = coalesce(custom, '{}'::jsonb) || jsonb_build_object(
+             'sim', coalesce(custom->'sim', '{}'::jsonb) || '{"payFraction":"1","obligated":true}'::jsonb)
      where id = ${invoiceId} and org_id = ${world.orgId}`);
 }
 
