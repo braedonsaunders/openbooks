@@ -275,6 +275,12 @@ export const ALLOWLIST = [
     reason:
       "PDF text-position tokenizer: TJ/Tj strings carry backslash-escaped parens in the raw stream text",
   },
+  {
+    file: "scripts/migration-baseline.test.mjs",
+    snippet: 'say \\\\"hi',
+    reason:
+      "pins a PostgreSQL array literal in generated seed SQL, whose embedded element quotes are really backslash-escaped",
+  },
 ];
 
 export function isAllowlisted(file, snippet) {
