@@ -17,7 +17,7 @@ test("the production image uses isolated Webpack compilation within its heap bud
   const dockerfile = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
   assert.match(
     dockerfile,
-    /^RUN cd web && NODE_OPTIONS=--max-old-space-size=8192 npx next build --webpack$/m,
+    /^RUN cd web && NODE_OPTIONS=--max-old-space-size=12288 npx next build --webpack$/m,
   );
 });
 

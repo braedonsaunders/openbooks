@@ -735,7 +735,7 @@ jobs:
         # cold build after a lockfile change stays within the runner.
         env:
           OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
-          NODE_OPTIONS: --max-old-space-size=8192
+          NODE_OPTIONS: --max-old-space-size=12288
         run: npm run build -w web
 
       - name: Save Next compiler cache
@@ -899,7 +899,7 @@ jobs:
         # cold build after a lockfile change stays within the runner.
         env:
           OPENBOOKS_DB_URL: ${{ env.OPENBOOKS_RUNTIME_DB_URL }}
-          NODE_OPTIONS: --max-old-space-size=8192
+          NODE_OPTIONS: --max-old-space-size=12288
         run: npm run build -w web
 
       - name: Playwright workflow suites
