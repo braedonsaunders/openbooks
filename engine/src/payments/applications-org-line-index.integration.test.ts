@@ -11,9 +11,9 @@ import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
  * open-items, payments) correlate `org_id = $org AND (to_line_id = $line OR
  * from_line_id = $line)`. With only the line-leading indexes app_from/app_to,
  * a small tenant's probe would BitmapOr over the majority tenant's index
- * entries with the org applied as a late filter. The composites
- * applications_org_from_idx / applications_org_to_idx bind each OR arm to the
- * probing tenant's own slice.
+ * entries with the org applied as a late filter. The org-leading indexes
+ * (applications_org_from_idx / applications_org_to_idx, and any other index
+ * keyed first on org_id) bind the probe to the probing tenant's own slice.
  */
 
 const BIG_ROWS = 5000;
@@ -97,6 +97,22 @@ async function probePlan(smallOrgId: string, lineId: string): Promise<string> {
   return r.rows.map((row) => row["QUERY PLAN"] ?? "").join("\n");
 }
 
+/** The leading key column of each index a plan scans. */
+async function leadingColumns(plan: string): Promise<Map<string, string>> {
+  const names = [...new Set([...plan.matchAll(/ using (\w+)/g)].map((m) => m[1]!))];
+  const leading = new Map<string, string>();
+  for (const name of names) {
+    const r = await db.execute<{ column: string }>(sql`
+      select a.attname as column
+        from pg_index i
+        join pg_class c on c.oid = i.indexrelid
+        join pg_attribute a on a.attrelid = i.indrelid and a.attnum = i.indkey[0]
+       where c.relname = ${name}`);
+    leading.set(name, r.rows[0]?.column ?? "");
+  }
+  return leading;
+}
+
 test(
   "small-tenant application OR-probes use the org-leading composite indexes",
   { skip: !process.env.OPENBOOKS_DB_URL },
@@ -112,7 +128,10 @@ test(
       ).rows[0]!.id;
       await db.execute(sql`ANALYZE applications`);
       const after = await probePlan(small.orgId, smallLine);
-      assert.match(after, /applications_org_(from|to)_idx/);
+      const leading = await leadingColumns(after);
+      assert.ok(leading.size > 0, `the probe must use an index:\n${after}`);
+      for (const [index, column] of leading)
+        assert.equal(column, "org_id", `${index} is not org-leading:\n${after}`);
       assert.doesNotMatch(after, /Seq Scan on applications/);
       assert.doesNotMatch(after, /BitmapOr/);
     } finally {
