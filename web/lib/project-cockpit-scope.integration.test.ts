@@ -1356,13 +1356,13 @@ const subcontractTransitionCases = [
     label: "subcontract transition validation",
     register: async () => {
       const stateKey = Symbol.for("openbooks.subcontract-transition-route-test");
-      const state = { transitionCalls: 0 };
+      const state = { transitionCalls: 0, orgId: "" };
       (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
       const { registerHooks } = await import("node:module");
       const mockSources = new Map<string, string>([
         [
           "mock:authz",
-          `export * from ${JSON.stringify(new URL("./authz.ts", import.meta.url).href)};export async function guardPermission(permission){if(permission!=='ap.create')throw Error('unexpected subcontract permission: '+permission);return {user:{orgId:'org-1',id:'user-1'},permissions:new Set(['ap.create']),allowedSubsidiaryIds:null}}`,
+          `export * from ${JSON.stringify(new URL("./authz.ts", import.meta.url).href)};export async function guardPermission(permission){if(permission!=='ap.create')throw Error('unexpected subcontract permission: '+permission);return {user:{orgId:globalThis[Symbol.for('openbooks.subcontract-transition-route-test')].orgId,id:'user-1'},permissions:new Set(['ap.create']),allowedSubsidiaryIds:null}}`,
         ],
         [
           "mock:db",
@@ -1374,7 +1374,7 @@ const subcontractTransitionCases = [
         ],
       ]);
       const mockUrls = new Map<string, string>([
-        ["../../../lib/authz", "mock:authz"],
+        ["@/lib/authz", "mock:authz"],
         ["@openbooks/engine/platform/db", "mock:db"],
         ["@openbooks/engine/projects/subcontracts", "mock:subcontracts"],
       ]);
@@ -1396,29 +1396,48 @@ const subcontractTransitionCases = [
         subcontractRouteModule
       )) as typeof import("../app/api/subcontracts/route");
       hooks.deregister();
-      test("subcontract API refuses an invalid transition before the engine call", async () => {
-        state.transitionCalls = 0;
-        const response = await POST(
-          new Request("http://openbooks.test/api/subcontracts", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              action: "transitionSubcontract",
-              id: "00000000-0000-4000-8000-000000000001",
-              transition: "approve",
-            }),
-          }),
-        );
-        assert.equal(response.status, 422);
-        const refusal = await response.json();
-        assert.match(refusal.error, /expected one of.*substantially_complete.*close.*void/);
-        assert.deepEqual(refusal.issues, [{ path: "transition", message: refusal.error }]);
-        assert.equal(
-          state.transitionCalls,
-          0,
-          "invalid input must not reach the transition engine",
-        );
-      });
+      test(
+        "subcontract API refuses an invalid transition before the engine call",
+        { skip: !process.env.OPENBOOKS_DB_URL },
+        async () => {
+          // The route factory confirms the Subcontracts feature through the
+          // real gate, so the caller's organization is a scratch tenant with
+          // the feature on; the route's own database double still refuses any
+          // transition work.
+          const org = await withBypassContext(() => createScratchOrg());
+          state.orgId = org.orgId;
+          await withBypassContext(() =>
+            db.execute(sql`
+            update orgs set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('features', ${JSON.stringify({ projects: true, subcontracts: true })}::jsonb)
+             where id = ${org.orgId}`),
+          );
+          state.transitionCalls = 0;
+          try {
+            const response = await POST(
+              new Request("http://openbooks.test/api/subcontracts", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  action: "transitionSubcontract",
+                  id: "00000000-0000-4000-8000-000000000001",
+                  transition: "approve",
+                }),
+              }),
+            );
+            assert.equal(response.status, 422);
+            const refusal = await response.json();
+            assert.match(refusal.error, /expected one of.*substantially_complete.*close.*void/);
+            assert.deepEqual(refusal.issues, [{ path: "transition", message: refusal.error }]);
+            assert.equal(
+              state.transitionCalls,
+              0,
+              "invalid input must not reach the transition engine",
+            );
+          } finally {
+            await dropScratchOrg(org.orgId);
+          }
+        },
+      );
     },
   },
 ] as const;
