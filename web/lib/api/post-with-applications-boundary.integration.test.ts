@@ -16,7 +16,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "../../../../lib/authz":
+    "@/lib/authz":
       "const key = Symbol.for('openbooks.posting-fx-gate')\n          export async function getAuthz() { return globalThis[key] ?? null }\n          export function can() { return true }\n          export function guardSubsidiaryScope() { return null }",
   },
 });
