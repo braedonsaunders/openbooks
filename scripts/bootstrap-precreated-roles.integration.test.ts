@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { cp, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -28,6 +28,16 @@ const HEADER = [
   "SET standard_conforming_strings = on;",
   "SET client_min_messages = warning;",
 ].join("\n");
+
+/** The probe migration filename `offset` ordinals past the newest published
+ * forward migration, so an upgrade probe never collides with a real one. */
+async function nextForwardMigration(offset: number, name: string): Promise<string> {
+  const ordinals = (await readdir(join(root, "schema", "migrations", "generated")))
+    .map((file) => /^(\d{4})_[a-z0-9_]+\.sql$/.exec(file)?.[1])
+    .filter((ordinal): ordinal is string => ordinal !== undefined)
+    .map(Number);
+  return `${String(Math.max(0, ...ordinals) + offset).padStart(4, "0")}_${name}.sql`;
+}
 
 /** A copy of this checkout's runner and release schema with forward
  * migrations above the baseline, so an upgrade can be exercised without
@@ -287,7 +297,7 @@ test(
           orgs.rows,
         );
       });
-      const firstForward = "0001_forward_owner_probe.sql";
+      const firstForward = await nextForwardMigration(1, "forward_owner_probe");
       const firstBody =
         "CREATE FUNCTION public.forward_owner_probe() RETURNS integer LANGUAGE sql STABLE AS 'select 1';";
       await t.test(
@@ -322,7 +332,7 @@ test(
       await t.test(
         "maintenance upgrades retain the established restricted business owner",
         async () => {
-          const secondForward = "0002_forward_maintenance_probe.sql";
+          const secondForward = await nextForwardMigration(2, "forward_maintenance_probe");
           const before = await ownerPool.query(
             "select filename,sha256,applied_at from _applied_migrations order by filename",
           );
