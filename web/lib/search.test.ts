@@ -110,7 +110,8 @@ const UNMAPPED_DOCUMENT: SearchFixture = {
 const stateKey = Symbol.for("openbooks.search-permission-test");
 
 /** A documents candidate leg: it selects ids for the final read to hydrate. */
-const DOCUMENT_CANDIDATE = /select (?:d\.id|dl\.document_id as id) from (?:documents d|document_lines dl|\()/;
+const DOCUMENT_CANDIDATE =
+  /select (?:d\.id|dl\.document_id as id) from (?:documents d|document_lines dl|\()/;
 const JE_POSTED: JournalEntryFixture = {
   id: "je-posted",
   entry_number: "JE-26188661",
