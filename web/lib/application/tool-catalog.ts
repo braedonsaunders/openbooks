@@ -76,6 +76,22 @@ import { ApplicationError, conflict, forbidden, invalidInput, notFound } from ".
 import { executeIdempotent } from "./idempotency";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 import { MIGRATION_APPLICATION_TOOLS } from "./migration-tools";
+import { LEDGER_APPLICATION_TOOLS } from "./ledger-tools";
+import { TREASURY_APPLICATION_TOOLS } from "./treasury-tools";
+import { CAPITAL_APPLICATION_TOOLS } from "./capital-tools";
+import { SALES_APPLICATION_TOOLS } from "./sales-tools";
+import { PURCHASING_APPLICATION_TOOLS } from "./purchasing-tools";
+import { INVENTORY_APPLICATION_TOOLS } from "./inventory-tools";
+import { MANUFACTURING_APPLICATION_TOOLS } from "./manufacturing-tools";
+import { SUBSCRIPTION_APPLICATION_TOOLS } from "./subscription-tools";
+import { PROJECT_APPLICATION_TOOLS } from "./project-tools";
+import { TIME_APPLICATION_TOOLS } from "./time-tools";
+import { HRM_APPLICATION_TOOLS } from "./hrm-tools";
+import { TALENT_APPLICATION_TOOLS } from "./talent-tools";
+import { PAYROLL_APPLICATION_TOOLS } from "./payroll-tools";
+import { CRM_APPLICATION_TOOLS } from "./crm-tools";
+import { ADMIN_APPLICATION_TOOLS } from "./admin-tools";
+import { WORKSPACE_APPLICATION_TOOLS } from "./workspace-tools";
 
 export type { ApplicationToolConfirmation, ApplicationToolDefinition } from "./tool-definition";
 
@@ -1799,6 +1815,22 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     },
   }),
   ...MIGRATION_APPLICATION_TOOLS,
+  ...LEDGER_APPLICATION_TOOLS,
+  ...TREASURY_APPLICATION_TOOLS,
+  ...CAPITAL_APPLICATION_TOOLS,
+  ...SALES_APPLICATION_TOOLS,
+  ...PURCHASING_APPLICATION_TOOLS,
+  ...INVENTORY_APPLICATION_TOOLS,
+  ...MANUFACTURING_APPLICATION_TOOLS,
+  ...SUBSCRIPTION_APPLICATION_TOOLS,
+  ...PROJECT_APPLICATION_TOOLS,
+  ...TIME_APPLICATION_TOOLS,
+  ...HRM_APPLICATION_TOOLS,
+  ...TALENT_APPLICATION_TOOLS,
+  ...PAYROLL_APPLICATION_TOOLS,
+  ...CRM_APPLICATION_TOOLS,
+  ...ADMIN_APPLICATION_TOOLS,
+  ...WORKSPACE_APPLICATION_TOOLS,
 ];
 
 export function applicationTool(name: string): ApplicationToolDefinition | undefined {

@@ -74,6 +74,22 @@ const TOOL_NAMES = toolNamesFrom(
   "../assistant/tools-expenses.ts",
   "../assistant/tools-migration.ts",
   "../application/migration-tools.ts",
+  "../application/ledger-tools.ts",
+  "../application/treasury-tools.ts",
+  "../application/capital-tools.ts",
+  "../application/sales-tools.ts",
+  "../application/purchasing-tools.ts",
+  "../application/inventory-tools.ts",
+  "../application/manufacturing-tools.ts",
+  "../application/subscription-tools.ts",
+  "../application/project-tools.ts",
+  "../application/time-tools.ts",
+  "../application/hrm-tools.ts",
+  "../application/talent-tools.ts",
+  "../application/payroll-tools.ts",
+  "../application/crm-tools.ts",
+  "../application/admin-tools.ts",
+  "../application/workspace-tools.ts",
 );
 
 // Snake_case terms in playbook prose that are deliberately not tool names.

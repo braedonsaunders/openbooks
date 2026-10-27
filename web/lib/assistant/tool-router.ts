@@ -153,6 +153,38 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   search_items: "inventory",
   get_item: "inventory",
   list_currencies: "multiCurrency",
+
+  // Ledger and close commands.
+
+  // Treasury commands.
+
+  // Assets, leases, equity and funds commands.
+
+  // Sales and fulfillment commands.
+
+  // Purchasing commands.
+
+  // Inventory and items commands.
+
+  // Manufacturing commands.
+
+  // Subscriptions, usage and revenue commands.
+
+  // Projects commands.
+
+  // Time and resourcing commands.
+
+  // Workforce records commands.
+
+  // Talent commands.
+
+  // Payroll commands.
+
+  // CRM and service commands.
+
+  // Administration commands.
+
+  // Workspace commands.
 };
 
 /** True for tools that ride every chat step. Absent tier means module. */
