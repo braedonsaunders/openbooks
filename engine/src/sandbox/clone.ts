@@ -9,6 +9,7 @@ import {
 } from "./catalog.ts";
 import { loadMaskingPolicies, maskExpr, type MaskTransform } from "./masking.ts";
 import { rebaseClonedJsonReferences } from "./json-references.ts";
+import { createClonePacer, readClonePacing } from "./clone-pacing.ts";
 import {
   copyS3Blob,
   deleteS3Blobs,
@@ -363,6 +364,7 @@ export function generateCopySql(
   retainedTenantTables: Set<string>,
   masking: Map<string, Map<string, MaskTransform>>,
   cutoff: AsOfCutoff | null,
+  idRange?: CopyIdRange,
 ): string | null {
   const seed = assertUuid(opts.seed);
   const sbx = assertUuid(opts.sandboxOrgId);
@@ -899,16 +901,7 @@ export function generateCopySql(
     }
   }
 
-  // Immediate ownership and reversal guards require ancestors to exist already.
-  // Heap/index order and UUID chronology cannot determine retained lineage.
-  const parentColumn =
-    t.name === "subsidiaries" || t.name === "segment_values"
-      ? "parent_id"
-      : t.name === "fx_revaluation_rate_evidence"
-        ? "supersedes_id"
-        : ["project_financial_adjustments", "project_overhead_adjustments"].includes(t.name)
-          ? "reverses_adjustment_id"
-          : null;
+  const parentColumn = lineageParentColumn(t.name);
   const tree = parentColumn
     ? `with recursive source_tree as (
     select id, 0 as depth from "${t.name}" where org_id = '${prod}' and "${parentColumn}" is null
@@ -942,7 +935,63 @@ export function generateCopySql(
               ", ",
             )} where public.financial_history_seeded_rate_clone_conflict(to_jsonb("fx_rate_types"),to_jsonb(excluded))`
         : "";
+  if (idRange) {
+    if (tree || order || conflict) {
+      throw new Error(`sandbox clone: ${t.name} must be copied in a single statement`);
+    }
+    const key = sliceKeyColumn(t.name);
+    if (idRange.after !== null) where += ` and "${key}" > '${assertUuid(idRange.after)}'`;
+    if (idRange.through !== null) where += ` and "${key}" <= '${assertUuid(idRange.through)}'`;
+  }
   return `${tree}insert into "${t.name}" (${cols.join(", ")}) select ${exprs.join(", ")} from "${t.name}" where ${where}${order}${conflict}`;
+}
+
+/**
+ * Tables whose INSERT triggers validate a group of rows once per statement.
+ * Each slice must hold whole groups, so these slice by the grouping key rather
+ * than the primary key: a journal entry's lines are checked for balance at the
+ * end of the statement that inserts them.
+ */
+export const STATEMENT_GROUP_SLICE_KEYS: Readonly<Record<string, string>> = {
+  journal_lines: "entry_id",
+};
+
+function sliceKeyColumn(table: string): string {
+  return STATEMENT_GROUP_SLICE_KEYS[table] ?? "id";
+}
+
+/** A half-open slice of a table's source rows by its slice key: `after < key <= through`. */
+export interface CopyIdRange {
+  after: string | null;
+  through: string | null;
+}
+
+/** Immediate ownership and reversal guards require ancestors to exist already.
+ * Heap/index order and UUID chronology cannot determine retained lineage, so
+ * these tables copy in one statement ordered by lineage depth. */
+function lineageParentColumn(table: string): string | null {
+  if (table === "subsidiaries" || table === "segment_values") return "parent_id";
+  if (table === "fx_revaluation_rate_evidence") return "supersedes_id";
+  if (["project_financial_adjustments", "project_overhead_adjustments"].includes(table)) {
+    return "reverses_adjustment_id";
+  }
+  return null;
+}
+
+/** Whether a table's copy can be split into primary-key slices. Tables whose
+ * copy depends on a whole-table order or an expected-conflict clause cannot. */
+export function copyIsSliceable(t: TableInfo): boolean {
+  const key = sliceKeyColumn(t.name);
+  return (
+    t.hasOrgId &&
+    t.columns.some((c) => c.name === key && c.isUuid && !c.isNullable) &&
+    lineageParentColumn(t.name) === null &&
+    ![
+      "gl_audit_number_assignments",
+      "pay_component_earning_classifications",
+      "fx_rate_types",
+    ].includes(t.name)
+  );
 }
 
 /**
@@ -973,8 +1022,58 @@ export function selectCloneTables(
   return selected;
 }
 
+/** Primary-key slices of one table's source rows, each at most `chunkRows` long.
+ * The boundaries come from the clone's own snapshot, so the slices cover
+ * exactly the rows a single statement would have copied. */
+async function sourceIdRanges(
+  t: TableInfo,
+  productionOrgId: string,
+  chunkRows: number,
+): Promise<CopyIdRange[]> {
+  const key = sql.identifier(sliceKeyColumn(t.name));
+  const bounds = await db.execute<{ id: string }>(
+    sql`
+    select key::text as id from (
+      select ${key} as key, row_number() over (order by ${key}) as position
+        from ${sql.identifier(t.name)} where org_id = ${productionOrgId}
+    ) source where position % ${chunkRows} = 0 group by key order by key`,
+    "objects",
+  );
+  const ranges: CopyIdRange[] = [];
+  let after: string | null = null;
+  for (const { id } of bounds) {
+    ranges.push({ after, through: id });
+    after = id;
+  }
+  ranges.push({ after, through: null });
+  return ranges;
+}
+
+/** The write-ahead-log position is readable by default; a role without it is
+ * still paced by duty cycle. Checked without raising, inside the clone's
+ * transaction, so a refusal cannot abort the copy. */
+async function canReadWalPosition(): Promise<boolean> {
+  const rows = await db.execute<{ allowed: boolean }>(
+    sql`select has_function_privilege('pg_current_wal_lsn()', 'execute') as allowed`,
+    "objects",
+  );
+  return rows[0]?.allowed === true;
+}
+
+function walPositionReader(allowed: boolean): () => Promise<bigint | null> {
+  return async () => {
+    if (!allowed) return null;
+    const rows = await db.execute<{ position: string }>(
+      sql`select pg_wal_lsn_diff(pg_current_wal_lsn(), '0/0')::bigint::text as position`,
+      "objects",
+    );
+    return rows[0] ? BigInt(rows[0].position) : null;
+  };
+}
+
 export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   validateSandboxTier(opts.tier);
+  const pacing = readClonePacing();
   const cat = await loadCatalog();
   const { tables, rebaseSet } = cat;
   const retainedTenantTables = new Set(
@@ -1102,6 +1201,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       // bypass pool, and its transaction starts with the bypass flag pinned off,
       // so the clone declares it transaction-locally beside the flags above.
       await db.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
+      const pacer = await createClonePacer(pacing, walPositionReader(await canReadWalPosition()));
       for (const t of selected) {
         const stmt = generateCopySql(t, opts, rebaseSet, retainedTenantTables, masking, cutoff);
         if (!stmt) continue;
@@ -1116,8 +1216,25 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
           }
           await validateVendorRetainageSourcesForClone(opts);
         }
-        const res = await db.execute<Record<string, unknown>>(sql.raw(stmt));
-        const n = res.rowCount ?? 0;
+        let n = 0;
+        if (copyIsSliceable(t)) {
+          for (const range of await sourceIdRanges(t, opts.productionOrgId, pacing.chunkRows)) {
+            const slice = generateCopySql(
+              t,
+              opts,
+              rebaseSet,
+              retainedTenantTables,
+              masking,
+              cutoff,
+              range,
+            )!;
+            n += (await db.execute<Record<string, unknown>>(sql.raw(slice))).rowCount ?? 0;
+            await pacer.afterStatement();
+          }
+        } else {
+          n = (await db.execute<Record<string, unknown>>(sql.raw(stmt))).rowCount ?? 0;
+          await pacer.afterStatement();
+        }
         perTable.push({ table: t.name, rows: n });
         rowsCopied += n;
       }
@@ -1131,6 +1248,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
         ...opts,
         copiedTables: new Set(perTable.map((row) => row.table)),
       });
+      await pacer.afterStatement();
       // These rollups are intentionally excluded from the clone catalog because
       // they are maintained projections, not source evidence. Rebuild them after
       // every copy: application rows can be inserted before their journal-line
@@ -1138,8 +1256,11 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       // legitimately have no effect during the bulk load. A rebuild also clears
       // stale values left by a refresh before applying the new source snapshot.
       await db.execute(sql`select openbooks_gl_activity_rebuild(${opts.sandboxOrgId})`);
+      await pacer.afterStatement();
       await db.execute(sql`select openbooks_party_payment_stats_rebuild(${opts.sandboxOrgId})`);
+      await pacer.afterStatement();
       await db.execute(sql`select openbooks_open_item_balances_rebuild(${opts.sandboxOrgId})`);
+      await pacer.afterStatement();
       // Evidence for the clone authority asserted above (OM-13): one audit row
       // in the target org recording the provenance and scope of this copy, so
       // closed-period history carried under openbooks.clone is attributable.
