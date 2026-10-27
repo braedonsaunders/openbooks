@@ -34,7 +34,7 @@ const mockAuthz = `
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      specifier === "../../../../lib/journal-warnings" &&
+      specifier === "@/lib/journal-warnings" &&
       context.parentURL?.endsWith("/journals/actions/route.ts")
     ) {
       const real = new URL("../../../../lib/journal-warnings.ts", context.parentURL).href;
