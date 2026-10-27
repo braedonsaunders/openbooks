@@ -21,7 +21,12 @@ registerHooks({
       return virtual(
         "export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }",
       );
-    if (specifier.endsWith("/lib/authz"))
+    // The route factory's feature gate reads the session through its own
+    // relative `./authz` import; both resolve to the same session double.
+    if (
+      specifier.endsWith("/lib/authz") ||
+      (specifier === "./authz" && context.parentURL?.endsWith("/web/lib/feature-gates.ts"))
+    )
       return virtual(`
         export async function guardPermission() {
           const s = globalThis.__complianceWaiverScopeState;

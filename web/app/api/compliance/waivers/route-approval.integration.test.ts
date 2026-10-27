@@ -38,7 +38,12 @@ const mockCompliance = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@/lib/authz")
+    // The route factory's feature gate reads the session through its own
+    // relative `./authz` import; both resolve to the same session double.
+    if (
+      specifier === "@/lib/authz" ||
+      (specifier === "./authz" && context.parentURL?.endsWith("/web/lib/feature-gates.ts"))
+    )
       return { url: "mock:waiver-approval-authz", shortCircuit: true };
     if (specifier === "@/lib/compliance")
       return { url: "mock:waiver-approval-gate", shortCircuit: true };

@@ -30,7 +30,13 @@ const jsonUrl = new URL("../../../../lib/api/json.ts", import.meta.url).href;
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@/lib/authz" || /(^|\/)lib\/authz$/.test(specifier)) {
+    // The route factory's feature gate reads the session through its own
+    // relative `./authz` import; both resolve to the same session double.
+    if (
+      specifier === "@/lib/authz" ||
+      /(^|\/)lib\/authz$/.test(specifier) ||
+      (specifier === "./authz" && context.parentURL?.endsWith("/web/lib/feature-gates.ts"))
+    ) {
       return { shortCircuit: true, url: "mock:info-returns-authz" };
     }
     if (specifier === "@/lib/api/json") {
