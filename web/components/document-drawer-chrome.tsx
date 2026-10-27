@@ -83,6 +83,7 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
     settlementHref,
     refundHref,
     creditHref,
+    submitRoutesForApproval,
     save,
     canSaveAndPost,
     freshFormHref,
@@ -182,7 +183,9 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
             }
             onClick={() => act("submit")}
           >
-            {t("actions.submitForApproval")}
+            {submitRoutesForApproval === false
+              ? tCommon("actions.approve")
+              : t("actions.submitForApproval")}
           </Button>
         ) : null;
       case "post":

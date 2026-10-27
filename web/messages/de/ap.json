@@ -205,6 +205,7 @@
   "toasts": {
     "actionFailed": "Aktion fehlgeschlagen",
     "submitted": "Zur Genehmigung eingereicht",
+    "approved": "Genehmigt",
     "posted": "Ins Hauptbuch gebucht",
     "saved": "Beleg gespeichert: {documentNumber}",
     "createDraftFailed": "Entwurf konnte nicht erstellt werden",

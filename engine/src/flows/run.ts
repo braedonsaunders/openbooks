@@ -19,7 +19,7 @@ import { db, schema, withOrgTransaction, withTransactionSavepoint } from "../pla
 import type { FlowExecCtx } from "./types.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
-import { lockFlowSubjectAdmission } from "./subject-admission.ts";
+import { lockFlowSubjectAdmission, resolveFlowSubjectAdmission } from "./subject-admission.ts";
 
 /**
  * Trigger dispatch — fire a subject's enabled flows at a lifecycle event from
@@ -203,6 +203,21 @@ const RECORD_LIFECYCLE_KINDS = new Set<TriggerEvent["kind"]>([
   "status_change",
 ]);
 
+/**
+ * The plan one graph produces for an event. Lifecycle events co-fire the
+ * graph's on_field_value triggers whose rules match (the flow execution
+ * contract), merged so converging nodes dedupe.
+ */
+function planEventAutomation(
+  graph: AutomationGraph,
+  event: TriggerEvent,
+  evalCtx: Parameters<typeof planAutomation>[2],
+): AutomationPlan {
+  const plan = planAutomation(graph, event, evalCtx);
+  if (!RECORD_LIFECYCLE_KINDS.has(event.kind)) return plan;
+  return mergePlans(plan, planAutomation(graph, { kind: "on_field_value" }, evalCtx));
+}
+
 export async function runRecordFlows(
   event: TriggerEvent,
   subjectKind: string,
@@ -364,12 +379,7 @@ export async function runRecordFlows(
       }
       if (ctx.submissionCommand)
         evalCtx.values.commandAction = ctx.submissionCommand.action ?? null;
-      let plan = planAutomation(graph, event, evalCtx);
-      if (RECORD_LIFECYCLE_KINDS.has(event.kind)) {
-        // on_field_value fires ALONGSIDE lifecycle events when its rule
-        // matches (the flow execution contract); merged so converging nodes dedupe.
-        plan = mergePlans(plan, planAutomation(graph, { kind: "on_field_value" }, evalCtx));
-      }
+      const plan = planEventAutomation(graph, event, evalCtx);
       const automaticSubmission =
         event.kind === "on_submit" &&
         plan.gates.length === 0 &&
@@ -515,6 +525,59 @@ export async function runRecordFlows(
     const reason = rootCauseMessage(e);
     return { runs: [], gatesCreated: 0, failed: true, error: `flow dispatch failed: ${reason}` };
   }
+}
+
+/**
+ * Whether submitting the subject as it stands would park it for approval.
+ * Read-only: it plans the same enabled flows the submission dispatch plans
+ * (graph validation, legal-entity admission, the on_submit plan with its
+ * co-firing on_field_value triggers) against the saved record, and writes,
+ * locks or runs nothing. A flow the dispatch could not plan (an invalid
+ * graph, an unresolvable legal entity) answers true: that submission is
+ * refused rather than released, so it is never presented as a direct
+ * approval. Surfaces use this to name the submit action honestly; the
+ * submission itself always re-plans under its own locks.
+ */
+export async function submissionRoutesForApproval(
+  orgId: string,
+  subjectKind: string,
+  subjectId: string,
+): Promise<boolean> {
+  const adapter = getFlowAdapter(subjectKind);
+  if (!adapter) return true;
+  const flows = await db
+    .select({ id: schema.flows.id, graph: schema.flows.graph })
+    .from(schema.flows)
+    .where(
+      and(
+        eq(schema.flows.orgId, orgId),
+        eq(schema.flows.subjectKind, subjectKind),
+        eq(schema.flows.enabled, true),
+      ),
+    );
+  if (flows.length === 0) return false;
+  const subject = await adapter.loadContext(subjectId);
+  if (!subject) return true;
+  const event = { kind: "on_submit", source: "ui" } as const;
+  for (const flow of flows) {
+    const graph = parseFlowGraph(flow.id, flow.graph);
+    if (!graph) return true;
+    const { admission } = await resolveFlowSubjectAdmission(
+      orgId,
+      adapter,
+      subjectKind,
+      subjectId,
+      graph,
+    );
+    if (admission === "out-of-scope") continue;
+    if (admission === "unresolved") return true;
+    const plan = planEventAutomation(graph, event, {
+      values: { ...subject.values, event_source: event.source },
+      rows: subject.rows ?? {},
+    });
+    if (plan.gates.length > 0) return true;
+  }
+  return false;
 }
 
 /**
@@ -698,12 +761,7 @@ async function retryFlowRunLocked(runId: string, ctx: FlowExecCtx): Promise<Retr
     values: { ...run.context, event_source: source },
     rows: retainedPolicy.rows as NonNullable<typeof subject.rows>,
   };
-  let plan = planAutomation(graph, event, evalCtx);
-  if (RECORD_LIFECYCLE_KINDS.has(event.kind)) {
-    // on_field_value fires ALONGSIDE lifecycle events when its rule
-    // matches (the flow execution contract); merged so converging nodes dedupe.
-    plan = mergePlans(plan, planAutomation(graph, { kind: "on_field_value" }, evalCtx));
-  }
+  const plan = planEventAutomation(graph, event, evalCtx);
   const automaticSubmission =
     event.kind === "on_submit" &&
     plan.gates.length === 0 &&

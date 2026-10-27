@@ -24,6 +24,7 @@ import {
 } from "../../../../lib/documents.ts";
 import { listScopedPartyOptionsWithCurrent } from "../../../../lib/scoped-options";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
+import { documentSubmitRouting } from "@/lib/document-submit-routing";
 import type { DocKindConfig } from "../../../../lib/document-kinds";
 import {
   customFieldViewerFor,
@@ -115,6 +116,8 @@ export interface ArInvoicesDrawer {
   returnAuthorizationHref: string | null;
   /** Receive payment for this posted invoice (party + invoice preselected). */
   settlementHref: string | null;
+  /** Whether a saved draft's submission would park for approval (Flows). */
+  submitRoutesForApproval?: boolean;
   promotionsEnabled: boolean;
   /** Canadian goods tax can be computed natively for this organization. */
   nativeGoodsTaxAvailable: boolean;
@@ -382,6 +385,12 @@ export async function loadArInvoices(
     drawerPayload && drawerKind
       ? await documentCurrencyOptions(authz.user.orgId, drawerKind, authz.allowedSubsidiaryIds)
       : null;
+  const submitRouting = drawerOpen
+    ? await documentSubmitRouting(
+        authz.user.orgId,
+        openDoc?.doc as Record<string, unknown> | undefined,
+      )
+    : {};
   const drawer =
     drawerPayload && pickers && resolvedForm && drawerKind
       ? {
@@ -428,6 +437,7 @@ export async function loadArInvoices(
               ap: false,
             },
           ),
+          ...submitRouting,
           promotionsEnabled: featureEnabled(featureState, "promotions"),
           nativeGoodsTaxAvailable:
             drawerKind === "customer_invoice"

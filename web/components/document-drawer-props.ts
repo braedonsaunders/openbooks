@@ -108,6 +108,14 @@ export interface DocumentDrawerProps {
   /** Prefilled-credit entry link for a posted vendor bill, resolved by the
    *  AP bills loader's permission and subsidiary gates. */
   creditHref?: string | null;
+  /**
+   * Whether submitting this saved draft would park it for approval, as the
+   * Flows engine plans it (flows/run.ts submissionRoutesForApproval). False
+   * labels the submit action Approve: with no approval flow applying, the
+   * same submission releases the record directly. Absent keeps "Submit for
+   * approval".
+   */
+  submitRoutesForApproval?: boolean;
   /** Org default tender account (till defaults) prefill for new tenders. */
   defaultTenderAccountId?: string | null;
   /** Active employees for the close-out server picker on cash sales.

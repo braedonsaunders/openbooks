@@ -86,14 +86,20 @@ export function buildDocumentDrawerLifecycleCommands(scope: DocumentDrawerPayloa
         onOk: (data) => {
           const result = data as {
             pendingApproval?: unknown;
+            autoApproved?: unknown;
             warnings?: {
               code: string;
               accounts?: { accountNumber: string | null; accountName: string }[];
             }[];
           } | null;
           const pendingApproval = result?.pendingApproval === true;
+          // A submission no approval flow gated was released directly.
           if (pendingApproval) toast.success(t("toasts.submitted"));
-          else toast.success(action === "submit" ? t("toasts.submitted") : t("toasts.posted"));
+          else if (action === "submit")
+            toast.success(
+              result?.autoApproved === true ? t("toasts.approved") : t("toasts.submitted"),
+            );
+          else toast.success(t("toasts.posted"));
           const partyless = (result?.warnings ?? []).find(
             (warning) => warning.code === "partyless_control_lines",
           );

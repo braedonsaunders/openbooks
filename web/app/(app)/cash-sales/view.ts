@@ -27,6 +27,7 @@ import {
   listScopedPartyOptionsWithCurrent,
 } from "../../../lib/scoped-options";
 import { loadDocument } from "@openbooks/engine/documents";
+import { documentSubmitRouting } from "@/lib/document-submit-routing";
 import type { DocKindConfig } from "../../../lib/document-kinds";
 import {
   customFieldViewerFor,
@@ -88,6 +89,7 @@ export interface CashSalesDrawer {
   allocationsEntryEnabled: DocumentDrawerProps["allocationsEntryEnabled"];
   tenderAccounts: DocumentDrawerProps["tenderAccounts"];
   refundHref: DocumentDrawerProps["refundHref"];
+  submitRoutesForApproval?: DocumentDrawerProps["submitRoutesForApproval"];
   defaultTenderAccountId: DocumentDrawerProps["defaultTenderAccountId"];
   /** Active employees for the close-out server picker; empty pools tips. */
   serverOptions: DocumentDrawerProps["serverOptions"];
@@ -631,6 +633,12 @@ export async function loadCashSales(
       : [];
   const depositDefaultDate =
     drawerKind === "cash_sale" && canDeposit ? await businessToday(authz.user.orgId) : "";
+  const submitRouting = drawerOpen
+    ? await documentSubmitRouting(
+        authz.user.orgId,
+        openDoc?.doc as Record<string, unknown> | undefined,
+      )
+    : {};
   const drawer =
     drawerPayload && pickers && resolvedForm && drawerKind
       ? {
@@ -669,6 +677,7 @@ export async function loadCashSales(
             canCreate
               ? `${BASE_PATH}?doc=new&kind=cash_refund&refundFrom=${openDoc.doc.id}`
               : null,
+          ...submitRouting,
           defaultTenderAccountId,
           canDeposit,
           depositAccounts,

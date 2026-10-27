@@ -176,6 +176,7 @@
   "toasts": {
     "actionFailed": "Falha na ação",
     "submitted": "Enviado para aprovação",
+    "approved": "Aprovado",
     "posted": "Lançado no razão",
     "saved": "Documento salvo: {documentNumber}",
     "createDraftFailed": "Não foi possível criar um rascunho",

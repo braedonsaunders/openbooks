@@ -176,6 +176,7 @@
   "toasts": {
     "actionFailed": "アクションに失敗しました",
     "submitted": "承認のために提出しました",
+    "approved": "承認しました",
     "posted": "元帳に記帳しました",
     "saved": "{documentNumber}を保存しました",
     "createDraftFailed": "下書きを作成できませんでした",

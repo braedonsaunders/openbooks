@@ -10,6 +10,7 @@ import {
   seedApprovalFlow,
 } from "../testing/fixtures.ts";
 import { submitAndReleaseIfUngated } from "./submit.ts";
+import { submissionRoutesForApproval } from "./run.ts";
 import { decideGate } from "./gates.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -91,3 +92,40 @@ test(
     }
   },
 );
+
+test("the submit preview agrees with the submission it names", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    const small = await seedDraftDocument(org.orgId, {
+      kind: "vendor_bill",
+      createdBy: actors.submitterId,
+      total: "200.00",
+    });
+    const large = await seedDraftDocument(org.orgId, {
+      kind: "vendor_bill",
+      createdBy: actors.submitterId,
+      total: "9000.00",
+    });
+    // No flow: the submission releases the bill directly.
+    assert.equal(await submissionRoutesForApproval(org.orgId, "vendor_bill", small), false);
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "vendor_bill",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+      condition: { field: "total", op: "gt", value: 5000 },
+    });
+    // A threshold flow parks only the bills above its threshold.
+    assert.equal(await submissionRoutesForApproval(org.orgId, "vendor_bill", small), false);
+    assert.equal(await submissionRoutesForApproval(org.orgId, "vendor_bill", large), true);
+    // Another kind's flows never govern a bill.
+    assert.equal(await submissionRoutesForApproval(org.orgId, "vendor_credit", small), false);
+
+    const released = await submitAndReleaseIfUngated("vendor_bill", small, actors.submitterId);
+    assert.equal(released.autoApproved, true);
+    const parked = await submitAndReleaseIfUngated("vendor_bill", large, actors.submitterId);
+    assert.equal(parked.gated, true);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

@@ -40,6 +40,7 @@ import {
 } from "../lib/scoped-options";
 import { dimensionOptions as reportDimensionOptions } from "../lib/reports/filters";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
+import { documentSubmitRouting } from "../lib/document-submit-routing";
 import { canRecallExpenseReport, loadExpenseReport } from "../lib/expenses";
 import { loadJournalDoc } from "../lib/journals";
 import { customSegmentOptions } from "../lib/segments";
@@ -479,6 +480,7 @@ export async function loadRelatedTransactionDrawerData({
     subsidiaries,
     resolvedForm,
     currencyOptions,
+    submitRouting,
   ] = await Promise.all([
     config.partyRole
       ? listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, {
@@ -546,6 +548,7 @@ export async function loadRelatedTransactionDrawerData({
       explicitLayoutId: formLayoutId,
     }),
     documentCurrencyOptions(authz.user.orgId, kind, authz.allowedSubsidiaryIds),
+    documentSubmitRouting(authz.user.orgId, loaded.doc as Record<string, unknown>),
   ]);
   return {
     type: "document",
@@ -586,6 +589,7 @@ export async function loadRelatedTransactionDrawerData({
           ? can(authz, "projects.manage")
           : can(authz, createPermission(kind)),
       canPost: kind === "project_charge" ? false : can(authz, postPermission(kind)),
+      ...submitRouting,
       // A posted credit memo settles its open items from every drawer that
       // opens it (party, report and global flyouts), not only the list pages.
       creditApplications: creditApplicationsDrawer(loaded.doc, {

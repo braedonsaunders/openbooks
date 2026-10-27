@@ -176,6 +176,7 @@
   "toasts": {
     "actionFailed": "操作失败",
     "submitted": "已提交审批",
+    "approved": "已批准",
     "posted": "已过账至总账",
     "saved": "已保存单据 {documentNumber}",
     "createDraftFailed": "无法创建草稿",

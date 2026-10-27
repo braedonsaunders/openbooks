@@ -5,6 +5,7 @@
 
 export {
   runRecordFlows,
+  submissionRoutesForApproval,
   retryFlowRun,
   FlowRetryError,
   emitStatusChange,

@@ -176,6 +176,7 @@
   "toasts": {
     "actionFailed": "Action failed",
     "submitted": "Submitted for approval",
+    "approved": "Approved",
     "posted": "Posted to the ledger",
     "saved": "Document saved: {documentNumber}",
     "createDraftFailed": "Could not create a draft",

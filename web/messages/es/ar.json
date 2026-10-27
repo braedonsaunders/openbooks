@@ -176,6 +176,7 @@
   "toasts": {
     "actionFailed": "La acción falló",
     "submitted": "Enviado para aprobación",
+    "approved": "Aprobado",
     "posted": "Contabilizado en el libro mayor",
     "saved": "Documento guardado: {documentNumber}",
     "createDraftFailed": "No se pudo crear un borrador",

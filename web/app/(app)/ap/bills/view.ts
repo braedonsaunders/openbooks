@@ -24,6 +24,7 @@ import {
 } from "../../../../lib/documents.ts";
 import { listScopedPartyOptionsWithCurrent } from "../../../../lib/scoped-options";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
+import { documentSubmitRouting } from "@/lib/document-submit-routing";
 import { postedDocumentControlAccount } from "@openbooks/engine/ledger/posting-control-account";
 import {
   customFieldViewerFor,
@@ -112,6 +113,8 @@ export interface ApBillsDrawer {
   settlementHref: string | null;
   /** New vendor credit prefilled from this posted bill. */
   creditHref: string | null;
+  /** Whether a saved draft's submission would park for approval (Flows). */
+  submitRoutesForApproval?: boolean;
 }
 
 export interface ApBillsData {
@@ -415,6 +418,13 @@ export async function loadApBills(
       ? await documentCurrencyOptions(authz.user.orgId, drawerKind, authz.allowedSubsidiaryIds)
       : null;
 
+  const submitRouting = drawerOpen
+    ? await documentSubmitRouting(
+        authz.user.orgId,
+        openDoc?.doc as Record<string, unknown> | undefined,
+      )
+    : {};
+
   const amortizationTemplates =
     drawerPayload && drawerKind === "vendor_bill"
       ? await sourceAmortizationOptions(authz.user.orgId, drawerPayload)
@@ -458,6 +468,7 @@ export async function loadApBills(
           canCreate,
           canPost: can(authz, "ap.post"),
           withholdingSchemes,
+          ...submitRouting,
           ...(amortizationTemplates ? { amortizationTemplates } : {}),
           allocationsEntryEnabled,
           initialMode: (isCreate || pickString(sp.mode) === "edit" ? "edit" : "view") as

@@ -12,6 +12,7 @@ import {
 } from "@braedonsaunders/appkit-viewspec";
 import { db } from "@openbooks/engine/platform/db";
 import { loadDocument } from "@openbooks/engine/ledger/document-service";
+import { documentSubmitRouting } from "@/lib/document-submit-routing";
 import { can, requirePermission } from "../../../lib/authz";
 import { requireFeatureEnabled } from "../../../lib/feature-gates";
 import { isUuid, pickString } from "../../../lib/list-params";
@@ -148,6 +149,9 @@ export async function loadReturns(
   const selectedSubsidiary = (subsidiaries as { id: string }[] | null)?.[0]?.id;
   if (seed && selectedSubsidiary)
     (seed.doc as Record<string, unknown>).subsidiary_id = selectedSubsidiary;
+  const submitRouting = openDocument
+    ? await documentSubmitRouting(authz.user.orgId, openDocument.doc as Record<string, unknown>)
+    : {};
   const drawer =
     payload && accounts && taxCodes && taxGroups && dimensions && items && stockLocations && form
       ? ({
@@ -172,6 +176,7 @@ export async function loadReturns(
           lineDefs: lineDefs as unknown as DrawerProps["lineDefs"],
           canCreate,
           canPost: false,
+          ...submitRouting,
           createMode: creating,
           initialMode: creating || pickString(sp.mode) === "edit" ? "edit" : "view",
           layout: form.layout,
