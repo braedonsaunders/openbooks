@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -15,11 +15,20 @@ import test from "node:test";
  *
  * The map is gone, so this test is what keeps the promise instead. It reads the
  * engine source rather than importing it because the codes are string literals
- * at the `flag(...)` call sites, and a test that imported the module would need
- * a database.
+ * at the `flag(...)` call sites across the readiness modules, and a test that
+ * imported them would need a database.
  */
 
-const READINESS = join(import.meta.dirname, "..", "..", "engine", "src", "payroll", "readiness.ts");
+const PAYROLL = join(import.meta.dirname, "..", "..", "engine", "src", "payroll");
+
+/** Every readiness module, derived from the tree so a further split stays scanned. */
+function readinessSource(): string {
+  return readdirSync(PAYROLL)
+    .filter((name) => /^readiness(-[\w-]+)?\.ts$/.test(name) && !name.includes(".test."))
+    .sort()
+    .map((name) => readFileSync(join(PAYROLL, name), "utf8"))
+    .join("\n");
+}
 const MESSAGES = join(import.meta.dirname, "..", "messages", "en", "payroll.json");
 
 /** Codes passed to `flag("blocker" | "warning", "<code>", …)`, newlines allowed. */
@@ -91,7 +100,7 @@ test("no readiness message names a country-specific payroll program", () => {
 });
 
 test("every readiness code the engine emits has a message", () => {
-  const codes = emittedCodes(readFileSync(READINESS, "utf8"));
+  const codes = emittedCodes(readinessSource());
   // A scan that silently matched nothing would pass this file vacuously.
   assert.ok(codes.length >= 15, `only ${codes.length} readiness codes were found — the scan broke`);
   assert.ok(codes.includes("employee.noWage"), "the scan missed a known code");
