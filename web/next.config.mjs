@@ -129,6 +129,60 @@ const config = {
         ...webpackConfig.resolve.alias,
         "@/lib/engine-composition$": compositionLoader,
       };
+      // Webpack leaves each external binding in every route that reaches it:
+      // the binding is smaller than the default split threshold, and a named
+      // chunk cannot be shared by sibling route entries. File tracing would
+      // then resolve that import list once per route. Move the bindings into
+      // one chunk per runtime, loaded before the route that uses them.
+      const runtimeModule = (module) => {
+        const request = module.userRequest || module.request || "";
+        if (runtimeRequest(request)) return true;
+        const identifier = typeof module.identifier === "function" ? module.identifier() : "";
+        return SERVER_RUNTIME_PACKAGE_NAMES.some((name) => String(identifier).includes(name));
+      };
+      const runtimeKey = (chunk) => {
+        const runtime = chunk.runtime;
+        if (typeof runtime === "string") return runtime;
+        if (runtime && typeof runtime[Symbol.iterator] === "function") {
+          return [...runtime].sort().join("\0");
+        }
+        return "";
+      };
+      webpackConfig.plugins.push({
+        apply(compiler) {
+          compiler.hooks.thisCompilation.tap("openbooks-server-runtime", (compilation) => {
+            compilation.hooks.optimizeChunks.tap(
+              { name: "openbooks-server-runtime", stage: 100 },
+              () => {
+                const alreadyMoved = [...compilation.chunks].some((chunk) =>
+                  chunk.idNameHints.has("openbooks-server-runtime"),
+                );
+                if (alreadyMoved) return;
+                const sharedByRuntime = new Map();
+                for (const chunk of [...compilation.chunks]) {
+                  const chunkGraph = compilation.chunkGraph;
+                  const modules = [...chunkGraph.getChunkModulesIterable(chunk)].filter(runtimeModule);
+                  if (modules.length === 0) continue;
+                  const key = runtimeKey(chunk);
+                  let shared = sharedByRuntime.get(key);
+                  if (!shared) {
+                    shared = compilation.addChunk();
+                    shared.idNameHints.add("openbooks-server-runtime");
+                    sharedByRuntime.set(key, shared);
+                  }
+                  if (chunk !== shared) chunk.split(shared);
+                  for (const module of modules) {
+                    if (!chunkGraph.isModuleInChunk(module, shared)) {
+                      chunkGraph.connectChunkAndModule(shared, module);
+                    }
+                    if (chunk !== shared) chunkGraph.disconnectChunkAndModule(chunk, module);
+                  }
+                }
+              },
+            );
+          });
+        },
+      });
     }
     return webpackConfig;
   },
