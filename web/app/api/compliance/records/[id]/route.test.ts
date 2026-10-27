@@ -117,7 +117,7 @@ const mockSources = new Map<string, string>([
         const transactional = kind === 'tx-execute'
 
         if(text.includes('flow_command_record_fingerprint'))return {rows:[{status:state.committedRecord.status,maker:'${CREATOR_ID}',facts:{},fingerprint:'certificate-fingerprint',makers:[]}]};
-        if(text.includes('from orgs'))return {rows:[{features:{subcontractorCompliance:true}}]};
+        if(text.includes('from orgs'))return {rows:[{f:{subcontractorCompliance:true},features:{subcontractorCompliance:true}}]};
         if(text.includes('from users'))return {rows:[{id:'${ACTOR_ID}',orgId:'${ORG_ID}',isActive:true,isSuperAdmin:false}]};
         if(text.includes('role.permissions'))return {rows:[{permissions:['compliance.verify']}]};
         if(text.includes('subsidiary_restriction'))return {rows:[{restriction:{mode:'all'}}]};

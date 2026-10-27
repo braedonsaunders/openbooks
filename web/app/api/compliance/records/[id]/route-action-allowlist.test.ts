@@ -51,7 +51,8 @@ stubModules({
   navigation: false,
   intl: false,
   authz: false,
-  features: false,
+  // The route factory gates the PATCH on the compliance feature.
+  features: { enabled: ["subcontractorCompliance"] },
   extra: {
     "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.compliance-record-action-allowlist-test')]

@@ -73,6 +73,11 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    // The route factory re-checks the payroll feature after authorization.
+    "mock:features",
+    `export async function isFeatureEnabled(_orgId, key) { return key === 'payroll' }`,
+  ],
+  [
     "mock:authz",
     `
       export { guardUnrestrictedScope, subsidiaryScopeAllows, subsidiariesInScope, can } from '${realAuthzUrl}'
@@ -169,6 +174,8 @@ registerHooks({
       return { url: "mock:payroll-evidence", shortCircuit: true };
     if (specifier.endsWith("/lib/feature-gates"))
       return { url: "mock:feature-gates", shortCircuit: true };
+    if (specifier === "@/lib/features" && context.parentURL?.endsWith("/web/lib/api/route.ts"))
+      return { url: "mock:features", shortCircuit: true };
     if (specifier.endsWith("/lib/authz")) return { url: "mock:authz", shortCircuit: true };
     return nextResolve(specifier, context);
   },
