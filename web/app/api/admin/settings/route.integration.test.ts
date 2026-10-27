@@ -275,7 +275,8 @@ test("users-manage authority cannot write accounting policy; setup authority can
         billing: { defaultPaymentTermsId: null },
       },
     });
-    assert.deepEqual(routeState.requestedPermissions, ["admin.users.manage", "admin.users.manage"]);
+    // The route factory checks the read permission once for the whole request.
+    assert.deepEqual(routeState.requestedPermissions, ["admin.users.manage"]);
     routeState.requestedPermissions = [];
 
     const denied = await put(fixture, {
