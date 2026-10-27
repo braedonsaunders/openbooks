@@ -138,6 +138,7 @@ export function TrendChart({
   maxTicks,
   format = "money",
   xValues,
+  emptyLabel,
 }: {
   /** The x-axis labels; with `xValues`, the tooltip title of each point. */
   labels: string[];
@@ -161,6 +162,8 @@ export function TrendChart({
    * of its points. One value per label.
    */
   xValues?: number[];
+  /** Shown instead of a flat line when every point is zero or empty. */
+  emptyLabel?: string;
 }) {
   const money = useChartMoney();
   const { number } = useViewerFormat();
@@ -169,6 +172,16 @@ export function TrendChart({
   const numericX = xValues !== undefined;
   const shape = (data: (number | null)[]) =>
     numericX ? data.map((value, index) => [xValues?.[index] ?? null, value]) : data;
+  if (emptyLabel && series.every((line) => line.data.every((value) => !value))) {
+    return (
+      <div
+        className="flex items-center justify-center px-4 text-center text-sm text-slate-500 dark:text-slate-400"
+        style={{ height: typeof height === "number" ? height : undefined }}
+      >
+        {emptyLabel}
+      </div>
+    );
+  }
   const option: EChartsOption = {
     grid: baseGrid,
     tooltip: {

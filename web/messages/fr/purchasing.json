@@ -41,7 +41,8 @@
     "trend": {
       "title": "Tendance des dépenses",
       "hint": "13 semaines de factures comptabilisées",
-      "series": "Facturé"
+      "series": "Facturé",
+      "empty": "Aucune facture fournisseur comptabilisée au cours des 13 dernières semaines."
     },
     "directory": {
       "title": "Espace de travail",

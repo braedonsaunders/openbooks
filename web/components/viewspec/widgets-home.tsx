@@ -125,6 +125,7 @@ export const HOME_WIDGETS = {
       area={props.area === true}
       maxTicks={typeof props.maxTicks === "number" ? props.maxTicks : undefined}
       format={str(props, "format") === "count" ? "count" : "money"}
+      emptyLabel={str(props, "emptyLabel")}
     />
   ),
   /* --- presentation: data-only charts and dashboard tiles ------------------ */

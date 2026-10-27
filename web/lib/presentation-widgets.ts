@@ -62,6 +62,7 @@ export const PRESENTATION_WIDGETS: Readonly<Record<string, PresentationWidgetDoc
       area: "boolean — shade under the line",
       format: '"money" (default, org currency) | "count"',
       height: "number — pixels (default 200)",
+      emptyLabel: "string — shown instead of a flat line when every point is zero",
     },
     example: {
       kind: "widget",

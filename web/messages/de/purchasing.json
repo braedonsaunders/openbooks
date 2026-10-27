@@ -41,7 +41,8 @@
     "trend": {
       "title": "Ausgabentrend",
       "hint": "13 Wochen gebuchte Rechnungen",
-      "series": "Fakturiert"
+      "series": "Fakturiert",
+      "empty": "Keine gebuchten Lieferantenrechnungen in den letzten 13 Wochen."
     },
     "directory": {
       "title": "Arbeitsbereich",

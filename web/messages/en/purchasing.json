@@ -41,7 +41,8 @@
     "trend": {
       "title": "Spend trend",
       "hint": "13 weeks of posted vendor bills",
-      "series": "Billed"
+      "series": "Billed",
+      "empty": "No posted vendor bills in the last 13 weeks."
     },
     "directory": {
       "title": "Workspace",

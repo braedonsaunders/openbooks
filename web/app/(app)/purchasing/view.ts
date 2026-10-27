@@ -115,6 +115,7 @@ export interface PurchasingData {
   trendHint: string;
   trendLabels: string[];
   trendSeries: { name: string; data: number[]; color: string }[];
+  trendEmpty: string;
   directoryTitle: string;
   directory: DirectoryItem[];
   attentionTitle: string;
@@ -320,6 +321,7 @@ export async function loadPurchasing(
     apHref: `/ap${subQs}`,
     trendTitle: t("home.trend.title"),
     trendHint: t("home.trend.hint"),
+    trendEmpty: t("home.trend.empty"),
     trendLabels: data.trend.map((w) => trendWeekLabel(w.weekStart, locale)),
     // The chart boundary is the only place trend strings become numbers.
     trendSeries: [
@@ -528,6 +530,7 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
                     series: data.trendSeries,
                     height: 170,
                     area: true,
+                    emptyLabel: data.trendEmpty,
                   },
                   f("grants.ap"),
                 ),

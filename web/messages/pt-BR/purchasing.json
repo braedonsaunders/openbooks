@@ -41,7 +41,8 @@
     "trend": {
       "title": "Tendência de gastos",
       "hint": "13 semanas de faturas lançadas",
-      "series": "Faturado"
+      "series": "Faturado",
+      "empty": "Nenhuma fatura de fornecedor lançada nas últimas 13 semanas."
     },
     "directory": {
       "title": "Espaço de trabalho",

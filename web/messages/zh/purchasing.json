@@ -41,7 +41,8 @@
     "trend": {
       "title": "支出趋势",
       "hint": "近 13 周已入账账单",
-      "series": "已开票"
+      "series": "已开票",
+      "empty": "过去 13 周内没有已过账的供应商账单。"
     },
     "directory": {
       "title": "工作区",

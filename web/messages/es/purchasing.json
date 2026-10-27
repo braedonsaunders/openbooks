@@ -41,7 +41,8 @@
     "trend": {
       "title": "Tendencia de gasto",
       "hint": "13 semanas de facturas registradas",
-      "series": "Facturado"
+      "series": "Facturado",
+      "empty": "No hay facturas de proveedor contabilizadas en las últimas 13 semanas."
     },
     "directory": {
       "title": "Espacio de trabajo",
