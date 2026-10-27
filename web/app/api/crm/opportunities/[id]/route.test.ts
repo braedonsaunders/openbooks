@@ -257,23 +257,20 @@ stubModules({
     }
     export function validateContributionTotal() {}
   `,
-    "../../../../../lib/authz": `
+    "@/lib/authz": `
     export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }
-  `,
-    "../../../../../lib/feature-gates": `
-    export async function guardFeaturePermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }
   `,
     "@/lib/feature-gates": `
     export async function guardFeaturePermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }
   `,
-    "../../../../../lib/features": `
+    "@/lib/features": `
     export async function isFeatureEnabled() { return true }
   `,
-    "../../../../../lib/crm": `
+    "@/lib/crm": `
     const state = globalThis[Symbol.for('openbooks.opportunity-contact-route-test')]
     export async function loadOpportunity() { return state.loaded }
   `,
-    "../../../../../lib/crm-scope": `
+    "@/lib/crm-scope": `
     export function crmOpportunityScope() { return '' }
     export function crmSharedScope() { return '' }
   `,

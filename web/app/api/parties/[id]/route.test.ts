@@ -107,7 +107,7 @@ stubModules({
       export async function withBypassContext(fn) { return fn() }
       export function ambientTenantOrgId() { return null }
     `,
-    "../../../../lib/authz": `
+    "@/lib/authz": `
       export async function guardPermission() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
@@ -119,18 +119,8 @@ stubModules({
       export function guardUnrestrictedScope() { return null }
       export function subsidiariesInScope() { return true }
     `,
-    "@/lib/authz": `
-      export async function guardPermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
-      }
-      export async function getAuthz() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
-      }
-      export function guardRootSubsidiaryScope() { return null }
-      export function guardUnrestrictedScope() { return null }
-    `,
-    "../../../../lib/features": `export async function isFeatureEnabled() { return true }`,
-    "../../../../lib/custom-fields": `
+    "@/lib/features": `export async function isFeatureEnabled() { return true }`,
+    "@/lib/custom-fields": `
       export async function loadFieldDefs() { return [] }
       export function validateCustomValues(_defs, values) { return { ok: true, errors: {}, cleaned: values ?? {} } }
       export async function findUnownedCustomReferences() { return [] }
@@ -138,7 +128,7 @@ stubModules({
       export function hiddenCustomFieldRefusal() { return null }
       export function visibleCustomFieldDefs(defs) { return defs }
     `,
-    "../../../../lib/countries": `
+    "@/lib/countries": `
       export function normalizeCountryCode(value) {
         if (typeof value !== 'string') return null
         const normalized = value.trim().toUpperCase()

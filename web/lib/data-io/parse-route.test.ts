@@ -16,7 +16,7 @@ const hooks = registerHooks({
     const mockUrl = new Map([
       ["../../../../lib/authz", "mock:parse-route-authz"],
       ["@/lib/authz", "mock:parse-route-authz"],
-      ["../../../../lib/data-io/resources", "mock:parse-route-resources"],
+      ["@/lib/data-io/resources", "mock:parse-route-resources"],
     ]).get(specifier);
     if (mockUrl) return { url: mockUrl, shortCircuit: true };
     return nextResolve(specifier, context);
