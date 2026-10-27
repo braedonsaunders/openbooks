@@ -250,8 +250,10 @@ test("entity drills scope every transaction leg and preserve exact money", async
   assert.match(payQuery, /sp\.subsidiary_id = any/);
   assert.match(payQuery, /sp\.kind in/);
   assert.match(payQuery, /group by pe\.source_document_id/);
-  // The open leg reads the shared reader's current-posting projection.
-  assert.match(readerQuery, /jl\.subsidiary_id = any/);
+  // The open leg reads the shared reader's current-posting projection over
+  // the open-item index, scoped to the caller's subsidiaries in every branch.
+  assert.match(readerQuery, /from open_item_balances b/);
+  assert.equal(readerQuery.match(/b\.subsidiary_id = any/g)?.length, 2);
   // Recents list posted sources joined one-to-one to their statement-book
   // posting — no drafts, no second-book duplicates, translated amounts.
   assert.match(recentQuery, /d\.subsidiary_id = any/);
