@@ -192,12 +192,13 @@ export async function validateSessionToken(
   const hash = tokenHash(token!);
   // bypass: identity-bootstrap — a session cookie is resolved to its identity before any organization scope exists.
   return withBypassContext(async () => {
-    // Validation reads the session under a share lock: a revocation still in
-    // flight holds the row, so validation waits for it and then re-checks the
-    // revoked row, while concurrent requests of one session never queue
-    // behind each other. The activity stamp writes only when it is stale, at
-    // most once per five minutes, under the same liveness conditions; a stamp
-    // that matches no row means the session stopped being live.
+    // Validation is a plain read of the committed session row: a revocation
+    // takes effect for every request that starts after it commits. It takes
+    // no row lock, because a lock gives the read a transaction of its own and
+    // every page would then wait on commit replication. The activity stamp
+    // writes only when it is stale, at most once per five minutes, under the
+    // same liveness conditions; a stamp that matches no row means the session
+    // stopped being live.
     const live = sql`s.id = ${parsed.sessionId}
          and s.user_id = ${parsed.userId}
          and s.token_hash = ${hash}
@@ -214,7 +215,6 @@ export async function validateSessionToken(
              s.last_seen_at < now() - interval '5 minutes' as stale
         from auth_sessions s
        where ${live}
-         for share of s
     `,
       "objects",
     );

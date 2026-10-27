@@ -44,8 +44,8 @@ test("session authentication reads a live session under a share lock and stamps 
       "a recently stamped session validates with one read and no write",
     );
     assert.ok(
-      queries[0]!.sql.includes("for share of s"),
-      "an in-flight revocation holds the row the read waits on",
+      !/\bfor (share|update|no key update|key share)\b/i.test(queries[0]!.sql),
+      "validation takes no row lock, so a page never waits on commit replication",
     );
     assertLiveness(queries[0]!);
 

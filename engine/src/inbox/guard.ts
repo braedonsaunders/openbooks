@@ -2,7 +2,8 @@
  * HR-15 inbox source guards.
  *
  * HRM adapters return an empty list while the hrm feature is off — probed
- * explicitly through the org feature lock, never by catching a refusal.
+ * explicitly through the org's feature switchboard, never by catching a
+ * refusal.
  * The inbox is core and must stay up for every org; hrm-gated work simply
  * has no rows while its switch is off, and reappears when it is on (rows
  * are never deleted by the switch).
@@ -16,7 +17,8 @@ import { sql } from "drizzle-orm";
 import { HRM_FEATURE_KEY } from "../hrm/employment-read.ts";
 import { HrmAuthorizationError, loadApprovalPerson } from "../hrm/authorization.ts";
 import { createActorPermissionRead } from "../organization/actor-permissions.ts";
-import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { featureEnabledFromState } from "../organization/feature-state.ts";
+import type { FeatureState } from "../organization/feature-registry.ts";
 import { worklistGates, type WorklistGate } from "../flows/gates.ts";
 import { db } from "../platform/db.ts";
 import type { WorklistScope } from "../flows/approval-worklist.ts";
@@ -24,14 +26,40 @@ import { memoizeForRead } from "./read-memo.ts";
 import type { InboxListContext } from "./types.ts";
 
 /**
- * One org feature switch, resolved through lockAndCheckOrgFeature (the
- * single authority) once per read and key. Missing orgs and unknown
- * features fail closed there.
+ * The org's stored feature switches, read once per inbox read. Null when the
+ * organization row is missing, so every switch fails closed.
+ *
+ * This is a plain read, not the `lockAndCheckOrgFeature` recheck: the inbox
+ * only lists work, and every action re-resolves its gate through the native
+ * write service. A `FOR SHARE` row lock would turn each read into a write
+ * transaction that waits for its commit to flush (and for a synchronous
+ * standby, where one is configured) while fencing nothing on an autocommit
+ * connection.
+ */
+function orgFeatureSwitches(ctx: InboxListContext): Promise<FeatureState | null> {
+  return memoizeForRead(ctx, "feature-switches", async () => {
+    const row = (
+      await (ctx.exec ?? db).execute<{ features: FeatureState | null }>(
+        sql`select settings->'features' as features from orgs where id = ${ctx.orgId}`,
+        "objects",
+      )
+    )[0];
+    return row ? (row.features ?? {}) : null;
+  });
+}
+
+/**
+ * One org feature switch, resolved once per read and key through the
+ * registry with the native data-dependent defaults (featureEnabledFromState,
+ * the resolution the Features page uses). A missing organization fails
+ * closed.
  */
 export function orgFeatureOn(ctx: InboxListContext, key: string): Promise<boolean> {
-  return memoizeForRead(ctx, `feature:${key}`, () =>
-    lockAndCheckOrgFeature(ctx.exec ?? db, ctx.orgId, key),
-  );
+  return memoizeForRead(ctx, `feature:${key}`, async () => {
+    const switches = await orgFeatureSwitches(ctx);
+    if (!switches) return false;
+    return featureEnabledFromState(ctx.orgId, key, switches, ctx.exec ?? db);
+  });
 }
 
 /** Resolve each permission through its native authority once per read. */

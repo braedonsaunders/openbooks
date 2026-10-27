@@ -14,6 +14,7 @@ const stateKey = Symbol.for("openbooks.inbox-read-memo-test");
 
 interface MemoState {
   features: Record<string, boolean>;
+  orgMissing: boolean;
   installed: Set<string>;
   partyId: string | null;
   gates: unknown[];
@@ -25,6 +26,7 @@ interface MemoState {
 
 const state: MemoState = {
   features: {},
+  orgMissing: false,
   installed: new Set(),
   partyId: null,
   gates: [],
@@ -51,6 +53,10 @@ const mockSources = new Map<string, string>([
         const compiled = globalThis[Symbol.for('openbooks.inbox-read-memo-dialect')].sqlToQuery(query);
         state.queries.push(compiled);
         const text = compiled.sql;
+        if (text.includes("settings->'features'")) {
+          hit('feature-switches');
+          return inMode({ rows: state.orgMissing ? [] : [{ features: state.features }] });
+        }
         if (text.includes('to_regclass')) {
           const table = compiled.params.find((param) => typeof param === 'string' && param.startsWith('public.'));
           hit('to_regclass');
@@ -62,12 +68,12 @@ const mockSources = new Map<string, string>([
     };`,
   ],
   [
-    "organization/org-feature-lock.ts",
+    "organization/feature-state.ts",
     `${STATE}
-    export async function lockAndCheckOrgFeature(_runner, orgId, key) {
+    export async function featureEnabledFromState(orgId, key, switches) {
       hit('feature:' + key);
       state.facts.push(['feature', orgId, key]);
-      return state.features[key] === true;
+      return switches[key] === true;
     }`,
   ],
   [
@@ -244,6 +250,7 @@ beforeEach(() => {
       aiGovernanceLedger: true,
       fieldTime: true,
     },
+    orgMissing: false,
     installed: new Set(["hrm_worker_qualifications", "payroll_anomaly_flags", "ai_capabilities"]),
     partyId: "party-1",
     gates: [gate("g-leave", "hrm_leave_request"), gate("g-week", "timesheet_week")],
@@ -284,6 +291,15 @@ describe("inbox read memo", () => {
     assert.equal(state.calls["feature:hrm"], 1);
     assert.equal(state.calls["feature:payroll"], 1);
     assert.equal(state.calls["feature:aiGovernanceLedger"], 1);
+    assert.equal(
+      state.calls["feature-switches"],
+      1,
+      "every switch resolves from one switchboard read",
+    );
+    assert.ok(
+      state.queries.every((query) => !/for\s+(share|update)/i.test(query.sql)),
+      "listing work takes no row lock",
+    );
     assert.equal(state.calls.loadApprovalPerson, 1);
     assert.equal(state.calls.worklistGates, 1);
     assert.equal(
@@ -306,6 +322,24 @@ describe("inbox read memo", () => {
     state.features.hrm = false;
     assert.equal(await inbox.countInbox(CTX, { kinds: ["hrm_leave_request"] }), 0);
     assert.equal(state.calls["feature:hrm"], 2);
+    assert.equal(state.calls["feature-switches"], 2);
+  });
+
+  it("lists no feature-gated work for an organization whose row is missing", async () => {
+    state.orgMissing = true;
+    const notices: import("./index.ts").InboxSourceNotice[] = [];
+    const count = await inbox.countInbox(CTX, {
+      kinds: ["hrm_leave_request", "payroll_anomaly_block", "ai_capability_review"],
+      notices,
+    });
+    assert.equal(count, 0, "every switch fails closed");
+    assert.equal(
+      state.calls["feature:hrm"],
+      undefined,
+      "a missing organization never falls back to registry defaults",
+    );
+    assert.deepEqual(notices, []);
+    assert.equal(state.calls.worklistGates, undefined, "no gated source reads further");
   });
 
   it("keeps each source's own gate on the shared facts", async () => {
