@@ -17,7 +17,12 @@ Object.assign(globalThis, {
   },
 });
 stubModules({
-  navigation: { source: "export function useRouter(){return globalThis.__executionDrawerRouter}" },
+  navigation: {
+    source:
+      "export function useRouter(){return globalThis.__executionDrawerRouter}" +
+      "export function usePathname(){return window.location.pathname}" +
+      "export function useSearchParams(){return new URLSearchParams(window.location.search)}",
+  },
   intl: false,
   authz: false,
   features: false,

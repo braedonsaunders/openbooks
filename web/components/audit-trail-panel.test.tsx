@@ -15,7 +15,7 @@ await bootJsdomEnvironment({ url: "http://localhost:4800/cash-sales" });
 stubModules({
   navigation: {
     source:
-      "export function useRouter(){return globalThis.__auditPanelRouter} export function useSearchParams(){return new URLSearchParams()}",
+      "export function useRouter(){return globalThis.__auditPanelRouter} export function usePathname(){return window.location.pathname} export function useSearchParams(){return new URLSearchParams()}",
   },
   intl: false,
   authz: false,
