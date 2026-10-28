@@ -811,3 +811,216 @@ async function searchProjects(
 }
 
 export { displayMoney };
+
+/** One labelled fact in a hit's preview; the client renders the label in the reader's language. */
+export type SearchPreviewField = {
+  labelKey: string;
+  value: string;
+  kind?: "money" | "date" | "status" | "text";
+};
+
+export interface SearchPreview {
+  hit: SearchHit;
+  fields: SearchPreviewField[];
+  /** A document's or entry's first lines. */
+  lines?: { description: string; amount: string }[];
+  /** How many lines it has in all. */
+  lineCount?: number;
+}
+
+/**
+ * The facts a hit's preview shows. The reference first re-resolves through
+ * the same legs a search uses, so a preview exists exactly when a search
+ * could have surfaced the record; every further read stays inside the
+ * reader's organization and fences.
+ */
+export async function searchPreview(authz: Authz, ref: RecentRef): Promise<SearchPreview | null> {
+  if (!CORE_TYPES.has(ref.type)) return null;
+  const [hit] = await resolveRecentCoreRecords(authz, [ref]);
+  if (!hit) return null;
+  const orgId = authz.user.orgId;
+  const scope = authz.allowedSubsidiaryIds;
+  const fields: SearchPreviewField[] = [];
+  const add = (labelKey: string, value: unknown, kind?: SearchPreviewField["kind"]) => {
+    if (value === null || value === undefined || value === "") return;
+    fields.push({ labelKey, value: String(value), kind });
+  };
+  if (ref.type === "transaction" && hit.href.startsWith("/journal")) {
+    const [entry] = await db.execute<{
+      entry_number: string;
+      posting_date: string;
+      status: string;
+      memo: string | null;
+    }>(
+      sql`select entry_number, posting_date::text as posting_date, status, memo
+            from journal_entries where org_id = ${orgId} and id = ${ref.id}`,
+      "objects",
+    );
+    if (!entry) return null;
+    add("date", entry.posting_date, "date");
+    add("status", entry.status, "status");
+    add("memo", entry.memo);
+    const lineScope =
+      scope === null
+        ? sql``
+        : sql`and l.subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[])`;
+    const lines = await db.execute<{ description: string; amount: unknown; n: number }>(
+      sql`select concat_ws(' · ', a.number, a.name) || coalesce(' — ' || l.memo, '') as description, l.amount,
+                 count(*) over () as n
+            from journal_lines l join accounts a on a.org_id = l.org_id and a.id = l.account_id
+           where l.org_id = ${orgId} and l.entry_id = ${ref.id} ${lineScope}
+           order by l.amount desc, l.id limit 6`,
+      "objects",
+    );
+    return {
+      hit,
+      fields,
+      lines: lines.map((line) => ({
+        description: line.description,
+        amount: displayMoney(line.amount),
+      })),
+      lineCount: Number(lines[0]?.n ?? 0),
+    };
+  }
+  if (ref.type === "transaction") {
+    const [doc] = await db.execute<{
+      document_date: string;
+      due_date: string | null;
+      status: string;
+      currency: string;
+      total: unknown;
+      open_balance: unknown;
+      tax_total: unknown;
+      memo: string | null;
+      reference_number: string | null;
+    }>(
+      sql`select document_date::text as document_date, due_date::text as due_date, status, currency,
+                 total, open_balance, tax_total, memo, reference_number
+            from documents where org_id = ${orgId} and id = ${ref.id}`,
+      "objects",
+    );
+    if (!doc) return null;
+    add("date", doc.document_date, "date");
+    add("due", doc.due_date, "date");
+    add("status", doc.status, "status");
+    add("total", `${displayMoney(doc.total)} ${doc.currency}`, "money");
+    if (doc.open_balance !== null && displayMoney(doc.open_balance) !== "0.00")
+      add("open", `${displayMoney(doc.open_balance)} ${doc.currency}`, "money");
+    if (displayMoney(doc.tax_total) !== "0.00") add("tax", displayMoney(doc.tax_total), "money");
+    add("reference", doc.reference_number);
+    add("memo", doc.memo);
+    const lines = await db.execute<{ description: string | null; amount: unknown; n: number }>(
+      sql`select coalesce(nullif(dl.description, ''), i.name) as description, dl.amount, count(*) over () as n
+            from document_lines dl left join items i on i.org_id = dl.org_id and i.id = dl.item_id
+           where dl.org_id = ${orgId} and dl.document_id = ${ref.id}
+           order by dl.line_number limit 6`,
+      "objects",
+    );
+    return {
+      hit,
+      fields,
+      lines: lines.map((line) => ({
+        description: line.description ?? "",
+        amount: displayMoney(line.amount),
+      })),
+      lineCount: Number(lines[0]?.n ?? 0),
+    };
+  }
+  if (ref.type === "contact") {
+    const [party] = await db.execute<{
+      email: string | null;
+      phone: string | null;
+      website: string | null;
+      short_code: string | null;
+      address: string | null;
+    }>(
+      sql`select p.email, p.phone, p.website, p.short_code,
+                 (select concat_ws(', ', nullif(a.line1, ''), nullif(a.city, ''), nullif(a.region, ''), nullif(a.postal_code, ''))
+                    from addresses a where a.org_id = p.org_id and a.party_id = p.id
+                   order by a.is_default_billing desc, a.created_at limit 1) as address
+            from parties p where p.org_id = ${orgId} and p.id = ${ref.id}`,
+      "objects",
+    );
+    if (!party) return null;
+    add("code", party.short_code);
+    add("email", party.email);
+    add("phone", party.phone);
+    add("website", party.website);
+    add("address", party.address);
+    // Open balances only from the documents the reader's own modules show.
+    const visible = new Set(allowedTransactionKinds(authz));
+    const fence = subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope);
+    for (const [kind, labelKey] of [
+      ["customer_invoice", "receivable"],
+      ["vendor_bill", "payable"],
+    ] as const) {
+      if (!visible.has(kind)) continue;
+      const [open] = await db.execute<{ total: unknown; n: number }>(
+        sql`select sum(d.open_balance) as total, count(*)::int as n from documents d
+             where d.org_id = ${orgId} and d.party_id = ${ref.id} and d.kind = ${kind}
+               and d.status = 'posted' and d.open_balance > 0 ${fence}`,
+        "objects",
+      );
+      if (open && open.n > 0) add(labelKey, displayMoney(open.total), "money");
+    }
+    return { hit, fields };
+  }
+  if (ref.type === "item") {
+    const [item] = await db.execute<{
+      code: string | null;
+      kind: string;
+      category: string | null;
+      description: string | null;
+      default_rate: unknown;
+      unit: string | null;
+    }>(
+      sql`select code, kind, category, description, default_rate, unit from items where org_id = ${orgId} and id = ${ref.id}`,
+      "objects",
+    );
+    if (!item) return null;
+    add("code", item.code);
+    add("kind", item.kind);
+    add("category", item.category);
+    if (item.default_rate !== null)
+      add(
+        "rate",
+        `${displayMoney(item.default_rate)}${item.unit ? ` / ${item.unit}` : ""}`,
+        "money",
+      );
+    add("description", item.description);
+    return { hit, fields };
+  }
+  if (ref.type === "project") {
+    const [project] = await db.execute<{
+      code: string | null;
+      status: string | null;
+      customer: string | null;
+    }>(
+      sql`select p.code, p.status, c.display_name as customer from projects p
+            left join parties c on c.org_id = p.org_id and c.id = p.customer_id
+           where p.org_id = ${orgId} and p.id = ${ref.id}`,
+      "objects",
+    );
+    if (!project) return null;
+    add("code", project.code);
+    add("status", project.status, "status");
+    add("customer", project.customer);
+    return { hit, fields };
+  }
+  if (ref.type === "account") {
+    const [account] = await db.execute<{
+      number: string | null;
+      type: string;
+      description: string | null;
+    }>(
+      sql`select number, type, description from accounts where org_id = ${orgId} and id = ${ref.id}`,
+      "objects",
+    );
+    if (!account) return null;
+    add("number", account.number);
+    add("accountType", account.type);
+    add("description", account.description);
+    return { hit, fields };
+  }
+  return { hit, fields };
+}

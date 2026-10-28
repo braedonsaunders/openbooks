@@ -3394,6 +3394,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       };
     },
   },
+  "/search": {
+    route: "/search",
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import("../app/(app)/search/view");
+      return {
+        load: (input) => m.loadSearchPage(input.searchParams ?? {}),
+        spec: (data) => m.searchSpec(data as never),
+      };
+    },
+  },
   "/service": {
     route: "/service",
     segments: [],

@@ -1033,6 +1033,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   "no-grants-body": { props: [] },
   "notifications-inbox": { props: ["rows"] },
   "notifications-mark-all-read": { props: ["unread"] },
+  "search-results": { props: ["active", "chips", "hits", "more", "page", "q", "tabs"] },
   "open-chart-of-accounts": { props: ["href", "label"] },
   "opening-balances-grid": {
     props: [

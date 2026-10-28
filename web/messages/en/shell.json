@@ -227,6 +227,148 @@
       "monthToDate": "mtd|month to date",
       "quarterToDate": "qtd|quarter to date",
       "stopwords": "from|for|with|the|a|an|of|by|all|show|find|me|my|to|in|on|at|and"
+    },
+    "seeAll": "See all results",
+    "seeAllGroup": "See all",
+    "nextGroup": "next group",
+    "newTab": "new tab",
+    "chips": {
+      "label": "Understood as",
+      "remove": "Remove {label}",
+      "scope": {
+        "invoice": "Invoices",
+        "credit": "Credits",
+        "bill": "Bills",
+        "vendorCredit": "Vendor credits",
+        "purchaseOrder": "Purchase orders",
+        "quote": "Quotes",
+        "salesOrder": "Sales orders",
+        "cashSale": "Cash sales",
+        "refund": "Refunds",
+        "payment": "Payments",
+        "receipt": "Receipts",
+        "check": "Checks",
+        "deposit": "Deposits",
+        "transfer": "Transfers",
+        "cardCharge": "Card charges",
+        "expense": "Expenses",
+        "fieldTicket": "Field tickets",
+        "journal": "Journal entries",
+        "payRun": "Pay runs",
+        "shipment": "Shipments",
+        "pick": "Picks",
+        "customer": "Customers",
+        "vendor": "Vendors",
+        "employee": "Employees",
+        "contact": "Contacts",
+        "item": "Items",
+        "project": "Projects",
+        "account": "Accounts"
+      },
+      "status": {
+        "open": "Open",
+        "overdue": "Overdue",
+        "paid": "Paid",
+        "draft": "Draft",
+        "pending": "Pending approval",
+        "voided": "Voided",
+        "posted": "Posted"
+      },
+      "amount": {
+        "eq": "Amount {amount}",
+        "prefix": "Amount {amount}…",
+        "gt": "Over {amount}",
+        "ge": "At least {amount}",
+        "lt": "Under {amount}",
+        "le": "At most {amount}",
+        "approx": "About {amount}",
+        "range": "{min} – {max}"
+      },
+      "date": {
+        "on": "On {date}",
+        "range": "{from} – {to}",
+        "since": "Since {date}",
+        "through": "Through {date}"
+      }
+    },
+    "match": {
+      "line": "Line: {text}",
+      "total": "Total {amount}",
+      "open": "Open {amount}",
+      "tax": "Tax {amount}",
+      "lineAmount": "Line amount {amount}"
+    },
+    "preview": {
+      "label": "Preview",
+      "open": "Open",
+      "openNewTab": "New tab",
+      "lines": "Lines",
+      "moreLines": "{count, plural, one {# more line} other {# more lines}}",
+      "fields": {
+        "date": "Date",
+        "due": "Due",
+        "status": "Status",
+        "total": "Total",
+        "open": "Open balance",
+        "tax": "Tax",
+        "reference": "Reference",
+        "memo": "Memo",
+        "code": "Code",
+        "email": "Email",
+        "phone": "Phone",
+        "website": "Website",
+        "address": "Address",
+        "receivable": "Open receivables",
+        "payable": "Open payables",
+        "kind": "Kind",
+        "category": "Category",
+        "rate": "Rate",
+        "description": "Description",
+        "customer": "Customer",
+        "number": "Number",
+        "accountType": "Type"
+      }
+    },
+    "tips": {
+      "title": "Try",
+      "number": {
+        "example": "inv:3668",
+        "label": "an invoice number"
+      },
+      "amount": {
+        "example": "$7,298.08",
+        "label": "a total or line amount"
+      },
+      "range": {
+        "example": "over 5000",
+        "label": "an amount range"
+      },
+      "period": {
+        "example": "bills last month",
+        "label": "a period"
+      },
+      "status": {
+        "example": "overdue invoices",
+        "label": "a status"
+      },
+      "exact": {
+        "example": "\"forklift\"",
+        "label": "exact words"
+      }
+    },
+    "results": {
+      "title": "Search results",
+      "description": "Everything matching “{query}”",
+      "noQueryTitle": "Search everything",
+      "noQueryDescription": "Find records by name, number, amount, date or status.",
+      "emptyTitle": "No results",
+      "emptyGroup": "No {group} on this page.",
+      "tabsLabel": "Result types",
+      "countMore": "{count}+",
+      "page": "Page {page}",
+      "previous": "Previous",
+      "next": "Next",
+      "pagination": "Result pages"
     }
   },
   "meta": {

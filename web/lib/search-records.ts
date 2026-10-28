@@ -72,6 +72,9 @@ type Context = {
   features: FeatureState;
   /** Whether the page owning `href` is in this reader's navigation. */
   navigable: (href: string) => boolean;
+  /** Hits a leg returns (one more is read to tell whether more exist), and how many to skip. */
+  limit: number;
+  offset: number;
 };
 
 type Leg = {
@@ -331,7 +334,7 @@ function listSourceLeg(config: ListSourceSearch): Leg {
           from ${tableSql} ${joins}
          where ${where}
          order by ${order}
-         limit ${PER_GROUP}`,
+         limit ${ctx.limit + 1} offset ${ctx.offset}`,
         "objects",
       );
       return r.map((row): SearchHit => ({
@@ -388,7 +391,7 @@ const subscriptionLeg: Leg = {
        where s.org_id = ${ctx.orgId}${customerScope}
          and ${predicate}
        order by c.display_name, s.created_at desc
-       limit ${PER_GROUP}`,
+       limit ${ctx.limit + 1} offset ${ctx.offset}`,
       "objects",
     );
     return r.map((row): SearchHit => ({
@@ -441,7 +444,7 @@ const workOrderLeg: Leg = {
          ${orderResourcesVisible(scope, "r")}
          and ${predicate}
        order by ${order}
-       limit ${PER_GROUP}`,
+       limit ${ctx.limit + 1} offset ${ctx.offset}`,
       "objects",
     );
     return r.map((row): SearchHit => ({
@@ -538,7 +541,7 @@ const customRecordLeg: Leg = {
          and (${sql.join(typeScopes, sql` or `)})
          and ${predicate}
        order by created_at desc
-       limit ${PER_GROUP}`,
+       limit ${ctx.limit + 1} offset ${ctx.offset}`,
       "objects",
     );
     const typeById = new Map(visible.map((type) => [type.id, type]));
@@ -589,7 +592,7 @@ const fileLeg: Leg = {
        where ${visibility}
          and ${predicate}
        order by ${order}
-       limit ${PER_GROUP}`,
+       limit ${ctx.limit + 1} offset ${ctx.offset}`,
       "objects",
     );
     return r.map((row): SearchHit => ({
@@ -621,7 +624,7 @@ const dashboardLeg: Leg = {
        where ${insightVisibilitySql(ctx.authz, "d")}
          and ${predicate}
        order by d.name
-       limit ${PER_GROUP}`,
+       limit ${ctx.limit + 1} offset ${ctx.offset}`,
       "objects",
     );
     return r.map((row): SearchHit => ({
@@ -675,7 +678,7 @@ function setupRecordLeg(config: {
            ${setupEntitySubsidiaryFilter(entity, ctx.authz.allowedSubsidiaryIds)}
            and ${predicate}
          order by ${title}
-         limit ${PER_GROUP}`,
+         limit ${ctx.limit + 1} offset ${ctx.offset}`,
         "objects",
       );
       return r.map((row): SearchHit => ({
@@ -727,12 +730,17 @@ const LEGS: Leg[] = [
 
 const LEG_BY_TYPE = new Map(LEGS.map((leg) => [leg.type, leg]));
 
-async function context(authz: Authz): Promise<Context> {
+async function context(
+  authz: Authz,
+  page: { limit?: number; offset?: number } = {},
+): Promise<Context> {
   const features = await resolvedFeatureState(authz.user.orgId);
   return {
     authz,
     orgId: authz.user.orgId,
     features,
+    limit: page.limit ?? PER_GROUP,
+    offset: page.offset ?? 0,
     navigable: (href) =>
       visibleNavigationHref(
         href,
@@ -751,6 +759,7 @@ export async function searchOperationalRecords(
   authz: Authz,
   rawQ: string,
   parsed?: ParsedSearch,
+  options: { types?: readonly string[]; limit?: number; offset?: number } = {},
 ): Promise<SearchGroup[]> {
   const q = rawQ.trim().slice(0, 200);
   if (q.length < 2) return [];
@@ -764,13 +773,24 @@ export async function searchOperationalRecords(
         .map((word) => word.toLowerCase());
   if (words.length === 0) return [];
   const match: Match = { kind: "text", q, words, likes: words.map(escapeLike) };
-  const ctx = await context(authz);
-  const results = await Promise.all(LEGS.map((leg) => leg.run(ctx, match)));
-  return LEGS.flatMap((leg, index) => {
-    const hits = results[index] ?? [];
-    return hits.length > 0 ? [{ type: leg.type, labelKey: leg.labelKey, hits }] : [];
+  const ctx = await context(authz, options);
+  const legs = options.types ? LEGS.filter((leg) => options.types!.includes(leg.type)) : LEGS;
+  const results = await Promise.all(legs.map((leg) => leg.run(ctx, match)));
+  return legs.flatMap((leg, index): SearchGroup[] => {
+    const found = results[index] ?? [];
+    if (found.length === 0) return [];
+    const group: SearchGroup = {
+      type: leg.type,
+      labelKey: leg.labelKey,
+      hits: found.slice(0, ctx.limit),
+    };
+    if (found.length > ctx.limit) group.more = true;
+    return [group];
   });
 }
+
+/** The operational record groups search can return. */
+export const OPERATIONAL_RECORD_TYPES: readonly string[] = LEGS.map((leg) => leg.type);
 
 /** Whether a recent reference names an operational record this module resolves. */
 export function isOperationalRecentRef(ref: RecentRef): boolean {
@@ -793,7 +813,7 @@ export async function resolveRecentOperationalRecords(
     idsByType.set(type, [...(idsByType.get(type) ?? []), ref.id]);
   }
   if (idsByType.size === 0) return [];
-  const ctx = await context(authz);
+  const ctx = await context(authz, { limit: refs.length });
   const results = await Promise.all(
     [...idsByType].map(([type, ids]) => LEG_BY_TYPE.get(type)!.run(ctx, { kind: "ids", ids })),
   );

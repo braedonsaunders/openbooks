@@ -227,6 +227,148 @@
       "monthToDate": "seit monatsbeginn",
       "quarterToDate": "seit quartalsbeginn",
       "stopwords": "von|vom|der|die|das|den|dem|ein|eine|für|mit|alle|meine"
+    },
+    "seeAll": "Alle Ergebnisse anzeigen",
+    "seeAllGroup": "Alle anzeigen",
+    "nextGroup": "nächste Gruppe",
+    "newTab": "neuer Tab",
+    "chips": {
+      "label": "Verstanden als",
+      "remove": "{label} entfernen",
+      "scope": {
+        "invoice": "Rechnungen",
+        "credit": "Gutschriften",
+        "bill": "Eingangsrechnungen",
+        "vendorCredit": "Lieferantengutschriften",
+        "purchaseOrder": "Bestellungen",
+        "quote": "Angebote",
+        "salesOrder": "Kundenaufträge",
+        "cashSale": "Barverkäufe",
+        "refund": "Erstattungen",
+        "payment": "Zahlungen",
+        "receipt": "Zahlungseingänge",
+        "check": "Schecks",
+        "deposit": "Einzahlungen",
+        "transfer": "Überweisungen",
+        "cardCharge": "Kartenzahlungen",
+        "expense": "Ausgaben",
+        "fieldTicket": "Arbeitsscheine",
+        "journal": "Journalbuchungen",
+        "payRun": "Lohnläufe",
+        "shipment": "Lieferungen",
+        "pick": "Kommissionierungen",
+        "customer": "Kunden",
+        "vendor": "Lieferanten",
+        "employee": "Mitarbeitende",
+        "contact": "Kontakte",
+        "item": "Artikel",
+        "project": "Projekte",
+        "account": "Konten"
+      },
+      "status": {
+        "open": "Offen",
+        "overdue": "Überfällig",
+        "paid": "Bezahlt",
+        "draft": "Entwurf",
+        "pending": "Genehmigung ausstehend",
+        "voided": "Storniert",
+        "posted": "Gebucht"
+      },
+      "amount": {
+        "eq": "Betrag {amount}",
+        "prefix": "Betrag {amount}…",
+        "gt": "Über {amount}",
+        "ge": "Mindestens {amount}",
+        "lt": "Unter {amount}",
+        "le": "Höchstens {amount}",
+        "approx": "Etwa {amount}",
+        "range": "{min} – {max}"
+      },
+      "date": {
+        "on": "Am {date}",
+        "range": "{from} – {to}",
+        "since": "Seit {date}",
+        "through": "Bis {date}"
+      }
+    },
+    "match": {
+      "line": "Zeile: {text}",
+      "total": "Summe {amount}",
+      "open": "Offen {amount}",
+      "tax": "Steuer {amount}",
+      "lineAmount": "Zeilenbetrag {amount}"
+    },
+    "preview": {
+      "label": "Vorschau",
+      "open": "Öffnen",
+      "openNewTab": "Neuer Tab",
+      "lines": "Positionen",
+      "moreLines": "{count, plural, one {# weitere Position} other {# weitere Positionen}}",
+      "fields": {
+        "date": "Datum",
+        "due": "Fällig",
+        "status": "Status",
+        "total": "Summe",
+        "open": "Offener Betrag",
+        "tax": "Steuer",
+        "reference": "Referenz",
+        "memo": "Notiz",
+        "code": "Code",
+        "email": "E-Mail",
+        "phone": "Telefon",
+        "website": "Website",
+        "address": "Adresse",
+        "receivable": "Offene Forderungen",
+        "payable": "Offene Verbindlichkeiten",
+        "kind": "Art",
+        "category": "Kategorie",
+        "rate": "Satz",
+        "description": "Beschreibung",
+        "customer": "Kunde",
+        "number": "Nummer",
+        "accountType": "Kontotyp"
+      }
+    },
+    "tips": {
+      "title": "Probieren Sie",
+      "number": {
+        "example": "inv:3668",
+        "label": "eine Rechnungsnummer"
+      },
+      "amount": {
+        "example": "7.298,08",
+        "label": "eine Summe oder einen Zeilenbetrag"
+      },
+      "range": {
+        "example": "über 5000",
+        "label": "einen Betragsbereich"
+      },
+      "period": {
+        "example": "eingangsrechnungen letzten monat",
+        "label": "einen Zeitraum"
+      },
+      "status": {
+        "example": "überfällige rechnungen",
+        "label": "einen Status"
+      },
+      "exact": {
+        "example": "\"stapler\"",
+        "label": "exakte Wörter"
+      }
+    },
+    "results": {
+      "title": "Suchergebnisse",
+      "description": "Alles, was zu „{query}“ passt",
+      "noQueryTitle": "Alles durchsuchen",
+      "noQueryDescription": "Finden Sie Datensätze nach Name, Nummer, Betrag, Datum oder Status.",
+      "emptyTitle": "Keine Ergebnisse",
+      "emptyGroup": "Keine Einträge in „{group}“ auf dieser Seite.",
+      "tabsLabel": "Ergebnistypen",
+      "countMore": "{count}+",
+      "page": "Seite {page}",
+      "previous": "Zurück",
+      "next": "Weiter",
+      "pagination": "Ergebnisseiten"
     }
   },
   "meta": {

@@ -126,23 +126,30 @@ function helpHit(slug: string): SearchHit | null {
   };
 }
 
-/** Reports, settings and help articles matching the query, as result groups. */
-export async function searchCatalog(authz: Authz, rawQ: string): Promise<SearchGroup[]> {
+/**
+ * Reports, settings and help articles matching the query, as result groups.
+ * `limit` widens each group for the results page.
+ */
+export async function searchCatalog(
+  authz: Authz,
+  rawQ: string,
+  options: { limit?: number } = {},
+): Promise<SearchGroup[]> {
   const q = rawQ.trim().slice(0, 80);
   if (q.length < 2) return [];
   const entries = await catalogEntries(authz);
   const reports = searchPages(
     entries.filter((entry) => entry.type === "report"),
     q,
-    REPORT_LIMIT,
+    options.limit ?? REPORT_LIMIT,
   );
   const settings = searchPages(
     entries.filter((entry) => entry.type === "setting"),
     q,
-    SETTING_LIMIT,
+    options.limit ?? SETTING_LIMIT,
   );
   const help = searchDocArticles(q)
-    .slice(0, HELP_LIMIT)
+    .slice(0, options.limit ?? HELP_LIMIT)
     .flatMap((hit) => {
       const resolved = helpHit(hit.id);
       return resolved ? [resolved] : [];

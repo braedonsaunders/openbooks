@@ -185,6 +185,20 @@ test("words are not lost: names, punctuation and stopwords", () => {
   assert.deepEqual(words("the"), ["the"], "a lone stopword is still searched");
 });
 
+test("amount chips say how the amount was written", () => {
+  const chip = (q: string) => parse(q).chips.find((c) => c.kind === "amount");
+  assert.deepEqual(
+    [chip("over 1,000"), chip("7298.08"), chip("1234"), chip("~1000"), chip("100..250")].map((c) =>
+      c && c.kind === "amount" ? [c.op, c.value] : null,
+    ),
+    [["gt", "100000"], ["eq", "729808"], null, ["approx", "100000"], ["range", "10000"]],
+  );
+  assert.deepEqual(
+    (({ op, value }) => [op, value])(chip("$1,234") as { op: string; value: string }),
+    ["prefix", "123400"],
+  );
+});
+
 test("chips name their source text, and removing one keeps the rest as typed", () => {
   const q = "invoices over 1,000 from acme this year";
   const parsed = parse(q);

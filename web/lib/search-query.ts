@@ -290,10 +290,16 @@ export type SearchChip =
       min: string;
       max: string | null;
       approximate: boolean;
+      /** How the amount was written, for its label; the operand is `value` cents. */
+      op: AmountOp;
+      value: string;
       start: number;
       end: number;
     }
   | { kind: "date"; from: string | null; to: string | null; start: number; end: number };
+
+/** How an amount was written: exactly, as a beginning, bounded, approximately, or as a range. */
+export type AmountOp = "eq" | "prefix" | "gt" | "ge" | "lt" | "le" | "approx" | "range";
 
 /** One word the record must contain. */
 export interface SearchWord {
@@ -749,10 +755,26 @@ export function parseSearchQuery(raw: string, options: ParseOptions): ParsedSear
     chips.push({ kind: "date", from, to, start, end });
     return true;
   };
-  const setAmount = (range: CentsRange, approximate: boolean, start: number, end: number) => {
+  const setAmount = (
+    range: CentsRange,
+    approximate: boolean,
+    start: number,
+    end: number,
+    op: AmountOp = range.max === range.min ? "eq" : "prefix",
+    value: string = range.min,
+  ) => {
     if (amount) return false;
     amount = { ...range, approximate };
-    chips.push({ kind: "amount", min: range.min, max: range.max, approximate, start, end });
+    chips.push({
+      kind: "amount",
+      min: range.min,
+      max: range.max,
+      approximate,
+      op,
+      value,
+      start,
+      end,
+    });
     return true;
   };
   const amountOf = (k: number) => {
@@ -818,6 +840,7 @@ export function parseSearchQuery(raw: string, options: ParseOptions): ParsedSear
           false,
           token.start,
           end,
+          "range",
         );
         i += betweenLen + 2 + andLen;
         continue;
@@ -889,7 +912,7 @@ export function parseSearchQuery(raw: string, options: ParseOptions): ParsedSear
                     min: (cents - (cents / 100n > 0n ? cents / 100n : 1n)).toString(),
                     max: (cents + (cents / 100n > 0n ? cents / 100n : 1n)).toString(),
                   };
-      if (setAmount(range, operator === "approx", token.start, end)) {
+      if (setAmount(range, operator === "approx", token.start, end, operator, cents.toString())) {
         i = operandAttached ? i + 1 : operandIndex + 1;
         continue;
       }
@@ -909,6 +932,7 @@ export function parseSearchQuery(raw: string, options: ParseOptions): ParsedSear
             false,
             token.start,
             token.end,
+            "range",
           )
         ) {
           i += 1;

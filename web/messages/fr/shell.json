@@ -227,6 +227,148 @@
       "monthToDate": "depuis le début du mois",
       "quarterToDate": "depuis le début du trimestre",
       "stopwords": "de|du|des|la|le|les|un|une|pour|avec|par|mes|mon|ma"
+    },
+    "seeAll": "Voir tous les résultats",
+    "seeAllGroup": "Tout voir",
+    "nextGroup": "groupe suivant",
+    "newTab": "nouvel onglet",
+    "chips": {
+      "label": "Compris comme",
+      "remove": "Retirer {label}",
+      "scope": {
+        "invoice": "Factures",
+        "credit": "Avoirs",
+        "bill": "Factures fournisseurs",
+        "vendorCredit": "Avoirs fournisseurs",
+        "purchaseOrder": "Bons de commande",
+        "quote": "Devis",
+        "salesOrder": "Commandes clients",
+        "cashSale": "Ventes au comptant",
+        "refund": "Remboursements",
+        "payment": "Paiements",
+        "receipt": "Encaissements",
+        "check": "Chèques",
+        "deposit": "Dépôts",
+        "transfer": "Virements",
+        "cardCharge": "Transactions par carte",
+        "expense": "Dépenses",
+        "fieldTicket": "Bons de travail",
+        "journal": "Écritures de journal",
+        "payRun": "Paies",
+        "shipment": "Expéditions",
+        "pick": "Prélèvements",
+        "customer": "Clients",
+        "vendor": "Fournisseurs",
+        "employee": "Employés",
+        "contact": "Contacts",
+        "item": "Articles",
+        "project": "Projets",
+        "account": "Comptes"
+      },
+      "status": {
+        "open": "Ouvert",
+        "overdue": "En retard",
+        "paid": "Payé",
+        "draft": "Brouillon",
+        "pending": "En attente d'approbation",
+        "voided": "Annulé",
+        "posted": "Comptabilisé"
+      },
+      "amount": {
+        "eq": "Montant {amount}",
+        "prefix": "Montant {amount}…",
+        "gt": "Plus de {amount}",
+        "ge": "Au moins {amount}",
+        "lt": "Moins de {amount}",
+        "le": "Au plus {amount}",
+        "approx": "Environ {amount}",
+        "range": "{min} – {max}"
+      },
+      "date": {
+        "on": "Le {date}",
+        "range": "Du {from} au {to}",
+        "since": "Depuis le {date}",
+        "through": "Jusqu'au {date}"
+      }
+    },
+    "match": {
+      "line": "Ligne : {text}",
+      "total": "Total {amount}",
+      "open": "Solde {amount}",
+      "tax": "Taxe {amount}",
+      "lineAmount": "Montant de ligne {amount}"
+    },
+    "preview": {
+      "label": "Aperçu",
+      "open": "Ouvrir",
+      "openNewTab": "Nouvel onglet",
+      "lines": "Lignes",
+      "moreLines": "{count, plural, one {# autre ligne} other {# autres lignes}}",
+      "fields": {
+        "date": "Date",
+        "due": "Échéance",
+        "status": "Statut",
+        "total": "Total",
+        "open": "Solde ouvert",
+        "tax": "Taxe",
+        "reference": "Référence",
+        "memo": "Mémo",
+        "code": "Code",
+        "email": "Courriel",
+        "phone": "Téléphone",
+        "website": "Site Web",
+        "address": "Adresse",
+        "receivable": "Créances ouvertes",
+        "payable": "Dettes ouvertes",
+        "kind": "Type",
+        "category": "Catégorie",
+        "rate": "Tarif",
+        "description": "Description",
+        "customer": "Client",
+        "number": "Numéro",
+        "accountType": "Type de compte"
+      }
+    },
+    "tips": {
+      "title": "Essayez",
+      "number": {
+        "example": "inv:3668",
+        "label": "un numéro de facture"
+      },
+      "amount": {
+        "example": "7298,08 €",
+        "label": "un total ou un montant de ligne"
+      },
+      "range": {
+        "example": "plus de 5000",
+        "label": "une plage de montants"
+      },
+      "period": {
+        "example": "factures fournisseurs ce mois",
+        "label": "une période"
+      },
+      "status": {
+        "example": "factures en retard",
+        "label": "un statut"
+      },
+      "exact": {
+        "example": "\"chariot\"",
+        "label": "des mots exacts"
+      }
+    },
+    "results": {
+      "title": "Résultats de recherche",
+      "description": "Tout ce qui correspond à « {query} »",
+      "noQueryTitle": "Rechercher partout",
+      "noQueryDescription": "Trouvez des enregistrements par nom, numéro, montant, date ou statut.",
+      "emptyTitle": "Aucun résultat",
+      "emptyGroup": "Aucun élément « {group} » sur cette page.",
+      "tabsLabel": "Types de résultats",
+      "countMore": "{count}+",
+      "page": "Page {page}",
+      "previous": "Précédent",
+      "next": "Suivant",
+      "pagination": "Pages de résultats"
     }
   },
   "meta": {

@@ -724,6 +724,9 @@ export const NotificationsMarkAllRead = dynamic(() =>
     (module) => module.NotificationsMarkAllRead,
   ),
 );
+export const SearchResults = dynamic(() =>
+  import("../../app/(app)/search/SearchResults").then((module) => module.SearchResults),
+);
 export const OpeningBalancesView = dynamic(() =>
   import("../../app/(app)/payroll/opening-balances/OpeningBalancesView").then(
     (module) => module.OpeningBalancesView,

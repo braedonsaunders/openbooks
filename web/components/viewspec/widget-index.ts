@@ -456,6 +456,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   "no-grants-body": "platform",
   "notifications-inbox": "platform",
   "notifications-mark-all-read": "platform",
+  "search-results": "platform",
   "open-chart-of-accounts": "banking",
   "opening-balances-grid": "payroll",
   "opening-balances-workspace": "payroll",

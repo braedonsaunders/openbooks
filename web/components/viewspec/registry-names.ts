@@ -657,6 +657,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   "pre-billing-workspace",
   "pos-register-picker",
   "pos-register-screen",
+  "search-results",
   "work-item-drawer",
   "year-end-workspace",
 ]);

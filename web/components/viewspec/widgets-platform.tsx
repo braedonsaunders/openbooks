@@ -9,6 +9,7 @@ import {
   NewRoleButton,
   NotificationsInbox,
   NotificationsMarkAllRead,
+  SearchResults,
   InviteUserButton,
   NewKeyButton,
   KeyDrawer,
@@ -153,6 +154,24 @@ export const PLATFORM_WIDGETS = {
   "notifications-mark-all-read": (props) => (
     <NotificationsMarkAllRead unread={num(props, "unread") ?? 0} />
   ),
+
+  /* --- search results ------------------------------------------------------- */
+  /** The results page owns its query box, chips, group tabs and paging, which
+   *  all navigate by URL. */
+  "search-results": (props) => {
+    type Props = ComponentProps<typeof SearchResults>;
+    return (
+      <SearchResults
+        q={str(props, "q") ?? ""}
+        chips={(props.chips as Props["chips"]) ?? []}
+        tabs={(props.tabs as Props["tabs"]) ?? []}
+        active={(props.active as Props["active"]) ?? null}
+        hits={(props.hits as Props["hits"]) ?? []}
+        page={num(props, "page") ?? 1}
+        more={props.more === true}
+      />
+    );
+  },
 
   /* --- admin hub ------------------------------------------------------------ */
   /** One hub navigation card. The icon and the accent are lookups resolved

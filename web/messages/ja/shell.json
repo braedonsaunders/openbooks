@@ -227,6 +227,148 @@
       "monthToDate": "月初来|当月累計",
       "quarterToDate": "四半期累計",
       "stopwords": "の|を|が|は|と"
+    },
+    "seeAll": "すべての結果を表示",
+    "seeAllGroup": "すべて表示",
+    "nextGroup": "次のグループ",
+    "newTab": "新しいタブ",
+    "chips": {
+      "label": "解釈",
+      "remove": "{label} を削除",
+      "scope": {
+        "invoice": "請求書",
+        "credit": "クレジットメモ",
+        "bill": "仕入請求書",
+        "vendorCredit": "仕入先クレジット",
+        "purchaseOrder": "発注書",
+        "quote": "見積書",
+        "salesOrder": "受注",
+        "cashSale": "現金売上",
+        "refund": "返金",
+        "payment": "支払",
+        "receipt": "入金",
+        "check": "小切手",
+        "deposit": "預金",
+        "transfer": "振替",
+        "cardCharge": "カード取引",
+        "expense": "経費",
+        "fieldTicket": "作業票",
+        "journal": "仕訳",
+        "payRun": "給与計算",
+        "shipment": "出荷",
+        "pick": "ピッキング",
+        "customer": "顧客",
+        "vendor": "仕入先",
+        "employee": "従業員",
+        "contact": "連絡先",
+        "item": "品目",
+        "project": "プロジェクト",
+        "account": "勘定科目"
+      },
+      "status": {
+        "open": "未決済",
+        "overdue": "期限超過",
+        "paid": "支払済み",
+        "draft": "下書き",
+        "pending": "承認待ち",
+        "voided": "取消",
+        "posted": "転記済み"
+      },
+      "amount": {
+        "eq": "金額 {amount}",
+        "prefix": "金額 {amount}…",
+        "gt": "{amount} 超",
+        "ge": "{amount} 以上",
+        "lt": "{amount} 未満",
+        "le": "{amount} 以下",
+        "approx": "約 {amount}",
+        "range": "{min} 〜 {max}"
+      },
+      "date": {
+        "on": "{date}",
+        "range": "{from} 〜 {to}",
+        "since": "{date} 以降",
+        "through": "{date} まで"
+      }
+    },
+    "match": {
+      "line": "明細: {text}",
+      "total": "合計 {amount}",
+      "open": "残高 {amount}",
+      "tax": "税額 {amount}",
+      "lineAmount": "明細金額 {amount}"
+    },
+    "preview": {
+      "label": "プレビュー",
+      "open": "開く",
+      "openNewTab": "新しいタブ",
+      "lines": "明細",
+      "moreLines": "{count, plural, other {他 # 件の明細}}",
+      "fields": {
+        "date": "日付",
+        "due": "期日",
+        "status": "ステータス",
+        "total": "合計",
+        "open": "未決済残高",
+        "tax": "税額",
+        "reference": "参照",
+        "memo": "メモ",
+        "code": "コード",
+        "email": "メール",
+        "phone": "電話",
+        "website": "ウェブサイト",
+        "address": "住所",
+        "receivable": "未回収の売掛金",
+        "payable": "未払いの買掛金",
+        "kind": "種類",
+        "category": "カテゴリ",
+        "rate": "単価",
+        "description": "説明",
+        "customer": "顧客",
+        "number": "番号",
+        "accountType": "種類"
+      }
+    },
+    "tips": {
+      "title": "検索例",
+      "number": {
+        "example": "inv:3668",
+        "label": "請求書番号"
+      },
+      "amount": {
+        "example": "¥729808",
+        "label": "合計または明細金額"
+      },
+      "range": {
+        "example": ">5000",
+        "label": "金額の範囲"
+      },
+      "period": {
+        "example": "仕入請求書 先月",
+        "label": "期間"
+      },
+      "status": {
+        "example": "期限超過 請求書",
+        "label": "ステータス"
+      },
+      "exact": {
+        "example": "\"フォークリフト\"",
+        "label": "完全一致"
+      }
+    },
+    "results": {
+      "title": "検索結果",
+      "description": "「{query}」に一致するすべて",
+      "noQueryTitle": "すべてを検索",
+      "noQueryDescription": "名前、番号、金額、日付、ステータスでレコードを検索できます。",
+      "emptyTitle": "結果がありません",
+      "emptyGroup": "このページに{group}はありません。",
+      "tabsLabel": "結果の種類",
+      "countMore": "{count}+",
+      "page": "{page} ページ",
+      "previous": "前へ",
+      "next": "次へ",
+      "pagination": "結果ページ"
     }
   },
   "meta": {

@@ -227,6 +227,148 @@
       "monthToDate": "月初至今|本月累计",
       "quarterToDate": "季初至今|本季累计",
       "stopwords": "的|了|和"
+    },
+    "seeAll": "查看所有结果",
+    "seeAllGroup": "查看全部",
+    "nextGroup": "下一组",
+    "newTab": "新标签页",
+    "chips": {
+      "label": "理解为",
+      "remove": "移除 {label}",
+      "scope": {
+        "invoice": "发票",
+        "credit": "贷项通知单",
+        "bill": "供应商账单",
+        "vendorCredit": "供应商贷项",
+        "purchaseOrder": "采购订单",
+        "quote": "报价单",
+        "salesOrder": "销售订单",
+        "cashSale": "现金销售",
+        "refund": "退款",
+        "payment": "付款",
+        "receipt": "收款",
+        "check": "支票",
+        "deposit": "存款",
+        "transfer": "转账",
+        "cardCharge": "卡交易",
+        "expense": "费用",
+        "fieldTicket": "现场工单",
+        "journal": "凭证",
+        "payRun": "工资发放",
+        "shipment": "发货",
+        "pick": "拣货",
+        "customer": "客户",
+        "vendor": "供应商",
+        "employee": "员工",
+        "contact": "联系人",
+        "item": "物料",
+        "project": "项目",
+        "account": "科目"
+      },
+      "status": {
+        "open": "未结",
+        "overdue": "逾期",
+        "paid": "已付",
+        "draft": "草稿",
+        "pending": "待审批",
+        "voided": "已作废",
+        "posted": "已过账"
+      },
+      "amount": {
+        "eq": "金额 {amount}",
+        "prefix": "金额 {amount}…",
+        "gt": "超过 {amount}",
+        "ge": "至少 {amount}",
+        "lt": "低于 {amount}",
+        "le": "最多 {amount}",
+        "approx": "约 {amount}",
+        "range": "{min} – {max}"
+      },
+      "date": {
+        "on": "{date}",
+        "range": "{from} – {to}",
+        "since": "自 {date}",
+        "through": "截至 {date}"
+      }
+    },
+    "match": {
+      "line": "明细行：{text}",
+      "total": "合计 {amount}",
+      "open": "未结 {amount}",
+      "tax": "税额 {amount}",
+      "lineAmount": "行金额 {amount}"
+    },
+    "preview": {
+      "label": "预览",
+      "open": "打开",
+      "openNewTab": "新标签页",
+      "lines": "明细行",
+      "moreLines": "{count, plural, other {另有 # 行}}",
+      "fields": {
+        "date": "日期",
+        "due": "到期日",
+        "status": "状态",
+        "total": "合计",
+        "open": "未结余额",
+        "tax": "税额",
+        "reference": "参考号",
+        "memo": "备注",
+        "code": "编码",
+        "email": "电子邮件",
+        "phone": "电话",
+        "website": "网站",
+        "address": "地址",
+        "receivable": "未结应收",
+        "payable": "未结应付",
+        "kind": "类型",
+        "category": "类别",
+        "rate": "单价",
+        "description": "描述",
+        "customer": "客户",
+        "number": "编号",
+        "accountType": "科目类型"
+      }
+    },
+    "tips": {
+      "title": "试试",
+      "number": {
+        "example": "inv:3668",
+        "label": "发票号"
+      },
+      "amount": {
+        "example": "7298.08",
+        "label": "合计或行金额"
+      },
+      "range": {
+        "example": ">5000",
+        "label": "金额范围"
+      },
+      "period": {
+        "example": "供应商账单 上个月",
+        "label": "期间"
+      },
+      "status": {
+        "example": "逾期 发票",
+        "label": "状态"
+      },
+      "exact": {
+        "example": "\"叉车\"",
+        "label": "精确词语"
+      }
+    },
+    "results": {
+      "title": "搜索结果",
+      "description": "与“{query}”匹配的全部内容",
+      "noQueryTitle": "搜索全部",
+      "noQueryDescription": "按名称、编号、金额、日期或状态查找记录。",
+      "emptyTitle": "无结果",
+      "emptyGroup": "本页没有{group}。",
+      "tabsLabel": "结果类型",
+      "countMore": "{count}+",
+      "page": "第 {page} 页",
+      "previous": "上一页",
+      "next": "下一页",
+      "pagination": "结果分页"
     }
   },
   "meta": {

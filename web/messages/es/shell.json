@@ -227,6 +227,148 @@
       "monthToDate": "en lo que va del mes",
       "quarterToDate": "en lo que va del trimestre",
       "stopwords": "de|del|la|el|los|las|un|una|para|con|por|mis|mi"
+    },
+    "seeAll": "Ver todos los resultados",
+    "seeAllGroup": "Ver todo",
+    "nextGroup": "siguiente grupo",
+    "newTab": "nueva pestaña",
+    "chips": {
+      "label": "Entendido como",
+      "remove": "Quitar {label}",
+      "scope": {
+        "invoice": "Facturas",
+        "credit": "Notas de crédito",
+        "bill": "Facturas de proveedor",
+        "vendorCredit": "Créditos de proveedor",
+        "purchaseOrder": "Órdenes de compra",
+        "quote": "Cotizaciones",
+        "salesOrder": "Órdenes de venta",
+        "cashSale": "Ventas al contado",
+        "refund": "Reembolsos",
+        "payment": "Pagos",
+        "receipt": "Cobros",
+        "check": "Cheques",
+        "deposit": "Depósitos",
+        "transfer": "Transferencias",
+        "cardCharge": "Cargos con tarjeta",
+        "expense": "Gastos",
+        "fieldTicket": "Partes de trabajo",
+        "journal": "Asientos contables",
+        "payRun": "Nóminas",
+        "shipment": "Envíos",
+        "pick": "Pickings",
+        "customer": "Clientes",
+        "vendor": "Proveedores",
+        "employee": "Empleados",
+        "contact": "Contactos",
+        "item": "Artículos",
+        "project": "Proyectos",
+        "account": "Cuentas"
+      },
+      "status": {
+        "open": "Abierto",
+        "overdue": "Vencido",
+        "paid": "Pagado",
+        "draft": "Borrador",
+        "pending": "Pendiente de aprobación",
+        "voided": "Anulado",
+        "posted": "Contabilizado"
+      },
+      "amount": {
+        "eq": "Importe {amount}",
+        "prefix": "Importe {amount}…",
+        "gt": "Más de {amount}",
+        "ge": "Al menos {amount}",
+        "lt": "Menos de {amount}",
+        "le": "Como máximo {amount}",
+        "approx": "Aproximadamente {amount}",
+        "range": "{min} – {max}"
+      },
+      "date": {
+        "on": "El {date}",
+        "range": "{from} – {to}",
+        "since": "Desde el {date}",
+        "through": "Hasta el {date}"
+      }
+    },
+    "match": {
+      "line": "Línea: {text}",
+      "total": "Total {amount}",
+      "open": "Saldo {amount}",
+      "tax": "Impuesto {amount}",
+      "lineAmount": "Importe de línea {amount}"
+    },
+    "preview": {
+      "label": "Vista previa",
+      "open": "Abrir",
+      "openNewTab": "Nueva pestaña",
+      "lines": "Líneas",
+      "moreLines": "{count, plural, one {# línea más} other {# líneas más}}",
+      "fields": {
+        "date": "Fecha",
+        "due": "Vencimiento",
+        "status": "Estado",
+        "total": "Total",
+        "open": "Saldo pendiente",
+        "tax": "Impuesto",
+        "reference": "Referencia",
+        "memo": "Nota",
+        "code": "Código",
+        "email": "Correo",
+        "phone": "Teléfono",
+        "website": "Sitio web",
+        "address": "Dirección",
+        "receivable": "Cuentas por cobrar abiertas",
+        "payable": "Cuentas por pagar abiertas",
+        "kind": "Tipo",
+        "category": "Categoría",
+        "rate": "Tarifa",
+        "description": "Descripción",
+        "customer": "Cliente",
+        "number": "Número",
+        "accountType": "Tipo de cuenta"
+      }
+    },
+    "tips": {
+      "title": "Pruebe",
+      "number": {
+        "example": "inv:3668",
+        "label": "un número de factura"
+      },
+      "amount": {
+        "example": "7298.08",
+        "label": "un total o importe de línea"
+      },
+      "range": {
+        "example": "más de 5000",
+        "label": "un rango de importes"
+      },
+      "period": {
+        "example": "facturas de proveedor el mes pasado",
+        "label": "un período"
+      },
+      "status": {
+        "example": "facturas vencidas",
+        "label": "un estado"
+      },
+      "exact": {
+        "example": "\"montacargas\"",
+        "label": "palabras exactas"
+      }
+    },
+    "results": {
+      "title": "Resultados de búsqueda",
+      "description": "Todo lo que coincide con «{query}»",
+      "noQueryTitle": "Buscar en todo",
+      "noQueryDescription": "Encuentre registros por nombre, número, importe, fecha o estado.",
+      "emptyTitle": "Sin resultados",
+      "emptyGroup": "No hay {group} en esta página.",
+      "tabsLabel": "Tipos de resultado",
+      "countMore": "{count}+",
+      "page": "Página {page}",
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "pagination": "Páginas de resultados"
     }
   },
   "meta": {
