@@ -60,13 +60,13 @@ async function withCountScope(
   return subsidiaryId;
 }
 
-async function runCountAction<T>(
+async function runCountAction<T extends object>(
   context: Parameters<ApplicationToolDefinition["execute"]>[0],
   input: { countId: string; idempotencyKey: string },
   operation: string,
   request: unknown,
   execute: () => Promise<T>,
-): Promise<{ ok: true; replayed: boolean } & Record<string, unknown>> {
+): Promise<{ ok: true; replayed: boolean } & T> {
   assertApplicationPermission(context, "items.post");
   await withCountScope(context, input.countId);
   try {
@@ -80,7 +80,7 @@ async function runCountAction<T>(
       request,
       execute,
     });
-    return { ok: true, replayed: outcome.replayed, ...(outcome.value as Record<string, unknown>) };
+    return { ok: true, replayed: outcome.replayed, ...outcome.value };
   } catch (error) {
     settleInventoryRefusal(error);
   }
@@ -463,7 +463,7 @@ export const INVENTORY_COUNT_TOOLS: ApplicationToolDefinition[] = [
         return {
           ok: true,
           replayed: outcome.replayed,
-          ...(outcome.value as Record<string, unknown>),
+          ...(outcome.value as unknown as Record<string, unknown>),
           href: COUNT_HREF(input.countId),
         };
       } catch (error) {

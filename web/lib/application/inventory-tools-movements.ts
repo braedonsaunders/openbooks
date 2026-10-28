@@ -75,20 +75,20 @@ async function postingSubsidiary(
   return subsidiaryId;
 }
 
-async function runMovement<T>(
+async function runMovement<T extends object>(
   context: Parameters<ApplicationToolDefinition["execute"]>[0],
   operation: string,
   idempotencyKey: string,
   request: unknown,
   execute: () => Promise<T>,
-) {
+): Promise<{ ok: true; replayed: boolean } & T> {
   try {
     const outcome = await executeIdempotentInventoryAction(
       context.authz.user.orgId,
       context.authz.user.id,
       { operation, idempotencyKey, request, execute },
     );
-    return { ok: true, replayed: outcome.replayed, ...(outcome.value as Record<string, unknown>) };
+    return { ok: true, replayed: outcome.replayed, ...outcome.value };
   } catch (error) {
     settleInventoryRefusal(error);
   }
