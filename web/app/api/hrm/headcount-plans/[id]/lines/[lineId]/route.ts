@@ -4,6 +4,7 @@ import { z } from "zod";
 import { approvePlanLine } from "@openbooks/engine/hrm/compensation/headcount-plans";
 import { isUuid } from "../../../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../../../compensation/_lib";
+import { approveHeadcountPlanLineBody } from "../../../../compensation/bodies";
 /**
  * One plan line: POST {action: approve} approves it — create/backfill
  * lines open a requisition through the recruiting service (a hire
@@ -13,10 +14,7 @@ import { compensationErrorResponse } from "../../../../compensation/_lib";
 export const POST = defineRoute({
   permission: "hrm.compensation.manage",
   feature: "hrmCompensation",
-  body: z.object({
-    action: z.literal("approve"),
-    reason: z.string().trim().max(2000).nullable().optional(),
-  }),
+  body: approveHeadcountPlanLineBody,
   params: z.object({ id: z.string(), lineId: z.string() }),
   handler: async ({ request: _req, authz: gate, params, body }) => {
     // The folder segment is [id]; naming the local planId is fine, reading

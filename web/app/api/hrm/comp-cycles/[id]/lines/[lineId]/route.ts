@@ -1,11 +1,11 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { canonicalDecimal } from "@/lib/exact-decimal";
 import { approveLine, proposeLine, reopenLine } from "@openbooks/engine/hrm/compensation/cycles";
 import { guardPermission } from "@/lib/authz";
 import { isUuid } from "@/lib/list-params";
 import { compensationErrorResponse } from "../../../../compensation/_lib";
+import { cycleLineBody } from "../../../../compensation/bodies";
 import { meritCyclesPayrollRefusal } from "../../../_gate";
 
 export const runtime = "nodejs";
@@ -17,30 +17,6 @@ export const runtime = "nodejs";
  * the one the reviewer reads, so it is declared here rather than left
  * to a generic "expected number".
  */
-const PCT_MESSAGE = "proposedPct must be a non-negative percent supplied as a decimal string";
-const RATE_MESSAGE = "proposedRate must be a positive amount with at most 4 decimals";
-
-function exactProposedPct(value: string): string | null {
-  const exact = canonicalDecimal(value, 6);
-  if (exact === null || exact.startsWith("-")) return null;
-  return exact;
-}
-
-const cycleLineBody = z.object({
-  // F3-33: the client sends canonical decimal text; JSON numbers are refused
-  // before the engine can mistake an already-rounded binary value for input.
-  proposedPct: z
-    .string({ error: PCT_MESSAGE })
-    .refine((v) => exactProposedPct(v) !== null, PCT_MESSAGE)
-    .transform((v) => exactProposedPct(v)!)
-    .nullish(),
-  proposedRate: z
-    .string({ error: RATE_MESSAGE })
-    .regex(/^\d+(\.\d{1,4})?$/, RATE_MESSAGE)
-    .nullish(),
-  reason: z.string().nullish(),
-});
-
 /**
  * One cycle line: PATCH?action= proposes (the manager's own reports or
  * comp.manage, within guideline or with a reason), reopens a decided

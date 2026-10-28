@@ -57,6 +57,7 @@ export function v1ApplicationContext(auth: ApiKeyAuth, request: Request): Applic
     auth,
     "api",
     request.headers.get("x-request-id") || randomUUID(),
+    new URL(request.url).origin,
   );
 }
 

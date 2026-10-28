@@ -9,7 +9,7 @@ import {
 } from "@openbooks/engine/hrm/compensation/headcount-plans";
 import { isUuid } from "../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../compensation/_lib";
-import { createPlanLineBody } from "../../compensation/bodies";
+import { headcountPlanActionBody } from "../../compensation/bodies";
 /**
  * One headcount plan: POST {action: line} costs and appends a line
  * (band target or incumbent rate plus burden, inputs in cost_basis);
@@ -20,9 +20,7 @@ import { createPlanLineBody } from "../../compensation/bodies";
 export const POST = defineRoute({
   permission: "hrm.compensation.manage",
   feature: "hrmCompensation",
-  body: z
-    .object({ action: z.enum(["line", "submit", "approve", "close"]) })
-    .and(createPlanLineBody.partial()),
+  body: headcountPlanActionBody,
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params, body }) => {
     const { id } = params;

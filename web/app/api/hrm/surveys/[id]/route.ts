@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { closeSurvey, getSurvey, openSurvey } from "@openbooks/engine/hrm/surveys/surveys";
-import { deliverSurveyInvitations } from "@/lib/hrm/document-delivery";
+import { closeSurvey, getSurvey } from "@openbooks/engine/hrm/surveys/surveys";
+import { openSurveyAndDeliver } from "@/lib/hrm/survey-actions";
 import { hrmDocumentsErrorResponse } from "../../documents/_lib";
 import { resolveAppBaseUrl } from "../route";
 import { openSurveyBody } from "../bodies";
@@ -53,33 +53,14 @@ export const POST = defineRoute({
       if (action !== "open") {
         return NextResponse.json({ error: "action must be open or close" }, { status: 400 });
       }
-      const { survey, deliveries } = await openSurvey({
+      const result = await openSurveyAndDeliver({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         surveyId: id,
         partyIds: body.partyIds,
-      });
-      const results = await deliverSurveyInvitations({
-        orgId: gate.user.orgId,
-        actorId: gate.user.id,
         appBaseUrl: resolveAppBaseUrl(req),
-        surveyName: survey.name,
-        anonymity: survey.anonymity,
-        closesDate: survey.closesAt ?? undefined,
-        recipients: deliveries,
       });
-      return NextResponse.json({
-        survey,
-        deliveries: deliveries.map((d) => ({
-          invitationId: d.invitationId,
-          partyId: d.partyId,
-          respondUrl: `${resolveAppBaseUrl(req).replace(/\/$/, "")}/survey/${d.token}`,
-          notified: results.find((r) => r.partyId === d.partyId)?.notified ?? false,
-          emailed: results.find((r) => r.partyId === d.partyId)?.emailed ?? false,
-          emailSkippedReason:
-            results.find((r) => r.partyId === d.partyId)?.emailSkippedReason ?? null,
-        })),
-      });
+      return NextResponse.json(result);
     } catch (e) {
       return hrmDocumentsErrorResponse(e);
     }

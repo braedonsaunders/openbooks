@@ -1,12 +1,11 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import {
   compensationSettingsDocument,
   updateCompensationSettings,
 } from "@openbooks/engine/hrm/compensation/architecture";
 import { compensationErrorResponse } from "../compensation/_lib";
-import { COMPENSATION_PERCENTAGE_INPUTS } from "../compensation/percentage-inputs";
+import { compensationSettingsBody } from "../compensation/bodies";
 /**
  * Compensation settings (the orgs.settings compensation document):
  * comparison attribute key, unexplained-gap threshold, pay-information
@@ -23,24 +22,6 @@ import { COMPENSATION_PERCENTAGE_INPUTS } from "../compensation/percentage-input
  * per-subsidiary material, and restricted analysts need them to run their
  * own entity's comparisons.
  */
-const settingsBody = z
-  .object({
-    comparisonAttributeKey: z.string().trim().max(120).nullable().optional(),
-    gapThresholdPct: COMPENSATION_PERCENTAGE_INPUTS.gapThresholdPct.nullable().optional(),
-    responseDays: z.number().int().positive().nullable().optional(),
-    fteRounding: z
-      .enum(["up_to_whole", "nearest_tenth", "nearest_hundredth"])
-      .nullable()
-      .optional(),
-    burdenRate: z
-      .string()
-      .regex(/^\d+(\.\d+)?$/)
-      .nullable()
-      .optional(),
-  })
-  .refine((body) => Object.keys(body).length > 0, {
-    message: "At least one field must be provided.",
-  });
 export const GET = defineRoute({
   permission: "hrm.compensation.read",
   feature: "hrmCompensation",
@@ -53,7 +34,7 @@ export const PUT = defineRoute({
   permission: "hrm.compensation.manage",
   feature: "hrmCompensation",
   scope: "unrestricted",
-  body: settingsBody,
+  body: compensationSettingsBody,
   handler: async ({ authz: gate, body }) => {
     try {
       const next = await updateCompensationSettings({

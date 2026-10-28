@@ -163,6 +163,7 @@ export async function createOpenBooksMcpServer(
     requestContext.auth,
     "mcp",
     requestContext.requestId,
+    new URL(requestContext.request.url).origin,
   );
   // One feature-state read per request: tools of disabled modules are not
   // registered at all, so an MCP client sees the same catalog the chat sees.

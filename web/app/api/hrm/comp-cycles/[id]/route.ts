@@ -16,7 +16,7 @@ import {
 import { isUuid } from "../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../compensation/_lib";
 import { meritCyclesPayrollRefusal } from "../_gate";
-import { setBudgetsBody } from "../../compensation/bodies";
+import { compCyclePostBody } from "../../compensation/bodies";
 
 export const runtime = "nodejs";
 
@@ -58,18 +58,11 @@ export const GET = defineRoute({
   },
 });
 
-const ACTIONS = ["open", "submit", "push", "close", "cancel", "budgets"] as const;
-
 export const POST = defineRoute({
   permission: "hrm.compensation.manage",
   feature: "hrmCompensation",
   params: z.object({ id: z.string().min(1) }),
-  body: setBudgetsBody.or(
-    z.object({
-      action: z.enum(ACTIONS),
-      reason: z.string().trim().min(1).max(2000).optional(),
-    }),
-  ),
+  body: compCyclePostBody,
   handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const payrollOff = await meritCyclesPayrollRefusal(gate.user.orgId);
     if (payrollOff) return payrollOff;

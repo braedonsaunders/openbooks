@@ -8,6 +8,7 @@ import {
 
 import { isUuid } from "../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../compensation/_lib";
+import { payInformationDecisionBody } from "../../compensation/bodies";
 
 export const runtime = "nodejs";
 
@@ -21,10 +22,7 @@ export const PUT = defineRoute({
   permission: "hrm.compensation.manage",
   feature: "hrmCompensation",
   params: z.object({ id: z.string().min(1) }),
-  body: z.object({
-    action: z.enum(["fulfil", "refuse"]),
-    reason: z.string().trim().min(1).max(2000).nullable().optional(),
-  }),
+  body: payInformationDecisionBody,
   handler: async ({ authz: gate, params: routeParams, body: body }) => {
     const { id } = routeParams;
     if (!isUuid(id)) return NextResponse.json({ error: "invalid request" }, { status: 400 });

@@ -117,6 +117,12 @@ export const setBudgetsBody = z.object({
   ),
 });
 
+export const compCycleActionBody = z.object({
+  action: z.enum(["open", "submit", "push", "close", "cancel"]),
+  reason: z.string().trim().min(1).max(2000).optional(),
+});
+export const compCyclePostBody = setBudgetsBody.or(compCycleActionBody);
+
 export const proposeLineBody = z.object({
   proposedPct: COMPENSATION_PERCENTAGE_INPUTS.proposedPct.nullable().optional(),
   proposedRate: money4("Proposed rate").nullable().optional(),
@@ -159,3 +165,46 @@ export const generateSnapshotBody = z.object({
 export const requestPayInfoBody = z.object({
   employmentId: uuid,
 });
+
+export const payInformationDecisionBody = z.object({
+  action: z.enum(["fulfil", "refuse"]),
+  reason: z.string().trim().min(1).max(2000).nullable().optional(),
+});
+
+const RATE_MESSAGE = "proposedRate must be a positive amount with at most 4 decimals";
+export const cycleLineBody = z.object({
+  proposedPct: COMPENSATION_PERCENTAGE_INPUTS.proposedPct.nullish(),
+  proposedRate: z
+    .string({ error: RATE_MESSAGE })
+    .regex(/^\d+(\.\d{1,4})?$/, RATE_MESSAGE)
+    .nullish(),
+  reason: z.string().nullish(),
+});
+
+export const headcountPlanActionBody = z
+  .object({ action: z.enum(["line", "submit", "approve", "close"]) })
+  .and(createPlanLineBody.partial());
+
+export const approveHeadcountPlanLineBody = z.object({
+  action: z.literal("approve"),
+  reason: z.string().trim().max(2000).nullable().optional(),
+});
+
+export const compensationSettingsBody = z
+  .object({
+    comparisonAttributeKey: z.string().trim().max(120).nullable().optional(),
+    gapThresholdPct: COMPENSATION_PERCENTAGE_INPUTS.gapThresholdPct.nullable().optional(),
+    responseDays: z.number().int().positive().nullable().optional(),
+    fteRounding: z
+      .enum(["up_to_whole", "nearest_tenth", "nearest_hundredth"])
+      .nullable()
+      .optional(),
+    burdenRate: z
+      .string()
+      .regex(/^\d+(\.\d+)?$/)
+      .nullable()
+      .optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, {
+    message: "At least one field must be provided.",
+  });

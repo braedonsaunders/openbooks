@@ -13,6 +13,8 @@ export interface ApplicationContext {
   source: ApplicationOperationSource;
   requestId: string;
   apiKeyId: string | null;
+  /** Canonical app origin available to commands that deliver user-facing links. */
+  appBaseUrl?: string | null;
   /**
    * Transport key/request correlation for API-key-authenticated requests.
    * `executeIdempotent` writes the material command's atomic execution event
@@ -26,6 +28,7 @@ export function applicationContextFromApiKey(
   auth: ApiKeyAuth,
   source: ApplicationOperationSource,
   requestId: string,
+  appBaseUrl?: string | null,
 ): ApplicationContext {
   return {
     authz: {
@@ -36,6 +39,7 @@ export function applicationContextFromApiKey(
     source,
     requestId,
     apiKeyId: auth.keyId,
+    appBaseUrl: appBaseUrl ?? null,
     requestAudit: auth.audit,
   };
 }

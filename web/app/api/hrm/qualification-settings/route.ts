@@ -1,15 +1,11 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { db } from "@openbooks/engine/platform/db";
 import { loadSettings, setAlertSchedule } from "@openbooks/engine/hrm/qualifications/types";
 import { qualificationErrorResponse } from "../qualifications/_lib";
+import { setQualificationAlertScheduleBody } from "../qualifications/bodies";
 
 export const runtime = "nodejs";
-
-const setScheduleBody = z.object({
-  leadDays: z.array(z.number().int().positive()).min(1).max(12),
-});
 
 /**
  * The org's qualification settings: vocabulary + alert schedule.
@@ -38,7 +34,7 @@ export const POST = defineRoute({
   permission: "hrm.certifications.manage",
   feature: "hrmCertifications",
   scope: "unrestricted",
-  body: setScheduleBody,
+  body: setQualificationAlertScheduleBody,
   handler: async ({ authz: gate, body: body }) => {
     try {
       const settings = await setAlertSchedule(db, {

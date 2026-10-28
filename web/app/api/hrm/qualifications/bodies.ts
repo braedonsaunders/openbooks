@@ -82,6 +82,10 @@ export const declareCategoryBody = z.object({
   category: text255,
 });
 
+export const setQualificationAlertScheduleBody = z.object({
+  leadDays: z.array(z.number().int().positive()).min(1).max(12),
+});
+
 export const qualificationStatusFilter = z.enum([
   "valid",
   "expiring",
