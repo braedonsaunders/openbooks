@@ -84,7 +84,7 @@ const applicationCatalog = (
     destructive: definition.destructive,
     openWorld: definition.openWorld,
     visible: (context) => applicationToolVisible(definition, context.authz, features),
-    execute: (context, input) => executeApplicationTool(definition, context, input),
+    execute: (context, input) => executeApplicationTool(definition, context, input, features),
   }));
 
 /**

@@ -43,7 +43,7 @@ async function handleV1POST(
       input.idempotencyKey = requireV1IdempotencyKey(request);
     }
     const body = definition.inputSchema.parse(input) as Record<string, unknown>;
-    const result = await executeApplicationTool(definition, context, body);
+    const result = await executeApplicationTool(definition, context, body, features);
     return { status: 200, body: result };
   });
 }

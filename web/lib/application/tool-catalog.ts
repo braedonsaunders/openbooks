@@ -82,7 +82,7 @@ import { orgVitals } from "./vitals";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { UUID_RE } from "@openbooks/engine/platform/identifiers";
-import { FEATURES, featureEnabled, resolvedFeatureState } from "../features";
+import { FEATURES, featureEnabled, resolvedFeatureState, type FeatureState } from "../features";
 import { applyFeatureChanges, normalizeFeatureChanges } from "../features-admin";
 import { readCompanySettings, updateCompanySettings } from "../company-settings";
 import { createSetupRecord, deleteSetupRecord, updateSetupRecord } from "../setup/write";
@@ -2588,12 +2588,30 @@ export function applicationTool(name: string): ApplicationToolDefinition | undef
   return APPLICATION_TOOLS.find((candidate) => candidate.name === name);
 }
 
+/**
+ * The one execution gate every transport shares. Permission and feature are
+ * both re-checked here, at execution, so a command discovered or proposed
+ * earlier cannot run after the actor lost the permission or the organization
+ * turned the module off. Callers that already resolved the feature state pass
+ * it to avoid a second read.
+ */
 export async function executeApplicationTool(
   definition: ApplicationToolDefinition,
   context: ApplicationContext,
   rawInput: unknown,
+  features?: FeatureState | null,
 ): Promise<Record<string, unknown>> {
   if (!definition.visibleTo(context.authz)) throw new Error("forbidden");
+  if (definition.featureKey) {
+    const state = features ?? (await resolvedFeatureState(context.authz.user.orgId));
+    if (!featureEnabled(state, definition.featureKey)) {
+      throw new ApplicationError(
+        "forbidden",
+        `${definition.name} needs the ${definition.featureKey} feature; an administrator can turn it on in Company Settings → Features`,
+        403,
+      );
+    }
+  }
   const input = definition.inputSchema.parse(rawInput) as Record<string, unknown>;
   return definition.execute(context, input);
 }

@@ -7,6 +7,7 @@ import test from "node:test";
 const { APPLICATION_TOOLS, applicationTool, executeApplicationTool } =
   await import("./tool-catalog.ts");
 const { applicationContextFromSession } = await import("./context.ts");
+const { FEATURE_BY_KEY } = await import("@openbooks/engine/organization/feature-registry");
 type Authz = import("../authz.ts").Authz;
 type SessionUser = import("../auth.ts").SessionUser;
 
@@ -161,4 +162,36 @@ test("execution behind a denied gate fails closed before any handler runs", asyn
     /forbidden/,
     `${gated.name} must refuse execution when its gate denies, before input parsing or handler work`,
   );
+});
+
+test("every feature-gated tool names a registered feature", () => {
+  for (const tool of APPLICATION_TOOLS) {
+    if (!tool.featureKey) continue;
+    assert.ok(
+      FEATURE_BY_KEY.has(tool.featureKey),
+      `${tool.name} is gated on unknown feature ${tool.featureKey}; an unknown key hides the tool for every organization`,
+    );
+  }
+});
+
+test("execution refuses a feature-gated tool while its module is off, even for a super-admin", async () => {
+  const gated = APPLICATION_TOOLS.find(
+    (tool) => tool.featureKey && tool.visibleTo(SUPER_ADMIN_AUTHZ),
+  );
+  assert.ok(gated?.featureKey, "the catalog must contain at least one feature-gated tool");
+  let handlerRan = false;
+  const probe = {
+    ...gated,
+    execute: async () => {
+      handlerRan = true;
+      return {};
+    },
+  };
+  const context = applicationContextFromSession(SUPER_ADMIN_AUTHZ, "api", "catalog-test");
+  await assert.rejects(
+    executeApplicationTool(probe, context, {}, { [gated.featureKey]: false }),
+    (error: Error) => error.message.includes(gated.featureKey!),
+    `${gated.name} must refuse while ${gated.featureKey} is off`,
+  );
+  assert.equal(handlerRan, false, "the handler must not run behind a disabled feature");
 });

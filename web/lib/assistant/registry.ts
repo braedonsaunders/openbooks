@@ -250,7 +250,10 @@ export function buildToolRegistry(
           "assistant",
           `assistant:${randomUUID()}`,
         );
-        return { ok: true, data: await executeApplicationTool(definition, context, parsed) };
+        return {
+          ok: true,
+          data: await executeApplicationTool(definition, context, parsed, features),
+        };
       } catch (error) {
         console.warn(`[assistant] application tool ${definition.name} failed`, error);
         return { ok: false, error: safeErrorMessage(error) };
