@@ -371,45 +371,42 @@ export function GlobalSearch({
     inputRef.current?.blur();
   }, []);
 
-  const go = useCallback(
-    (hit: Hit | undefined, options: { newTab?: boolean } = {}) => {
-      if (!hit) return;
-      if (hit.type === "action") {
-        close();
-        void create(hit.id as GlobalCreateKey);
-        return;
-      }
-      const entry: StoredRecent =
-        hit.type === "page" ? { type: "page", id: hit.href } : { type: hit.type, id: hit.id };
-      writeRecents(recentScope, rememberRecent(readRecents(recentScope), entry));
-      if (options.newTab) {
-        window.open(hit.href, "_blank", "noopener");
-        return;
-      }
+  function go(hit: Hit | undefined, options: { newTab?: boolean } = {}) {
+    if (!hit) return;
+    if (hit.type === "action") {
       close();
-      if (PAGE_TYPES.has(hit.type)) {
-        router.push(hit.href as never);
-        return;
-      }
-      router.push(
-        (hit.type === "contact"
-          ? relatedPartyHref(pathname, searchParams.toString(), hit.id)
-          : hit.href) as never,
-        { scroll: false },
-      );
-    },
-    [close, create, pathname, recentScope, router, searchParams],
-  );
+      void create(hit.id as GlobalCreateKey);
+      return;
+    }
+    const entry: StoredRecent =
+      hit.type === "page" ? { type: "page", id: hit.href } : { type: hit.type, id: hit.id };
+    writeRecents(recentScope, rememberRecent(readRecents(recentScope), entry));
+    if (options.newTab) {
+      window.open(hit.href, "_blank", "noopener");
+      return;
+    }
+    close();
+    if (PAGE_TYPES.has(hit.type)) {
+      router.push(hit.href as never);
+      return;
+    }
+    router.push(
+      (hit.type === "contact"
+        ? relatedPartyHref(pathname, searchParams.toString(), hit.id)
+        : hit.href) as never,
+      { scroll: false },
+    );
+  }
 
-  const seeAll = useCallback(
-    (type?: string) => {
-      const term = q.trim();
-      if (term.length < 2) return;
-      close();
-      router.push(searchResultsHref(term, type) as never);
-    },
-    [close, q, router],
-  );
+  const pickOption = (index: number, newTab: boolean) => go(flat[index], { newTab });
+  const seeAllInGroup = (groupIndex: number) => seeAll(groups[groupIndex]?.type);
+
+  function seeAll(type?: string) {
+    const term = q.trim();
+    if (term.length < 2) return;
+    close();
+    router.push(searchResultsHref(term, type) as never);
+  }
 
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
@@ -443,8 +440,6 @@ export function GlobalSearch({
 
   const showPanel = open && (searching || total > 0 || (showRecents && recentFailed));
   const chips = searching && res && res.q === pageQuery ? (res.chips ?? []) : [];
-  let idx = -1;
-
   return (
     <div className={cn("relative", className)}>
       <div className="relative">
@@ -521,7 +516,7 @@ export function GlobalSearch({
               className="app-scroll min-h-0 min-w-0 flex-1 overflow-y-auto p-1.5"
             >
               {total > 0 ? (
-                groups.map((group) => (
+                groups.map((group, groupIndex) => (
                   <div
                     key={group.type}
                     role="group"
@@ -536,17 +531,16 @@ export function GlobalSearch({
                         <button
                           type="button"
                           onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => seeAll(group.type)}
+                          onClick={() => seeAllInGroup(groupIndex)}
                           className="text-[11px] font-medium text-teal-700 hover:underline dark:text-teal-300"
                         >
                           {t("seeAllGroup")}
                         </button>
                       ) : null}
                     </div>
-                    {group.hits.map((hit) => {
-                      idx++;
-                      const isActive = idx === active;
-                      const myIdx = idx;
+                    {group.hits.map((hit, hitIndex) => {
+                      const myIdx = (groupStarts[groupIndex] ?? 0) + hitIndex;
+                      const isActive = myIdx === active;
                       return (
                         <div
                           key={`${hit.type}-${hit.id}`}
@@ -556,7 +550,7 @@ export function GlobalSearch({
                           onMouseEnter={() => setActive(myIdx)}
                           onMouseDown={(e) => {
                             e.preventDefault();
-                            go(hit, { newTab: e.metaKey || e.ctrlKey || e.button === 1 });
+                            pickOption(myIdx, e.metaKey || e.ctrlKey || e.button === 1);
                           }}
                           className={cn(
                             "flex w-full cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors",
