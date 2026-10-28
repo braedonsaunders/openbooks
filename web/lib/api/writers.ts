@@ -1145,6 +1145,71 @@ function documentEditingContext(
   };
 }
 
+function documentBodyWithCustomFields(
+  body: Record<string, unknown>,
+  fields: ApiField[],
+): DocumentWriteInput {
+  const custom =
+    body.custom && typeof body.custom === "object" && !Array.isArray(body.custom)
+      ? { ...(body.custom as Record<string, unknown>) }
+      : {};
+  const known = new Set(fields.filter((field) => field.custom).map((field) => field.name));
+  const rest: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(body)) {
+    if (!name.startsWith("cf_")) {
+      rest[name] = value;
+      continue;
+    }
+    if (!known.has(name)) {
+      throw new DocumentEditingRefusal("edit_refused", 422, `unknown custom field ${name}`);
+    }
+    custom[name.slice(3)] = value;
+  }
+  const lineCustomPrefix = "lines[].cf_";
+  const knownLineCustom = new Set(
+    fields
+      .filter((field) => field.custom && field.name.startsWith(lineCustomPrefix))
+      .map((field) => field.name.slice(lineCustomPrefix.length)),
+  );
+  const lines = Array.isArray(rest.lines)
+    ? rest.lines.map((line, index) => {
+        if (!line || typeof line !== "object" || Array.isArray(line)) return line;
+        const lineRecord = line as Record<string, unknown>;
+        const lineCustom =
+          lineRecord.custom &&
+          typeof lineRecord.custom === "object" &&
+          !Array.isArray(lineRecord.custom)
+            ? { ...(lineRecord.custom as Record<string, unknown>) }
+            : {};
+        const lineRest: Record<string, unknown> = {};
+        for (const [name, value] of Object.entries(lineRecord)) {
+          if (!name.startsWith("cf_")) {
+            lineRest[name] = value;
+            continue;
+          }
+          const key = name.slice(3);
+          if (!knownLineCustom.has(key)) {
+            throw new DocumentEditingRefusal(
+              "edit_refused",
+              422,
+              `line ${index + 1} has unknown custom field ${name}`,
+            );
+          }
+          lineCustom[key] = value;
+        }
+        return {
+          ...lineRest,
+          ...(Object.keys(lineCustom).length > 0 ? { custom: lineCustom } : {}),
+        };
+      })
+    : rest.lines;
+  return {
+    ...rest,
+    ...(lines === undefined ? {} : { lines }),
+    ...(Object.keys(custom).length > 0 ? { custom } : {}),
+  } as DocumentWriteInput;
+}
+
 /** The saved document, or the lifecycle outcome alongside it. */
 function documentWriteResult(result: DocumentEditingResult, savedStatus: 200 | 201): WriteResult {
   switch (result.outcome) {
@@ -1212,7 +1277,7 @@ export async function createRecord(
           documentWriteResult(
             await createDocumentFromInput(documentEditingContext(user, options), {
               kind,
-              body: body as DocumentWriteInput,
+              body: documentBodyWithCustomFields(body, fields),
             }),
             201,
           ),
@@ -1256,7 +1321,7 @@ export async function updateRecord(
             await editDocument(documentEditingContext(user, options), {
               kind,
               documentId: id,
-              body: body as DocumentWriteInput,
+              body: documentBodyWithCustomFields(body, fields),
             }),
             200,
           ),

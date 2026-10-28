@@ -11,6 +11,13 @@ import {
 import {
   API_RECORD_TYPES,
   DOCUMENT_REVISION_READ_METADATA,
+  DOCUMENT_LINES_FIELD,
+  DOCUMENT_EDIT_HEADER_FIELDS,
+  DOCUMENT_LINE_FIELDS,
+  ORDER_CUSTOMER_FIELD,
+  ORDER_EDIT_HEADER_FIELDS,
+  ORDER_LINE_FIELDS,
+  ORDER_SHIPPING_LINE_FIELDS,
   RECORD_TYPE_BY_KEY,
   ITEM_EQUIPMENT_KINDS,
   ITEM_INVENTORY_KINDS,
@@ -60,7 +67,7 @@ interface CustomFieldRow extends Record<string, unknown> {
   label: string | null;
   field_type: string;
   is_required: boolean;
-  config: { allowedRoles?: unknown } | null;
+  config: { allowedRoles?: unknown; options?: unknown } | null;
 }
 interface CustomRecordTypeRow extends Record<string, unknown> {
   key: string;
@@ -75,6 +82,18 @@ interface StoredFormField {
   type?: string;
   required?: boolean;
   label?: string | null;
+  validation?: { options?: unknown };
+}
+
+function choiceValues(options: unknown): string[] | undefined {
+  if (!Array.isArray(options)) return undefined;
+  const values = options.flatMap((option) => {
+    if (typeof option === "string") return [option];
+    if (!option || typeof option !== "object" || Array.isArray(option)) return [];
+    const value = (option as { value?: unknown }).value;
+    return typeof value === "string" ? [value] : [];
+  });
+  return values.length > 0 ? values : undefined;
 }
 
 /**
@@ -137,7 +156,7 @@ export async function loadApiSchema(
     cfByTargetKind.set(k, arr);
   }
 
-  function customFieldsFor(table: string, docKind?: string): ApiField[] {
+  function customFieldsFor(table: string, docKind?: string, writable = true): ApiField[] {
     const keys = docKind ? [`${table}::`, `${table}::${docKind}`] : [`${table}::`];
     const seen = new Set<string>();
     const out: ApiField[] = [];
@@ -155,9 +174,10 @@ export async function loadApiSchema(
           name,
           type: fieldTypeToApi(d.field_type),
           required: Boolean(d.is_required),
-          writable: true,
+          writable,
           description: d.label ? String(d.label) : null,
           custom: true,
+          ...(choiceValues(d.config?.options) ? { enum: choiceValues(d.config?.options) } : {}),
         });
       }
     }
@@ -175,7 +195,23 @@ export async function loadApiSchema(
       (equipmentOn || !ITEM_EQUIPMENT_KINDS.has(kind)),
   );
   const result: ApiRecordTypeSchema[] = builtIn.map((t) => {
-    const docKind = t.writer.kind === "document" ? t.writer.docKind : undefined;
+    const docKind =
+      t.writer.kind === "document"
+        ? t.writer.docKind
+        : t.table === "documents" && t.documentKinds?.length === 1
+          ? t.documentKinds[0]
+          : undefined;
+    const orderDocument = ["quote", "sales_order", "purchase_order"].includes(docKind ?? "");
+    const lineCustomFields =
+      docKind && !orderDocument
+        ? customFieldsFor("document_lines", docKind).map((field) => ({
+            ...field,
+            name: `lines[].${field.name}`,
+            description: field.description
+              ? `Document line custom field: ${field.description}`
+              : "Document line custom field",
+          }))
+        : [];
     const physical = (byTable.get(t.table!) ?? [])
       .filter(
         (c) =>
@@ -189,15 +225,22 @@ export async function loadApiSchema(
       )
       .map((c): ApiField => ({
         name: c.column_name,
-        type: pgTypeToOpenApi(c.data_type),
+        type:
+          t.table === "documents" &&
+          ["subtotal", "tax_total", "total", "balance", "exchange_rate"].includes(c.column_name)
+            ? "string (decimal)"
+            : pgTypeToOpenApi(c.data_type),
         // GENERATED ALWAYS columns are projections the row computes itself:
         // advertised for reads, never required of or accepted from a writer.
         required:
+          t.table !== "documents" &&
           c.is_nullable === "NO" &&
           !c.column_default &&
           c.is_generated === "NEVER" &&
           !READONLY_COLUMNS.has(c.column_name),
         writable:
+          t.writer.kind !== "readonly" &&
+          t.table !== "documents" &&
           c.is_generated === "NEVER" &&
           !READONLY_COLUMNS.has(c.column_name) &&
           c.column_name !== "custom" &&
@@ -207,13 +250,70 @@ export async function loadApiSchema(
           ? DOCUMENT_REVISION_READ_METADATA
           : { description: null }),
         ...(t.key === "items" && c.column_name === "kind" ? { enum: itemKinds } : {}),
+        ...(t.table === "documents" && c.column_name === "kind" && t.documentKinds
+          ? { enum: [...t.documentKinds] }
+          : {}),
+        ...(t.table === "documents" && c.column_name === "status"
+          ? {
+              enum: orderDocument
+                ? ["draft", "pending_approval", "approved", "voided"]
+                : ["draft", "pending_approval", "approved", "posted", "voided"],
+            }
+          : {}),
       }));
+    const lineFields = orderDocument ? ORDER_LINE_FIELDS : DOCUMENT_LINE_FIELDS;
+    const lineField: ApiField = {
+      ...DOCUMENT_LINES_FIELD,
+      ...(orderDocument
+        ? {
+            description:
+              "Order lines. Each line accepts itemId or itemCode, accountId, description, quantity, unit, unitPrice, discountPercent, discountAmount, taxCodeId, taxGroupId, stockLocationId, departmentId, and projectId. Amounts and quantities are exact decimal strings.",
+          }
+        : {}),
+      items: [
+        ...lineFields,
+        ...lineCustomFields.map((field) => ({
+          ...field,
+          name: field.name.replace(/^lines\[\]\./, ""),
+        })),
+      ],
+    };
+    const documentFields: ApiField[] =
+      t.writer.kind !== "document"
+        ? []
+        : orderDocument
+          ? [
+              ...ORDER_EDIT_HEADER_FIELDS,
+              ...(docKind === "sales_order" ? [ORDER_CUSTOMER_FIELD] : []),
+              lineField,
+              ...(docKind === "sales_order"
+                ? [
+                    {
+                      name: "shippingLines",
+                      type: "array",
+                      required: false,
+                      writable: true,
+                      description: "Sales-order shipping lines with exact decimal amounts.",
+                      custom: false,
+                      items: [...ORDER_SHIPPING_LINE_FIELDS],
+                    },
+                  ]
+                : []),
+            ]
+          : [
+              ...DOCUMENT_EDIT_HEADER_FIELDS.filter(
+                (field) => multiCurrencyOn || !["currency", "explicitFx"].includes(field.name),
+              ),
+              lineField,
+              ...lineCustomFields,
+            ];
     return {
       ...t,
       path: `/api/v1/records/${t.key}`,
       fields: withDocumentRevisionWriteField(t.writer, [
         ...physical,
-        ...customFieldsFor(t.table!, docKind),
+        ...documentFields,
+        ...customFieldsFor(t.table!, docKind, t.writer.kind === "document" && !orderDocument),
       ]),
     };
   });
@@ -240,6 +340,7 @@ export async function loadApiSchema(
       writable: true,
       description: f.label ? String(f.label) : null,
       custom: true,
+      ...(choiceValues(f.validation?.options) ? { enum: choiceValues(f.validation?.options) } : {}),
     }));
     result.push({
       key: row.key,

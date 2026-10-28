@@ -5,7 +5,9 @@ import {
 import {
   createPermission,
   documentReadPermission,
+  postPermission,
 } from "@openbooks/engine/records/document-kind-permissions";
+import { DOC_KIND_FEATURE } from "../document-kinds";
 export { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken };
 
 /**
@@ -47,6 +49,8 @@ export interface ApiRecordType {
   documentKinds?: readonly string[];
   /** When set, the type disappears from the API catalog if that Features switch is off. */
   featureKey?: string;
+  /** Permission required for the kind-specific posting lifecycle action. */
+  postPermission?: string | null;
 }
 
 /** The full read+write op set, for types whose writer supports mutation. */
@@ -112,6 +116,15 @@ function documentResource(args: {
   featureKey?: string;
 }): ApiRecordType {
   const writable = args.writePermission !== null;
+  const featureKey = args.featureKey ?? DOC_KIND_FEATURE[args.docKind];
+  let postPermissionKey: string | null = null;
+  if (writable) {
+    try {
+      postPermissionKey = postPermission(args.docKind);
+    } catch {
+      // Non-registry document kinds keep their dedicated application lifecycle.
+    }
+  }
   return {
     key: args.key,
     label: args.label,
@@ -123,8 +136,9 @@ function documentResource(args: {
     operations: writable ? RW : RO,
     writer: writable ? { kind: "document", docKind: args.docKind } : { kind: "readonly" },
     dynamic: false,
-    ...(writable ? {} : { documentKinds: [args.docKind] }),
-    ...(args.featureKey ? { featureKey: args.featureKey } : {}),
+    documentKinds: [args.docKind],
+    postPermission: postPermissionKey,
+    ...(featureKey ? { featureKey } : {}),
   };
 }
 
@@ -143,32 +157,24 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     writer: { kind: "readonly" },
     dynamic: false,
   },
-  {
+  documentResource({
     key: "bills",
     label: "Vendor Bills",
     description:
       "Accounts payable documents — invoices received from vendors. Writes create a draft and can submit/post through the posting kernel.",
-    table: "documents",
-    searchColumn: "document_number",
-    readPermission: "ap.read",
-    writePermission: "ap.create",
-    operations: RW,
-    writer: { kind: "document", docKind: "vendor_bill" },
-    dynamic: false,
-  },
-  {
+    docKind: "vendor_bill",
+    readPermission: documentReadPermission("vendor_bill"),
+    writePermission: createPermission("vendor_bill"),
+  }),
+  documentResource({
     key: "invoices",
     label: "Customer Invoices",
     description:
       "Accounts receivable documents — sales invoices issued to customers. Writes create a draft and can submit/post through the posting kernel.",
-    table: "documents",
-    searchColumn: "document_number",
-    readPermission: "ar.read",
-    writePermission: "ar.create",
-    operations: RW,
-    writer: { kind: "document", docKind: "customer_invoice" },
-    dynamic: false,
-  },
+    docKind: "customer_invoice",
+    readPermission: documentReadPermission("customer_invoice"),
+    writePermission: createPermission("customer_invoice"),
+  }),
   {
     key: "payments",
     label: "Payments",
@@ -266,6 +272,15 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     writePermission: "ar.create",
   }),
   documentResource({
+    key: "internal-billing",
+    label: "Intercompany Billing",
+    description:
+      "Internal cross-entity billing documents. Drafts use the shared document editor and post through the accounting kernel.",
+    docKind: "internal_billing",
+    readPermission: documentReadPermission("internal_billing"),
+    writePermission: createPermission("internal_billing"),
+  }),
+  documentResource({
     key: "cash-sales",
     label: "Cash Sales",
     description:
@@ -335,8 +350,8 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     description:
       "Project resource-usage charges. Writes create a draft and can post through the posting kernel.",
     docKind: "project_charge",
-    readPermission: "gl.read",
-    writePermission: "gl.post",
+    readPermission: documentReadPermission("project_charge"),
+    writePermission: createPermission("project_charge"),
     featureKey: "projects",
   }),
   documentResource({
@@ -370,21 +385,19 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     key: "quotes",
     label: "Quotes",
     description:
-      "Customer estimates. Create an empty draft through POST /api/v1/quotes; convert through POST /api/v1/quotes/{id}/convert.",
+      "Customer estimates. Drafts can be created and edited here; issuing and conversion use the quote lifecycle.",
     docKind: "quote",
-    readPermission: "ar.read",
-    writePermission: null,
-    featureKey: "orders",
+    readPermission: "estimates.read",
+    writePermission: "estimates.create",
   }),
   documentResource({
     key: "sales-orders",
     label: "Sales Orders",
     description:
-      "Customer sales orders. Create an empty draft through POST /api/v1/sales-orders; convert through POST /api/v1/sales-orders/{id}/convert.",
+      "Customer sales orders. Drafts can be created and edited here; issuance and conversion use the sales-order lifecycle.",
     docKind: "sales_order",
     readPermission: "ar.read",
-    writePermission: null,
-    featureKey: "orders",
+    writePermission: "ar.create",
   }),
   documentResource({
     key: "return-authorizations",
@@ -394,17 +407,15 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     docKind: "rma",
     readPermission: documentReadPermission("rma"),
     writePermission: createPermission("rma"),
-    featureKey: "orders",
   }),
   documentResource({
     key: "purchase-orders",
     label: "Purchase Orders",
     description:
-      "Vendor purchase orders. Create an empty draft through POST /api/v1/purchase-orders; convert through POST /api/v1/purchase-orders/{id}/convert.",
+      "Vendor purchase orders. Drafts can be created and edited here; approval and conversion use the purchase-order lifecycle.",
     docKind: "purchase_order",
     readPermission: "purchase_orders.read",
-    writePermission: null,
-    featureKey: "orders",
+    writePermission: "purchase_orders.create",
   }),
   documentResource({
     key: "sales-fulfillments",
@@ -412,7 +423,7 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     description:
       "Shipments against sales orders. Read-only — operational documents are not edited as commercial commitments.",
     docKind: "sales_fulfillment",
-    readPermission: "ar.read",
+    readPermission: "orders.fulfill",
     writePermission: null,
     featureKey: "orders",
   }),
@@ -442,7 +453,7 @@ export const API_RECORD_TYPES: ApiRecordType[] = [
     description:
       "Project field tickets. Create a draft through POST /api/v1/field-tickets. Hours and signatures stay on the field-ticket workspace.",
     docKind: "field_ticket",
-    readPermission: "projects.read",
+    readPermission: "time.read",
     writePermission: null,
     featureKey: "fieldTickets",
   }),
@@ -487,7 +498,186 @@ export interface ApiField {
   custom: boolean;
   /** Closed set advertised to REST/MCP. Omitted values are hidden, not unknown. */
   enum?: string[];
+  /** Item contract for array fields such as document lines. */
+  items?: ApiField[];
+  /** Property contract for object fields such as order customer match input. */
+  properties?: ApiField[];
 }
+
+function inputField(
+  name: string,
+  type: string,
+  description: string,
+  options: Partial<
+    Pick<ApiField, "required" | "writableOnCreate" | "requiredOnUpdate" | "enum">
+  > = {},
+): ApiField {
+  return {
+    name,
+    type,
+    required: options.required ?? false,
+    writable: true,
+    description,
+    custom: false,
+    ...options,
+  };
+}
+
+/** Header fields accepted by the shared document editor. */
+export const DOCUMENT_EDIT_HEADER_FIELDS: readonly ApiField[] = [
+  inputField("partyId", "string (uuid) | null", "Party on the document."),
+  inputField("paymentCardId", "string (uuid) | null", "Payment card used by card documents."),
+  inputField("documentDate", "string (date)", "Document business date (YYYY-MM-DD)."),
+  inputField("dueDate", "string (date) | null", "Due date when the document is an open item."),
+  inputField("referenceNumber", "string | null", "External or supplier reference number."),
+  inputField("externalRef", "string | null", "Originating system's stable document reference."),
+  inputField("externalSource", "string | null", "Originating system name; send with externalRef."),
+  inputField("memo", "string | null", "Document memo."),
+  inputField("postingDate", "string (date) | null", "Accounting posting date override."),
+  inputField("departmentId", "string (uuid) | null", "Department dimension."),
+  inputField("projectId", "string (uuid) | null", "Project dimension."),
+  inputField("locationId", "string (uuid) | null", "Location dimension."),
+  inputField("classId", "string (uuid) | null", "Class dimension."),
+  inputField("extraDims", "object", "Additional configured segment dimensions."),
+  inputField(
+    "subsidiaryId",
+    "string (uuid) | null",
+    "Legal entity; restricted keys must use an allowed subsidiary.",
+  ),
+  inputField("expectedPayDate", "string (date) | null", "Expected payment date."),
+  inputField("workCompletedOn", "string (date) | null", "Date the invoiced work was completed."),
+  inputField("paymentHoldReason", "string | null", "Reason a payable is held from payment."),
+  inputField("internalNotes", "string | null", "Internal document notes."),
+  inputField("billingMethod", "string | null", "Billing method for project billing."),
+  inputField("isFinalInvoice", "boolean", "Whether this is the final project invoice."),
+  inputField(
+    "currency",
+    "string",
+    "Three-letter transaction currency; requires multi-currency when different from base.",
+  ),
+  inputField(
+    "explicitFx",
+    "object | null",
+    "Explicit exchange-rate evidence for supported drafts.",
+  ),
+];
+
+/** Header fields accepted by the shared quote and order writers. */
+export const ORDER_EDIT_HEADER_FIELDS: readonly ApiField[] = [
+  inputField("partyId", "string (uuid) | null", "Customer or vendor party reference."),
+  inputField("documentDate", "string (date)", "Order business date (YYYY-MM-DD)."),
+  inputField("dueDate", "string (date) | null", "Order due date when applicable."),
+  inputField("workCompletedOn", "string (date) | null", "Date the ordered work was completed."),
+  inputField("externalRef", "string | null", "Originating system's stable order reference."),
+  inputField("externalSource", "string | null", "Originating system name; send with externalRef."),
+  inputField("memo", "string | null", "Order memo."),
+  inputField(
+    "currency",
+    "string",
+    "Three-letter order currency. Sales-order creation accepts the organization's base currency.",
+  ),
+  inputField("departmentId", "string (uuid) | null", "Department dimension."),
+  inputField("projectId", "string (uuid) | null", "Project dimension."),
+  inputField(
+    "subsidiaryId",
+    "string (uuid) | null",
+    "Legal entity; restricted keys must use an allowed subsidiary.",
+  ),
+  inputField("extraDims", "object", "Additional configured segment dimensions."),
+];
+
+export const ORDER_CUSTOMER_FIELD: ApiField = {
+  ...inputField(
+    "customer",
+    "object",
+    "Sales-order customer: send id, or match fields to find or create a customer.",
+  ),
+  properties: [
+    inputField("id", "string (uuid)", "Existing customer party id."),
+    inputField("externalRef", "string", "Customer identity from the originating system."),
+    inputField("externalSource", "string", "Originating system name; send with externalRef."),
+    inputField("email", "string", "Customer email used when matching or creating."),
+    inputField("name", "string", "Customer name used when matching or creating."),
+    inputField("kind", "string", "Party kind, such as company or person.", {
+      enum: ["company", "person", "customer", "vendor", "employee"],
+    }),
+    inputField("phone", "string | null", "Customer phone number."),
+    {
+      ...inputField("address", "object", "Customer postal address."),
+      properties: [
+        inputField("line1", "string | null", "Address line one."),
+        inputField("line2", "string | null", "Address line two."),
+        inputField("city", "string | null", "City."),
+        inputField("region", "string | null", "State, province, or region."),
+        inputField("postalCode", "string | null", "Postal code."),
+        inputField("country", "string | null", "Country code."),
+      ],
+    },
+  ],
+};
+
+export const ORDER_SHIPPING_LINE_FIELDS: readonly ApiField[] = [
+  inputField("accountId", "string (uuid)", "Posting account for the shipping line.", {
+    required: true,
+  }),
+  inputField("description", "string", "Shipping line description."),
+  inputField("amount", "string (decimal)", "Exact shipping amount as a decimal string.", {
+    required: true,
+  }),
+  inputField("taxCodeId", "string (uuid)", "Tax code reference."),
+  inputField("taxGroupId", "string (uuid)", "Tax group reference."),
+];
+
+/** Exact line input contract accepted by the shared document editor. */
+export const DOCUMENT_LINE_FIELDS: readonly ApiField[] = [
+  inputField("accountId", "string (uuid)", "Posting account for the line.", { required: true }),
+  inputField("itemId", "string (uuid) | null", "Optional item or service reference."),
+  inputField("description", "string | null", "Line description."),
+  inputField("amount", "string (decimal)", "Exact line amount as a decimal string.", {
+    required: true,
+  }),
+  inputField("quantity", "string (decimal) | null", "Exact quantity as a decimal string."),
+  inputField("unit", "string | null", "Unit label."),
+  inputField("unitPrice", "string (decimal) | null", "Exact unit price as a decimal string."),
+  inputField("taxCodeId", "string (uuid) | null", "Tax code reference."),
+  inputField("taxGroupId", "string (uuid) | null", "Tax group reference."),
+  inputField("taxOverridden", "boolean", "Whether tax was explicitly overridden."),
+  inputField(
+    "taxAmount",
+    "string (decimal) | null",
+    "Exact overridden tax amount as a decimal string.",
+  ),
+  inputField("partyId", "string (uuid) | null", "Line party dimension."),
+  inputField("departmentId", "string (uuid) | null", "Department dimension."),
+  inputField("projectId", "string (uuid) | null", "Project dimension."),
+  inputField("locationId", "string (uuid) | null", "Location dimension."),
+  inputField("classId", "string (uuid) | null", "Class dimension."),
+  inputField("stockLocationId", "string (uuid) | null", "Inventory warehouse for the line."),
+  inputField("extraDims", "object", "Additional configured segment dimensions."),
+  inputField("custom", "object", "Custom field values keyed by each custom field key."),
+];
+
+/** Native order line shape; order amounts and quantities remain exact decimal strings. */
+export const ORDER_LINE_FIELDS: readonly ApiField[] = [
+  inputField("itemId", "string (uuid)", "Item or service id from the catalog."),
+  inputField("itemCode", "string", "Item code used instead of itemId."),
+  inputField("accountId", "string (uuid)", "Posting account for non-item lines."),
+  inputField("description", "string", "Line description."),
+  inputField("quantity", "string (decimal)", "Exact quantity as a decimal string."),
+  inputField("unit", "string", "Unit label."),
+  inputField("unitPrice", "string (decimal)", "Exact unit price as a decimal string."),
+  inputField(
+    "discountPercent",
+    "string (decimal)",
+    "Exact discount percentage as a decimal string.",
+  ),
+  inputField("discountAmount", "string (decimal)", "Exact discount amount as a decimal string."),
+  inputField("taxCodeId", "string (uuid)", "Tax code reference."),
+  inputField("taxGroupId", "string (uuid)", "Tax group reference."),
+  inputField("stockLocationId", "string (uuid)", "Inventory warehouse for the line."),
+  inputField("departmentId", "string (uuid)", "Department dimension."),
+  inputField("projectId", "string (uuid)", "Project dimension."),
+];
 
 export const DOCUMENT_REVISION_READ_METADATA: Readonly<
   Pick<ApiField, "requiredOnRead" | "pattern" | "description">
@@ -509,6 +699,18 @@ export const DOCUMENT_REVISION_WRITE_FIELD: Readonly<ApiField> = Object.freeze({
   pattern: DOCUMENT_REVISION_PATTERN,
   description: DOCUMENT_REVISION_DESCRIPTION,
   custom: false,
+});
+
+/** Document bodies always carry their line collection as exact decimal strings. */
+export const DOCUMENT_LINES_FIELD: Readonly<ApiField> = Object.freeze({
+  name: "lines",
+  type: "array",
+  required: false,
+  writable: true,
+  description:
+    "Document lines. Each line accepts accountId, itemId, description, quantity, unitPrice, amount, taxCodeId, taxGroupId, partyId, departmentId, projectId, locationId, classId, extraDims, and custom. Amount and quantity values are exact decimal strings.",
+  custom: false,
+  items: [...DOCUMENT_LINE_FIELDS],
 });
 
 export function withDocumentRevisionWriteField(writer: Writer, fields: ApiField[]): ApiField[] {
@@ -580,6 +782,8 @@ export const READONLY_COLUMNS = new Set<string>([
   "type_id",
   "type_key",
   "posted_entry_id",
+  "kind",
+  "status",
 ]);
 
 /** Map a Postgres data type to a canonical API type string. */

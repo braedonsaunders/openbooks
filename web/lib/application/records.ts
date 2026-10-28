@@ -2,6 +2,7 @@ import "server-only";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import {
+  API_RECORD_TYPES,
   loadApiSchema,
   resolveApiType,
   type ApiOperation,
@@ -25,6 +26,14 @@ import {
   loadCustomFieldAccessDefs,
   redactHiddenCustomValues,
 } from "../custom-fields";
+import {
+  createApplicationOrder,
+  createFullApplicationOrder,
+  editApplicationOrderDraft,
+  ORDER_TYPE_KIND,
+  type FullOrderInput,
+  type OrderTypeKey,
+} from "./orders";
 
 export interface RecordListInput {
   typeKey: string;
@@ -39,6 +48,136 @@ export interface RecordListResult {
   total: number;
   page: number;
   perPage: number;
+}
+
+export function applicationDocumentHref(kind: string, id: string): string {
+  return documentHref("documents", { kind, id }) ?? `/documents?doc=${encodeURIComponent(id)}`;
+}
+
+export function applicationRecordHref(
+  typeKey: string,
+  value: unknown,
+  fallbackId?: string,
+): string | null {
+  const entry = API_RECORD_TYPES.find((type) => type.key === typeKey);
+  if (!entry || entry.writer.kind !== "document") return null;
+  const record = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const nested =
+    record.document && typeof record.document === "object"
+      ? (record.document as Record<string, unknown>)
+      : record.doc && typeof record.doc === "object"
+        ? (record.doc as Record<string, unknown>)
+        : null;
+  const id =
+    (typeof record.id === "string" && record.id) ||
+    (typeof record.documentId === "string" && record.documentId) ||
+    (typeof nested?.id === "string" && nested.id) ||
+    fallbackId;
+  return id ? applicationDocumentHref(entry.writer.docKind, id) : null;
+}
+
+function documentHref(typeKey: string, row: Record<string, unknown>): string | null {
+  if (typeof row.id !== "string") return null;
+  const id = encodeURIComponent(row.id);
+  switch (String(row.kind ?? "")) {
+    case "vendor_bill":
+    case "vendor_credit":
+      return `/ap/bills?doc=${id}`;
+    case "customer_invoice":
+    case "customer_credit":
+      return `/ar/invoices?doc=${id}`;
+    case "cash_sale":
+    case "cash_refund":
+      return `/cash-sales?doc=${id}`;
+    case "sales_order":
+      return `/sales-orders?order=${id}`;
+    case "purchase_order":
+      return `/purchase-orders?order=${id}`;
+    case "quote":
+      return `/estimates?estimate=${id}`;
+    case "rma":
+      return `/returns?doc=${id}`;
+    case "internal_billing":
+      return `/internal-billing?doc=${id}`;
+    case "project_charge":
+      return `/projects?projectTxn=${id}&projectTxnKind=project_charge`;
+    case "vendor_payment":
+      return `/payments?payment=${id}`;
+    case "customer_payment":
+      return `/receipts?payment=${id}`;
+    case "sales_fulfillment":
+      return `/shipments?shipment=${id}`;
+    case "purchase_receipt":
+      return "/purchase-orders";
+    case "expense_report":
+      return `/expenses/reports?expense=${id}`;
+    case "field_ticket":
+      return `/field-tickets?ticket=${id}`;
+    case "pay_run":
+      return `/payroll/runs?run=${id}`;
+    case "journal":
+      return `/journal?journal=${id}`;
+    case "check":
+    case "deposit":
+    case "transfer":
+    case "card_charge":
+    case "card_refund":
+      return `/banking/cash?doc=${id}`;
+    default:
+      return `/${typeKey}?record=${id}`;
+  }
+}
+
+async function documentLinesById(ids: readonly string[]): Promise<Map<string, unknown[]>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db.execute<{ documentId: string; lines: unknown[] }>(
+    sql`
+    select document_id as "documentId",
+           json_agg(to_jsonb(line) order by line_number) as lines
+      from document_lines line
+     where document_id = any(${pgTextArrayLiteral([...ids])}::uuid[])
+     group by document_id
+  `,
+    "objects",
+  );
+  return new Map(rows.map((row) => [row.documentId, row.lines ?? []]));
+}
+
+function redactDocumentLines(
+  lines: unknown[],
+  definitions: Awaited<ReturnType<typeof loadCustomFieldAccessDefs>>,
+  viewer: ReturnType<typeof customFieldViewerFor>,
+): unknown[] {
+  return lines.map((line) => {
+    if (!line || typeof line !== "object" || Array.isArray(line)) return line;
+    const record = line as Record<string, unknown>;
+    if (!record.custom || typeof record.custom !== "object" || Array.isArray(record.custom)) {
+      return record;
+    }
+    return {
+      ...record,
+      custom: redactHiddenCustomValues(
+        definitions,
+        viewer,
+        record.custom as Record<string, unknown>,
+      ),
+    };
+  });
+}
+
+function exposeDocumentRecord(
+  typeKey: string,
+  row: Record<string, unknown>,
+  lines: unknown[] = [],
+): Record<string, unknown> {
+  if (typeof row.kind !== "string") return row;
+  const revision = typeof row.updated_at === "string" ? row.updated_at : undefined;
+  return {
+    ...row,
+    lines,
+    ...(revision === undefined ? {} : { revision }),
+    href: documentHref(typeKey, row),
+  };
 }
 
 interface RecordScope {
@@ -74,7 +213,7 @@ async function scopeFor(
   }
   const [resolved, schemas] = await Promise.all([
     resolveApiType(context.authz.user.orgId, typeKey),
-    loadApiSchema(context.authz.user.orgId),
+    loadApiSchema(context.authz.user.orgId, null, customFieldViewerFor(context.authz)),
   ]);
   if (!resolved) throw notFound("record type");
   if (!resolved.operations.includes(operation)) {
@@ -214,7 +353,11 @@ async function assertExistingRecordAccess(
 }
 
 export async function listRecordTypes(context: ApplicationContext): Promise<ApiRecordTypeSchema[]> {
-  const schemas = await loadApiSchema(context.authz.user.orgId);
+  const schemas = await loadApiSchema(
+    context.authz.user.orgId,
+    null,
+    customFieldViewerFor(context.authz),
+  );
   const visible = await Promise.all(
     schemas.map(async (schema) => {
       if (!(await typeAudienceVisible(context, schema))) return null;
@@ -252,24 +395,44 @@ export async function listRecords(
       rows: { count: string | number }[];
     }>,
   ]);
+  const documentLines =
+    scope.resolved.table === "documents"
+      ? await documentLinesById(rows.rows.map((row) => String(row.id)))
+      : new Map<string, unknown[]>();
+  const lineCustomDefinitions =
+    scope.resolved.table === "documents"
+      ? await Promise.all(
+          [...new Set(rows.rows.map((row) => String(row.kind)))].map(
+            async (kind) =>
+              [kind, await loadCustomFieldAccessDefs("document_lines", kind)] as const,
+          ),
+        )
+      : [];
+  const lineDefinitionsByKind = new Map(lineCustomDefinitions);
   const definitions = await loadCustomFieldAccessDefs(
     scope.resolved.table,
     scope.resolved.documentKinds?.[0],
   );
   const viewer = customFieldViewerFor(context.authz);
   return {
-    records: normalizeDocumentRecordRevisions(scope.resolved.table, rows.rows).map((row) => ({
-      ...row,
-      ...(row.custom && typeof row.custom === "object"
-        ? {
-            custom: redactHiddenCustomValues(
-              definitions,
+    records: normalizeDocumentRecordRevisions(scope.resolved.table, rows.rows).map((row) => {
+      const custom =
+        row.custom && typeof row.custom === "object"
+          ? redactHiddenCustomValues(definitions, viewer, row.custom as Record<string, unknown>)
+          : row.custom;
+      const visible = { ...row, ...(custom === undefined ? {} : { custom }) };
+      return scope.resolved.table === "documents"
+        ? exposeDocumentRecord(
+            scope.resolved.key,
+            visible,
+            redactDocumentLines(
+              documentLines.get(String(row.id)) ?? [],
+              lineDefinitionsByKind.get(String(row.kind)) ?? [],
               viewer,
-              row.custom as Record<string, unknown>,
             ),
-          }
-        : {}),
-    })),
+          )
+        : visible;
+    }),
     total: Number(count.rows[0]?.count ?? 0),
     page,
     perPage,
@@ -303,6 +466,19 @@ export async function getRecord(
       row.custom as Record<string, unknown>,
     );
   }
+  if (scope.resolved.table === "documents") {
+    const lines = await documentLinesById([input.id]);
+    const lineDefinitions = await loadCustomFieldAccessDefs("document_lines", String(row.kind));
+    return exposeDocumentRecord(
+      scope.resolved.key,
+      row,
+      redactDocumentLines(
+        lines.get(input.id) ?? [],
+        lineDefinitions,
+        customFieldViewerFor(context.authz),
+      ),
+    );
+  }
   return row;
 }
 
@@ -316,7 +492,9 @@ export async function createApplicationRecord(
 ): Promise<{ replayed: boolean; status: number; result: unknown }> {
   const scope = await scopeFor(context, input.typeKey, "create");
   const requested = requestedSubsidiary(input.body);
-  if (requested !== undefined || !scope.resolved.dynamic) {
+  const orderType = input.typeKey in ORDER_TYPE_KIND;
+  const documentWriter = scope.resolved.writer.kind === "document";
+  if (requested !== undefined || (!scope.resolved.dynamic && !documentWriter)) {
     assertSubsidiaryAccess(context, requested);
   }
   const outcome = await executeIdempotent({
@@ -326,14 +504,76 @@ export async function createApplicationRecord(
     request: input.body,
     // The transport responds with the write result's own status; record it.
     successStatus: (value) => value.status,
-    execute: async () =>
-      applicationWriteValue(
+    execute: async () => {
+      if (orderType) {
+        const typeKey = input.typeKey as OrderTypeKey;
+        const kind = ORDER_TYPE_KIND[typeKey];
+        const salesOrderContent = [
+          "customer",
+          "lines",
+          "shippingLines",
+          "documentDate",
+          "dueDate",
+          "currency",
+          "memo",
+          "externalRef",
+          "externalSource",
+        ].some((field) => input.body[field] !== undefined);
+        if (typeKey === "sales-orders" && salesOrderContent) {
+          const allowedFields = new Set([
+            "customer",
+            "lines",
+            "shippingLines",
+            "documentDate",
+            "dueDate",
+            "currency",
+            "memo",
+            "externalRef",
+            "externalSource",
+            "subsidiaryId",
+            "subsidiary_id",
+          ]);
+          const unknownFields = Object.keys(input.body).filter(
+            (field) => !allowedFields.has(field),
+          );
+          if (unknownFields.length > 0) {
+            throw invalidInput(`unsupported sales-order create field: ${unknownFields[0]}`);
+          }
+          if (!input.body.customer || typeof input.body.customer !== "object") {
+            throw invalidInput("customer is required when creating a sales order with content");
+          }
+          const order = await createFullApplicationOrder(context, {
+            ...(input.body as unknown as Omit<FullOrderInput, "kind" | "idempotencyKey">),
+            kind: "sales_order",
+            idempotencyKey: input.idempotencyKey,
+            subsidiaryId: (requested ?? null) as string | null,
+          });
+          return { status: 201, body: order.result };
+        }
+        const unsupportedContent = Object.keys(input.body).filter(
+          (key) => !["subsidiaryId", "subsidiary_id"].includes(key),
+        );
+        if (unsupportedContent.length > 0) {
+          throw invalidInput(
+            `${typeKey} creates an empty draft; create it with subsidiaryId, then set its fields through update_record`,
+          );
+        }
+        const order = await createApplicationOrder(context, {
+          kind,
+          idempotencyKey: input.idempotencyKey,
+          subsidiaryId: (requested ?? null) as string | null,
+        });
+        return { status: 201, body: order.result };
+      }
+      const write = applicationWriteValue(
         await createRecord(context.authz.user, scope.resolved, scope.schema.fields, input.body, {
           source: context.source,
           allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
           customFieldViewer: customFieldViewerFor(context.authz),
         }),
-      ),
+      );
+      return write;
+    },
   });
   return { replayed: outcome.replayed, status: outcome.value.status, result: outcome.value.body };
 }
@@ -358,8 +598,17 @@ export async function updateApplicationRecord(
     idempotencyKey: input.idempotencyKey,
     request: { id: input.id, body: input.body },
     successStatus: (value) => value.status,
-    execute: async () =>
-      applicationWriteValue(
+    execute: async () => {
+      if (input.typeKey in ORDER_TYPE_KIND) {
+        const result = await editApplicationOrderDraft(
+          context,
+          input.typeKey as OrderTypeKey,
+          input.id,
+          input.body as never,
+        );
+        return { status: 200, body: result };
+      }
+      const write = applicationWriteValue(
         await updateRecord(
           context.authz.user,
           scope.resolved,
@@ -372,7 +621,9 @@ export async function updateApplicationRecord(
             customFieldViewer: customFieldViewerFor(context.authz),
           },
         ),
-      ),
+      );
+      return write;
+    },
   });
   return { replayed: outcome.replayed, status: outcome.value.status, result: outcome.value.body };
 }

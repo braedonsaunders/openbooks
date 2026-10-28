@@ -8,7 +8,7 @@ const {
   toResolved,
   v1PrettyResourcePath,
 } = await import("./registry-data.ts");
-const { DOCUMENT_CREATE_KINDS } = await import("../document-kinds.ts");
+const { DOC_KINDS, DOC_KIND_FEATURE, DOCUMENT_CREATE_KINDS } = await import("../document-kinds.ts");
 
 test("resolveDocumentReadKinds returns null off the documents table", () => {
   for (const key of ["journal-entries", "parties", "accounts", "items", "projects", "assets"]) {
@@ -109,6 +109,27 @@ test("every unsaved-create document kind has a writable REST type", () => {
     assert.ok(entry, `${kind} must have a writable REST record type`);
     assert.ok(entry.operations.includes("create") && entry.operations.includes("update"));
     assert.ok(entry.writePermission, `${kind} must advertise a write permission`);
+  }
+});
+
+test("generic document kinds advertise scoped writers, lifecycle permissions, and route features", () => {
+  for (const kind of Object.keys(DOC_KINDS)) {
+    const entry = API_RECORD_TYPES.find(
+      (type) => type.writer.kind === "document" && type.writer.docKind === kind,
+    );
+    if (kind === "pay_run") {
+      assert.equal(entry, undefined, "pay runs keep their dedicated payroll writer");
+      continue;
+    }
+    assert.ok(entry, `${kind} uses the generic document writer`);
+    assert.deepEqual(entry.documentKinds, [kind]);
+    assert.ok(entry.writePermission, `${kind} advertises its create permission`);
+    assert.ok(entry.postPermission, `${kind} advertises its post permission`);
+    assert.equal(
+      entry.featureKey,
+      DOC_KIND_FEATURE[kind],
+      `${kind} follows its document route feature`,
+    );
   }
 });
 

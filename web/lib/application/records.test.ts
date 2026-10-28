@@ -15,6 +15,7 @@ const {
   getRecord,
   createApplicationRecord,
   updateApplicationRecord,
+  applicationDocumentHref,
   normalizeDocumentRecordRevisions,
 } = await import("./records.ts");
 const { resolveEntityLabels: resolveEntityLabelsFromModule } = await import("../records.ts");
@@ -22,6 +23,21 @@ const { ApplicationError } = await import("./errors.ts");
 const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("@openbooks/engine/testing/fixtures");
+
+test("document record hrefs use the native UI route for each lifecycle kind", () => {
+  assert.equal(applicationDocumentHref("vendor_bill", "bill-id"), "/ap/bills?doc=bill-id");
+  assert.equal(applicationDocumentHref("sales_order", "order-id"), "/sales-orders?order=order-id");
+  assert.equal(applicationDocumentHref("quote", "quote-id"), "/estimates?estimate=quote-id");
+  assert.equal(applicationDocumentHref("rma", "return-id"), "/returns?doc=return-id");
+  assert.equal(
+    applicationDocumentHref("internal_billing", "billing-id"),
+    "/internal-billing?doc=billing-id",
+  );
+  assert.equal(
+    applicationDocumentHref("expense_report", "expense-id"),
+    "/expenses/reports?expense=expense-id",
+  );
+});
 
 interface SeededDocument {
   id: string;

@@ -10,6 +10,7 @@ import {
   getExtensionPackage,
 } from "./extensions";
 import { z } from "zod";
+import { EINVOICE_PROFILES, type EInvoiceProfileKey } from "@openbooks/engine/einvoice";
 import { can, type Authz } from "../authz";
 import {
   DOCUMENT_REVISION_DESCRIPTION,
@@ -39,8 +40,20 @@ import {
   advanceDocumentLifecycle,
   correctPostedDocument,
   postJournalDocument,
+  returnDocumentToDraftAction,
+  retryDocumentPostingEffects,
+  withdrawDocumentAction,
   voidDocument,
 } from "./documents";
+import {
+  applyDocumentPromotionAction,
+  correctPurchaseReceiptRemainder,
+  getDocumentSupplyEvidence,
+  issueDocumentEInvoice,
+  listVendorBillMatchCandidates,
+  matchVendorBillLinesAction,
+  recordDocumentSupplyEvidence,
+} from "./document-actions";
 import { createPayment, postPayment, updatePayment } from "./payments";
 import { assertCabinetUploadAccess, uploadCabinetFile } from "./files";
 import { withContentDigest } from "./idempotency-core";
@@ -51,6 +64,8 @@ import {
   listRecords,
   listRecordTypes,
   updateApplicationRecord,
+  applicationRecordHref,
+  applicationDocumentHref,
 } from "./records";
 import {
   clearLayout,
@@ -213,6 +228,9 @@ const documentLineSchema = z.object({
   extraDims: DIMENSIONS.optional(),
   custom: CUSTOM.optional(),
 });
+const EINVOICE_PROFILE = z.enum(
+  Object.keys(EINVOICE_PROFILES) as [EInvoiceProfileKey, ...EInvoiceProfileKey[]],
+);
 
 const correctionSchema = z.object({
   amendmentReason: z.string().trim().min(5).max(500),
@@ -458,10 +476,15 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     openWorld: false,
     assistantConfirmation: "always",
     visibleTo: visible,
-    execute: async (context, input) => ({
-      ok: true,
-      ...(await createApplicationRecord(context, input)),
-    }),
+    execute: async (context, input) => {
+      const outcome = await createApplicationRecord(context, input);
+      const href = applicationRecordHref(input.typeKey, outcome.result);
+      return {
+        ok: true,
+        ...outcome,
+        ...(href ? { href } : {}),
+      };
+    },
   }),
   definition({
     name: "update_record",
@@ -474,10 +497,15 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     openWorld: false,
     assistantConfirmation: "always",
     visibleTo: visible,
-    execute: async (context, input) => ({
-      ok: true,
-      ...(await updateApplicationRecord(context, input)),
-    }),
+    execute: async (context, input) => {
+      const outcome = await updateApplicationRecord(context, input);
+      const href = applicationRecordHref(input.typeKey, outcome.result, input.id);
+      return {
+        ok: true,
+        ...outcome,
+        ...(href ? { href } : {}),
+      };
+    },
   }),
   definition({
     name: "delete_record",
@@ -1153,12 +1181,327 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       openWorld: false,
       assistantConfirmation: "always",
       visibleTo: documentActor,
-      execute: async (context, input) => ({
-        ok: true,
-        ...(await advanceDocumentLifecycle(context, { ...input, action })),
-      }),
+      execute: async (context, input) => {
+        const outcome = await advanceDocumentLifecycle(context, { ...input, action });
+        const document = (outcome.result as { document?: { kind?: string } } | null)?.document;
+        return {
+          ok: true,
+          ...outcome,
+          ...(document?.kind
+            ? { href: applicationDocumentHref(document.kind, input.documentId) }
+            : {}),
+        };
+      },
     }),
   ),
+  definition({
+    name: "list_vendor_bill_match_candidates",
+    title: "List Vendor Bill Match Candidates",
+    description:
+      "List unmatched stocked bill lines and approved purchase order lines with open quantity for a vendor bill. Find the bill id with get_record before matching its lines.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Vendor bill id from get_record."),
+    }),
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "never",
+    visibleTo: hasPermission("ap.read"),
+    execute: async (context, input) => ({
+      ok: true,
+      ...(await listVendorBillMatchCandidates(context, input.documentId)),
+    }),
+  }),
+  definition({
+    name: "get_document_supply_evidence",
+    title: "Get Document Supply Evidence",
+    description:
+      "Read the cross-border supply election, saved country evidence, and correction link for a customer invoice or credit. Find the document id with get_record.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Customer invoice or credit id from get_record."),
+    }),
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "never",
+    featureKey: "crossBorderTax",
+    visibleTo: hasPermission("ar.read"),
+    execute: async (context, input) => ({
+      ok: true,
+      ...(await getDocumentSupplyEvidence(context, input.documentId)),
+    }),
+  }),
+  definition({
+    name: "return_document_to_draft",
+    title: "Return Document to Draft",
+    description:
+      "Return an approved, never-posted document to draft when its kind supports that transition. Find the document id and exact revision token with get_record.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Document id from get_record or list_records."),
+      reason: z
+        .string()
+        .trim()
+        .min(5)
+        .max(500)
+        .describe("Reason recorded for returning the document."),
+      expectedUpdatedAt: DOCUMENT_REVISION.optional(),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: documentActor,
+    execute: async (context, input) => {
+      const outcome = await returnDocumentToDraftAction(context, input);
+      const result = outcome.result as { kind: string; documentId: string };
+      return {
+        ok: true,
+        ...outcome,
+        href: applicationDocumentHref(result.kind, result.documentId),
+      };
+    },
+  }),
+  definition({
+    name: "withdraw_document_submission",
+    title: "Withdraw Document Submission",
+    description:
+      "Withdraw the caller's pending submission or an approver's assigned request. Find the document id and exact revision token with get_record.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Document id from get_record or list_records."),
+      reason: z.string().trim().min(5).max(500).describe("Reason recorded for withdrawal."),
+      expectedUpdatedAt: DOCUMENT_REVISION.optional(),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: true,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: documentActor,
+    execute: async (context, input) => {
+      const outcome = await withdrawDocumentAction(context, input);
+      const result = outcome.result as { kind: string; documentId: string };
+      return {
+        ok: true,
+        ...outcome,
+        href: applicationDocumentHref(result.kind, result.documentId),
+      };
+    },
+  }),
+  definition({
+    name: "retry_document_posting_effects",
+    title: "Retry Document Posting Effects",
+    description:
+      "Retry the posting effect for a posted document only when its effect is terminally failed. Find the document id with get_record and provide the operator review reason.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Posted document id from get_record or list_records."),
+      reason: z
+        .string()
+        .trim()
+        .min(10)
+        .max(1000)
+        .describe("Review reason recorded with the retry."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: documentActor,
+    execute: async (context, input) => {
+      const outcome = await retryDocumentPostingEffects(context, input);
+      const result = outcome.result as { kind: string; documentId: string };
+      return {
+        ok: true,
+        ...outcome,
+        href: applicationDocumentHref(result.kind, result.documentId),
+      };
+    },
+  }),
+  definition({
+    name: "issue_einvoice",
+    title: "Issue E Invoice",
+    description:
+      "Issue and archive a validated electronic invoice from a posted invoice or credit. Find the document id with get_record; configure the e-invoice profile and PDF template first when required.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Posted invoice or credit id from get_record."),
+      profile: EINVOICE_PROFILE.describe("Supported electronic-invoice profile."),
+      buyerReference: z
+        .string()
+        .trim()
+        .min(1)
+        .max(200)
+        .nullable()
+        .optional()
+        .describe("Optional buyer reference included in the issued invoice."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    featureKey: "einvoicing",
+    visibleTo: hasPermission("documents.manage"),
+    execute: async (context, input) => issueDocumentEInvoice(context, input),
+  }),
+  definition({
+    name: "correct_receipt_remainder",
+    title: "Correct Receipt Remainder",
+    description:
+      "Correct an unconsumed remainder or named over-received lines on a posted purchase receipt without voiding its evidence. Find the receipt and line ids with get_record.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Purchase receipt id from get_record."),
+      reason: z
+        .string()
+        .trim()
+        .min(5)
+        .max(500)
+        .describe("Reason recorded for the inventory correction."),
+      date: DATE.optional().describe("Business date for the correcting inventory adjustment."),
+      lines: z
+        .array(
+          z.object({
+            receiptLineId: UUID.describe("Receipt line id from get_record.lines."),
+            correctedQuantity: z
+              .string()
+              .min(1)
+              .max(50)
+              .describe("Correct delivered quantity as an exact decimal string."),
+          }),
+        )
+        .min(1)
+        .max(500)
+        .optional()
+        .describe("Named receipt lines and their true delivered quantities."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: true,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: hasPermission("goods_receipts.create"),
+    execute: async (context, input) => {
+      const outcome = await correctPurchaseReceiptRemainder(context, input);
+      return {
+        ok: true,
+        ...outcome,
+        href: applicationDocumentHref("purchase_receipt", input.documentId),
+      };
+    },
+  }),
+  definition({
+    name: "record_document_supply_evidence",
+    title: "Record Document Supply Evidence",
+    description:
+      "Set the cross-border supply classification and collected country signals on a draft customer invoice or credit. Find the document id with get_record; evidence values must contain derived country codes, never raw network or payment data.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Draft customer invoice or credit id from get_record."),
+      election: z
+        .object({
+          supplyKind: z.enum(["digital_service", "goods"]).describe("Kind of supply."),
+          customerKind: z.enum(["consumer", "business"]).describe("Customer classification."),
+          correctsDocumentId: UUID.nullable()
+            .optional()
+            .describe("Posted invoice corrected by this credit, when applicable."),
+        })
+        .describe("Cross-border supply election."),
+      evidence: z
+        .array(
+          z.object({
+            kind: z
+              .enum([
+                "billing_address",
+                "ip_country",
+                "card_bin_country",
+                "bank_country",
+                "sim_country",
+                "ship_to",
+              ])
+              .describe("Evidence signal type."),
+            country: z.string().min(2).max(2).describe("ISO country code derived from the signal."),
+            source: z.string().min(1).max(40).describe("Source label for the evidence."),
+          }),
+        )
+        .max(6)
+        .describe("Collected country signals."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    featureKey: "crossBorderTax",
+    visibleTo: hasPermission("ar.create"),
+    execute: async (context, input) => {
+      const result = await recordDocumentSupplyEvidence(context, input);
+      return {
+        ok: true,
+        ...result,
+        href: applicationDocumentHref(result.kind, input.documentId),
+      };
+    },
+  }),
+  definition({
+    name: "match_vendor_bill_lines",
+    title: "Match Vendor Bill Lines",
+    description:
+      "Attach purchase-order provenance to stocked lines on a hand-coded vendor bill while the matching order quantity remains open. Find bill, bill-line, and purchase-order-line ids with get_record and bill-match candidates.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Vendor bill id from get_record."),
+      expectedUpdatedAt: DOCUMENT_REVISION.optional(),
+      matches: z
+        .array(
+          z.object({
+            billLineId: UUID.describe("Unmatched vendor bill line id."),
+            purchaseOrderLineId: UUID.describe("Open purchase-order line id."),
+          }),
+        )
+        .min(1)
+        .max(200)
+        .describe("Bill lines paired with their purchase-order lines."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => can(authz, "ap.read") && can(authz, "ap.create"),
+    execute: async (context, input) => ({
+      ...(await matchVendorBillLinesAction(context, input)),
+      href: `/ap/bills?doc=${encodeURIComponent(input.documentId)}`,
+    }),
+  }),
+  definition({
+    name: "apply_document_promotion",
+    title: "Apply Document Promotion",
+    description:
+      "Apply an active promotion to an eligible draft customer document. Find the document id with get_record and use either a promotion code or promotion id from the promotions list.",
+    inputSchema: z
+      .object({
+        documentId: UUID.describe("Eligible draft customer document id from get_record."),
+        code: z.string().max(64).optional().describe("Promotion code."),
+        promotionId: UUID.optional().describe("Promotion id from the promotions list."),
+        idempotencyKey: IDEMPOTENCY_KEY,
+      })
+      .refine(
+        (input) => Boolean(input.code || input.promotionId),
+        "A promotion code or id is required",
+      ),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    featureKey: "promotions",
+    visibleTo: hasPermission("ar.create"),
+    execute: async (context, input) => {
+      const result = await applyDocumentPromotionAction(context, input);
+      return {
+        ok: true,
+        ...result,
+        href: applicationDocumentHref(result.kind, input.documentId),
+      };
+    },
+  }),
   definition({
     name: "post_journal",
     title: "Post Journal",
@@ -1170,10 +1513,14 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     openWorld: false,
     assistantConfirmation: "always",
     visibleTo: hasPermission("gl.post"),
-    execute: async (context, input) => ({
-      ok: true,
-      ...(await postJournalDocument(context, input)),
-    }),
+    execute: async (context, input) => {
+      const outcome = await postJournalDocument(context, input);
+      return {
+        ok: true,
+        ...outcome,
+        href: applicationDocumentHref(outcome.kind, input.documentId),
+      };
+    },
   }),
   definition({
     name: "void_document",
@@ -1191,10 +1538,14 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     openWorld: false,
     assistantConfirmation: "always",
     visibleTo: documentActor,
-    execute: async (context, input) => ({
-      ok: true,
-      ...(await voidDocument(context, input)),
-    }),
+    execute: async (context, input) => {
+      const outcome = await voidDocument(context, input);
+      return {
+        ok: true,
+        ...outcome,
+        href: applicationDocumentHref(outcome.kind, input.documentId),
+      };
+    },
   }),
   definition({
     name: "correct_document",
@@ -1213,10 +1564,17 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     openWorld: false,
     assistantConfirmation: "always",
     visibleTo: documentActor,
-    execute: async (context, input) => ({
-      ok: true,
-      ...(await correctPostedDocument(context, input)),
-    }),
+    execute: async (context, input) => {
+      const outcome = await correctPostedDocument(context, input);
+      const result = outcome.result as { correctionId?: string };
+      return {
+        ok: true,
+        ...outcome,
+        ...(result.correctionId
+          ? { href: applicationDocumentHref(outcome.kind, result.correctionId) }
+          : { href: applicationDocumentHref(outcome.kind, input.documentId) }),
+      };
+    },
   }),
   definition({
     name: "create_payment",

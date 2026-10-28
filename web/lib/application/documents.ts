@@ -2,14 +2,28 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { DocumentVoidError, requestDocumentVoid } from "@openbooks/engine/documents";
-import { SubmitError, submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
+import {
+  SubmitError,
+  submitAndReleaseIfUngated,
+  returnDocumentToDraft,
+  ReturnToDraftError,
+  withdrawDocumentSubmission,
+  WithdrawSubmissionError,
+} from "@openbooks/engine/flows/module";
 import { ControlAccountsIncompleteError } from "@openbooks/engine/records/control-accounts";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { postDocument } from "@openbooks/engine/documents";
 import { PostingError } from "@openbooks/engine/journal/contracts";
 import { controlDeps, loadDocument } from "@openbooks/engine/documents";
 import { DocumentEditError } from "@openbooks/engine/documents";
 import type { DocumentEditInput } from "@openbooks/engine/documents";
-import { createPermission, postPermission, DOC_KINDS } from "../document-kinds";
+import {
+  createPermission,
+  postPermission,
+  documentApprovalPermission,
+  documentKindPermissions,
+} from "@openbooks/engine/records/document-kind-permissions";
+import { DOC_KINDS } from "../document-kinds";
 import { customFieldViewerFor } from "../custom-fields";
 import { isDocKindEnabled } from "@openbooks/engine/documents/write";
 import { applyPostedDocumentCorrection } from "@openbooks/engine/ledger/document-correction-editing";
@@ -18,6 +32,8 @@ import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
+import { can } from "../authz";
+import { canReadDocumentKind, holdsSubjectGrant } from "../flow-subject-authz";
 type DocumentHeader = {
   id: string;
   kind: string;
@@ -230,6 +246,228 @@ export async function advanceDocumentLifecycle(
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
+function approvalPermission(kind: string): string {
+  return (
+    documentApprovalPermission(kind) ??
+    documentKindPermissions(kind)?.approve ??
+    postPermission(kind)
+  );
+}
+
+function submitPermission(kind: string): string {
+  const permissions = documentKindPermissions(kind);
+  if (permissions && !DOC_KINDS[kind]) return permissions.edit;
+  return createPermission(kind);
+}
+
+/** Return an approved document to draft through its governed flow action. */
+export async function returnDocumentToDraftAction(
+  context: ApplicationContext,
+  input: {
+    documentId: string;
+    reason: string;
+    expectedUpdatedAt?: string;
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: unknown }> {
+  const header = await documentHeader(context, input.documentId);
+  if (!DOC_KINDS[header.kind]) {
+    throw new ApplicationError(
+      "unsupported_operation",
+      "this document uses a dedicated lifecycle",
+      422,
+    );
+  }
+  if (!canReadDocumentKind(context.authz, header.kind)) throw notFound("document");
+  assertApplicationPermission(context, approvalPermission(header.kind));
+  const outcome = await executeIdempotent({
+    context,
+    operation: "documents.return_to_draft",
+    idempotencyKey: input.idempotencyKey,
+    request: input,
+    execute: async () => {
+      try {
+        const locked = await lockDocumentHeader(context, input.documentId);
+        if (!DOC_KINDS[locked.kind]) {
+          throw new ApplicationError(
+            "unsupported_operation",
+            "this document uses a dedicated lifecycle",
+            422,
+          );
+        }
+        assertApplicationPermission(context, approvalPermission(locked.kind));
+        const result = await returnDocumentToDraft({
+          documentId: input.documentId,
+          orgId: context.authz.user.orgId,
+          actorId: context.authz.user.id,
+          reason: input.reason,
+          expectedUpdatedAt: input.expectedUpdatedAt,
+          allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+        });
+        return {
+          ok: true,
+          kind: locked.kind,
+          documentId: input.documentId,
+          status: "draft",
+          supersededRunIds: result.supersededRunIds,
+        };
+      } catch (error) {
+        if (error instanceof ScopeNotFoundError) throw notFound("document");
+        if (error instanceof ReturnToDraftError) {
+          throw new ApplicationError(
+            error.status === 409 ? "conflict" : "invalid_input",
+            error.message,
+            error.status,
+            { code: error.code },
+          );
+        }
+        throw error;
+      }
+    },
+  });
+  return { replayed: outcome.replayed, result: outcome.value };
+}
+
+/** Withdraw the caller's pending submission, or an approver's assigned item. */
+export async function withdrawDocumentAction(
+  context: ApplicationContext,
+  input: {
+    documentId: string;
+    reason: string;
+    expectedUpdatedAt?: string;
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: unknown }> {
+  const header = await documentHeader(context, input.documentId);
+  const perms = documentKindPermissions(header.kind);
+  if (!perms)
+    throw new ApplicationError("unsupported_operation", "this document cannot be withdrawn", 422);
+  const submitGrant = submitPermission(header.kind);
+  const approveGrant = approvalPermission(header.kind);
+  const ownSubmission =
+    !canReadDocumentKind(context.authz, header.kind) &&
+    (await holdsSubjectGrant(context.authz, header.kind, header.id, perms.read));
+  if (!ownSubmission && !canReadDocumentKind(context.authz, header.kind))
+    throw notFound("document");
+  if (!ownSubmission && !can(context.authz, submitGrant) && !can(context.authz, approveGrant)) {
+    assertApplicationPermission(context, submitGrant);
+  }
+  const outcome = await executeIdempotent({
+    context,
+    operation: "documents.withdraw_submission",
+    idempotencyKey: input.idempotencyKey,
+    request: input,
+    execute: async () => {
+      try {
+        const locked = await lockDocumentHeader(context, input.documentId);
+        const currentPermissions = documentKindPermissions(locked.kind);
+        if (!currentPermissions) throw notFound("document");
+        const isOwner =
+          !canReadDocumentKind(context.authz, locked.kind) &&
+          (await holdsSubjectGrant(context.authz, locked.kind, locked.id, currentPermissions.read));
+        if (!isOwner && !canReadDocumentKind(context.authz, locked.kind))
+          throw notFound("document");
+        if (!isOwner) {
+          assertApplicationPermission(
+            context,
+            can(context.authz, approvalPermission(locked.kind))
+              ? approvalPermission(locked.kind)
+              : submitPermission(locked.kind),
+          );
+        }
+        const result = await withdrawDocumentSubmission({
+          documentId: input.documentId,
+          orgId: context.authz.user.orgId,
+          actorId: context.authz.user.id,
+          actorIsApprover: can(context.authz, approvalPermission(locked.kind)),
+          reason: input.reason,
+          expectedUpdatedAt: input.expectedUpdatedAt,
+          allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+        });
+        return { ok: true, kind: locked.kind, documentId: input.documentId, ...result };
+      } catch (error) {
+        if (error instanceof ScopeNotFoundError) throw notFound("document");
+        if (error instanceof WithdrawSubmissionError) {
+          throw new ApplicationError(
+            error.status === 409 ? "conflict" : "invalid_input",
+            error.message,
+            error.status,
+            { code: error.code },
+          );
+        }
+        throw error;
+      }
+    },
+  });
+  return { replayed: outcome.replayed, result: outcome.value };
+}
+
+/** Replay a terminally failed posting effect with an audited operator reason. */
+export async function retryDocumentPostingEffects(
+  context: ApplicationContext,
+  input: {
+    documentId: string;
+    reason: string;
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: unknown }> {
+  const header = await documentHeader(context, input.documentId);
+  if (!canReadDocumentKind(context.authz, header.kind)) throw notFound("document");
+  assertApplicationPermission(context, postPermission(header.kind));
+  const outcome = await executeIdempotent({
+    context,
+    operation: "documents.retry_posting_effects",
+    idempotencyKey: input.idempotencyKey,
+    request: input,
+    execute: async () => {
+      const locked = await lockDocumentHeader(context, input.documentId);
+      if (!canReadDocumentKind(context.authz, locked.kind)) throw notFound("document");
+      assertApplicationPermission(context, postPermission(locked.kind));
+      if (locked.status !== "posted") {
+        throw invalidInput(
+          `document is ${locked.status}; only a posted document's effects can be retried`,
+        );
+      }
+      const effect = (
+        await db.execute<{ id: string; status: string }>(
+          sql`
+          select id, status from posting_effects
+           where document_id = ${input.documentId} and org_id = ${context.authz.user.orgId}
+        `,
+          "objects",
+        )
+      )[0];
+      if (!effect) throw notFound("posting effect");
+      if (effect.status !== "terminal_failed") {
+        throw invalidInput(
+          `posting effects are ${effect.status}; only terminal-failed effects can be retried`,
+        );
+      }
+      try {
+        const { replayTerminalPostingEffect } =
+          await import("@openbooks/engine/ledger/posting-effects");
+        await replayTerminalPostingEffect({
+          orgId: context.authz.user.orgId,
+          id: effect.id,
+          actorId: context.authz.user.id,
+          reason: input.reason,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === "PostingEffectsReplayError") {
+          throw new ApplicationError(
+            /conflict|already|currently/i.test(error.message) ? "conflict" : "invalid_input",
+            error.message,
+            /conflict|already|currently/i.test(error.message) ? 409 : 422,
+          );
+        }
+        throw error;
+      }
+      return { ok: true, kind: locked.kind, status: "posted", documentId: input.documentId };
+    },
+  });
+  return { replayed: outcome.replayed, result: outcome.value };
+}
+
 /**
  * Post a manual journal: the application-layer twin of POST
  * /api/journals/actions. Journal documents are not in DOC_KINDS, so the
@@ -246,7 +484,7 @@ export async function postJournalDocument(
     documentId: string;
     idempotencyKey: string;
   },
-): Promise<{ replayed: boolean; result: unknown }> {
+): Promise<{ replayed: boolean; kind: string; result: unknown }> {
   const header = await documentHeader(context, input.documentId);
   // The route 404s anything that is not a journal of this org.
   if (header.kind !== "journal") throw notFound("journal");
@@ -301,7 +539,7 @@ export async function postJournalDocument(
       }
     },
   });
-  return { replayed: outcome.replayed, result: outcome.value };
+  return { replayed: outcome.replayed, kind: header.kind, result: outcome.value };
 }
 
 export async function voidDocument(
@@ -313,7 +551,7 @@ export async function voidDocument(
     reversalPeriodId?: string | null;
     idempotencyKey: string;
   },
-): Promise<{ replayed: boolean; result: unknown }> {
+): Promise<{ replayed: boolean; kind: string; result: unknown }> {
   const header = await documentHeader(context, input.documentId);
   assertApplicationPermission(context, voidPermission(header.kind));
   const outcome = await executeIdempotent({
@@ -344,7 +582,7 @@ export async function voidDocument(
       }
     },
   });
-  return { replayed: outcome.replayed, result: outcome.value };
+  return { replayed: outcome.replayed, kind: header.kind, result: outcome.value };
 }
 
 export async function correctPostedDocument(
@@ -354,7 +592,7 @@ export async function correctPostedDocument(
     correction: DocumentEditInput;
     idempotencyKey: string;
   },
-): Promise<{ replayed: boolean; result: unknown }> {
+): Promise<{ replayed: boolean; kind: string; result: unknown }> {
   const header = await documentHeader(context, input.documentId);
   if (!DOC_KINDS[header.kind]) {
     throw new ApplicationError(
@@ -425,5 +663,5 @@ export async function correctPostedDocument(
       }
     },
   });
-  return { replayed: outcome.replayed, result: outcome.value };
+  return { replayed: outcome.replayed, kind: header.kind, result: outcome.value };
 }

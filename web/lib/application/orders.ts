@@ -228,11 +228,53 @@ async function sourceOrder(
 }
 
 /** The drawer config for the v1 sales-order surface: same writer, same rules. */
-const SALES_ORDER_CFG = {
-  kind: "sales_order",
-  readPerm: "ar.read",
-  createPerm: "ar.create",
-} as const;
+const ORDER_EDIT_CONFIG = {
+  quotes: {
+    kind: "quote",
+    readPerm: "estimates.read",
+    createPerm: "estimates.create",
+  },
+  "sales-orders": {
+    kind: "sales_order",
+    readPerm: "ar.read",
+    createPerm: "ar.create",
+  },
+  "purchase-orders": {
+    kind: "purchase_order",
+    readPerm: "purchase_orders.read",
+    createPerm: "purchase_orders.create",
+  },
+} as const satisfies Record<OrderTypeKey, import("../order-draft-edit").OrderHandlerConfig>;
+
+/** Update an order draft through the same aggregate writer as its page. */
+export async function editApplicationOrderDraft(
+  context: ApplicationContext,
+  typeKey: OrderTypeKey,
+  documentId: string,
+  patch: OrderPatchBody,
+): Promise<{ doc: Record<string, unknown>; lines: unknown[] }> {
+  const writableFields = new Set([
+    "expectedUpdatedAt",
+    "partyId",
+    "documentDate",
+    "dueDate",
+    "workCompletedOn",
+    "externalRef",
+    "externalSource",
+    "memo",
+    "departmentId",
+    "projectId",
+    "subsidiaryId",
+    "extraDims",
+    "lines",
+  ]);
+  const unknownFields = Object.keys(patch).filter((field) => !writableFields.has(field));
+  if (unknownFields.length > 0) {
+    throw invalidInput(`unsupported order update field: ${unknownFields[0]}`);
+  }
+  assertApplicationPermission(context, ORDER_EDIT_CONFIG[typeKey].createPerm);
+  return applyOrderEditAsV1(context, documentId, patch, typeKey);
+}
 
 function orderEditFailure(error: unknown): never {
   if (error instanceof OrderEditError) {
@@ -251,6 +293,7 @@ async function applyOrderEditAsV1(
   context: ApplicationContext,
   documentId: string,
   patch: OrderPatchBody,
+  typeKey: OrderTypeKey = "sales-orders",
 ): Promise<{ doc: Record<string, unknown>; lines: unknown[] }> {
   let response: Response;
   try {
@@ -263,7 +306,7 @@ async function applyOrderEditAsV1(
         permissions: context.authz.permissions,
         services: orderEditServices,
       },
-      SALES_ORDER_CFG,
+      ORDER_EDIT_CONFIG[typeKey],
       documentId,
       patch,
     );
@@ -690,7 +733,7 @@ export async function createFullApplicationOrder(
     patch.externalSource = input.externalSource;
   }
   // applyOrderEditAsV1 raises every refusal mapped; nothing to catch here.
-  const payload = await applyOrderEditAsV1(context, draft.result.id, patch);
+  const payload = await applyOrderEditAsV1(context, draft.result.id, patch, "sales-orders");
   const doc = payload.doc;
   return {
     replayed: draft.replayed,
@@ -738,10 +781,15 @@ export async function replaceApplicationOrderLines(
     );
   }
   const mapped = await mapV1OrderLines(orgId, input.lines, input.shippingLines);
-  const payload = await applyOrderEditAsV1(context, input.documentId, {
-    expectedUpdatedAt: input.expectedUpdatedAt,
-    lines: mapped,
-  });
+  const payload = await applyOrderEditAsV1(
+    context,
+    input.documentId,
+    {
+      expectedUpdatedAt: input.expectedUpdatedAt,
+      lines: mapped,
+    },
+    "sales-orders",
+  );
   const doc = payload.doc;
   return {
     result: {

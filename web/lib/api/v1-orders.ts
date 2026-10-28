@@ -2,16 +2,14 @@ import "server-only";
 import { NextResponse } from "next/server";
 import {
   convertApplicationOrder,
-  createApplicationOrder,
-  createFullApplicationOrder,
   issueApplicationOrder,
   replaceApplicationOrderLines,
   ORDER_TYPE_KIND,
-  type FullOrderInput,
   type OrderTypeKey,
   type V1OrderLineInput,
   type V1ShippingLineInput,
 } from "../application/orders";
+import { createApplicationRecord } from "../application/records";
 import { invalidInput, notFound } from "../application/errors";
 import { v1GetRecord, v1ListRecords } from "./v1-records";
 import { readV1JsonObject, requireV1IdempotencyKey, withV1Request } from "./v1-request";
@@ -41,40 +39,17 @@ export function v1CreateOrder(request: Request, typeKey: string): Promise<NextRe
   const key = orderTypeKey(typeKey);
   return withV1Request(request, `api/v1/${key}`, async (_auth, context) => {
     const body = await readV1JsonObject(request);
-    if (key === "sales-orders" && hasFullOrderContent(body)) {
-      const outcome = await createFullApplicationOrder(
-        context,
-        fullOrderInput(body, requireV1IdempotencyKey(request)),
-      );
-      return { status: 201, body: outcome.result, replayed: outcome.replayed };
-    }
-    const subsidiaryId = body.subsidiaryId ?? body.subsidiary_id ?? null;
-    if (subsidiaryId !== null && typeof subsidiaryId !== "string") {
-      throw invalidInput("subsidiaryId must be a UUID");
-    }
-    const outcome = await createApplicationOrder(context, {
-      kind: ORDER_TYPE_KIND[key],
+    const recordBody =
+      key === "sales-orders"
+        ? body
+        : { subsidiaryId: body.subsidiaryId ?? body.subsidiary_id ?? null };
+    const outcome = await createApplicationRecord(context, {
+      typeKey: key,
+      body: recordBody,
       idempotencyKey: requireV1IdempotencyKey(request),
-      subsidiaryId,
     });
     return { status: 201, body: outcome.result, replayed: outcome.replayed };
   });
-}
-
-const FULL_ORDER_KEYS = [
-  "customer",
-  "lines",
-  "shippingLines",
-  "documentDate",
-  "dueDate",
-  "currency",
-  "memo",
-  "externalRef",
-  "externalSource",
-] as const;
-
-function hasFullOrderContent(body: Record<string, unknown>): boolean {
-  return FULL_ORDER_KEYS.some((field) => body[field] !== undefined);
 }
 
 /** Replace every line on a draft order. The revision token is required. */
@@ -118,29 +93,6 @@ export function v1IssueOrder(request: Request, typeKey: string, id: string): Pro
     });
     return { status: outcome.status, body: outcome.result };
   });
-}
-
-/**
- * The transport forwards the JSON shape untouched — values ride as unknown
- * and every rule (types, pairs, decimals, duplicates) lives in the
- * application layer and the drawer's writer, so coercion here can never
- * launder a mistyped value past validation.
- */
-function fullOrderInput(body: Record<string, unknown>, idempotencyKey: string): FullOrderInput {
-  return {
-    kind: "sales_order",
-    idempotencyKey,
-    subsidiaryId: (body.subsidiaryId ?? body.subsidiary_id ?? null) as string | null,
-    customer: body.customer as FullOrderInput["customer"],
-    documentDate: body.documentDate as string | undefined,
-    dueDate: body.dueDate as string | null | undefined,
-    currency: body.currency as string | undefined,
-    memo: body.memo as string | null | undefined,
-    lines: body.lines as V1OrderLineInput[] | undefined,
-    shippingLines: body.shippingLines as V1ShippingLineInput[] | undefined,
-    externalRef: body.externalRef as string | null | undefined,
-    externalSource: body.externalSource as string | null | undefined,
-  };
 }
 
 /** Convert an issued order — same writer as the order-cycle convert action. */

@@ -1,11 +1,14 @@
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
-import { sql } from "drizzle-orm";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { db, withOrgTransaction } from "@openbooks/engine/platform/database";
-import { recordSupplyEvidence } from "@openbooks/engine/tax";
+import { applicationContextFromSession } from "../../../../../lib/application/context";
+import {
+  getDocumentSupplyEvidence,
+  recordDocumentSupplyEvidence,
+} from "../../../../../lib/application/document-actions";
 
 export const runtime = "nodejs";
 
@@ -33,13 +36,6 @@ const PUTBodySchema = z.object({
   evidence: z.array(EvidenceSchema).max(6),
 });
 
-type EvidenceRow = {
-  kind: string;
-  countryCode: string;
-  source: string;
-  observedOn: string | null;
-};
-
 /**
  * Place-of-supply evidence on a draft sales document: read the collected
  * signals with the frozen verdict, or replace the election and signals in
@@ -50,46 +46,18 @@ export const GET = defineRoute({
   permission: "ar.read",
   feature: "crossBorderTax",
   params: z.object({ id: uuidString() }),
-  handler: async ({ authz: routeAuthz, params }) => {
-    const gate = routeAuthz;
+  handler: async ({ authz, params, request }) => {
     try {
-      const doc = (
-        await db.execute<{ custom: { crossBorder?: unknown; crossBorderSupply?: unknown } | null }>(
-          sql`
-        select custom from documents where org_id = ${gate.user.orgId} and id = ${params.id}`,
-          "objects",
-        )
-      )[0];
-      if (!doc) return NextResponse.json({ error: "document not found" }, { status: 404 });
-      const rows = await db.execute<EvidenceRow>(
-        sql`
-        select kind, country_code as "countryCode", source, observed_on::text as "observedOn"
-          from document_supply_evidence
-         where org_id = ${gate.user.orgId} and document_id = ${params.id}
-         order by kind, source`,
-        "objects",
+      return NextResponse.json(
+        await getDocumentSupplyEvidence(
+          applicationContextFromSession(
+            authz,
+            "api",
+            request.headers.get("x-request-id") || randomUUID(),
+          ),
+          params.id,
+        ),
       );
-      const corrected =
-        (
-          await db.execute<{ id: string; number: string }>(
-            sql`
-        select corrected.id, corrected.document_number as number
-          from document_links link
-          join documents corrected
-            on corrected.org_id = link.org_id and corrected.id = link.to_document_id
-         where link.org_id = ${gate.user.orgId}
-           and link.from_document_id = ${params.id}
-           and link.link_type = 'corrects'
-         limit 1`,
-            "objects",
-          )
-        )[0] ?? null;
-      return NextResponse.json({
-        election: doc.custom?.crossBorder ?? null,
-        verdict: doc.custom?.crossBorderSupply ?? null,
-        evidence: rows,
-        correctedDocument: corrected,
-      });
     } catch (e: unknown) {
       return apiErrorResponse(e, { safeStatus: 422 });
     }
@@ -101,30 +69,17 @@ export const PUT = defineRoute({
   feature: "crossBorderTax",
   params: z.object({ id: uuidString() }),
   body: PUTBodySchema,
-  handler: async ({ authz: routeAuthz, params, body: routeBody }) => {
-    const gate = routeAuthz;
-    const { election, evidence } = routeBody as {
-      election: {
-        supplyKind: "digital_service" | "goods";
-        customerKind: "consumer" | "business";
-        correctsDocumentId?: string | null;
-      };
-      evidence: {
-        kind:
-          | "billing_address"
-          | "ip_country"
-          | "card_bin_country"
-          | "bank_country"
-          | "sim_country"
-          | "ship_to";
-        country: string;
-        source: string;
-      }[];
-    };
+  handler: async ({ authz, params, body, request }) => {
     try {
-      const saved = await withOrgTransaction(gate.user.orgId, () =>
-        recordSupplyEvidence(db, gate.user.orgId, params.id, { election, evidence }, gate.user.id),
+      const result = await recordDocumentSupplyEvidence(
+        applicationContextFromSession(
+          authz,
+          "api",
+          request.headers.get("x-request-id") || randomUUID(),
+        ),
+        { documentId: params.id, ...body },
       );
+      const { kind: _kind, ...saved } = result;
       return NextResponse.json({ ok: true, ...saved });
     } catch (e: unknown) {
       return apiErrorResponse(e, { safeStatus: 422 });
