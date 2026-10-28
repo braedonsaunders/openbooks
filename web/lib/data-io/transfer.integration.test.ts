@@ -371,8 +371,8 @@ test(
       await t.test(
         "exports pass the legacy row ceiling with a complete bounded cursor and checksum",
         async () => {
-          let seeded = false;
           const exportPrefix = `EXPORT-${randomUUID().slice(0, 8)}`;
+          let seeded = false;
           try {
             await withOrgTransaction(org.orgId, () =>
               db.execute(
@@ -402,20 +402,25 @@ test(
             const parts = [];
             for await (const part of transferBytes(org.orgId, job.id, "output")) parts.push(part);
             const output = Buffer.concat(parts);
+            const csvRows = output.toString().split("\r\n");
             assert.equal(output.length, complete.bytes);
-            assert.match(output.toString(), new RegExp(`${exportPrefix}-50001,Export item 50001`));
-            assert.equal(output.toString().split("\r\n").length - 2, complete.totalRows);
-          } finally {
-            const exportCodePrefix = `${exportPrefix}-%`;
-            const removed = await withOrgTransaction(org.orgId, () =>
-              db.execute<{ id: string }>(
-                sql`delete from items
-                where org_id=${org.orgId} and code like ${exportCodePrefix} returning id`,
-                "objects",
-              ),
+            assert.equal(
+              csvRows.filter((row) => row.startsWith(`${exportPrefix}-`)).length,
+              50_001,
+              "all seeded rows must survive the export cursor and checksum",
             );
+            assert.match(output.toString(), new RegExp(`${exportPrefix}-50001,Export item 50001`));
+            assert.equal(csvRows.length - 2, complete.totalRows);
+          } finally {
             if (seeded) {
-              assert.equal(removed.length, 50_001, "the export fixture rows must be removed");
+              const exportCodePrefix = `${exportPrefix}-%`;
+              const removed = await withOrgTransaction(org.orgId, () =>
+                db.execute(
+                  sql`delete from items
+                  where org_id=${org.orgId} and code like ${exportCodePrefix}`,
+                ),
+              );
+              assert.equal(removed.rowCount, 50_001, "the export fixture rows must be removed");
             }
           }
         },
