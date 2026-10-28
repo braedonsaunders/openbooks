@@ -413,7 +413,8 @@ const TASK_TYPES = new Set([
 const COMPLETION_MODES = new Set(["manual", "computed", "automatic"]);
 const GATE_TYPES = new Set(["none", "soft", "hard"]);
 
-function text(body: Body, key: string, required = false): string | null {
+/** A trimmed string field of a close settings body; required fields refuse when blank. */
+export function text(body: Body, key: string, required = false): string | null {
   const value = typeof body[key] === "string" ? body[key].trim() : "";
   if (required && !value) throw new CloseError(`${key} is required`);
   return value || null;
