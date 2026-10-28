@@ -34,6 +34,66 @@ function selfVisible(authz: Parameters<ApplicationToolDefinition["visibleTo"]>[0
   return typeof authz.user.id === "string" && authz.user.id.length > 0;
 }
 
+function inboxActionPermissions(itemId: string, actionKey: string): string[] | null {
+  const separator = itemId.indexOf(":");
+  if (separator < 1 || separator === itemId.length - 1) return null;
+  const kind = itemId.slice(0, separator);
+  const sourceId = itemId.slice(separator + 1);
+  const gateAction = ["approve", "reject", "delegate"].includes(actionKey);
+
+  switch (kind) {
+    case "flows_approval":
+    case "expense_report":
+      return gateAction ? ["flows.approve"] : null;
+    case "hrm_process_step":
+      return actionKey === "complete" ? ["hrm.process.read", "hrm.self.read"] : null;
+    case "hrm_leave_request":
+      if (sourceId.startsWith("own:") && actionKey === "submit") return ["hrm.leave.request"];
+      return sourceId.startsWith("gate:") && gateAction ? ["flows.approve"] : null;
+    case "hrm_change_request":
+      if (sourceId.startsWith("own:") && actionKey === "submit") return ["hrm.employment.manage"];
+      return sourceId.startsWith("gate:") && gateAction ? ["flows.approve"] : null;
+    case "hrm_review":
+      return sourceId.startsWith("ack:") && actionKey === "acknowledge"
+        ? ["hrm.self.request"]
+        : null;
+    case "timesheet_week":
+    case "crew_time_batch":
+      return sourceId.startsWith("gate:") && gateAction ? ["flows.approve"] : null;
+    case "notification":
+      return actionKey === "mark-read" ? ["hrm.self.read"] : null;
+    case "equity_action":
+      return ["approve", "reject"].includes(actionKey) ? ["equity.approve"] : null;
+    default:
+      return null;
+  }
+}
+
+const INBOX_ACTION_VISIBILITY_PERMISSIONS = [
+  "flows.approve",
+  "hrm.process.read",
+  "hrm.self.read",
+  "hrm.leave.request",
+  "hrm.employment.manage",
+  "hrm.self.request",
+  "equity.approve",
+];
+
+function inboxActionVisible(authz: Parameters<ApplicationToolDefinition["visibleTo"]>[0]): boolean {
+  return INBOX_ACTION_VISIBILITY_PERMISSIONS.some((permission) => can(authz, permission));
+}
+
+function assertInboxActionPermission(
+  context: ApplicationContext,
+  itemId: string,
+  actionKey: string,
+): void {
+  const permissions = inboxActionPermissions(itemId, actionKey);
+  if (!permissions) throw invalidInput("The selected inbox action is not supported.");
+  if (permissions.some((permission) => can(context.authz, permission))) return;
+  assertApplicationPermission(context, permissions[0]!);
+}
+
 function settleSqlRefusal(error: unknown): never {
   if (error instanceof UserSqlRefusal) {
     if (error.status === 403) throw new ApplicationError("forbidden", error.message, 403);
@@ -253,7 +313,7 @@ export const WORKSPACE_OPERATION_TOOLS: ApplicationToolDefinition[] = [
     name: "mark_notifications_read",
     title: "Mark Notifications Read",
     description:
-      "Mark your own notifications as read by id, or mark all of your unread notifications. Use the notification inbox to resolve ids; organization and user scope are always taken from the authenticated actor.",
+      "Mark only your own notifications as read by id, or mark all of your unread notifications. Use the notification inbox to resolve ids; organization and user scope are always taken from the authenticated actor.",
     inputSchema: z
       .object({
         ids: z.array(UUID).min(1).max(100).optional().describe("Notification ids to mark read."),
@@ -278,7 +338,7 @@ export const WORKSPACE_OPERATION_TOOLS: ApplicationToolDefinition[] = [
     name: "act_on_inbox_item",
     title: "Act on Inbox Item",
     description:
-      "Complete an action offered by an inbox item, such as approve, reject, complete, or mark read. The source module enforces the item's current state, actor authority, reason rules, and subsidiary scope; use the inbox list to copy itemId and actionKey.",
+      "Complete an action offered by an inbox item, such as approve, reject, complete, or mark read. This checks the matching application permission for each item kind before the source module enforces current state, actor authority, reason rules, and subsidiary scope; use the inbox list to copy itemId and actionKey.",
     inputSchema: z.object({
       itemId: z.string().min(1).max(300).describe("Opaque item id returned by the inbox list."),
       actionKey: z.string().min(1).max(80).describe("Action key advertised by that inbox item."),
@@ -293,8 +353,11 @@ export const WORKSPACE_OPERATION_TOOLS: ApplicationToolDefinition[] = [
     destructive: true,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: selfVisible,
+    visibleTo: inboxActionVisible,
+    authorizeReplay: async (context, input) =>
+      assertInboxActionPermission(context, input.itemId, input.actionKey),
     execute: async (context, input) => {
+      assertInboxActionPermission(context, input.itemId, input.actionKey);
       try {
         await actOnInboxItem(
           await inboxContext(context.authz),

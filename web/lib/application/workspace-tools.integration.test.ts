@@ -111,6 +111,39 @@ test(
       assert.equal(replay.id, created.id);
       assert.ok(await withOrgContext(first.orgId, () => getFolder(first.orgId, created.id)));
 
+      await run(ctxA, "grant_folder_access", {
+        resourceId: created.id,
+        principalType: "user",
+        principalId: actorA.adminId,
+        access: "editor",
+        idempotencyKey: "workspace-folder-grant-0001",
+      });
+      const grants = (await run(ctxA, "list_folder_grants", { resourceId: created.id })) as {
+        grants: Array<{ principalId: string; access: string }>;
+      };
+      assert.ok(
+        grants.grants.some(
+          (grant) => grant.principalId === actorA.adminId && grant.access === "editor",
+        ),
+      );
+      const keyScopedActor = ctxFor(first.orgId, actorA.adminId, ["ap.read"]);
+      await assert.rejects(
+        run(keyScopedActor, "create_folder", {
+          name: "Scoped key must be refused",
+          parentId: created.id,
+          idempotencyKey: "workspace-folder-scoped-0001",
+        }),
+        /forbidden/,
+      );
+      await assert.rejects(
+        run(ctxFor(first.orgId, actorA.adminId, ["hrm.self.read"]), "act_on_inbox_item", {
+          itemId: `flows_approval:gate:${randomUUID()}`,
+          actionKey: "approve",
+          idempotencyKey: "workspace-inbox-scope-0001",
+        }),
+        /forbidden/,
+      );
+
       const destination = (await run(ctxA, "create_folder", {
         name: "Bulk destination",
         idempotencyKey: "workspace-folder-0002",

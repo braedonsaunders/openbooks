@@ -44,7 +44,7 @@ import {
   authorizeAttachmentTargetMutation,
 } from "@/app/api/file-cabinet/lib";
 import { cabinetViewer } from "./files";
-import type { ApplicationContext } from "./context";
+import { assertApplicationPermission, type ApplicationContext } from "./context";
 import { ApplicationError, conflict, forbidden, invalidInput, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 
@@ -57,6 +57,12 @@ const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$
 
 function requireAuthenticated(context: ApplicationContext): void {
   if (!context.authz.user.id) throw forbidden("session");
+}
+
+function permissionGate(
+  permission: string,
+): (authz: Parameters<ApplicationToolDefinition["visibleTo"]>[0]) => boolean {
+  return (authz) => can(authz, permission);
 }
 
 async function requireCabinetAccess(
@@ -94,6 +100,7 @@ async function setCabinetGrant(
   access: AccessLevel,
 ) {
   requireAuthenticated(context);
+  assertApplicationPermission(context, "documents.read");
   if (!(await cabinetResourceExists(context.authz.user.orgId, resourceType, resourceId))) {
     throw notFound(resourceType);
   }
@@ -139,6 +146,7 @@ async function listCabinetGrants(
   resourceId: string,
 ) {
   requireAuthenticated(context);
+  assertApplicationPermission(context, "documents.read");
   if (!(await cabinetResourceExists(context.authz.user.orgId, resourceType, resourceId))) {
     throw notFound(resourceType);
   }
@@ -153,6 +161,7 @@ async function revokeCabinetGrant(
   grantId: string,
 ) {
   requireAuthenticated(context);
+  assertApplicationPermission(context, "documents.read");
   if (!(await cabinetResourceExists(context.authz.user.orgId, resourceType, resourceId))) {
     throw notFound(resourceType);
   }
@@ -180,12 +189,13 @@ const bulkIds = z.array(UUID).max(500).default([]);
 
 function bulkCabinetTool(action: "move" | "delete"): ApplicationToolDefinition {
   const moving = action === "move";
+  const permission = "documents.read";
   return definition({
     name: moving ? "bulk_move_file_cabinet_items" : "bulk_delete_file_cabinet_items",
     title: moving ? "Move File Cabinet Items" : "Delete File Cabinet Items",
     description: moving
-      ? "Move selected files and folders together while applying the File Cabinet's per-item Editor and Manager grants. Use list_files and list_folders for ids, and verify each result there."
-      : "Move selected files and folders to the File Cabinet trash while applying each item's Manager grant and retention rules. Use list_files and list_folders for ids, and review per-item refusals in the result.",
+      ? "Move selected files and folders together; requires documents.read plus the File Cabinet's per-item Editor and Manager grants. Use list_files and list_folders for ids, and verify each result there."
+      : "Move selected files and folders to the File Cabinet trash; requires documents.read, each item's Manager grant, and retention clearance. Use list_files and list_folders for ids, and review per-item refusals in the result.",
     inputSchema: z
       .object({
         fileIds: bulkIds.describe("File ids selected from the File Cabinet."),
@@ -206,11 +216,13 @@ function bulkCabinetTool(action: "move" | "delete"): ApplicationToolDefinition {
     destructive: !moving,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: permissionlessResourceGate,
+    visibleTo: permissionGate(permission),
     execute: async (context, input) => {
       requireAuthenticated(context);
+      assertApplicationPermission(context, permission);
       const viewer = cabinetViewer(context.authz);
-      const targetFolderId = moving && "targetFolderId" in input ? input.targetFolderId : undefined;
+      const targetFolderId =
+        moving && typeof input.targetFolderId === "string" ? input.targetFolderId : undefined;
       if (
         moving &&
         (!targetFolderId ||
@@ -232,10 +244,6 @@ function bulkCabinetTool(action: "move" | "delete"): ApplicationToolDefinition {
   });
 }
 
-function permissionlessResourceGate(authz: Parameters<ApplicationToolDefinition["visibleTo"]>[0]) {
-  return authz.user.id.length > 0;
-}
-
 export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
   bulkCabinetTool("move"),
   bulkCabinetTool("delete"),
@@ -243,7 +251,7 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     name: "create_folder",
     title: "Create Folder",
     description:
-      "Create a File Cabinet folder. Creating a nested folder requires Editor access on its parent; creating a root folder requires documents.manage. Use list_folders to resolve the parent id.",
+      "Create a File Cabinet folder; requires documents.read and Editor access on a parent, while creating a root folder also requires documents.manage. Use list_folders to resolve the parent id.",
     inputSchema: z.object({
       name: z.string().trim().min(1).max(255).describe("Folder name."),
       parentId: UUID.nullable().optional().describe("Parent folder, or null for a root folder."),
@@ -257,9 +265,10 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: permissionlessResourceGate,
+    visibleTo: permissionGate("documents.read"),
     execute: async (context, input) => {
       requireAuthenticated(context);
+      assertApplicationPermission(context, "documents.read");
       const parentId = input.parentId ?? null;
       if (parentId) {
         if (!(await getFolder(context.authz.user.orgId, parentId))) throw notFound("parent folder");
@@ -285,7 +294,7 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     name: "update_folder",
     title: "Update Folder",
     description:
-      "Rename, move, or change the privacy of a folder. Requires Manager access on the folder, Editor access on a destination parent, and documents.manage to move it to the root; use list_folders to verify the result.",
+      "Rename, move, or change the privacy of a folder; requires documents.read and Manager access on the folder, Editor access on a destination parent, and documents.manage to move it to the root. Use list_folders to verify the result.",
     inputSchema: z
       .object({
         folderId: UUID,
@@ -303,9 +312,10 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: permissionlessResourceGate,
+    visibleTo: permissionGate("documents.read"),
     execute: async (context, input) => {
       requireAuthenticated(context);
+      assertApplicationPermission(context, "documents.read");
       await requireCabinetAccess(context, "folder", input.folderId, "manager");
       const current = await getFolder(context.authz.user.orgId, input.folderId);
       if (!current) throw notFound("folder");
@@ -347,15 +357,16 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     name: "delete_folder",
     title: "Delete Folder",
     description:
-      "Move a folder subtree to the File Cabinet trash. Requires Manager access and refuses system folders or retained evidence; use list_folders to resolve the folder and restore_folder if recovery is needed.",
+      "Move a folder subtree to the File Cabinet trash; requires documents.read and Manager access, and refuses system folders or retained evidence. Use list_folders to resolve the folder and restore_folder if recovery is needed.",
     inputSchema: z.object({ folderId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false,
     destructive: true,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: permissionlessResourceGate,
+    visibleTo: permissionGate("documents.read"),
     execute: async (context, input) => {
       requireAuthenticated(context);
+      assertApplicationPermission(context, "documents.read");
       await requireCabinetAccess(context, "folder", input.folderId, "manager");
       const result = await deleteFolder(
         context.authz.user.orgId,
@@ -378,15 +389,16 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     name: "restore_folder",
     title: "Restore Folder",
     description:
-      "Restore a trashed folder subtree. Requires Manager access on the folder; use list_folders to find the folder and then verify the restored subtree.",
+      "Restore a trashed folder subtree; requires documents.read and Manager access on the folder. Use list_folders to find the folder and verify the restored subtree.",
     inputSchema: z.object({ folderId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false,
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: permissionlessResourceGate,
+    visibleTo: permissionGate("documents.read"),
     execute: async (context, input) => {
       requireAuthenticated(context);
+      assertApplicationPermission(context, "documents.read");
       await requireCabinetAccess(context, "folder", input.folderId, "manager", true);
       const ok = await restoreFolder(
         context.authz.user.orgId,
@@ -401,7 +413,7 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     name: "rename_file",
     title: "Rename File",
     description:
-      "Rename a File Cabinet file while preserving its version history. Requires Editor access on the file; use list_files or get_file to resolve the id and verify the updated metadata.",
+      "Rename a File Cabinet file while preserving its version history; requires documents.read and Editor access on the file. Use list_files or get_file to resolve the id and verify the updated metadata.",
     inputSchema: z.object({
       fileId: UUID,
       name: z.string().trim().min(1).max(255).describe("New file name, including its extension."),
@@ -411,7 +423,7 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: permissionlessResourceGate,
+    visibleTo: permissionGate("documents.read"),
     execute: async (context, input) =>
       updateCabinetFile(context, input.fileId, { name: input.name }),
   }),
@@ -419,7 +431,7 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     name: "move_file",
     title: "Move File",
     description:
-      "Move a File Cabinet file to another folder. Requires Editor access on both the file and destination folder; use list_files and list_folders to resolve ids and verify the new folder.",
+      "Move a File Cabinet file to another folder; requires documents.read and Editor access on both the file and destination folder. Use list_files and list_folders to resolve ids and verify the new folder.",
     inputSchema: z.object({
       fileId: UUID,
       folderId: UUID.describe("Destination folder."),
@@ -429,7 +441,7 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: permissionlessResourceGate,
+    visibleTo: permissionGate("documents.read"),
     execute: async (context, input) =>
       updateCabinetFile(context, input.fileId, { folderId: input.folderId }),
   }),
@@ -437,15 +449,16 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     name: "delete_file",
     title: "Delete File",
     description:
-      "Move a File Cabinet file to the trash while preserving its bytes and history. Requires Manager access and refuses retained evidence; use list_files or get_file to resolve the id and restore_file if recovery is needed.",
+      "Move a File Cabinet file to the trash while preserving its bytes and history; requires documents.read and Manager access, and refuses retained evidence. Use list_files or get_file to resolve the id and restore_file if recovery is needed.",
     inputSchema: z.object({ fileId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false,
     destructive: true,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: permissionlessResourceGate,
+    visibleTo: permissionGate("documents.read"),
     execute: async (context, input) => {
       requireAuthenticated(context);
+      assertApplicationPermission(context, "documents.read");
       await requireCabinetAccess(context, "file", input.fileId, "manager");
       const ok = await deleteFile(context.authz.user.orgId, input.fileId, cabinetAudit(context));
       if (!ok) {
@@ -463,15 +476,16 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     name: "restore_file",
     title: "Restore File",
     description:
-      "Restore a trashed File Cabinet file. Requires Manager access on the file; use list_files to resolve its id and verify the restored metadata.",
+      "Restore a trashed File Cabinet file; requires documents.read and Manager access on the file. Use list_files to resolve its id and verify the restored metadata.",
     inputSchema: z.object({ fileId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false,
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: permissionlessResourceGate,
+    visibleTo: permissionGate("documents.read"),
     execute: async (context, input) => {
       requireAuthenticated(context);
+      assertApplicationPermission(context, "documents.read");
       await requireCabinetAccess(context, "file", input.fileId, "manager", true);
       const ok = await restoreFile(context.authz.user.orgId, input.fileId, cabinetAudit(context));
       if (!ok) throw notFound("file");
@@ -492,26 +506,26 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
       definition({
         name: `list_${noun}_grants`,
         title: `List ${title} Grants`,
-        description: `List sharing grants on a ${noun}. Requires Manager access; use list_files or list_folders to resolve the resource id.`,
+        description: `List sharing grants on a ${noun}; requires documents.read and Manager access. Use list_files or list_folders to resolve the resource id.`,
         inputSchema: z.object({ resourceId: UUID }),
         readOnly: true,
         destructive: false,
         openWorld: false,
         assistantConfirmation: "never",
-        visibleTo: permissionlessResourceGate,
+        visibleTo: permissionGate("documents.read"),
         execute: async (context, input) =>
           listCabinetGrants(context, resourceType, input.resourceId),
       }),
       definition({
         name: `grant_${noun}_access`,
         title: `Grant ${title} Access`,
-        description: `Create or update a ${noun} sharing grant. Requires Manager access; the recipient must be an organization user or role and its subsidiary scope must include the resource. Use list_${plural} and list_users/list_roles to resolve ids.`,
+        description: `Create or update a ${noun} sharing grant; requires documents.read and Manager access. The recipient must be an organization user or role and its subsidiary scope must include the resource. Use list_${plural} and list_users/list_roles to resolve ids.`,
         inputSchema: grantInput,
         readOnly: false,
         destructive: false,
         openWorld: false,
         assistantConfirmation: "always",
-        visibleTo: permissionlessResourceGate,
+        visibleTo: permissionGate("documents.read"),
         execute: async (context, input) => {
           const { resourceId, ...grant } = input;
           return setCabinetGrant(
@@ -527,13 +541,13 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
       definition({
         name: `revoke_${noun}_access`,
         title: `Revoke ${title} Access`,
-        description: `Remove one sharing grant from a ${noun}. Requires Manager access; use list_${noun}_grants to resolve the grant id and verify the remaining grants.`,
+        description: `Remove one sharing grant from a ${noun}; requires documents.read and Manager access. Use list_${noun}_grants to resolve the grant id and verify the remaining grants.`,
         inputSchema: z.object({ resourceId: UUID, grantId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
         readOnly: false,
         destructive: true,
         openWorld: false,
         assistantConfirmation: "always",
-        visibleTo: permissionlessResourceGate,
+        visibleTo: permissionGate("documents.read"),
         execute: async (context, input) =>
           revokeCabinetGrant(context, resourceType, input.resourceId, input.grantId),
       }),
@@ -543,7 +557,7 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     name: "replace_file",
     title: "Replace File Version",
     description:
-      "Upload a new version of a File Cabinet file while preserving prior versions. Requires Editor access and refuses retained evidence; use get_file or list_files to resolve the file id and verify the new version.",
+      "Upload a new version of a File Cabinet file while preserving prior versions; requires documents.read and Editor access, and refuses retained evidence. Use get_file or list_files to resolve the file id and verify the new version.",
     inputSchema: z.object({
       fileId: UUID,
       filename: z.string().min(1).max(255).describe("New version filename."),
@@ -562,9 +576,10 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: permissionlessResourceGate,
+    visibleTo: permissionGate("documents.read"),
     execute: async (context, input) => {
       requireAuthenticated(context);
+      assertApplicationPermission(context, "documents.read");
       const compact = input.contentBase64.replace(/\\s+/g, "");
       if (!BASE64.test(compact)) throw invalidInput("contentBase64 is not valid base64.");
       const bytes = Buffer.from(compact, "base64");
@@ -600,7 +615,7 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     name: "attach_file_to_record",
     title: "Attach File to Record",
     description:
-      "Link an existing visible File Cabinet file to a supported record. Requires the record's write permission and subsidiary access; use list_files and the record list to resolve fileId, targetTable, and targetId.",
+      "Link an existing visible File Cabinet file to a supported record; requires documents.read plus the record's write permission and subsidiary access. Use list_files and the record list to resolve fileId, targetTable, and targetId.",
     inputSchema: z.object({
       fileId: UUID,
       targetTable: z
@@ -615,9 +630,10 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: permissionlessResourceGate,
+    visibleTo: permissionGate("documents.read"),
     execute: async (context, input) => {
       requireAuthenticated(context);
+      assertApplicationPermission(context, "documents.read");
       const orgId = context.authz.user.orgId;
       const target = await loadAttachmentTarget(orgId, input.targetTable, input.targetId);
       if (!target || !attachmentTargetInScope(context.authz, target)) throw notFound("record");
@@ -656,15 +672,16 @@ export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
     name: "detach_file_from_record",
     title: "Detach File from Record",
     description:
-      "Remove a file attachment link without deleting the cabinet file. Requires read and write access to the target record and refuses retained evidence; use the record attachment list to resolve attachmentId.",
+      "Remove a file attachment link without deleting the cabinet file; requires documents.read and read/write access to the target record, and refuses retained evidence. Use the record attachment list to resolve attachmentId.",
     inputSchema: z.object({ attachmentId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false,
     destructive: true,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: permissionlessResourceGate,
+    visibleTo: permissionGate("documents.read"),
     execute: async (context, input) => {
       requireAuthenticated(context);
+      assertApplicationPermission(context, "documents.read");
       const orgId = context.authz.user.orgId;
       const link = await getAttachmentLink(orgId, input.attachmentId);
       if (!link) throw notFound("attachment");
@@ -715,6 +732,7 @@ async function updateCabinetFile(
   patch: { name?: string; folderId?: string },
 ) {
   requireAuthenticated(context);
+  assertApplicationPermission(context, "documents.read");
   await requireCabinetAccess(context, "file", fileId, "editor");
   if (patch.folderId) {
     if (!(await getFolder(context.authz.user.orgId, patch.folderId)))
