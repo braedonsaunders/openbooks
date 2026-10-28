@@ -38,9 +38,11 @@ export const POST = defineRoute({
     try {
       await pinAccountToGroup(gate, id, accountId);
     } catch (error) {
-      if (!(error instanceof AccountGroupPinError)) throw error;
-      if (error.status === 404) return notFound("record");
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      if (error instanceof AccountGroupPinError) {
+        if (error.status === 404) return notFound("record");
+        return NextResponse.json({ error: error.message }, { status: error.status });
+      }
+      throw error;
     }
     return NextResponse.json({ ok: true });
   },
@@ -63,9 +65,11 @@ export const DELETE = defineRoute({
     try {
       await unpinAccountFromGroup(gate, id, accountId);
     } catch (error) {
-      if (!(error instanceof AccountGroupPinError)) throw error;
-      if (error.status === 404) return notFound("record");
-      return NextResponse.json({ error: error.message }, { status: error.status });
+      if (error instanceof AccountGroupPinError) {
+        if (error.status === 404) return notFound("record");
+        return NextResponse.json({ error: error.message }, { status: error.status });
+      }
+      throw error;
     }
     return NextResponse.json({ ok: true });
   },
