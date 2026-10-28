@@ -51,12 +51,6 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@/lib/insight-mutations": `
-    import { db } from '@openbooks/engine/platform/db'
-    export async function mutateInsight(_authz, _table, _id, _action, work) {
-      return db.transaction ? db.transaction(tx => work(tx, null)) : work(db, null)
-    }
-  `,
     "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.dashboard-route-test')]
       const sqlText = globalThis.openbooksSqlTextDashboard
@@ -104,14 +98,34 @@ stubModules({
     "../../_lib": `
       const state = globalThis[Symbol.for('openbooks.dashboard-route-test')]
       export async function loadDashboard() { return state.dashboard }
+      export async function loadCard() { return null }
+      export async function guardInsightCardQuery() { return null }
       // Neither PATCH case in this suite sends a layout, so admission here is
       // unobserved; the refusal itself is covered by create.test.ts and the
       // route-cards integration test against the real visibility predicate.
       export async function layoutCardsVisible() { return true }
       export function normalizeLayout(value) { return Array.isArray(value) ? value : [] }
       export function normalizeAllowedRoles(value) { return value }
+      export function normalizeQuery(value) { return value }
+      export function normalizeVizSettings(value) { return value ?? {} }
       export function strOrNull(value) { return typeof value === 'string' && value.trim() ? value.trim() : null }
     `,
+    "../app/api/insights/_lib": `
+      const state = globalThis[Symbol.for('openbooks.dashboard-route-test')]
+      export async function loadDashboard() { return state.dashboard }
+      export async function loadCard() { return null }
+      export async function guardInsightCardQuery() { return null }
+      export async function layoutCardsVisible() { return true }
+      export function normalizeLayout(value) { return Array.isArray(value) ? value : [] }
+      export function normalizeAllowedRoles(value) { return value }
+      export function normalizeQuery(value) { return value }
+      export function normalizeVizSettings(value) { return value ?? {} }
+      export function strOrNull(value) { return typeof value === 'string' && value.trim() ? value.trim() : null }
+    `,
+    "./insight-access": `
+      export function insightVisibilitySql() { return true }
+    `,
+    "./setup/audit": `export async function auditSetupChange() { return undefined }`,
   },
 });
 
@@ -137,7 +151,20 @@ function reset(): void {
   routeState.respondExecute = (text) =>
     text.includes("updatedAt") ? { rows: [{ updatedAt: routeState.revision }] } : { rows: [] };
   routeState.respondTxExecute = (text) => {
-    if (text.includes("for update")) return { rows: [{ updatedAt: routeState.revision }] };
+    if (text.includes("to_jsonb(i) as snapshot")) {
+      return { rows: [{ snapshot: routeState.dashboard, revision: routeState.revision }] };
+    }
+    if (text.includes("for update")) {
+      return {
+        rows: [
+          {
+            updatedAt: routeState.revision,
+            snapshot: routeState.dashboard,
+            revision: routeState.revision,
+          },
+        ],
+      };
+    }
     if (text.includes("update insight_dashboards")) {
       routeState.revision = routeState.nextRevision;
       if (routeState.dashboard) {
@@ -196,6 +223,9 @@ test("overlapping saves commit the fresh request and reject the delayed stale re
     staleLockEntered = resolve;
   });
   routeState.respondTxExecute = async (text) => {
+    if (text.includes("to_jsonb(i) as snapshot")) {
+      return { rows: [{ snapshot: routeState.dashboard, revision: routeState.revision }] };
+    }
     if (text.includes("for update")) {
       routeState.lockCount += 1;
       if (routeState.lockCount === 1) {

@@ -21,6 +21,7 @@ import {
   type PageSpec,
 } from "@braedonsaunders/appkit-viewspec";
 import { insightVisibilitySql } from "@/lib/insight-access";
+import { listInsightDashboardsForAuthz } from "../../api/insights/_lib";
 import { can, requirePermission } from "../../../../lib/authz";
 import { parseListParams, pickString } from "../../../../lib/list-params";
 
@@ -34,11 +35,6 @@ import { parseListParams, pickString } from "../../../../lib/list-params";
  * appear on roughly 39 pages, which is far too many to leave to per-page
  * widgets.
  */
-
-const SORT_COLUMNS = {
-  name: sql`name`,
-  updated: sql`updated_at`,
-} as const;
 
 export interface DashboardRow {
   id: string;
@@ -105,16 +101,14 @@ export async function loadDashboards(
     ${status ? sql` and status = ${status}` : sql``}`;
 
   const [dashboards, counts] = await Promise.all([
-    db.execute(
-      sql`
-      select id, name, description, status, updated_at,
-             jsonb_array_length(layout) as card_count
-        from insight_dashboards
-       where ${where}
-       order by ${SORT_COLUMNS[params.sort]} ${params.dir === "asc" ? sql`asc` : sql`desc`} nulls last
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`,
-      "objects",
-    ),
+    listInsightDashboardsForAuthz(authz, {
+      ...(params.q ? { query: params.q } : {}),
+      ...(status ? { status } : {}),
+      limit: params.perPage,
+      offset: (params.page - 1) * params.perPage,
+      sort: params.sort,
+      direction: params.dir,
+    }),
     db.execute<{ total: string; drafts: string; published: string }>(
       sql`
       select count(*) as total,

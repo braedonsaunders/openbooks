@@ -67,28 +67,22 @@ function sqlText(query: unknown): string {
 
 const mockSources = new Map<string, string>([
   [
-    "mock:mutations",
-    `
-    import { db } from '@openbooks/engine/platform/db'
-    export async function mutateInsight(_authz, _table, _id, _action, work) {
-      return db.transaction ? db.transaction(tx => work(tx, null)) : work(db, null)
-    }
-  `,
-  ],
-  [
     "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.insight-card-route-test')]
       const sqlText = globalThis.openbooksSqlTextCard
+      const execute = async (query, mode) => {
+        const inMode = (result) => (mode === 'objects' ? result.rows : result)
+        const text = sqlText(query)
+        state.calls.push({ text })
+        if (text.includes('update insight_cards')) return inMode({ rows: state.updateSucceeds ? [{ ...state.card, updated_at: state.currentRevision }] : [] })
+        if (text.includes('updatedAt')) return inMode({ rows: [{ updatedAt: state.currentRevision }] })
+        if (text.includes('to_jsonb(i) as snapshot')) return inMode({ rows: [{ snapshot: state.card, revision: state.card.updated_at }] })
+        return inMode({ rows: [] })
+      }
       export const db = {
-        execute: async (query, mode) => {
-          const inMode = (result) => (mode === 'objects' ? result.rows : result)
-          const text = sqlText(query)
-          state.calls.push({ text })
-          if (text.includes('update insight_cards')) return inMode({ rows: state.updateSucceeds ? [{ ...state.card, updated_at: state.currentRevision }] : [] })
-          if (text.includes('updatedAt')) return inMode({ rows: [{ updatedAt: state.currentRevision }] })
-          return inMode({ rows: [] })
-        },
+        execute,
+        transaction: async (work) => work({ execute }),
       }
       export const schema = {}
       export const pool = {}
@@ -119,6 +113,9 @@ const mockSources = new Map<string, string>([
       export function normalizeQuery(value) { return value }
       export function normalizeVizSettings(value) { return value ?? {} }
       export function normalizeAllowedRoles(value) { return value }
+      export function normalizeLayout(value) { return value ?? [] }
+      export async function layoutCardsVisible() { return true }
+      export async function loadDashboard() { return null }
       export function strOrNull(value) { return typeof value === 'string' && value.trim() ? value.trim() : null }
       export async function loadCard() { return state.card }
       export async function guardInsightCardQuery(_authz, query) {
@@ -126,14 +123,23 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  [
+    "mock:insight-access",
+    `
+      export function insightVisibilitySql() { return true }
+    `,
+  ],
+  ["mock:audit", `export async function auditSetupChange() { return undefined }`],
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@/lib/insight-mutations", "mock:mutations"],
   ["@openbooks/engine/platform/db", "mock:db"],
   ["../../../../../lib/authz", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
   ["../../_lib", "mock:insights-lib"],
+  ["../app/api/insights/_lib", "mock:insights-lib"],
+  ["./insight-access", "mock:insight-access"],
+  ["./setup/audit", "mock:audit"],
 ]);
 
 const _hooks = registerHooks({

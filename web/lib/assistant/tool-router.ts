@@ -301,6 +301,16 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   // Administration commands.
 
   // Workspace commands.
+  list_insight_cards: "analytics",
+  get_insight_card: "analytics",
+  create_insight_card: "analytics",
+  update_insight_card: "analytics",
+  delete_insight_card: "analytics",
+  list_insight_dashboards: "analytics",
+  get_insight_dashboard: "analytics",
+  create_insight_dashboard: "analytics",
+  update_insight_dashboard: "analytics",
+  delete_insight_dashboard: "analytics",
   get_analytics_dashboard_config: "analytics",
   update_analytics_dashboard_config: "analytics",
   list_saved_report_shortcuts: "reports",

@@ -98,8 +98,12 @@ export type CardRow = {
   updated_at: string;
 };
 
-export async function loadCard(id: string, orgId: string): Promise<CardRow | null> {
-  const authz = await getAuthz();
+export async function loadCard(
+  id: string,
+  orgId: string,
+  resolvedAuthz?: Authz,
+): Promise<CardRow | null> {
+  const authz = resolvedAuthz ?? (await getAuthz());
   if (!authz || authz.user.orgId !== orgId) return null;
   const res = await db.execute<CardRow>(
     sql`
@@ -125,8 +129,12 @@ export type DashboardRow = {
   updated_at: string;
 };
 
-export async function loadDashboard(id: string, orgId: string): Promise<DashboardRow | null> {
-  const authz = await getAuthz();
+export async function loadDashboard(
+  id: string,
+  orgId: string,
+  resolvedAuthz?: Authz,
+): Promise<DashboardRow | null> {
+  const authz = resolvedAuthz ?? (await getAuthz());
   if (!authz || authz.user.orgId !== orgId) return null;
   const res = await db.execute<DashboardRow>(
     sql`
@@ -138,6 +146,67 @@ export async function loadDashboard(id: string, orgId: string): Promise<Dashboar
     "objects",
   );
   return res[0] ?? null;
+}
+
+export async function listInsightCardsForAuthz(
+  authz: Authz,
+  input: {
+    query?: string;
+    status?: "draft" | "published";
+    limit: number;
+    offset: number;
+    sort: "name" | "updated";
+    direction: "asc" | "desc";
+  },
+): Promise<CardRow[]> {
+  const sourceKeys = await visibleInsightSourceKeys(authz);
+  const sourceFilter = insightSourceFilter(sourceKeys);
+  const like = input.query ? `%${input.query}%` : null;
+  const sort = input.sort === "name" ? sql.raw("name") : sql.raw("updated_at");
+  const direction = input.direction === "asc" ? sql.raw("asc") : sql.raw("desc");
+  return db.execute<CardRow>(
+    sql`
+      select id, name, description, viz_type, status, query, allowed_roles, viz_settings,
+             to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
+        from insight_cards
+       where org_id = ${authz.user.orgId} and ${insightVisibilitySql(authz)} and ${sourceFilter}
+         ${like ? sql`and name ilike ${like}` : sql``}
+         ${input.status ? sql`and status = ${input.status}` : sql``}
+       order by ${sort} ${direction} nulls last
+       limit ${input.limit} offset ${input.offset}
+    `,
+    "objects",
+  );
+}
+
+export async function listInsightDashboardsForAuthz(
+  authz: Authz,
+  input: {
+    query?: string;
+    status?: "draft" | "published";
+    limit: number;
+    offset: number;
+    sort: "name" | "updated";
+    direction: "asc" | "desc";
+  },
+): Promise<Array<DashboardRow & { card_count: number }>> {
+  const like = input.query ? `%${input.query}%` : null;
+  const sort = input.sort === "name" ? sql.raw("name") : sql.raw("updated_at");
+  const direction = input.direction === "asc" ? sql.raw("asc") : sql.raw("desc");
+  return db.execute<DashboardRow & { card_count: number }>(
+    sql`
+      select id, name, description, layout, status, allowed_roles,
+             jsonb_array_length(layout) as card_count,
+             to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at
+        from insight_dashboards
+       where org_id = ${authz.user.orgId} and ${insightVisibilitySql(authz)}
+         ${like ? sql`and name ilike ${like}` : sql``}
+         ${input.status ? sql`and status = ${input.status}` : sql``}
+       order by ${sort} ${direction} nulls last
+       limit ${input.limit} offset ${input.offset}
+    `,
+    "objects",
+  );
 }
 
 export type DashboardCard = {

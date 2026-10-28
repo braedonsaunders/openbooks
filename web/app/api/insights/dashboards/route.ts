@@ -1,14 +1,9 @@
 import { defineRoute } from "@/lib/api/route";
-import { UNTITLED_DASHBOARD_NAME } from "@/lib/insight-untitled";
 import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
-import { claimIdempotentCreate, resolveIdempotentReplay } from "../../../../lib/api/idempotency";
-import { auditSetupChange } from "../../../../lib/setup/audit";
-import { layoutCardsVisible, normalizeAllowedRoles, normalizeLayout, strOrNull } from "../_lib";
+import { createInsightDashboard } from "@/lib/insight-mutations";
 
 export const runtime = "nodejs";
 
@@ -34,22 +29,6 @@ const createDashboardBodySchema = z.strictObject({
     .optional(),
 });
 
-function bad(error: string) {
-  return NextResponse.json({ error }, { status: 422 });
-}
-
-/**
- * A layout naming a missing or foreign card. Thrown inside the create
- * transaction so the refusal rolls back the whole unit (no row, no audit
- * event) and caught below into the same 422 PATCH returns.
- */
-class DashboardCardRefusal extends Error {
-  constructor() {
-    super("Layout references an unavailable card");
-    this.name = "DashboardCardRefusal";
-  }
-}
-
 /**
  * Explicit create for an insight dashboard. The New button opens a LOCAL
  * dialog (name + description, zero writes) and this endpoint runs only on
@@ -65,110 +44,10 @@ export const POST = defineRoute({
   },
   body: createDashboardBodySchema,
   handler: async ({ request: req, authz: gate, body: routeBody }) => {
-    const user = gate.user;
-
     const requestId = req.headers.get("Idempotency-Key")?.trim() ?? "";
     if (!isUuid(requestId)) {
       return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 400 });
     }
-
-    const body = routeBody;
-
-    if (body.name !== undefined && typeof body.name !== "string") {
-      return bad("Dashboard name must be a string");
-    }
-    const name = body.name?.trim() || UNTITLED_DASHBOARD_NAME;
-    const description = strOrNull(body.description);
-
-    let layout: ReturnType<typeof normalizeLayout>;
-    try {
-      layout = normalizeLayout(body.layout ?? []);
-    } catch (e) {
-      return bad(e instanceof Error ? e.message : "invalid layout");
-    }
-    let allowedRoles: string[] | null;
-    try {
-      allowedRoles = normalizeAllowedRoles(body.allowedRoles);
-    } catch (e) {
-      return bad(e instanceof Error ? e.message : "invalid roles");
-    }
-
-    const snapshot = {
-      id: requestId,
-      org_id: user.orgId,
-      name,
-      description,
-      layout,
-      allowed_roles: allowedRoles,
-    };
-    const match = { name, description, layout, allowed_roles: allowedRoles };
-
-    let outcome: "fresh" | "replay" | "conflict";
-    try {
-      outcome = await db.transaction(async (tx) => {
-        const claim = await claimIdempotentCreate(tx, {
-          orgId: user.orgId,
-          table: "insight_dashboards",
-          key: requestId,
-        });
-        if (claim === "exists") {
-          return resolveIdempotentReplay(tx, {
-            orgId: user.orgId,
-            table: "insight_dashboards",
-            key: requestId,
-            match,
-          });
-        }
-        // Transactional and equivalent to PATCH: a layout naming a missing or
-        // foreign card is refused inside this same transaction, before any
-        // insert, so the refusal commits nothing — no row, no audit event.
-        if (!(await layoutCardsVisible(tx, gate, layout))) {
-          throw new DashboardCardRefusal();
-        }
-        const inserted = await tx.execute<{ id: string }>(
-          sql`
-      insert into insight_dashboards
-        (id, org_id, name, description, layout, status, allowed_roles, created_by, updated_by)
-      values
-        (${requestId}, ${user.orgId}, ${name}, ${description},
-         ${JSON.stringify(layout)}::jsonb, 'draft',
-         ${allowedRoles ? JSON.stringify(allowedRoles) : null}::jsonb,
-         ${user.id}, ${user.id})
-      -- A retry resolves the existing audited payload below; conflicting input is refused.
-      on conflict (id) do nothing
-      returning id
-    `,
-          "objects",
-        );
-        if (!inserted[0]) {
-          return resolveIdempotentReplay(tx, {
-            orgId: user.orgId,
-            table: "insight_dashboards",
-            key: requestId,
-            match,
-          });
-        }
-        await auditSetupChange(
-          {
-            orgId: user.orgId,
-            table: "insight_dashboards",
-            rowId: requestId,
-            action: "insert",
-            changes: { before: null, after: snapshot },
-            actorId: user.id,
-            requestId,
-          },
-          tx,
-        );
-        return "fresh" as const;
-      });
-    } catch (e) {
-      if (e instanceof DashboardCardRefusal) return bad(e.message);
-      throw e;
-    }
-    if (outcome === "conflict") {
-      return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 409 });
-    }
-    return NextResponse.json({ id: requestId }, { status: outcome === "fresh" ? 201 : 200 });
+    return createInsightDashboard(gate, requestId, routeBody);
   },
 });

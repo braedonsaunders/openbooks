@@ -8,6 +8,7 @@ import { WORKSPACE_DATA_TOOLS } from "./workspace-data-tools";
 import { WORKSPACE_VIEW_TOOLS } from "./workspace-view-tools";
 import { WORKSPACE_PDF_TOOLS } from "./workspace-pdf-tools";
 import { WORKSPACE_ANALYTICS_TOOLS } from "./workspace-analytics-tools";
+import { WORKSPACE_INSIGHT_TOOLS } from "./workspace-insights-tools";
 
 /** File cabinet, documents, reports, insights, notifications and data transfer commands for the assistant, MCP and the v1 command API. */
 export const WORKSPACE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
@@ -19,4 +20,5 @@ export const WORKSPACE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
   ...WORKSPACE_VIEW_TOOLS,
   ...WORKSPACE_PDF_TOOLS,
   ...WORKSPACE_ANALYTICS_TOOLS,
+  ...WORKSPACE_INSIGHT_TOOLS,
 ];

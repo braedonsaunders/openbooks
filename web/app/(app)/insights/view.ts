@@ -26,7 +26,7 @@ import { UNTITLED_CARD_NAME } from "@/lib/insight-untitled";
 import { can, requirePermission } from "../../../lib/authz";
 import { featureEnabled, orgFeatureState } from "../../../lib/features";
 import { buildListDrawerHref, isUuid, parseListParams, pickString } from "../../../lib/list-params";
-import { insightSourceFilter, loadCard } from "../../api/insights/_lib";
+import { insightSourceFilter, listInsightCardsForAuthz, loadCard } from "../../api/insights/_lib";
 import { VIZ_META } from "./viz-meta";
 
 /**
@@ -38,11 +38,6 @@ import { VIZ_META } from "./viz-meta";
  * so the loader passes the viz type and its localized label and the lookup
  * happens inside the cell component.
  */
-
-const SORT_COLUMNS = {
-  name: sql`name`,
-  updated: sql`updated_at`,
-} as const;
 
 export interface CardRow {
   id: string;
@@ -123,15 +118,14 @@ export async function loadInsights(
     ${status ? sql` and status = ${status}` : sql``}`;
 
   const [cards, counts] = await Promise.all([
-    db.execute(
-      sql`
-      select id, name, description, viz_type, status, query, updated_at
-        from insight_cards
-       where ${where}
-       order by ${SORT_COLUMNS[params.sort]} ${params.dir === "asc" ? sql`asc` : sql`desc`} nulls last
-       limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`,
-      "objects",
-    ),
+    listInsightCardsForAuthz(authz, {
+      ...(params.q ? { query: params.q } : {}),
+      ...(status ? { status } : {}),
+      limit: params.perPage,
+      offset: (params.page - 1) * params.perPage,
+      sort: params.sort,
+      direction: params.dir,
+    }),
     db.execute<{ total: string; drafts: string; published: string }>(
       sql`
       select count(*) as total,

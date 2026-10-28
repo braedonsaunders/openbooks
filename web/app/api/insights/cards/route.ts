@@ -1,21 +1,9 @@
 import { defineRoute } from "@/lib/api/route";
-import { UNTITLED_CARD_NAME } from "@/lib/insight-untitled";
 import { z } from "zod";
 import { INSIGHT_VIZ_TYPES, validateInsightQuery } from "@openbooks/analytics";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
-import { claimIdempotentCreate, resolveIdempotentReplay } from "../../../../lib/api/idempotency";
-import { auditSetupChange } from "../../../../lib/setup/audit";
-import {
-  isVizType,
-  guardInsightCardQuery,
-  normalizeAllowedRoles,
-  normalizeQuery,
-  normalizeVizSettings,
-  strOrNull,
-} from "../_lib";
+import { createInsightCard } from "@/lib/insight-mutations";
 
 export const runtime = "nodejs";
 
@@ -41,17 +29,6 @@ const createCardBodySchema = z.strictObject({
     .optional(),
 });
 
-function bad(error: string) {
-  return NextResponse.json({ error }, { status: 422 });
-}
-
-/** The blank a fresh unsaved studio starts from (same seed the draft route used). */
-const DEFAULT_QUERY = {
-  source: "ledger_lines",
-  measures: [{ agg: "sum", field: "amount" }],
-  dimensions: [{ field: "posting_date", bin: "month" }],
-};
-
 /**
  * Explicit create for an insight card. The New button opens an UNSAVED studio
  * (`?card=new`) and this endpoint runs only on Save: the caller supplies a
@@ -66,118 +43,10 @@ export const POST = defineRoute({
   },
   body: createCardBodySchema,
   handler: async ({ request: req, authz: gate, body: routeBody }) => {
-    const user = gate.user;
-
     const requestId = req.headers.get("Idempotency-Key")?.trim() ?? "";
     if (!isUuid(requestId)) {
       return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 400 });
     }
-
-    const body = routeBody;
-
-    if (body.name !== undefined && typeof body.name !== "string") {
-      return bad("Card name must be a string");
-    }
-    const name = body.name?.trim() || UNTITLED_CARD_NAME;
-
-    let query: ReturnType<typeof normalizeQuery>;
-    try {
-      query = normalizeQuery(body.query ?? DEFAULT_QUERY);
-    } catch (e) {
-      return bad(e instanceof Error ? e.message : "invalid query");
-    }
-    const queryDenied = await guardInsightCardQuery(gate, query);
-    if (queryDenied) return queryDenied;
-    const vizType = body.vizType ?? "bar";
-    if (!isVizType(vizType)) return bad("invalid viz type");
-    let vizSettings: ReturnType<typeof normalizeVizSettings>;
-    try {
-      vizSettings = normalizeVizSettings(body.vizSettings);
-    } catch (e) {
-      return bad(e instanceof Error ? e.message : "invalid viz settings");
-    }
-    let allowedRoles: string[] | null;
-    try {
-      allowedRoles = normalizeAllowedRoles(body.allowedRoles);
-    } catch (e) {
-      return bad(e instanceof Error ? e.message : "invalid roles");
-    }
-    const description = strOrNull(body.description);
-
-    const snapshot = {
-      id: requestId,
-      org_id: user.orgId,
-      name,
-      description,
-      query,
-      viz_type: vizType,
-      viz_settings: vizSettings,
-      allowed_roles: allowedRoles,
-    };
-    const match = {
-      name,
-      description,
-      query,
-      viz_type: vizType,
-      viz_settings: vizSettings,
-      allowed_roles: allowedRoles,
-    };
-
-    const outcome = await db.transaction(async (tx) => {
-      const claim = await claimIdempotentCreate(tx, {
-        orgId: user.orgId,
-        table: "insight_cards",
-        key: requestId,
-      });
-      if (claim === "exists") {
-        return resolveIdempotentReplay(tx, {
-          orgId: user.orgId,
-          table: "insight_cards",
-          key: requestId,
-          match,
-        });
-      }
-      const inserted = await tx.execute<{ id: string }>(
-        sql`
-      insert into insight_cards
-        (id, org_id, name, description, query, viz_type, viz_settings,
-         status, allowed_roles, created_by, updated_by)
-      values
-        (${requestId}, ${user.orgId}, ${name}, ${description},
-         ${JSON.stringify(query)}::jsonb, ${vizType}, ${JSON.stringify(vizSettings)}::jsonb,
-         'draft', ${allowedRoles ? JSON.stringify(allowedRoles) : null}::jsonb,
-         ${user.id}, ${user.id})
-      -- A retry resolves the existing audited payload below; conflicting input is refused.
-      on conflict (id) do nothing
-      returning id
-    `,
-        "objects",
-      );
-      if (!inserted[0]) {
-        return resolveIdempotentReplay(tx, {
-          orgId: user.orgId,
-          table: "insight_cards",
-          key: requestId,
-          match,
-        });
-      }
-      await auditSetupChange(
-        {
-          orgId: user.orgId,
-          table: "insight_cards",
-          rowId: requestId,
-          action: "insert",
-          changes: { before: null, after: snapshot },
-          actorId: user.id,
-          requestId,
-        },
-        tx,
-      );
-      return "fresh" as const;
-    });
-    if (outcome === "conflict") {
-      return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 409 });
-    }
-    return NextResponse.json({ id: requestId }, { status: outcome === "fresh" ? 201 : 200 });
+    return createInsightCard(gate, requestId, routeBody);
   },
 });

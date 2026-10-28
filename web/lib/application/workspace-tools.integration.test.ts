@@ -174,3 +174,93 @@ test(
     }
   },
 );
+
+test(
+  "insight cards and dashboards support idempotent authoring and revisioned edits",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+      const ctx = ctxFor(org.orgId, actors.adminId, [
+        "insights.create",
+        "insights.read",
+        "insights.publish",
+        "gl.read",
+      ]);
+      const run = (name: string, input: Record<string, unknown>) =>
+        withOrgContext(org.orgId, () => executeApplicationTool(applicationTool(name)!, ctx, input));
+
+      const cardInput = {
+        name: "Quarterly Ledger Insight",
+        idempotencyKey: "workspace-insight-card-create-01",
+      };
+      const cardCreated = (await run("create_insight_card", cardInput)) as {
+        cardId: string;
+        replayed: boolean;
+      };
+      const cardReplay = (await run("create_insight_card", cardInput)) as {
+        cardId: string;
+        replayed: boolean;
+      };
+      assert.equal(cardCreated.replayed, false);
+      assert.equal(cardReplay.replayed, true);
+      assert.equal(cardReplay.cardId, cardCreated.cardId);
+      const cardRead = (await run("get_insight_card", { cardId: cardCreated.cardId })) as {
+        card: { name: string; updated_at: string };
+      };
+      const cardUpdated = (await run("update_insight_card", {
+        cardId: cardCreated.cardId,
+        expectedUpdatedAt: cardRead.card.updated_at,
+        name: "Quarterly Ledger Insight Updated",
+        idempotencyKey: "workspace-insight-card-update-01",
+      })) as { card: { name: string } };
+      assert.equal(cardUpdated.card.name, "Quarterly Ledger Insight Updated");
+
+      const dashboardInput = {
+        name: "Quarterly Finance Dashboard",
+        layout: [],
+        idempotencyKey: "workspace-insight-dashboard-create-01",
+      };
+      const dashboardCreated = (await run("create_insight_dashboard", dashboardInput)) as {
+        dashboardId: string;
+        replayed: boolean;
+      };
+      const dashboardReplay = (await run("create_insight_dashboard", dashboardInput)) as {
+        dashboardId: string;
+        replayed: boolean;
+      };
+      assert.equal(dashboardCreated.replayed, false);
+      assert.equal(dashboardReplay.replayed, true);
+      assert.equal(dashboardReplay.dashboardId, dashboardCreated.dashboardId);
+      const dashboardRead = (await run("get_insight_dashboard", {
+        dashboardId: dashboardCreated.dashboardId,
+      })) as { dashboard: { updated_at: string } };
+      const dashboardUpdated = (await run("update_insight_dashboard", {
+        dashboardId: dashboardCreated.dashboardId,
+        expectedUpdatedAt: dashboardRead.dashboard.updated_at,
+        name: "Quarterly Finance Dashboard Updated",
+        idempotencyKey: "workspace-insight-dashboard-update-01",
+      })) as { dashboard: { name: string } };
+      assert.equal(dashboardUpdated.dashboard.name, "Quarterly Finance Dashboard Updated");
+
+      await run("delete_insight_card", {
+        cardId: cardCreated.cardId,
+        idempotencyKey: "workspace-insight-card-delete-01",
+      });
+      await run("delete_insight_dashboard", {
+        dashboardId: dashboardCreated.dashboardId,
+        idempotencyKey: "workspace-insight-dashboard-delete-01",
+      });
+      const remaining = (await run("list_insight_dashboards", {})) as {
+        dashboards: Array<{ id: string }>;
+      };
+      assert.equal(
+        remaining.dashboards.some((row) => row.id === dashboardCreated.dashboardId),
+        false,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
