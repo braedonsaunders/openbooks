@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";

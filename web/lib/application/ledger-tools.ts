@@ -129,7 +129,12 @@ function assertUnrestricted(context: ApplicationContext): void {
 function settleRefusal(error: unknown): never {
   if (error instanceof ApplicationError) throw error;
   if (error instanceof Error) {
-    const refusal = error as Error & { status?: unknown; code?: unknown; remedy?: unknown };
+    const refusal = error as Error & {
+      status?: unknown;
+      code?: unknown;
+      remedy?: unknown;
+      details?: unknown;
+    };
     if (typeof refusal.status === "number") {
       const details: Record<string, unknown> =
         typeof refusal.details === "object" && refusal.details !== null
@@ -936,22 +941,30 @@ export const LEDGER_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
               input.runId,
               context.authz.allowedSubsidiaryIds,
             );
-          else if (action === "cancel")
+          else if (action === "cancel") {
+            const reason = typeof input.reason === "string" ? input.reason : undefined;
+            if (reason === undefined) throw invalidInput("A cancellation reason is required.");
             result = await cancelNettingRun(
               context.authz.user.orgId,
               context.authz.user.id,
               input.runId,
-              input.reason!,
+              reason,
               context.authz.allowedSubsidiaryIds,
             );
-          else
+          } else {
+            const reason = typeof input.reason === "string" ? input.reason : undefined;
+            const reversalDate =
+              typeof input.reversalDate === "string" ? input.reversalDate : undefined;
+            if (reason === undefined || reversalDate === undefined)
+              throw invalidInput("A reversal reason and date are required.");
             result = await reverseNettingRun(
               context.authz.user.orgId,
               context.authz.user.id,
               input.runId,
-              { reason: input.reason!, reversalDate: input.reversalDate! },
+              { reason, reversalDate },
               context.authz.allowedSubsidiaryIds,
             );
+          }
           return { ok: true, ...result, href: `/intercompany/netting?run=${input.runId}` };
         } catch (error) {
           settleRefusal(error);

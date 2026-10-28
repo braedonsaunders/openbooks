@@ -8,6 +8,7 @@ import {
   deleteBudgetScenario,
   updateBudgetScenario,
 } from "../budget-scenarios";
+import { BudgetMutationError } from "../budget-mutations";
 import { can } from "../authz";
 import { assertApplicationPermission, type ApplicationContext } from "./context";
 import { ApplicationError, conflict, notFound } from "./errors";
@@ -18,6 +19,19 @@ const IDEMPOTENCY_KEY = z
   .string()
   .regex(/^[A-Za-z0-9._:-]{8,200}$/)
   .describe("Unique retry key for this exact budget action.");
+
+function settleRefusal(error: unknown): never {
+  if (error instanceof ApplicationError) throw error;
+  if (error instanceof BudgetMutationError) {
+    const details = { code: error.message };
+    if (error.status === 403) throw new ApplicationError("forbidden", error.message, 403, details);
+    if (error.status === 404) throw new ApplicationError("not_found", error.message, 404, details);
+    if (error.status === 409) throw conflict(error.message, details);
+    throw new ApplicationError("invalid_input", error.message, error.status, details);
+  }
+  throw error;
+}
+
 async function runAction(
   context: ApplicationContext,
   input: {

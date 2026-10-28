@@ -74,8 +74,6 @@ export class RecurringScheduleActionRefusal extends Error {
     this.name = "RecurringScheduleActionRefusal";
   }
 }
-import type { Authz } from "../authz";
-
 export async function ownedRecurringSchedule(exec: SqlExecutor, authz: Authz, id: string) {
   const owned = (
     await exec.execute<{ templateId: string }>(
@@ -248,14 +246,17 @@ export async function updateRecurringSchedule(
       "objects",
     );
     if (updated.length !== 1) throw new Error("Recurring schedule update returned no row.");
-    const audit = await tx.execute<{ row_id: string }>(sql`
+    const audit = await tx.execute<{ row_id: string }>(
+      sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
       values
         (${authz.user.orgId}, 'recurring_schedules', ${id}, 'update',
          ${JSON.stringify({ before, after: updated[0] })}::jsonb, ${authz.user.id})
       returning row_id
-    `);
+    `,
+      "objects",
+    );
     if (audit.length !== 1) throw new Error("Recurring schedule audit record was not saved.");
     return "updated" as const;
   });
@@ -281,25 +282,34 @@ export async function deleteRecurringSchedule(
   return db.transaction(async (tx) => {
     const existing = await ownedRecurringSchedule(tx, authz, id);
     if (!existing) return "not_found";
-    const lineage = await tx.execute<{ linked: boolean }>(sql`
+    const lineage = await tx.execute<{ linked: boolean }>(
+      sql`
       select true as linked from recurring_occurrence_documents
        where schedule_id = ${id} and org_id = ${authz.user.orgId}
        limit 1
-    `);
+    `,
+      "objects",
+    );
     if (lineage[0]) return "generated_documents_exist";
-    const deleted = await tx.execute<{ id: string }>(sql`
+    const deleted = await tx.execute<{ id: string }>(
+      sql`
       delete from recurring_schedules where id = ${id} and org_id = ${authz.user.orgId}
       returning id
-    `);
+    `,
+      "objects",
+    );
     if (deleted.length !== 1) throw new Error("Recurring schedule delete returned no row.");
-    const audit = await tx.execute<{ row_id: string }>(sql`
+    const audit = await tx.execute<{ row_id: string }>(
+      sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id)
       values
         (${authz.user.orgId}, 'recurring_schedules', ${id}, 'delete',
          ${JSON.stringify({ before: existing, after: null })}::jsonb, ${authz.user.id})
       returning row_id
-    `);
+    `,
+      "objects",
+    );
     if (audit.length !== 1) throw new Error("Recurring schedule audit record was not saved.");
     return "deleted";
   });

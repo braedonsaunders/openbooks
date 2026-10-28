@@ -66,7 +66,7 @@ function settleAllocationRefusal(error: unknown): never {
   throw error;
 }
 
-function allocationMutation<S extends z.ZodTypeAny>(args: {
+function allocationMutation<S extends z.ZodType>(args: {
   name: string;
   title: string;
   description: string;

@@ -74,7 +74,12 @@ export async function updateContinuousCloseItem(
       const status = result.error === "not_found" ? 404 : result.error === "forbidden" ? 403 : 422;
       return { ok: false, error: result.error, status };
     }
-    return { ok: true, ...(input.action === "note" && "id" in result ? { id: result.id } : {}) };
+    return {
+      ok: true,
+      ...(input.action === "note" && "id" in result && typeof result.id === "string"
+        ? { id: result.id }
+        : {}),
+    };
   }
 
   if (!(ALLOWED_ACTIONS[access.status] as readonly string[]).includes(input.action))
@@ -133,12 +138,14 @@ export async function updateContinuousCloseItem(
     },
   );
   if (!result) return { ok: false, error: "not_found", status: 404 };
-  if ("error" in result) {
+  if ("error" in result && typeof result.error === "string") {
     return {
       ok: false,
       error: result.error,
       status: result.error === "not_found" ? 404 : result.error === "forbidden" ? 403 : 409,
     };
   }
+  if (!("status" in result) || typeof result.status !== "string")
+    return { ok: false, error: "conflict", status: 409 };
   return { ok: true, status: result.status };
 }
