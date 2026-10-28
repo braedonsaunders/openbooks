@@ -420,6 +420,14 @@ export async function ensureBypassObjectGrants(
   // never SET ROLEs to openbooks_read and never runs the query-catalog
   // maintenance function.
   await revokeRuntimeFunctionExecute(pool, config.roleName);
+  // Sandbox clones run on this login and refresh the statistics of the tables
+  // they copy; the function refuses outside a clone transaction.
+  const cloneAnalyze = await pool.query<{ present: boolean }>(
+    `select to_regprocedure('public.openbooks_clone_analyze(text[])') is not null as present`,
+  );
+  if (cloneAnalyze.rows[0]?.present) {
+    await pool.query(`grant execute on function public.openbooks_clone_analyze(text[]) to ${role}`);
+  }
   await pool.query(
     `alter default privileges in schema public grant select, insert, update, delete on tables to ${role}`,
   );

@@ -1079,6 +1079,34 @@ function walPositionReader(allowed: boolean): () => Promise<bigint | null> {
   };
 }
 
+/** Tables smaller than this keep usable estimates without a refresh. */
+const STATISTICS_REFRESH_MIN_ROWS = 1000;
+
+/**
+ * Refresh planner statistics for the tables a clone copied substantially,
+ * through the owner-run clone statistics function. Returns false when the
+ * function is not available to this role, so the caller can plan defensively.
+ */
+async function refreshCopiedStatistics(
+  perTable: readonly { table: string; rows: number }[],
+): Promise<boolean> {
+  const available = await db.execute<{ allowed: boolean }>(
+    sql`select case when to_regprocedure('public.openbooks_clone_analyze(text[])') is null then false
+                else has_function_privilege('public.openbooks_clone_analyze(text[])', 'execute') end as allowed`,
+    "objects",
+  );
+  if (available[0]?.allowed !== true) return false;
+  const tables = perTable
+    .filter((row) => row.rows >= STATISTICS_REFRESH_MIN_ROWS)
+    .map((row) => row.table);
+  if (tables.length > 0) {
+    await db.execute(
+      sql`select public.openbooks_clone_analyze(string_to_array(${tables.join(",")}, ','))`,
+    );
+  }
+  return true;
+}
+
 /** Elapsed time per clone phase, for the operator log. */
 function clonePhaseTimer() {
   const started = Date.now();
@@ -1298,13 +1326,17 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       }
       phases.mark("copy");
       // The copied rows are invisible to the planner's statistics until the
-      // transaction commits and the tables are analyzed, so it estimates a
-      // single row for the new organization and chooses nested loops that
-      // rescan the whole copy for every outer row. The set-wide rewrites and
-      // rebuilds below run as hash joins instead; this setting ends with the
-      // transaction.
+      // tables are analyzed, so the verification and rebuild statements below
+      // would be planned for an empty organization and rescan the whole copy
+      // for every row. ANALYZE counts this transaction's own rows; the clone
+      // refreshes every table that received a substantial copy. Where that is
+      // unavailable, the set-wide rewrites and rebuilds avoid nested loops.
+      const statisticsRefreshed = await refreshCopiedStatistics(perTable);
+      phases.mark("statistics");
       const preferSetJoins = (on: boolean) =>
-        db.execute(sql`select set_config('enable_nestloop', ${on ? "off" : "on"}, true)`);
+        statisticsRefreshed
+          ? Promise.resolve()
+          : db.execute(sql`select set_config('enable_nestloop', ${on ? "off" : "on"}, true)`);
       await preferSetJoins(true);
       await rebaseClonedJsonReferences({
         ...opts,

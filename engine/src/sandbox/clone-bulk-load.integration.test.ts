@@ -119,3 +119,13 @@ test("a bulk-loaded clone holds the same ledger as a row-by-row clone", { skip: 
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("clone statistics refresh refuses outside a clone transaction", { skip: !DB }, async () => {
+  await assert.rejects(
+    db.execute(sql`select public.openbooks_clone_analyze(array['journal_lines'])`),
+    (err: unknown) =>
+      /only inside a sandbox clone transaction/.test(
+        String((err as { cause?: { message?: string } }).cause?.message ?? err),
+      ),
+  );
+});
