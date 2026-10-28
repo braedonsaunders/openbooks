@@ -24,7 +24,7 @@ import { addTicketQuantity, removeTicketQuantity } from "../field-ticket-product
 import { sendTicketForSignature } from "../field-ticket-signing";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission } from "./context";
-import { ApplicationError, conflict, invalidInput, notFound } from "./errors";
+import { conflict, invalidInput, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 
 const UUID = z
@@ -72,7 +72,6 @@ function settleFieldTicket(error: unknown): never {
     throw invalidInput(error.message);
   }
   if (error instanceof FieldTicketSourceCertificationError) {
-    if (error.status === 404) throw new ApplicationError("not_found", error.message, 404);
     throw invalidInput(error.message);
   }
   throw error;
