@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { getLocale } from "next-intl/server";
 import { z } from "zod";
-import { runRevenueRecognition } from "@openbooks/engine/revenue/recognition";
 import { periodDisplayLabel } from "@openbooks/engine/periods/period-policy";
-import { syncProjectRevenueContracts } from "@openbooks/engine/projects/revenue";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { defineRoute } from "@/lib/api/route";
 import { revenueRecognitionErrorResponse } from "@/lib/revenue-recognition-error";
 import { isoDate, uuidId } from "@/lib/api/json";
+import { executeRevenueRecognitionRun } from "@/lib/revenue/recognition-actions";
 
 export const runtime = "nodejs";
 
@@ -42,67 +41,20 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, body }) => {
     const user = gate.user;
     const asOfDate = body.asOfDate ?? (await businessToday(user.orgId));
-    // Snapshot the authorization set once and carry that exact policy through
-    // both project synchronization and recognition posting. `null` means
-    // unrestricted; an empty Set is a restricted caller with no permitted legal
-    // entities and must not reach either engine boundary.
-    const allowedSubsidiaryIds =
-      gate.allowedSubsidiaryIds === null ? undefined : [...gate.allowedSubsidiaryIds];
-
-    if (allowedSubsidiaryIds?.length === 0) {
-      return NextResponse.json({
-        posted: 0,
-        skipped: 0,
-        totalAmount: "0",
-        entries: [],
-        problems: [],
-      });
-    }
-
     try {
-      // A reviewed confirmation must validate the exact schedule lines the
-      // operator saw. Project synchronization rebuilds those lines, so defer it
-      // to the next unreviewed run; the preview already warns about catch-up
-      // lines waiting for that run.
-      // The engine owns the Projects gate and names its skip: an unreviewed run
-      // with project work waiting but no sync must warn, never post zero project
-      // progress in silence.
-      const projectSync = body.fingerprint
-        ? null
-        : await syncProjectRevenueContracts(
-            user.orgId,
-            user.id,
-            asOfDate,
-            undefined,
-            allowedSubsidiaryIds,
-          );
-      const result = await runRevenueRecognition(
+      const result = await executeRevenueRecognitionRun(
         user.orgId,
-        asOfDate,
         user.id,
-        body.obligationId,
-        allowedSubsidiaryIds,
-        // A confirmed run carries the fingerprint of exactly what the operator
-        // reviewed; the engine re-derives that set and refuses before writing
-        // anything if it moved.
-        body.fingerprint
-          ? {
-              fingerprint: body.fingerprint,
-              scope: {
-                asOfDate,
-                obligationId: body.obligationId,
-                contractId: body.contractId,
-                bookId: body.bookId,
-                periodId: body.periodId,
-                allowedSubsidiaryIds,
-              },
-            }
-          : undefined,
+        gate.allowedSubsidiaryIds,
+        {
+          asOfDate,
+          obligationId: body.obligationId,
+          contractId: body.contractId,
+          bookId: body.bookId,
+          periodId: body.periodId,
+          fingerprint: body.fingerprint,
+        },
       );
-      if (projectSync) {
-        result.problems.push(...projectSync.problems);
-        if (projectSync.skipped) result.problems.push(projectSync.skipped);
-      }
       // Posted entries reach the drawer with their period labelled in the viewer's locale.
       const locale = await getLocale();
       return NextResponse.json({

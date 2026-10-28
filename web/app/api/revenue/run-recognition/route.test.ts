@@ -68,7 +68,11 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ["business-date", `export async function businessToday() { return '2026-08-31' }`],
+  [
+    "business-date",
+    `export async function businessToday() { return '2026-08-31' }
+     export function isIsoCalendarDate(value) { return /^\\d{4}-\\d{2}-\\d{2}$/.test(value ?? '') }`,
+  ],
   [
     "project-revenue",
     `
@@ -89,6 +93,10 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.recognition-route-test')]
       const projects = ${JSON.stringify(projects)}
       export class RevenueRecognitionError extends Error {}
+      export async function obligationAttribution() { return null }
+      export async function revenueContractAttribution() { return null }
+      export async function recognitionScopeRowExists() { return false }
+      export async function previewRevenueRecognition() { return { rows: [], postableCount: 0, skippedCount: 0, totalAmount: '0', totalDebits: '0', totalCredits: '0', balanced: true, warnings: [], fingerprint: 'preview' } }
       export async function runRevenueRecognition(_orgId, _asOfDate, _actorId, _obligationId, allowedSubsidiaryIds, confirm) {
         if (state.runError) {
           if (state.runError.kind === 'domain') throw new RevenueRecognitionError(state.runError.message)

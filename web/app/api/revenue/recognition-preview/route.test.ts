@@ -92,6 +92,9 @@ const mockSources = new Map<string, string>([
           fingerprint: 'preview-fingerprint',
         }
       }
+      export async function runRevenueRecognition() {
+        return { posted: 0, skipped: 0, totalAmount: '0', entries: [], problems: [] }
+      }
     `,
   ],
 ]);

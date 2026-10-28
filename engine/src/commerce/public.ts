@@ -95,7 +95,12 @@ export { reviveFulfilmentPayload } from "./fulfilments.ts";
 export { reviveRefundPayload } from "./refunds.ts";
 export { getPostingPolicy, listPostingPolicies, setPostingPolicy } from "./posting-policies.ts";
 export type { ChannelPostingPolicy } from "./posting-policies.ts";
-export { replayChannelExceptions, replayChannelEventExceptions } from "./exceptions.ts";
+export {
+  listChannelExceptions,
+  listChannelEventExceptions,
+  replayChannelExceptions,
+  replayChannelEventExceptions,
+} from "./exceptions.ts";
 export { postChannelOrder } from "./order-posting.ts";
 export {
   decimalToMinorUnits,
