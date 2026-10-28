@@ -1204,7 +1204,7 @@ export const MANUFACTURING_MASTER_TOOLS: ApplicationToolDefinition[] = [
     openWorld: false,
     assistantConfirmation: "always",
     visibleTo: (authz) => can(authz, "admin.setup.manage") && authz.allowedSubsidiaryIds === null,
-    authorizeReplay: (context) => {
+    authorizeReplay: async (context) => {
       assertBomManage(context);
     },
     featureKey: "inventory",

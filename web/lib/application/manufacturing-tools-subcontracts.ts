@@ -143,7 +143,6 @@ export const MANUFACTURING_SUBCONTRACT_TOOLS: ApplicationToolDefinition[] = [
           context.authz.user.id,
           input.subcontractId,
           {
-            command: "ship",
             id: nativeIdempotencyKey(input.idempotencyKey),
             subcontractId: input.subcontractId,
             materialId: input.materialId,
@@ -215,7 +214,6 @@ export const MANUFACTURING_SUBCONTRACT_TOOLS: ApplicationToolDefinition[] = [
           context.authz.user.id,
           input.subcontractId,
           {
-            command: "return",
             id: nativeIdempotencyKey(input.idempotencyKey),
             subcontractId: input.subcontractId,
             quantity: input.quantity,
@@ -346,7 +344,6 @@ export const MANUFACTURING_SUBCONTRACT_TOOLS: ApplicationToolDefinition[] = [
           context.authz.user.id,
           input.subcontractId,
           {
-            command: "returnComponents",
             id: nativeIdempotencyKey(input.idempotencyKey),
             subcontractId: input.subcontractId,
             shipmentId: input.shipmentId,

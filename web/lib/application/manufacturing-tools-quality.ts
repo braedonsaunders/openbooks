@@ -90,6 +90,12 @@ export const MANUFACTURING_QUALITY_TOOLS: ApplicationToolDefinition[] = [
           input.operationId,
           { id: nativeIdempotencyKey(input.idempotencyKey), quantity: input.quantity },
         );
+        if (!row)
+          return {
+            ok: true,
+            inspection: null,
+            href: recordHref("work-orders", input.workOrderId),
+          };
         return { ok: true, ...row, href: qualityHref(String(row.id)) };
       });
     },
@@ -129,7 +135,6 @@ export const MANUFACTURING_QUALITY_TOOLS: ApplicationToolDefinition[] = [
           context.authz.user.id,
           input.id,
           {
-            command: "inspect",
             outcome: input.outcome,
             measurements: input.measurements,
             reason: input.reason,
@@ -179,7 +184,6 @@ export const MANUFACTURING_QUALITY_TOOLS: ApplicationToolDefinition[] = [
           context.authz.user.id,
           input.id,
           {
-            command: "dispose",
             action: input.action,
             reason: input.reason,
             requestKey: nativeIdempotencyKey(input.idempotencyKey),
