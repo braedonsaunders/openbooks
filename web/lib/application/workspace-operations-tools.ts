@@ -16,7 +16,9 @@ import { TimeApprovalRefusal } from "../time-approval-refusal";
 import { isFeatureEnabled } from "../features";
 import { setInsightDashboardPin } from "../insight-dashboard-pin";
 import { setInsightPublication } from "../insight-mutations";
-import { markNotificationsReadForRoute } from "../notification-mutations";
+import { markNotificationsRead } from "@openbooks/engine/inbox/adapters/notification";
+import { db } from "@openbooks/engine/platform/db";
+import { sql } from "drizzle-orm";
 import { assertApplicationPermission, type ApplicationContext } from "./context";
 import { ApplicationError, forbidden, invalidInput, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
@@ -129,9 +131,22 @@ async function markOwnNotificationsRead(
   const ids = [...new Set(input.ids ?? [])];
   if (!input.all && ids.length === 0)
     throw invalidInput("Pass notification ids or set all to true.");
-  const result = await markNotificationsReadForRoute({ orgId, userId, ids, all: input.all });
-  if (!input.all && result.own < ids.length) throw notFound("notification");
-  return { ok: true, updated: result.own };
+  if (input.all) {
+    // The same self-scoped statement the notifications route runs for "all".
+    const rows = await db.execute<{ id: string }>(
+      sql`
+      update notifications set read_at = now(), updated_at = now()
+       where org_id = ${orgId} and user_id = ${userId} and read_at is null
+      returning id`,
+      "objects",
+    );
+    return { ok: true, updated: rows.length };
+  }
+  // The native ownership check the route uses: a list naming any notification
+  // that is not the caller's own is refused before anything is marked.
+  const result = await markNotificationsRead(db, { orgId, userId, ids });
+  if (result.own < ids.length) throw notFound("notification");
+  return { ok: true, updated: result.flipped };
 }
 
 async function publishInsight(
