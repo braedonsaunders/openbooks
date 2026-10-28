@@ -121,8 +121,7 @@ test("capital commands create and replay lease and fund workflows", { skip: !DB 
     const leaseRead = await withOrgContext(org.orgId, () =>
       executeAssistantTool(context.authz, "get_lease_agreement", { id: leaseId }),
     );
-    assert.equal(leaseRead.ok, true, JSON.stringify(leaseRead));
-    if (!leaseRead.ok) throw new Error(leaseRead.error);
+    if (!leaseRead.ok) assert.fail(leaseRead.error);
     assert.equal((leaseRead.data as { lease: { status: string } }).lease.status, "draft");
 
     await withBypassContext(() =>

@@ -40,7 +40,9 @@ export function describeObjectFields<T extends z.ZodObject<z.ZodRawShape>>(
   const shape = Object.fromEntries(
     Object.entries(schema.shape).map(([key, value]) => [
       key,
-      value.describe(descriptions[key as keyof T["shape"] & string] ?? `Value for ${key}.`),
+      (value as z.ZodType).describe(
+        descriptions[key as keyof T["shape"] & string] ?? `Value for ${key}.`,
+      ),
     ]),
   ) as z.ZodRawShape;
   return schema.extend(shape) as T;

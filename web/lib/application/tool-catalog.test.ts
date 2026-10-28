@@ -96,21 +96,18 @@ test("every mutating tool requires a retry key and is protected by executeIdempo
       "execute-idempotent",
       `${tool.name} must use the catalog mutation wrapper`,
     );
-    const schema = tool.inputSchema as unknown as {
-      shape?: Record<
-        string,
-        { isOptional?: () => boolean; safeParse: (value: unknown) => { success: boolean } }
-      >;
-      options?: Array<{
-        shape?: Record<
-          string,
-          { isOptional?: () => boolean; safeParse: (value: unknown) => { success: boolean } }
-        >;
-      }>;
+    type InputField = {
+      isOptional?: () => boolean;
+      safeParse: (value: unknown) => { success: boolean };
     };
-    const branches = schema.shape
+    type InputShape = Record<string, InputField>;
+    const schema = tool.inputSchema as unknown as {
+      shape?: InputShape;
+      options?: Array<{ shape?: InputShape }>;
+    };
+    const branches: InputShape[] = schema.shape
       ? [schema.shape]
-      : (schema.options?.map((option) => option.shape ?? []) ?? []);
+      : (schema.options?.map((option) => option.shape ?? {}) ?? []);
     assert.ok(branches.length > 0, `${tool.name} must expose object input fields`);
     for (const shape of branches) {
       const key = shape.idempotencyKey;
