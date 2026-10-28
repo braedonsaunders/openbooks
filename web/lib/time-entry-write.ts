@@ -1,0 +1,675 @@
+import type { Authz } from "@/lib/authz";
+import { refuseOthersTime, timeWorkFamily } from "@/lib/time-workspace";
+import {
+  lockSharedTimeAuthority,
+  TimeWorkTargetError,
+} from "@openbooks/engine/projects/time-work-target";
+import { z } from "zod";
+import { isoDate, uuidId } from "@/lib/api/json";
+import { notFound } from "@/lib/api/responses";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import {
+  lockScopeRow,
+  lockScopeRows,
+  ScopeNotFoundError,
+} from "@openbooks/engine/organization/scope";
+import { normalizeMoney } from "@openbooks/engine/money/money";
+import { checkProjectsWriteEnabled, isFeatureEnabled } from "./features";
+import { isUuid } from "./list-params";
+import { can } from "./authz";
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "./custom-fields";
+import { TimeApprovalRefusal } from "./time-approval-refusal";
+import { apiErrorResponse } from "./api/error-response";
+import { canonicalDecimal, compareDecimal } from "./exact-decimal";
+import { canonicalJson } from "@openbooks/engine/platform/canonical-json";
+import { lockTimeWorkOrderTarget } from "@openbooks/engine/projects/time-work-target";
+import {
+  isIsoDate,
+  loadWeek,
+  pinTimekeeper,
+  pinTimesheetLineRefs,
+  weekStart,
+  weekWindow,
+} from "../app/api/timesheets/_lib";
+
+export const saveBodySchema = z.strictObject({
+  employee: uuidId.describe("Employee party id from search_timesheets."),
+  week: isoDate("week must be a valid calendar date").describe(
+    "Any date inside the Sunday-start week.",
+  ),
+  rows: z
+    .array(
+      z
+        .strictObject({
+          projectId: uuidId.nullable().optional().describe("Project id for project time."),
+          workOrderId: uuidId
+            .nullable()
+            .optional()
+            .describe("Production work order id for production time."),
+          woOperationId: uuidId
+            .nullable()
+            .optional()
+            .describe("Operation id belonging to the work order."),
+          itemId: uuidId.nullable().optional().describe("Item id for the time line."),
+          timeTypeId: uuidId.nullable().optional().describe("Time type id for the line."),
+          departmentId: uuidId.nullable().optional().describe("Department id for the line."),
+          isBillable: z.boolean().optional().describe("Whether this time line is billable."),
+          memo: z
+            .string()
+            .max(2000)
+            .nullable()
+            .optional()
+            .describe("Line memo; a memo with no hours declares a no-hours entry."),
+          hours: z
+            .array(
+              z
+                .union([z.string().max(32), z.number().finite(), z.null()])
+                .describe("Hours cell; API route accepts a number for browser compatibility."),
+            )
+            .length(7)
+            .describe("Sunday through Saturday hours."),
+          custom: z
+            .record(z.string().min(1), z.json())
+            .default({})
+            .describe("Custom time-entry field values."),
+        })
+        .describe("One row in the weekly time grid."),
+    )
+    .max(1000)
+    .describe("Replacement rows in the editable weekly grid."),
+  expectedRevision: z
+    .string()
+    .min(1, "expectedRevision is required")
+    .max(128)
+    .describe("Revision from get_timesheet_week; stale saves refuse."),
+});
+
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
+
+const STALE_WEEK_ERROR =
+  "This week changed since you opened it — another editor saved first. " +
+  "Reload the week and re-enter your hours; nothing was saved or overwritten.";
+
+function bad(error: string) {
+  return NextResponse.json({ error }, { status: 422 });
+}
+
+class TimeLineEntityRefusal extends Error {}
+
+interface SaveRow {
+  projectId?: string | null;
+  workOrderId?: string | null;
+  woOperationId?: string | null;
+  itemId?: string | null;
+  timeTypeId?: string | null;
+  departmentId?: string | null;
+  isBillable?: boolean;
+  memo?: string | null;
+  hours?: (string | number | null)[];
+  custom?: Record<string, unknown>;
+}
+
+interface SaveBody {
+  employee: string;
+  week: string;
+  rows: SaveRow[];
+  /**
+   * The revision the client loaded (loadWeek returns it). When present and
+   * stale, the save is refused with a named 409 instead of silently
+   * overwriting another editor's hours. The grid sends it on every save;
+   * requests without one are refused at the body boundary.
+   */
+  expectedRevision: string;
+}
+
+function uuidOrNull(v: unknown): string | null | "invalid" {
+  if (v == null || v === "") return null;
+  if (typeof v !== "string" || !isUuid(v)) return "invalid";
+  return v;
+}
+
+function hoursOrNull(v: unknown): string | null | "invalid" {
+  if (v == null || v === "") return null;
+  const exact = canonicalDecimal(v, 4);
+  if (exact === null) return "invalid";
+  let hours: string;
+  try {
+    hours = normalizeMoney(exact);
+  } catch {
+    return "invalid";
+  }
+  if (compareDecimal(hours, "0") < 0) return "invalid";
+  if (compareDecimal(hours, "0") === 0) return null;
+  // time_entries.hours is numeric(19,4): fifteen whole digits. The format
+  // check admits any magnitude, so a pasted 20-digit cell died in Postgres
+  // with a storage error. Fail closed with the same named refusal.
+  if (hours.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) return "invalid";
+  return hours;
+}
+
+export async function saveTimesheetEntries({
+  request: workspaceRequest,
+  authz: gate,
+  body: requestBody,
+}: {
+  request: Request;
+  authz: Authz;
+  body: z.output<typeof saveBodySchema>;
+}): Promise<NextResponse> {
+  const { user } = gate;
+  const orgId = user.orgId;
+  const body = requestBody as SaveBody;
+  const employee = uuidOrNull(body.employee);
+  if (employee === "invalid" || employee === null) return bad("Invalid employee");
+  if (!body.week || !isIsoDate(body.week)) return bad("Invalid week");
+  const week = weekStart(body.week);
+  const days = weekWindow(week);
+  if (!Array.isArray(body.rows)) return bad("Rows must be a list");
+  const ownedEmployee = await pinTimekeeper(orgId, employee, gate.allowedSubsidiaryIds);
+  if (!ownedEmployee) return bad("Employee not found");
+  const othersRefused = await refuseOthersTime(gate, "time.manage", ownedEmployee);
+  if (othersRefused) return othersRefused;
+  const timeEntryPermission = can(gate, "time.manage") ? "time.manage" : "time.self";
+  interface Persist {
+    workedOn: string;
+    hours: string;
+    projectId: string | null;
+    workOrderId: string | null;
+    woOperationId: string | null;
+    itemId: string | null;
+    timeTypeId: string | null;
+    departmentId: string | null;
+    isBillable: boolean;
+    memo: string | null;
+    custom: Record<string, unknown>;
+  }
+  const lineDefs = await loadFieldDefs("time_entries");
+  const newStatus = "draft" as const;
+  const toPersist: Persist[] = [];
+  for (const r of body.rows) {
+    if (r == null || typeof r !== "object" || Array.isArray(r))
+      return bad("Each row must be an object");
+    if (!Array.isArray(r.hours) || r.hours.length > 7) {
+      return bad("Hours must be a list of at most seven day cells");
+    }
+    if (r.isBillable != null && typeof r.isBillable !== "boolean")
+      return bad("Invalid billable flag");
+    const projectId = uuidOrNull(r.projectId);
+    if (projectId === "invalid") return bad("Invalid project");
+    const workOrderId = uuidOrNull(r.workOrderId),
+      woOperationId = uuidOrNull(r.woOperationId);
+    if (
+      workOrderId === "invalid" ||
+      woOperationId === "invalid" ||
+      (projectId && workOrderId) ||
+      (woOperationId && !workOrderId)
+    )
+      return bad(
+        "Choose one project or production order; an operation must belong to that production order.",
+      );
+    const itemId = uuidOrNull(r.itemId);
+    if (itemId === "invalid") return bad("Invalid item");
+    const timeTypeId = uuidOrNull(r.timeTypeId);
+    if (timeTypeId === "invalid") return bad("Invalid time type");
+    const departmentId = uuidOrNull(r.departmentId);
+    if (departmentId === "invalid") return bad("Invalid department");
+    const memo = typeof r.memo === "string" && r.memo.trim() !== "" ? r.memo.trim() : null;
+    const isBillable = r.isBillable === true;
+    const validated = validateCustomValues(lineDefs, r.custom);
+    if (!validated.ok) return bad(Object.values(validated.errors)[0] ?? "Invalid custom field");
+    // Reference custom values are uuid-SHAPED at this point but nothing
+    // proves the referenced row belongs to the caller: refuse foreign or
+    // dangling ids instead of persisting a cross-tenant pointer.
+    const unowned = await findUnownedCustomReferences(orgId, lineDefs, validated.cleaned);
+    if (unowned.length > 0) return bad(`${unowned[0]!.label} not found in this organization`);
+    const custom = validated.cleaned;
+    const cells = Array.isArray(r.hours) ? r.hours : [];
+    let ownedRefs: Awaited<ReturnType<typeof pinTimesheetLineRefs>> | undefined;
+
+    const pinRowRefs = async () => {
+      if (ownedRefs === undefined) {
+        const pinned = await pinTimesheetLineRefs(
+          orgId,
+          {
+            projectId,
+            itemId,
+            timeTypeId,
+            departmentId,
+          },
+          gate.allowedSubsidiaryIds,
+        );
+        if (!pinned) return null;
+        ownedRefs = pinned;
+      }
+      return ownedRefs;
+    };
+
+    let rowHasHours = false;
+    for (let i = 0; i < 7; i++) {
+      const h = hoursOrNull(cells[i]);
+      if (h === "invalid") return bad("Hours must be a non-negative number");
+      if (h === null) continue;
+      rowHasHours = true;
+      if (projectId === null && isBillable)
+        return bad(
+          "Billable hours need a project; select the customer project or mark this work nonbillable",
+        );
+      const pinned = await pinRowRefs();
+      if (!pinned) {
+        return bad("Invalid project, item, time type, or department");
+      }
+      toPersist.push({
+        workedOn: days[i]!,
+        hours: h,
+        projectId: pinned.projectId,
+        workOrderId,
+        woOperationId,
+        itemId: pinned.itemId,
+        timeTypeId: pinned.timeTypeId,
+        departmentId: pinned.departmentId,
+        isBillable,
+        memo,
+        custom,
+      });
+    }
+    if (!rowHasHours && memo !== null) {
+      // A memo with no hours in any day cell is an explicit no-hours
+      // declaration for the week (leave, no work), not an empty line: it
+      // persists as one zero-hour entry anchored on the week's Sunday so
+      // the declaration survives a reload, reads back with its memo, and
+      // submits like any draft line. It names no time type and costs
+      // nothing — approval skips zero-hour lines — so an org with no
+      // leave/vacation time type declares against its approved leave,
+      // which the declaration audit records for the approver.
+      if (projectId === null && isBillable)
+        return bad(
+          "Billable hours need a project; select the customer project or mark this work nonbillable",
+        );
+      const pinned = await pinRowRefs();
+      if (!pinned) {
+        return bad("Invalid project, item, time type, or department");
+      }
+      toPersist.push({
+        workedOn: days[0]!,
+        hours: "0",
+        projectId: pinned.projectId,
+        workOrderId,
+        woOperationId,
+        itemId: pinned.itemId,
+        timeTypeId: pinned.timeTypeId,
+        departmentId: pinned.departmentId,
+        isBillable,
+        memo,
+        custom,
+      });
+    }
+  }
+  if (!(await isFeatureEnabled(orgId, "inventory"))) {
+    const stored = await db.execute<{ item_id: string }>(
+      sql`
+      select item_id from time_entries
+       where org_id = ${orgId}
+         and employee_party_id = ${ownedEmployee}
+         and worked_on >= ${days[0]} and worked_on <= ${days[6]}
+         and item_id is not null`,
+      "objects",
+    );
+    const storedIds = new Set(stored.map((row) => row.item_id));
+    for (const p of toPersist) {
+      if (!p.itemId || storedIds.has(p.itemId)) continue;
+      const item = await db.execute<{ kind: string }>(
+        sql`
+        select kind from items where id = ${p.itemId} and org_id = ${orgId}`,
+        "objects",
+      );
+      if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
+        return notFound("record");
+      }
+    }
+  }
+  if (!(await isFeatureEnabled(orgId, "equipment"))) {
+    const stored = await db.execute<{ item_id: string }>(
+      sql`
+      select item_id from time_entries
+       where org_id = ${orgId}
+         and employee_party_id = ${ownedEmployee}
+         and worked_on >= ${days[0]} and worked_on <= ${days[6]}
+         and item_id is not null`,
+      "objects",
+    );
+    const storedIds = new Set(stored.map((row) => row.item_id));
+    for (const p of toPersist) {
+      if (!p.itemId || storedIds.has(p.itemId)) continue;
+      const item = await db.execute<{ kind: string }>(
+        sql`
+        select kind from items where id = ${p.itemId} and org_id = ${orgId}`,
+        "objects",
+      );
+      if (item[0] && item[0].kind === "equipment_charge") {
+        return notFound("record");
+      }
+    }
+  }
+  let staleRevision: string | null = null;
+  let projectsRefused: boolean;
+  try {
+    projectsRefused = await withOrgTransaction(orgId, async () => {
+      const tx = db;
+      await lockSharedTimeAuthority(tx, orgId, user.id, {
+        employeeId: ownedEmployee,
+        from: days[0]!,
+        through: days[6]!,
+        requestedScope: gate.allowedSubsidiaryIds,
+        permission: "time.manage",
+        workFamily: timeWorkFamily(workspaceRequest),
+      });
+      // Canonical lock order is department, party, project. Shared locks
+      // pin legal-entity attribution through the save.
+      const departmentScopes = await lockScopeRows(
+        tx,
+        orgId,
+        toPersist.flatMap((p) =>
+          p.departmentId ? [{ kind: "department" as const, id: p.departmentId }] : [],
+        ),
+        gate.allowedSubsidiaryIds,
+        "share",
+        { orgWideNull: true },
+      );
+      const employeeScope = await lockScopeRow(
+        tx,
+        orgId,
+        "party",
+        ownedEmployee,
+        gate.allowedSubsidiaryIds,
+        "share",
+      );
+      const projectScopes = await lockScopeRows(
+        tx,
+        orgId,
+        toPersist.flatMap((p) =>
+          p.projectId ? [{ kind: "project" as const, id: p.projectId }] : [],
+        ),
+        gate.allowedSubsidiaryIds,
+        "share",
+      );
+      for (const p of toPersist) {
+        const production = p.workOrderId
+          ? await lockTimeWorkOrderTarget(tx, orgId, user.id, {
+              workOrderId: p.workOrderId,
+              operationId: p.woOperationId,
+              requestedScope: gate.allowedSubsidiaryIds,
+              requireOpen: false,
+              permission: timeEntryPermission,
+            })
+          : null;
+        const projectEntity =
+          production?.subsidiaryId ??
+          projectScopes.find((row) => row.id === p.projectId)?.subsidiaryId;
+        if (
+          employeeScope.subsidiaryId != null &&
+          projectEntity != null &&
+          employeeScope.subsidiaryId !== projectEntity
+        ) {
+          throw new TimeLineEntityRefusal(
+            "The project belongs to a different legal entity than the employee",
+          );
+        }
+        const departmentEntity = departmentScopes.find(
+          (row) => row.id === p.departmentId,
+        )?.subsidiaryId;
+        const workEntity = projectEntity ?? employeeScope.subsidiaryId;
+        if (departmentEntity != null && workEntity != null && departmentEntity !== workEntity) {
+          throw new TimeLineEntityRefusal(
+            "The department belongs to a different legal entity than this work; select a department in the employee or project legal entity",
+          );
+        }
+      }
+      // Released entries remain immutable across subsequent saves.
+      // Entries any downstream document has consumed stay put regardless: they
+      // are evidence for an invoice, pay run or ledger entry that already
+      // exists.
+      //
+      // An amendment offset points at its original by id, so a referenced
+      // original stays put even when it would otherwise be deletable: removing
+      // it — through a direct or stale save — orphans the offset into phantom
+      // negative hours. Amendment history is append-only; correct such weeks
+      // with a new amendment instead.
+      //
+      // The row lock serializes concurrent saves of this week so two writers
+      // cannot interleave their diffs.
+      const stored = await tx.execute<{
+        id: string;
+        worked_on: string;
+        hours: string;
+        project_id: string | null;
+        work_order_id: string | null;
+        wo_operation_id: string | null;
+        item_id: string | null;
+        time_type_id: string | null;
+        department_id: string | null;
+        memo: string | null;
+        is_billable: boolean;
+        status: string;
+        custom: Record<string, unknown> | null;
+        invoiced_by_line_id: string | null;
+        payroll_batch_ref: string | null;
+        cost_journal_entry_id: string | null;
+        production_consumed_operation_id: string | null;
+        overhead_journal_entry_id: string | null;
+        field_ticket_id: string | null;
+        service_visit_id: string | null;
+        billing_status: "unbilled" | "billed";
+        amends_entry_id: string | null;
+        corrects_entry_id: string | null;
+        has_contra: boolean;
+      }>(
+        sql`
+      select id, worked_on, hours::text as hours, project_id, work_order_id, wo_operation_id, item_id,
+             time_type_id, department_id, memo, is_billable, status, custom,
+             invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
+             overhead_journal_entry_id, production_consumed_operation_id, field_ticket_id, service_visit_id, billing_status,
+             amends_entry_id, corrects_entry_id,
+             exists (
+               select 1 from time_entries contra
+                where contra.org_id = time_entries.org_id
+                  and contra.amends_entry_id = time_entries.id
+             ) as has_contra
+        from time_entries
+       where org_id = ${orgId}
+         and employee_party_id = ${ownedEmployee}
+         and worked_on >= ${days[0]} and worked_on <= ${days[6]}
+       for update
+    `,
+        "objects",
+      );
+      // Lost-update fence: the client names the revision it loaded,
+      // refuse a save over a week that moved since. The lock above is held,
+      // so the re-read sees the latest committed state; no write has
+      // happened yet, so recording the refusal and returning persists
+      // nothing — the other editor's hours stand and this save lands
+      // nowhere. (The refusal travels out-of-band: any truthy callback
+      // value is read as the projects-refused flag.)
+      const current = await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds);
+      if (current.revision !== body.expectedRevision) {
+        staleRevision = current.revision;
+        return false;
+      }
+      const replaceable = (row: (typeof stored)[number]): boolean => {
+        if (row.amends_entry_id != null || row.corrects_entry_id != null || row.has_contra)
+          return false;
+        // Crew capture owns ticket rows and visit completion owns service
+        // labor. A weekly aggregate must not delete their stable source
+        // identities, even after a time-only rejection.
+        if (
+          row.field_ticket_id != null ||
+          row.service_visit_id != null ||
+          row.invoiced_by_line_id != null ||
+          row.payroll_batch_ref != null ||
+          row.cost_journal_entry_id != null ||
+          row.production_consumed_operation_id != null ||
+          row.overhead_journal_entry_id != null ||
+          row.billing_status !== "unbilled"
+        )
+          return false;
+        if (row.status === "draft" || row.status === "rejected") return true;
+        return false;
+      };
+      const lineKey = (v: {
+        workedOn: string;
+        hours: string;
+        projectId: string | null;
+        workOrderId: string | null;
+        woOperationId: string | null;
+        itemId: string | null;
+        timeTypeId: string | null;
+        departmentId: string | null;
+        memo: string | null;
+        isBillable: boolean;
+        custom: Record<string, unknown>;
+      }): string =>
+        [
+          v.workedOn,
+          normalizeMoney(v.hours),
+          v.projectId ?? "",
+          v.workOrderId ?? "",
+          v.woOperationId ?? "",
+          v.itemId ?? "",
+          v.timeTypeId ?? "",
+          v.departmentId ?? "",
+          v.memo ?? "",
+          v.isBillable ? "1" : "0",
+          canonicalJson(v.custom ?? {}),
+        ].join("|");
+      // Multiset of replaceable row ids by line identity; survivors are dropped
+      // from the payload before they can duplicate immutable hours.
+      const survivorCounts = new Map<string, number>();
+      const replaceableIds = new Map<string, string[]>();
+      for (const row of stored) {
+        const key = lineKey({
+          workedOn: row.worked_on,
+          hours: row.hours,
+          projectId: row.project_id,
+          workOrderId: row.work_order_id,
+          woOperationId: row.wo_operation_id,
+          itemId: row.item_id,
+          timeTypeId: row.time_type_id,
+          departmentId: row.department_id,
+          memo: row.memo,
+          isBillable: row.is_billable,
+          custom: row.custom ?? {},
+        });
+        if (replaceable(row)) {
+          const ids = replaceableIds.get(key) ?? [];
+          ids.push(row.id);
+          replaceableIds.set(key, ids);
+        } else {
+          survivorCounts.set(key, (survivorCounts.get(key) ?? 0) + 1);
+        }
+      }
+      const toInsert: Persist[] = [];
+      for (const p of toPersist) {
+        const key = lineKey(p);
+        const survivors = survivorCounts.get(key) ?? 0;
+        if (survivors > 0) {
+          // Already stored on an entry this save must not touch: a replay of
+          // the original result, not a new line.
+          survivorCounts.set(key, survivors - 1);
+          continue;
+        }
+        const kept = replaceableIds.get(key);
+        if (kept && kept.length > 0) {
+          // The stored row already carries this line: keep it (and its effects)
+          // instead of churning it into a new id.
+          kept.pop();
+          continue;
+        }
+        toInsert.push(p);
+      }
+      // Project-carrying lines are Projects disable-blockers (open project
+      // time), so a disable racing this save must refuse one side or the
+      // other. Fenced inside the write transaction, and only when the save
+      // actually inserts project lines: replays and deletions need no gate.
+      // True escapes the transaction as a refusal; the route answers below.
+      if (
+        toInsert.some((p) => p.projectId != null) &&
+        !(await checkProjectsWriteEnabled(orgId, tx))
+      ) {
+        return true;
+      }
+      const deleteIds = Array.from(replaceableIds.values()).flat();
+      for (const row of stored.filter((row) => deleteIds.includes(row.id) && row.work_order_id)) {
+        await lockTimeWorkOrderTarget(tx, orgId, user.id, {
+          workOrderId: row.work_order_id!,
+          operationId: row.wo_operation_id,
+          requestedScope: gate.allowedSubsidiaryIds,
+          permission: timeEntryPermission,
+        });
+      }
+      if (deleteIds.length > 0) {
+        const deleted = await tx.execute(
+          sql`
+        delete from time_entries
+         where org_id = ${orgId}
+           and id = any(${`{${deleteIds.join(",")}}`}::uuid[]) returning id
+      `,
+          "objects",
+        );
+        if (deleted.length !== deleteIds.length)
+          throw new TimeLineEntityRefusal(
+            "The time lines changed while saving. Reload before trying again.",
+          );
+      }
+      for (const p of toInsert) {
+        if (p.workOrderId)
+          await lockTimeWorkOrderTarget(tx, orgId, user.id, {
+            workOrderId: p.workOrderId,
+            operationId: p.woOperationId,
+            requestedScope: gate.allowedSubsidiaryIds,
+            permission: timeEntryPermission,
+          });
+        const saved = await tx.execute<{ id: string }>(
+          sql`
+        insert into time_entries
+          (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
+           project_id, work_order_id, wo_operation_id, department_id, memo, is_billable, status, custom,
+           created_by, updated_by)
+        values
+          (${orgId}, ${ownedEmployee}, ${p.workedOn}, ${p.hours}, ${p.timeTypeId},
+           ${p.itemId}, ${p.projectId}, ${p.workOrderId}, ${p.woOperationId}, ${p.departmentId}, ${p.memo},
+           ${p.isBillable}, ${newStatus}, ${JSON.stringify(p.custom)}::jsonb,
+           ${user.id}, ${user.id})
+        returning id
+      `,
+          "objects",
+        );
+        if (saved.length !== 1)
+          throw new TimeLineEntityRefusal(
+            "The time line was not saved. Reload the week before retrying.",
+          );
+      }
+      return false;
+    });
+  } catch (error) {
+    if (error instanceof TimeLineEntityRefusal) return bad(error.message);
+    if (error instanceof ScopeNotFoundError) return notFound("record");
+    // Native work-target refusals preserve the saved week atomically.
+    if (error instanceof TimeApprovalRefusal || error instanceof TimeWorkTargetError)
+      return apiErrorResponse(error);
+    throw error;
+  }
+  if (staleRevision !== null) {
+    return NextResponse.json(
+      {
+        error: STALE_WEEK_ERROR,
+        code: "timesheet_stale_revision",
+        revision: staleRevision,
+      },
+      { status: 409 },
+    );
+  }
+  if (projectsRefused) return bad("Projects feature is disabled");
+  const payload = await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds);
+  return NextResponse.json(payload);
+}

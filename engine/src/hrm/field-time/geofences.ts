@@ -25,6 +25,24 @@ export type ProjectGeofenceBody =
 
 type Scope = ReadonlySet<string> | null | undefined;
 
+/** Validate the shape required by the selected geofence kind at every write boundary. */
+export function assertProjectGeofenceShape(
+  fence: Exclude<ProjectGeofenceBody, { action: "delete" }>,
+): void {
+  if (fence.kind === "circle" && (!fence.center || !fence.radiusM)) {
+    throw new FieldTimeError(
+      "geofence_shape_incomplete",
+      "A circle geofence needs a center and a radius in metres",
+    );
+  }
+  if (fence.kind === "polygon" && !fence.polygon) {
+    throw new FieldTimeError(
+      "geofence_shape_incomplete",
+      "A polygon geofence needs at least three corners",
+    );
+  }
+}
+
 function effectiveScope(scope: Scope): ReadonlySet<string> | null {
   return scope === undefined ? new Set<string>() : scope;
 }

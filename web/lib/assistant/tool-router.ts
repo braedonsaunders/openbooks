@@ -270,6 +270,20 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   // Projects commands.
 
   // Time and resourcing commands.
+  save_timesheet_week: "timeTracking",
+  set_submitted_time_line_billable: "timeTracking",
+  submit_timesheet_week: "timeTracking",
+  reopen_timesheet_week: "timeTracking",
+  withdraw_timesheet_week: "timeTracking",
+  amend_time_entry: "timeTracking",
+  amend_timesheet_week: "timeTracking",
+  correct_unapproved_time_type: "timeTracking",
+  list_schedule_boards: "timeTracking",
+  list_schedule_board_assignments: "timeTracking",
+  get_schedule_board_window: "timeTracking",
+  change_schedule_board_entries: "timeTracking",
+  publish_schedule_board: "timeTracking",
+  send_schedule_distribution: "timeTracking",
 
   // Workforce records commands.
 

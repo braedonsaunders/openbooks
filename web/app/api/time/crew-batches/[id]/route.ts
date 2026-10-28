@@ -2,18 +2,9 @@ import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { guardFeaturePermission } from "@/lib/feature-gates";
-import { can } from "@/lib/authz";
-import { postPermission } from "@/lib/document-kinds";
-import { postDocument } from "@openbooks/engine/ledger/posting-document";
-import { paymentControlDeps } from "@openbooks/engine/payments/payment-accounts";
-import {
-  postBatch,
-  setBatchLines,
-  submitBatch,
-  withdrawBatch,
-} from "@openbooks/engine/hrm/field-time/crew";
 import { getBatchDetail } from "@openbooks/engine/hrm/field-time/reads";
 import { FieldTimeError } from "@openbooks/engine/hrm/field-time/errors";
+import { handleCrewBatchAction, type CrewBatchAction } from "@/lib/field-time/crew-batch-write";
 
 export const runtime = "nodejs";
 
@@ -84,109 +75,6 @@ const batchActionBody = z.discriminatedUnion(
   { error: "Unknown batch action — use lines, submit, withdraw or post" },
 );
 
-/**
- * POST {action} — lines (draft only), submit (signed), withdraw,
- * approve (current stage), reject (reason required), post (entries +
- * equipment charges, then the charge documents to the ledger).
- */
-async function legacyPOST(id: string, body: z.output<typeof batchActionBody>) {
-  try {
-    if (body.action === "lines") {
-      const gate = await batchGate("time.crew.enter");
-      if (gate instanceof NextResponse) return gate;
-      const actor = {
-        actorUserId: gate.user.id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      };
-      await setBatchLines({
-        orgId: gate.user.orgId,
-        actorUserId: gate.user.id,
-        batchId: id,
-        lines: body.lines,
-        canManageAll: can(gate, "time.manage"),
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      });
-      return NextResponse.json(await getBatchDetail(gate.user.orgId, actor, id));
-    }
-    if (body.action === "submit") {
-      const gate = await batchGate("time.crew.enter");
-      if (gate instanceof NextResponse) return gate;
-      const actor = {
-        actorUserId: gate.user.id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      };
-      await submitBatch({
-        orgId: gate.user.orgId,
-        actorUserId: gate.user.id,
-        batchId: id,
-        signerName: body.signerName ?? null,
-        canManageAll: can(gate, "time.manage"),
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      });
-      return NextResponse.json(await getBatchDetail(gate.user.orgId, actor, id));
-    }
-    if (body.action === "withdraw") {
-      const gate = await batchGate("time.crew.enter");
-      if (gate instanceof NextResponse) return gate;
-      const actor = {
-        actorUserId: gate.user.id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      };
-      await withdrawBatch({
-        orgId: gate.user.orgId,
-        actorUserId: gate.user.id,
-        batchId: id,
-        reason: body.reason ?? null,
-        canManageAll: can(gate, "time.manage"),
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      });
-      return NextResponse.json(await getBatchDetail(gate.user.orgId, actor, id));
-    }
-    if (body.action === "post") {
-      const gate = await batchGate("time.manage");
-      if (gate instanceof NextResponse) return gate;
-      // Posting the batch creates APPROVED project_charge documents and
-      // posts each to the GL, so it takes the kind's postPermission — the
-      // same map the generic document actions route enforces — on top of
-      // time.manage. A time manager without gl.post cannot post equipment
-      // charges here. Refused BEFORE postBatch commits anything, by name.
-      const batchPostPerm = postPermission("project_charge");
-      if (!can(gate, batchPostPerm)) {
-        return NextResponse.json(
-          { error: `missing permission: ${batchPostPerm}` },
-          { status: 403 },
-        );
-      }
-      const result = await postBatch({
-        orgId: gate.user.orgId,
-        actorUserId: gate.user.id,
-        batchId: id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      });
-      // The entries and charge documents committed in one transaction
-      // above; each charge now posts to the ledger through the EXISTING
-      // equipment charge path. A ledger failure names the charge
-      // document so the approved charge can be re-posted, never lost.
-      const entryIds: string[] = [];
-      for (const documentId of result.chargeDocumentIds) {
-        try {
-          entryIds.push(await postDocument(documentId, await paymentControlDeps(gate.user.orgId)));
-        } catch (error) {
-          return bad(
-            `The batch posted but equipment charge ${documentId} did not reach the ledger (${error instanceof Error ? error.message : "posting failed"}) — re-post the charge document from Equipment`,
-          );
-        }
-      }
-      return NextResponse.json({ ...result, ledgerEntryIds: entryIds });
-    }
-    // The union above admits exactly six actions, so this is
-    // unreachable; it keeps the handler total for the type checker.
-    return bad("Unknown batch action — use lines, submit, withdraw or post");
-  } catch (error) {
-    return fieldTime(error);
-  }
-}
-
 export const GET = defineRoute({
   public: "session",
   params: z.object({ id: z.string() }),
@@ -198,5 +86,14 @@ export const POST = defineRoute({
   params: z.object({ id: z.string() }),
   body: batchActionBody,
   invalidBodyStatus: 422,
-  handler: ({ params, body }) => legacyPOST(params.id, body),
+  handler: async ({ params, body }) => {
+    const requiredPermission = body.action === "post" ? "time.manage" : "time.crew.enter";
+    const gate = await batchGate(requiredPermission);
+    if (gate instanceof NextResponse) return gate;
+    return handleCrewBatchAction({
+      authz: gate,
+      batchId: params.id,
+      body: body as CrewBatchAction,
+    });
+  },
 });

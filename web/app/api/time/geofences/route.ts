@@ -5,6 +5,7 @@ import { z } from "zod";
 import { isUuid } from "@/lib/list-params";
 import { FieldTimeError } from "@openbooks/engine/hrm/field-time/errors";
 import {
+  assertProjectGeofenceShape,
   deleteProjectGeofence,
   listProjectGeofences,
   saveProjectGeofence,
@@ -83,12 +84,7 @@ async function legacyPOST(body: z.output<typeof geofenceBody>, injectedGate?: Au
       return bad("The geofence is unknown in this organization — reload and retry");
     }
     const fence = body;
-    if (fence.kind === "circle" && (!fence.center || !fence.radiusM)) {
-      return bad("A circle geofence needs a center and a radius in metres");
-    }
-    if (fence.kind === "polygon" && !fence.polygon) {
-      return bad("A polygon geofence needs at least three corners");
-    }
+    assertProjectGeofenceShape(fence);
     const outcome = await saveProjectGeofence({
       orgId: user.orgId,
       actorUserId: user.id,
