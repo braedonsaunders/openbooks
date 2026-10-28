@@ -247,15 +247,17 @@ const subcontractRequestBody = z.discriminatedUnion("action", [
       action: z.literal("updatePayApplication"),
       payApplicationId: uuidId,
       expectedRevision: z.number().int().positive(),
-      lines: z.array(
-        z
-          .object({
-            sovLineId: z.string(),
-            workCompletedThisPeriod: z.string().optional(),
-            materialsStoredCurrent: z.string().optional(),
-          })
-          .strict(),
-      ),
+      lines: z
+        .array(
+          z
+            .object({
+              sovLineId: z.string(),
+              workCompletedThisPeriod: z.string().optional(),
+              materialsStoredCurrent: z.string().optional(),
+            })
+            .strict(),
+        )
+        .max(500),
     })
     .strict(),
   z.object({ action: z.literal("submitPayApplication"), id: uuidId }).strict(),
@@ -294,7 +296,7 @@ const subcontractRequestBody = z.discriminatedUnion("action", [
     .strict(),
 ]);
 
-async function dispatchSubcontractAction(
+export async function dispatchSubcontractAction(
   requestBody: z.infer<typeof subcontractRequestBody>,
   authz: Authz,
 ) {

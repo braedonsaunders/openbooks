@@ -239,6 +239,22 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   // Sales and fulfillment commands.
 
   // Purchasing commands.
+  list_ap_capture_items: "purchasing",
+  get_ap_capture_item: "purchasing",
+  review_ap_capture_item: "purchasing",
+  ingest_ap_capture_documents: "purchasing",
+  reject_ap_capture_item: "purchasing",
+  reprocess_ap_capture_item: "purchasing",
+  materialize_ap_capture_item: "purchasing",
+  list_ap_capture_mailboxes: "purchasing",
+  create_ap_capture_mailbox: "purchasing",
+  update_ap_capture_mailbox: "purchasing",
+  transfer_ap_capture_mailbox_ownership: "purchasing",
+  list_ap_capture_inbound_messages: "purchasing",
+  list_inbox_items: "purchasing",
+  act_on_inbox_item: "purchasing",
+  create_direct_debit_run: "purchasing",
+  update_vendor_compliance_settings: "purchasing",
 
   // Inventory and items commands.
   preview_item_price: "inventory",
@@ -553,6 +569,15 @@ export const MODULE_KEYWORDS: Record<string, string[]> = {
     "mileage",
     "expense report",
     "reimbursement",
+  ],
+  purchasing: [
+    "purchase order",
+    "purchase orders",
+    "purchasing",
+    "ap capture",
+    "supplier document",
+    "inbox",
+    "approval worklist",
   ],
   fixedAssets: ["asset", "depreciation", "depreciate", "capital", "cca", "tax pool", "disposal"],
   equipment: ["equipment", "maintenance"],

@@ -22,10 +22,11 @@ import { notFound } from "@/lib/api/responses";
 
 // Money is decimal text at the boundary; malformed and over-width amounts are
 // domain refusals (422) raised by the update branch before any write.
-const requestAmount = z.string().nullable().optional();
+const requestAmount = z.string().max(100).nullable().optional();
 const updateFields = {
   throughDate: z
     .string()
+    .max(10)
     .refine(isIsoCalendarDate, "throughDate must be a real calendar date (YYYY-MM-DD)")
     .nullable()
     .optional(),
@@ -33,7 +34,7 @@ const updateFields = {
   jurisdiction: z.string().trim().max(20).nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
 };
-const requestBodySchema = z.preprocess(
+export const requestBodySchema = z.preprocess(
   (value) =>
     value && typeof value === "object" && !Array.isArray(value) && !("action" in value)
       ? { ...value, action: "update" }
@@ -53,6 +54,7 @@ const requestBodySchema = z.preprocess(
         signedByTitle: z.string().trim().max(200).nullable().optional(),
         signedAt: z
           .string()
+          .max(10)
           .refine(isIsoCalendarDate, "signedAt must be a real calendar date (YYYY-MM-DD)")
           .nullable()
           .optional(),
@@ -112,30 +114,30 @@ const ALLOWED_FROM: Record<Action, string[]> = {
  * through-date of an executed release would silently change what a
  * subcontractor gave up.
  */
-export const PATCH = defineRoute({
-  authorize: authorizeLienWaiverUpdate,
-  feature: "subcontractorCompliance",
-  params: z.object({ id: z.string() }),
-  body: requestBodySchema,
-  handler: async ({ authz: gate, params: routeParams, body }) => {
-    const params = Promise.resolve(routeParams);
-    const { orgId, id: actorId } = gate.user;
-    const { id } = await params;
-    if (!isUuid(id)) return notFound("record");
 
-    const action: Action = body.action;
-    if (!Object.hasOwn(ALLOWED_FROM, action)) {
-      return NextResponse.json({ error: "unknown lien waiver action" }, { status: 400 });
-    }
+export async function actOnLienWaiver(
+  routeParams: { id: string },
+  gate: import("@/lib/authz").Authz,
+  body: z.infer<typeof requestBodySchema>,
+) {
+  const params = Promise.resolve(routeParams);
+  const { orgId, id: actorId } = gate.user;
+  const { id } = await params;
+  if (!isUuid(id)) return notFound("record");
 
-    try {
-      const result = await withOrgTransaction(orgId, async () => {
-        // Lock the current row before validating its lifecycle. The lock makes
-        // the status snapshot, mutation, and audit one serializable unit: a
-        // racing request sees the committed state after the first request and
-        // cannot overwrite a signed/void waiver.
-        const before = await db.execute<Record<string, unknown>>(
-          sql`
+  const action: Action = body.action;
+  if (!Object.hasOwn(ALLOWED_FROM, action)) {
+    return NextResponse.json({ error: "unknown lien waiver action" }, { status: 400 });
+  }
+
+  try {
+    const result = await withOrgTransaction(orgId, async () => {
+      // Lock the current row before validating its lifecycle. The lock makes
+      // the status snapshot, mutation, and audit one serializable unit: a
+      // racing request sees the committed state after the first request and
+      // cannot overwrite a signed/void waiver.
+      const before = await db.execute<Record<string, unknown>>(
+        sql`
           select lw.id, lw.status, lw.waiver_number, lw.waiver_type, lw.through_date,
                  lw.amount, lw.currency, lw.direction,
                  pj.subsidiary_id as "subsidiaryId"
@@ -144,58 +146,58 @@ export const PATCH = defineRoute({
            where lw.org_id = ${orgId} and lw.id = ${id}
            for update of lw
         `,
-          "objects",
+        "objects",
+      );
+      const waiver = before[0];
+      if (!waiver) return notFound("record");
+      const denied = guardSubsidiaryScope(gate, waiver.subsidiaryId as string | null | undefined);
+      if (denied) return denied;
+      if (!ALLOWED_FROM[action].includes(String(waiver.status))) {
+        return NextResponse.json(
+          {
+            error: `a ${waiver.status} waiver cannot be ${action === "update" ? "edited" : action + "ed"}`,
+          },
+          { status: 422 },
         );
-        const waiver = before[0];
-        if (!waiver) return notFound("record");
-        const denied = guardSubsidiaryScope(gate, waiver.subsidiaryId as string | null | undefined);
-        if (denied) return denied;
-        if (!ALLOWED_FROM[action].includes(String(waiver.status))) {
-          return NextResponse.json(
-            {
-              error: `a ${waiver.status} waiver cannot be ${action === "update" ? "edited" : action + "ed"}`,
-            },
-            { status: 422 },
-          );
-        }
+      }
 
-        if (body.action === "request") {
-          await db.execute(sql`
+      if (body.action === "request") {
+        await db.execute(sql`
             update lien_waivers
                set status = 'requested', requested_at = now(), requested_by = ${actorId},
                    updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id = ${id}`);
-        } else if (body.action === "receive") {
-          await db.execute(sql`
+      } else if (body.action === "receive") {
+        await db.execute(sql`
             update lien_waivers set status = 'received', updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id = ${id}`);
-        } else if (body.action === "sign") {
-          const name = (body.signedByName ?? "").trim();
-          if (!name) {
-            return NextResponse.json(
-              { error: "the name of the person who signed is required" },
-              { status: 400 },
-            );
-          }
-          const signedAt = body.signedAt ?? (await businessToday(orgId));
-          // The sign stamps this straight to timestamptz: a non-calendar date
-          // would otherwise die in Postgres with a raw driver failure.
-          if (!isIsoCalendarDate(signedAt)) {
-            return NextResponse.json(
-              { error: "signed date must be a real calendar date (YYYY-MM-DD)" },
-              { status: 400 },
-            );
-          }
-          // Evidence of the attestation, not a digital signature: who in this
-          // organisation recorded the executed document, and when.
-          const evidence = {
-            method: "recorded_in_app",
-            attestedBy: actorId,
-            attestedAt: new Date().toISOString(),
-            signedByName: name,
-            signedByTitle: body.signedByTitle ?? null,
-          };
-          await db.execute(sql`
+      } else if (body.action === "sign") {
+        const name = (body.signedByName ?? "").trim();
+        if (!name) {
+          return NextResponse.json(
+            { error: "the name of the person who signed is required" },
+            { status: 400 },
+          );
+        }
+        const signedAt = body.signedAt ?? (await businessToday(orgId));
+        // The sign stamps this straight to timestamptz: a non-calendar date
+        // would otherwise die in Postgres with a raw driver failure.
+        if (!isIsoCalendarDate(signedAt)) {
+          return NextResponse.json(
+            { error: "signed date must be a real calendar date (YYYY-MM-DD)" },
+            { status: 400 },
+          );
+        }
+        // Evidence of the attestation, not a digital signature: who in this
+        // organisation recorded the executed document, and when.
+        const evidence = {
+          method: "recorded_in_app",
+          attestedBy: actorId,
+          attestedAt: new Date().toISOString(),
+          signedByName: name,
+          signedByTitle: body.signedByTitle ?? null,
+        };
+        await db.execute(sql`
             update lien_waivers
                set status = 'signed', signed_by_name = ${name},
                    signed_by_title = ${body.signedByTitle ?? null},
@@ -204,89 +206,85 @@ export const PATCH = defineRoute({
                    signature = ${JSON.stringify(evidence)}::jsonb,
                    updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id = ${id}`);
-          // Freeze the executed release: every value the printable waiver
-          // shows, resolved names included, as it stood at signing. Later
-          // renames cannot rewrite it, because the printable route serves
-          // this image instead of the live rows.
-          const source = await loadLienWaiverPrintSource(orgId, id);
-          if (!source) throw new Error("signed waiver vanished mid-transition");
-          const frozen = lienWaiverPrintData(source);
-          const snapshot: LienWaiverExecutedSnapshot = {
-            version: 1,
-            takenAt: new Date().toISOString(),
-            takenBy: actorId,
-            orgName: frozen.orgName,
-            data: frozen.data,
-          };
-          await db.execute(sql`
+        // Freeze the executed release: every value the printable waiver
+        // shows, resolved names included, as it stood at signing. Later
+        // renames cannot rewrite it, because the printable route serves
+        // this image instead of the live rows.
+        const source = await loadLienWaiverPrintSource(orgId, id);
+        if (!source) throw new Error("signed waiver vanished mid-transition");
+        const frozen = lienWaiverPrintData(source);
+        const snapshot: LienWaiverExecutedSnapshot = {
+          version: 1,
+          takenAt: new Date().toISOString(),
+          takenBy: actorId,
+          orgName: frozen.orgName,
+          data: frozen.data,
+        };
+        await db.execute(sql`
             update lien_waivers
                set executed_snapshot = ${JSON.stringify(snapshot)}::jsonb,
                    updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id = ${id}`);
-        } else if (body.action === "reject") {
-          const reason = (body.reason ?? "").trim();
-          if (!reason)
-            return NextResponse.json({ error: "a rejection needs a reason" }, { status: 400 });
-          await db.execute(sql`
+      } else if (body.action === "reject") {
+        const reason = (body.reason ?? "").trim();
+        if (!reason)
+          return NextResponse.json({ error: "a rejection needs a reason" }, { status: 400 });
+        await db.execute(sql`
             update lien_waivers
                set status = 'rejected', rejected_reason = ${reason},
                    updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id = ${id}`);
-        } else if (body.action === "void") {
-          const reason = (body.reason ?? "").trim();
-          if (!reason)
-            return NextResponse.json({ error: "voiding needs a reason" }, { status: 400 });
-          await db.execute(sql`
+      } else if (body.action === "void") {
+        const reason = (body.reason ?? "").trim();
+        if (!reason) return NextResponse.json({ error: "voiding needs a reason" }, { status: 400 });
+        await db.execute(sql`
             update lien_waivers
                set status = 'void', void_reason = ${reason}, updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id = ${id}`);
-        } else {
-          const amountRaw =
-            body.amount == null || body.amount === "" ? null : canonicalDecimal(body.amount, 4);
-          // lien_waivers.amount is numeric(19,4): refuse whole-digit widths the
-          // column cannot hold before any write.
-          if (amountRaw !== null && wholeDigits(amountRaw) > 15) {
+      } else {
+        const amountRaw =
+          body.amount == null || body.amount === "" ? null : canonicalDecimal(body.amount, 4);
+        // lien_waivers.amount is numeric(19,4): refuse whole-digit widths the
+        // column cannot hold before any write.
+        if (amountRaw !== null && wholeDigits(amountRaw) > 15) {
+          return NextResponse.json(
+            { error: "Amount is out of range — at most 15 whole digits fit the ledger" },
+            { status: 422 },
+          );
+        }
+        // through_date casts straight to date: require a real calendar day
+        // before any write, instead of leaking the cast failure.
+        if (
+          body.throughDate !== undefined &&
+          body.throughDate !== null &&
+          !isIsoCalendarDate(body.throughDate)
+        ) {
+          return NextResponse.json(
+            { error: "through date must be a real calendar date (YYYY-MM-DD)" },
+            { status: 400 },
+          );
+        }
+        if (body.amount != null && body.amount !== "" && amountRaw === null) {
+          return NextResponse.json({ error: moneyRefusal("Amount", body.amount) }, { status: 422 });
+        }
+        const amount = amountRaw === null ? null : normalizeMoney(amountRaw);
+        // The jurisdiction is an ISO 3166-2 subdivision code, validated like
+        // the create verb: an unknown code refuses instead of storing text
+        // the evaluator can never match against a project site.
+        let jurisdiction: string | null | undefined;
+        if (body.jurisdiction != null && body.jurisdiction !== "") {
+          const canonical = normalizeSubdivisionCode(body.jurisdiction);
+          if (!canonical) {
             return NextResponse.json(
-              { error: "Amount is out of range — at most 15 whole digits fit the ledger" },
+              {
+                error: `unknown jurisdiction ${JSON.stringify(body.jurisdiction)} — use an ISO 3166-2 subdivision code (e.g. US-CA)`,
+              },
               { status: 422 },
             );
           }
-          // through_date casts straight to date: require a real calendar day
-          // before any write, instead of leaking the cast failure.
-          if (
-            body.throughDate !== undefined &&
-            body.throughDate !== null &&
-            !isIsoCalendarDate(body.throughDate)
-          ) {
-            return NextResponse.json(
-              { error: "through date must be a real calendar date (YYYY-MM-DD)" },
-              { status: 400 },
-            );
-          }
-          if (body.amount != null && body.amount !== "" && amountRaw === null) {
-            return NextResponse.json(
-              { error: moneyRefusal("Amount", body.amount) },
-              { status: 422 },
-            );
-          }
-          const amount = amountRaw === null ? null : normalizeMoney(amountRaw);
-          // The jurisdiction is an ISO 3166-2 subdivision code, validated like
-          // the create verb: an unknown code refuses instead of storing text
-          // the evaluator can never match against a project site.
-          let jurisdiction: string | null | undefined;
-          if (body.jurisdiction != null && body.jurisdiction !== "") {
-            const canonical = normalizeSubdivisionCode(body.jurisdiction);
-            if (!canonical) {
-              return NextResponse.json(
-                {
-                  error: `unknown jurisdiction ${JSON.stringify(body.jurisdiction)} — use an ISO 3166-2 subdivision code (e.g. US-CA)`,
-                },
-                { status: 422 },
-              );
-            }
-            jurisdiction = canonical;
-          }
-          await db.execute(sql`
+          jurisdiction = canonical;
+        }
+        await db.execute(sql`
             update lien_waivers
                set through_date = coalesce(${body.throughDate ?? null}::date, through_date),
                    amount = ${amount === null ? sql`amount` : sql`${amount}`},
@@ -294,16 +292,24 @@ export const PATCH = defineRoute({
                    notes = coalesce(${body.notes ?? null}, notes),
                    updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id = ${id}`);
-        }
-        await db.execute(sql`
+      }
+      await db.execute(sql`
           insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'lien_waivers', ${id}, ${action === "update" ? "update" : action},
                   ${JSON.stringify({ before: waiver, after: body })}::jsonb, ${actorId})`);
-        return NextResponse.json({ id });
-      });
-      return result;
-    } catch (e) {
-      return complianceWriteFailure(e);
-    }
-  },
+      return NextResponse.json({ id });
+    });
+    return result;
+  } catch (e) {
+    return complianceWriteFailure(e);
+  }
+}
+
+export const PATCH = defineRoute({
+  authorize: authorizeLienWaiverUpdate,
+  feature: "subcontractorCompliance",
+  params: z.object({ id: z.string() }),
+  body: requestBodySchema,
+  handler: async ({ authz: gate, params: routeParams, body }) =>
+    actOnLienWaiver(routeParams, gate, body),
 });

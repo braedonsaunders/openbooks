@@ -12,31 +12,43 @@ import { isFeatureEnabled } from "@/lib/features";
 import { complianceWriteFailure } from "@/lib/compliance-errors";
 import { isUuid } from "@/lib/list-params";
 import { notFound } from "@/lib/api/responses";
+import type { Authz } from "@/lib/authz";
 
-const requestBodySchema = z
+export const requestBodySchema = z
   .object({
     complianceClassId: uuidString({
       error: "complianceClassId must be a valid compliance class id",
     })
       .nullable()
-      .optional(),
+      .optional()
+      .describe("Compliance classification UUID; requires subcontractor compliance to be enabled."),
     informationReturnForm: z
       .string()
+      .max(50)
       .refine(
         (value) => value === "none" || FORM_TYPES.includes(value as FormType),
         "informationReturnForm must be an installed information return form or none",
       )
       .nullable()
-      .optional(),
-    informationReturnBox: z.string().trim().max(40).nullable().optional(),
+      .optional()
+      .describe("Information-return form, or none when this vendor is not reportable."),
+    informationReturnBox: z
+      .string()
+      .trim()
+      .max(40)
+      .nullable()
+      .optional()
+      .describe("Information-return box override."),
     taxClassification: z
       .string()
+      .max(50)
       .refine(
         (value) => TAX_CLASSIFICATIONS.has(value),
         "taxClassification must be an installed tax classification",
       )
       .nullable()
-      .optional(),
+      .optional()
+      .describe("Installed taxpayer classification."),
     tin: z
       .string()
       .max(100)
@@ -45,23 +57,32 @@ const requestBodySchema = z
         "tin must contain exactly 9 digits; remove other characters and correct the number",
       )
       .nullable()
-      .optional(),
+      .optional()
+      .describe("Nine-digit taxpayer identification number; null clears the stored identifier."),
     tinType: z
       .string()
+      .max(50)
       .refine((value) => TIN_TYPES.has(value), "tinType must be an installed TIN type")
       .nullable()
-      .optional(),
+      .optional()
+      .describe("Taxpayer identification number type."),
     backupWithholding: z
       .boolean({ error: "backupWithholding must be a boolean" })
       .nullable()
-      .optional(),
-    reportable: z.boolean({ error: "reportable must be a boolean" }).nullable().optional(),
+      .optional()
+      .describe("Whether backup withholding applies."),
+    reportable: z
+      .boolean({ error: "reportable must be a boolean" })
+      .nullable()
+      .optional()
+      .describe("Whether this vendor is reportable for information returns."),
     reason: z
       .string()
       .trim()
       .min(1, "reason is required for a vendor compliance change")
       .max(2000)
-      .optional(),
+      .optional()
+      .describe("Reason recorded with the vendor compliance audit."),
   })
   .optional();
 
@@ -127,153 +148,150 @@ function auditReason(raw: unknown): string {
  * The TIN is sealed with the org data key before it is stored; only the last
  * four digits are kept in plaintext, and only those are ever read back.
  */
-export const PATCH = defineRoute({
-  authorize: authorizeVendorSettings,
-  feature: {
-    none: "Vendor settings span information-return and subcontractor-compliance features; each field is checked against its own switch.",
-  },
-  params: z.object({ partyId: z.string() }),
-  body: requestBodySchema,
-  handler: async ({ authz: gate, params: routeParams, body }) => {
-    if (body === undefined) {
-      return NextResponse.json({ error: "invalid request body" }, { status: 400 });
-    }
-    const params = Promise.resolve(routeParams);
-    const { orgId, id: actorId } = gate.user;
-    // This route serves two switches: the compliance class is COI tracking
-    // (subcontractorCompliance) while the taxpayer identity — TIN, filing
-    // form/box, withholding — is year-end tax (informationReturns). Each
-    // field enforces its own switch below; reaching neither switch at all is
-    // indistinguishable from no API.
-    const [returnsOn, complianceOn] = await Promise.all([
-      isFeatureEnabled(orgId, "informationReturns"),
-      isFeatureEnabled(orgId, "subcontractorCompliance"),
-    ]);
-    const { partyId } = await params;
-    if (!isUuid(partyId)) return notFound("record");
-    // The vendor is the record boundary: a restricted caller may only touch
-    // compliance identity for parties inside their fence (null-subsidiary
-    // parties are org-wide, mirroring the party lists and the bank-detail
-    // route). Without this, a hidden-entity TIN could be overwritten blind.
-    const partyScope = await db.execute<{ subsidiaryId: string | null }>(
-      sql`
+export async function updateVendorComplianceSettings(
+  gate: Authz,
+  routeParams: { partyId: string },
+  body: z.infer<typeof requestBodySchema> | undefined,
+) {
+  if (body === undefined) {
+    return NextResponse.json({ error: "invalid request body" }, { status: 400 });
+  }
+  const params = Promise.resolve(routeParams);
+  const { orgId, id: actorId } = gate.user;
+  // This route serves two switches: the compliance class is COI tracking
+  // (subcontractorCompliance) while the taxpayer identity — TIN, filing
+  // form/box, withholding — is year-end tax (informationReturns). Each
+  // field enforces its own switch below; reaching neither switch at all is
+  // indistinguishable from no API.
+  const [returnsOn, complianceOn] = await Promise.all([
+    isFeatureEnabled(orgId, "informationReturns"),
+    isFeatureEnabled(orgId, "subcontractorCompliance"),
+  ]);
+  const { partyId } = await params;
+  if (!isUuid(partyId)) return notFound("record");
+  // The vendor is the record boundary: a restricted caller may only touch
+  // compliance identity for parties inside their fence (null-subsidiary
+  // parties are org-wide, mirroring the party lists and the bank-detail
+  // route). Without this, a hidden-entity TIN could be overwritten blind.
+  const partyScope = await db.execute<{ subsidiaryId: string | null }>(
+    sql`
       select subsidiary_id as "subsidiaryId" from parties
        where id = ${partyId} and org_id = ${orgId}`,
-      "objects",
+    "objects",
+  );
+  if (!partyScope[0]) return notFound("record");
+  const scopeDenied = guardSubsidiaryScope(gate, partyScope[0].subsidiaryId, {
+    orgWideNull: true,
+  });
+  if (scopeDenied) return scopeDenied;
+
+  // Per-field switches: taxpayer identity needs the tax switch, the
+  // tracking class needs the compliance switch. Each names the switch
+  // that is actually off, so the operator knows where to turn it on.
+  const touchesReturns =
+    body.informationReturnForm !== undefined ||
+    body.informationReturnBox !== undefined ||
+    body.taxClassification !== undefined ||
+    body.tin !== undefined ||
+    body.tinType !== undefined ||
+    body.backupWithholding !== undefined ||
+    body.reportable !== undefined;
+  if (touchesReturns && !returnsOn) {
+    const blocked = await guardInformationReturnsFeature(orgId);
+    if (blocked) return blocked;
+  }
+  if (body.complianceClassId !== undefined && !complianceOn) {
+    return NextResponse.json(
+      { error: "subcontractor compliance feature is disabled" },
+      { status: 404 },
     );
-    if (!partyScope[0]) return notFound("record");
-    const scopeDenied = guardSubsidiaryScope(gate, partyScope[0].subsidiaryId, {
-      orgWideNull: true,
-    });
-    if (scopeDenied) return scopeDenied;
+  }
 
-    // Per-field switches: taxpayer identity needs the tax switch, the
-    // tracking class needs the compliance switch. Each names the switch
-    // that is actually off, so the operator knows where to turn it on.
-    const touchesReturns =
-      body.informationReturnForm !== undefined ||
-      body.informationReturnBox !== undefined ||
-      body.taxClassification !== undefined ||
-      body.tin !== undefined ||
-      body.tinType !== undefined ||
-      body.backupWithholding !== undefined ||
-      body.reportable !== undefined;
-    if (touchesReturns && !returnsOn) {
-      const blocked = await guardInformationReturnsFeature(orgId);
-      if (blocked) return blocked;
+  if (body.complianceClassId && !isUuid(body.complianceClassId)) {
+    return NextResponse.json({ error: "invalid compliance class" }, { status: 400 });
+  }
+  if (
+    body.informationReturnForm &&
+    body.informationReturnForm !== "none" &&
+    !FORM_TYPES.includes(body.informationReturnForm as FormType)
+  ) {
+    return NextResponse.json({ error: "unknown information return form" }, { status: 400 });
+  }
+  if (body.taxClassification && !TAX_CLASSIFICATIONS.has(body.taxClassification)) {
+    return NextResponse.json({ error: "unknown tax classification" }, { status: 400 });
+  }
+  if (body.tinType && !TIN_TYPES.has(body.tinType)) {
+    return NextResponse.json({ error: "unknown TIN type" }, { status: 400 });
+  }
+  // Both toggles ride into coalesce() against boolean columns: Postgres would
+  // parse 'yes'/'no' but die on anything else, surfacing the full vendor_roles
+  // UPDATE through the catch below. Refuse non-booleans with a named 400.
+  for (const key of ["backupWithholding", "reportable"] as const) {
+    if (body[key] !== undefined && body[key] !== null && typeof body[key] !== "boolean") {
+      return NextResponse.json({ error: `${key} must be a boolean` }, { status: 400 });
     }
-    if (body.complianceClassId !== undefined && !complianceOn) {
-      return NextResponse.json(
-        { error: "subcontractor compliance feature is disabled" },
-        { status: 404 },
-      );
-    }
+  }
 
-    if (body.complianceClassId && !isUuid(body.complianceClassId)) {
-      return NextResponse.json({ error: "invalid compliance class" }, { status: 400 });
-    }
-    if (
-      body.informationReturnForm &&
-      body.informationReturnForm !== "none" &&
-      !FORM_TYPES.includes(body.informationReturnForm as FormType)
-    ) {
-      return NextResponse.json({ error: "unknown information return form" }, { status: 400 });
-    }
-    if (body.taxClassification && !TAX_CLASSIFICATIONS.has(body.taxClassification)) {
-      return NextResponse.json({ error: "unknown tax classification" }, { status: 400 });
-    }
-    if (body.tinType && !TIN_TYPES.has(body.tinType)) {
-      return NextResponse.json({ error: "unknown TIN type" }, { status: 400 });
-    }
-    // Both toggles ride into coalesce() against boolean columns: Postgres would
-    // parse 'yes'/'no' but die on anything else, surfacing the full vendor_roles
-    // UPDATE through the catch below. Refuse non-booleans with a named 400.
-    for (const key of ["backupWithholding", "reportable"] as const) {
-      if (body[key] !== undefined && body[key] !== null && typeof body[key] !== "boolean") {
-        return NextResponse.json({ error: `${key} must be a boolean` }, { status: 400 });
+  // A TIN is digits; separators are cosmetic. Reject anything else rather than
+  // storing a half-typed number that will fail at the filing channel in January.
+  let tinEncrypted: string | null | undefined;
+  let tinLast4: string | null | undefined;
+  if (body.tin !== undefined) {
+    if (body.tin === null || body.tin.trim() === "") {
+      tinEncrypted = null;
+      tinLast4 = null;
+    } else {
+      const digits = body.tin.replace(/[\s-]/g, "");
+      if (!/^\d{9}$/.test(digits)) {
+        return NextResponse.json(
+          { error: "a taxpayer identification number is exactly 9 digits" },
+          { status: 400 },
+        );
       }
+      tinEncrypted = sealSecret(digits, { orgId, purpose: "compliance.vendor.tin" });
+      tinLast4 = digits.slice(-4);
     }
+  }
 
-    // A TIN is digits; separators are cosmetic. Reject anything else rather than
-    // storing a half-typed number that will fail at the filing channel in January.
-    let tinEncrypted: string | null | undefined;
-    let tinLast4: string | null | undefined;
-    if (body.tin !== undefined) {
-      if (body.tin === null || body.tin.trim() === "") {
-        tinEncrypted = null;
-        tinLast4 = null;
-      } else {
-        const digits = body.tin.replace(/[\s-]/g, "");
-        if (!/^\d{9}$/.test(digits)) {
-          return NextResponse.json(
-            { error: "a taxpayer identification number is exactly 9 digits" },
-            { status: 400 },
-          );
-        }
-        tinEncrypted = sealSecret(digits, { orgId, purpose: "compliance.vendor.tin" });
-        tinLast4 = digits.slice(-4);
-      }
-    }
-
-    // The class check runs before the write transaction, not inside it: the
-    // catch below maps every unclassified failure to a generic 500, so a
-    // computed refusal raised in there would never reach the operator.
-    if (body.complianceClassId) {
-      const exists = await db.execute(
-        sql`
+  // The class check runs before the write transaction, not inside it: the
+  // catch below maps every unclassified failure to a generic 500, so a
+  // computed refusal raised in there would never reach the operator.
+  if (body.complianceClassId) {
+    const exists = await db.execute(
+      sql`
         select 1 from compliance_classes
          where org_id = ${orgId} and id = ${body.complianceClassId} and is_active`,
-        "objects",
-      );
-      if (exists.length === 0) {
-        return NextResponse.json({ error: "unknown compliance class" }, { status: 400 });
-      }
+      "objects",
+    );
+    if (exists.length === 0) {
+      return NextResponse.json({ error: "unknown compliance class" }, { status: 400 });
     }
+  }
 
-    const reason = auditReason(body.reason);
-    let recordMissing = false;
-    try {
-      await withOrgTransaction(orgId, async () => {
-        // Lock the authoritative tenant row before reading its before-state.
-        // Every subsequent write and the audit insert participates in this same
-        // pinned transaction, so concurrent saves serialize and an audit error
-        // rolls the sensitive compliance/TIN mutation back with it.
-        const role = await db.execute<VendorRoleAuditRow>(
-          sql`
+  const reason = auditReason(body.reason);
+  let recordMissing = false;
+  try {
+    await withOrgTransaction(orgId, async () => {
+      // Lock the authoritative tenant row before reading its before-state.
+      // Every subsequent write and the audit insert participates in this same
+      // pinned transaction, so concurrent saves serialize and an audit error
+      // rolls the sensitive compliance/TIN mutation back with it.
+      const role = await db.execute<VendorRoleAuditRow>(
+        sql`
           select ${VENDOR_ROLE_AUDIT_COLUMNS}
             from vendor_roles
            where org_id = ${orgId} and party_id = ${partyId}
            for update`,
-          "objects",
-        );
-        const before = role[0];
-        if (!before) {
-          recordMissing = true;
-          return;
-        }
+        "objects",
+      );
+      const before = role[0];
+      if (!before) {
+        recordMissing = true;
+        return;
+      }
 
-        const updated = await db.execute<VendorRoleAuditRow>(
-          sql`
+      const updated = await db.execute<VendorRoleAuditRow>(
+        sql`
           update vendor_roles set
             compliance_class_id = ${body.complianceClassId === undefined ? sql`compliance_class_id` : sql`${body.complianceClassId}::uuid`},
             information_return_form = ${body.informationReturnForm === undefined ? sql`information_return_form` : sql`${body.informationReturnForm}`},
@@ -287,31 +305,41 @@ export const PATCH = defineRoute({
             updated_at = now(), updated_by = ${actorId}
           where org_id = ${orgId} and party_id = ${partyId}
           returning ${VENDOR_ROLE_AUDIT_COLUMNS}`,
-          "objects",
-        );
-        const after = updated[0];
-        // The row was locked by this transaction's own read, so a zero-row
-        // update means it vanished under the lock — still the vendor-missing
-        // refusal, raised through the flag like the pre-lock read.
-        if (!after) {
-          recordMissing = true;
-          return;
-        }
+        "objects",
+      );
+      const after = updated[0];
+      // The row was locked by this transaction's own read, so a zero-row
+      // update means it vanished under the lock — still the vendor-missing
+      // refusal, raised through the flag like the pre-lock read.
+      if (!after) {
+        recordMissing = true;
+        return;
+      }
 
-        // The audit row is immutable at the database layer. Its actor_id and at
-        // columns are written by PostgreSQL, while changes.reason and the exact
-        // secret-free before/after snapshots make the evidence attributable and
-        // complete without ever persisting TIN ciphertext in the trail.
-        await db.execute(sql`
+      // The audit row is immutable at the database layer. Its actor_id and at
+      // columns are written by PostgreSQL, while changes.reason and the exact
+      // secret-free before/after snapshots make the evidence attributable and
+      // complete without ever persisting TIN ciphertext in the trail.
+      await db.execute(sql`
           insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'vendor_roles', ${partyId}, 'update',
                   ${JSON.stringify({ reason, before, after })}::jsonb, ${actorId})`);
-      });
-      if (recordMissing)
-        return NextResponse.json({ error: "this party is not a vendor" }, { status: 404 });
-      return NextResponse.json({ partyId });
-    } catch (e) {
-      return complianceWriteFailure(e);
-    }
+    });
+    if (recordMissing)
+      return NextResponse.json({ error: "this party is not a vendor" }, { status: 404 });
+    return NextResponse.json({ partyId });
+  } catch (e) {
+    return complianceWriteFailure(e);
+  }
+}
+
+export const PATCH = defineRoute({
+  authorize: authorizeVendorSettings,
+  feature: {
+    none: "Vendor settings span information-return and subcontractor-compliance features; each field is checked against its own switch.",
   },
+  params: z.object({ partyId: z.string() }),
+  body: requestBodySchema,
+  handler: async ({ authz: gate, params: routeParams, body }) =>
+    updateVendorComplianceSettings(gate, routeParams, body),
 });

@@ -16,35 +16,73 @@ import { notFound } from "@/lib/api/responses";
 
 // Money is decimal text at the boundary; malformed and over-width figures are
 // domain refusals (422) raised by optionalCoverageMoney before any write.
-const requestMoney = z.string().nullable();
-const requestBodySchema = z.object({
-  partyId: uuidString({ error: "partyId must be a valid vendor id" }),
-  requirementId: uuidString({ error: "requirementId must be a valid compliance requirement id" }),
-  projectId: uuidString({ error: "projectId must be a valid project id" }).nullable().optional(),
-  issuerName: z.string().trim().max(200).nullable().optional(),
-  policyNumber: z.string().trim().max(200).nullable().optional(),
+const requestMoney = z
+  .string()
+  .max(100)
+  .nullable()
+  .describe("Exact amount as decimal text, or null when unknown.");
+export const requestBodySchema = z.object({
+  partyId: uuidString({ error: "partyId must be a valid vendor id" }).describe(
+    "Vendor party UUID.",
+  ),
+  requirementId: uuidString({
+    error: "requirementId must be a valid compliance requirement id",
+  }).describe("Applicable compliance requirement UUID."),
+  projectId: uuidString({ error: "projectId must be a valid project id" })
+    .nullable()
+    .optional()
+    .describe("Optional project UUID for project-specific evidence."),
+  issuerName: z
+    .string()
+    .trim()
+    .max(200)
+    .nullable()
+    .optional()
+    .describe("Insurance carrier or certificate issuer."),
+  policyNumber: z
+    .string()
+    .trim()
+    .max(200)
+    .nullable()
+    .optional()
+    .describe("Policy number printed on the certificate."),
   effectiveFrom: z
     .string()
-    .refine(isIsoCalendarDate, "effectiveFrom must be a real calendar date (YYYY-MM-DD)"),
+    .max(10)
+    .refine(isIsoCalendarDate, "effectiveFrom must be a real calendar date (YYYY-MM-DD)")
+    .describe("Coverage start date in YYYY-MM-DD format."),
   expiresOn: z
     .string()
+    .max(10)
     .refine(isIsoCalendarDate, "expiresOn must be a real calendar date (YYYY-MM-DD)")
     .nullable()
-    .optional(),
-  coverageAmount: requestMoney.optional(),
-  aggregateAmount: requestMoney.optional(),
+    .optional()
+    .describe("Coverage expiry date in YYYY-MM-DD format, when required by the policy."),
+  coverageAmount: requestMoney.optional().describe("Exact per-occurrence coverage amount."),
+  aggregateAmount: requestMoney.optional().describe("Exact aggregate coverage amount."),
   coverageCurrency: z
     .string()
     .regex(/^[A-Z]{3}$/, "coverageCurrency must be a three-letter ISO currency code")
     .nullable()
-    .optional(),
-  additionalInsured: z.boolean().optional(),
-  waiverOfSubrogation: z.boolean().optional(),
-  primaryNoncontributory: z.boolean().optional(),
-  notes: z.string().trim().max(2000).nullable().optional(),
+    .optional()
+    .describe("Currency code for coverage amounts."),
+  additionalInsured: z
+    .boolean()
+    .optional()
+    .describe("Whether the certificate names the organization as additional insured."),
+  waiverOfSubrogation: z
+    .boolean()
+    .optional()
+    .describe("Whether waiver of subrogation is evidenced."),
+  primaryNoncontributory: z
+    .boolean()
+    .optional()
+    .describe("Whether primary and noncontributory coverage is evidenced."),
+  notes: z.string().trim().max(2000).nullable().optional().describe("Optional review notes."),
   supersedesId: uuidString({ error: "supersedesId must be a valid certificate id" })
     .nullable()
-    .optional(),
+    .optional()
+    .describe("Previous certificate UUID this renewal replaces after approval."),
 });
 
 export const runtime = "nodejs";
@@ -64,166 +102,166 @@ function optionalCoverageMoney(value: unknown): string | null | "invalid" | "ran
  * uploads a certificate is not the person who attests that it satisfies the
  * policy. Verification is a separate call needing `compliance.verify`.
  */
-export const POST = defineRoute({
-  permission: "compliance.manage",
-  feature: "subcontractorCompliance",
-  body: requestBodySchema,
-  handler: async ({ authz: gate, body }) => {
-    const { orgId, id: actorId } = gate.user;
-    const partyId = body.partyId;
-    if (!partyId || !isUuid(partyId))
-      return NextResponse.json({ error: "partyId is required" }, { status: 400 });
-    const requirementId = body.requirementId;
-    if (!requirementId || !isUuid(requirementId)) {
-      return NextResponse.json({ error: "requirementId is required" }, { status: 400 });
-    }
-    if (!body.effectiveFrom)
-      return NextResponse.json({ error: "effectiveFrom is required" }, { status: 400 });
-    // Both ends land in date columns and this verb's catch surfaces the driver
-    // text, so refuse anything that is not a real calendar day here with a
-    // named 400 before any write is attempted.
-    if (!isIsoCalendarDate(body.effectiveFrom)) {
-      return NextResponse.json(
-        { error: "effectiveFrom must be a real calendar date (YYYY-MM-DD)" },
-        { status: 400 },
-      );
-    }
-    if (body.expiresOn != null && body.expiresOn !== "" && !isIsoCalendarDate(body.expiresOn)) {
-      return NextResponse.json(
-        { error: "expiresOn must be a real calendar date (YYYY-MM-DD)" },
-        { status: 400 },
-      );
-    }
 
-    // The requirement must belong to this org, and to the vendor's class — a
-    // certificate against an inapplicable policy would never be evaluated and
-    // would quietly read as "on file". Shared with the waiver write.
-    const requirement = await loadApplicableRequirement(orgId, partyId, requirementId);
-    if (!requirement) {
-      return NextResponse.json(
-        { error: "that requirement does not apply to this vendor — check its compliance class" },
-        { status: 422 },
-      );
-    }
-    if (requirement.requiresExpiry && !body.expiresOn) {
-      return NextResponse.json({ error: "this requirement needs an expiry date" }, { status: 422 });
-    }
+export async function createComplianceEvidence(
+  gate: import("@/lib/authz").Authz,
+  body: z.infer<typeof requestBodySchema>,
+) {
+  const { orgId, id: actorId } = gate.user;
+  const partyId = body.partyId;
+  if (!partyId || !isUuid(partyId))
+    return NextResponse.json({ error: "partyId is required" }, { status: 400 });
+  const requirementId = body.requirementId;
+  if (!requirementId || !isUuid(requirementId)) {
+    return NextResponse.json({ error: "requirementId is required" }, { status: 400 });
+  }
+  if (!body.effectiveFrom)
+    return NextResponse.json({ error: "effectiveFrom is required" }, { status: 400 });
+  // Both ends land in date columns and this verb's catch surfaces the driver
+  // text, so refuse anything that is not a real calendar day here with a
+  // named 400 before any write is attempted.
+  if (!isIsoCalendarDate(body.effectiveFrom)) {
+    return NextResponse.json(
+      { error: "effectiveFrom must be a real calendar date (YYYY-MM-DD)" },
+      { status: 400 },
+    );
+  }
+  if (body.expiresOn != null && body.expiresOn !== "" && !isIsoCalendarDate(body.expiresOn)) {
+    return NextResponse.json(
+      { error: "expiresOn must be a real calendar date (YYYY-MM-DD)" },
+      { status: 400 },
+    );
+  }
 
-    const coverageAmount = optionalCoverageMoney(body.coverageAmount);
-    const aggregateAmount = optionalCoverageMoney(body.aggregateAmount);
-    if (coverageAmount === "invalid") {
-      return NextResponse.json(
-        { error: moneyRefusal("Coverage amount", body.coverageAmount) },
-        { status: 422 },
-      );
-    }
-    if (aggregateAmount === "invalid") {
-      return NextResponse.json(
-        { error: moneyRefusal("Aggregate amount", body.aggregateAmount) },
-        { status: 422 },
-      );
-    }
-    // Both columns are numeric(19,4): a wider figure would die in Postgres,
-    // surfacing the full INSERT through the catch below. Refuse it named.
-    if (coverageAmount === "range" || aggregateAmount === "range") {
-      return NextResponse.json(
-        { error: "coverage figures are out of range — at most 15 whole digits fit the ledger" },
-        { status: 422 },
-      );
-    }
+  // The requirement must belong to this org, and to the vendor's class — a
+  // certificate against an inapplicable policy would never be evaluated and
+  // would quietly read as "on file". Shared with the waiver write.
+  const requirement = await loadApplicableRequirement(orgId, partyId, requirementId);
+  if (!requirement) {
+    return NextResponse.json(
+      { error: "that requirement does not apply to this vendor — check its compliance class" },
+      { status: 422 },
+    );
+  }
+  if (requirement.requiresExpiry && !body.expiresOn) {
+    return NextResponse.json({ error: "this requirement needs an expiry date" }, { status: 422 });
+  }
 
-    // project_id casts straight to uuid in the queries below: refuse a
-    // malformed id with a named 400 before any write is attempted.
-    if (
-      body.projectId !== undefined &&
-      body.projectId !== null &&
-      body.projectId !== "" &&
-      !isUuid(body.projectId)
-    ) {
-      return NextResponse.json({ error: "projectId must be a valid project id" }, { status: 400 });
-    }
-    // Subsidiary fence: evidence cannot be filed for a vendor — or under a
-    // project — the caller cannot see. Missing and hidden both read as 404,
-    // so the refusal never oracles which ids exist elsewhere.
-    const partyScope = (
-      await db.execute<{ subsidiaryId: string | null }>(
-        sql`
+  const coverageAmount = optionalCoverageMoney(body.coverageAmount);
+  const aggregateAmount = optionalCoverageMoney(body.aggregateAmount);
+  if (coverageAmount === "invalid") {
+    return NextResponse.json(
+      { error: moneyRefusal("Coverage amount", body.coverageAmount) },
+      { status: 422 },
+    );
+  }
+  if (aggregateAmount === "invalid") {
+    return NextResponse.json(
+      { error: moneyRefusal("Aggregate amount", body.aggregateAmount) },
+      { status: 422 },
+    );
+  }
+  // Both columns are numeric(19,4): a wider figure would die in Postgres,
+  // surfacing the full INSERT through the catch below. Refuse it named.
+  if (coverageAmount === "range" || aggregateAmount === "range") {
+    return NextResponse.json(
+      { error: "coverage figures are out of range — at most 15 whole digits fit the ledger" },
+      { status: 422 },
+    );
+  }
+
+  // project_id casts straight to uuid in the queries below: refuse a
+  // malformed id with a named 400 before any write is attempted.
+  if (
+    body.projectId !== undefined &&
+    body.projectId !== null &&
+    body.projectId !== "" &&
+    !isUuid(body.projectId)
+  ) {
+    return NextResponse.json({ error: "projectId must be a valid project id" }, { status: 400 });
+  }
+  // Subsidiary fence: evidence cannot be filed for a vendor — or under a
+  // project — the caller cannot see. Missing and hidden both read as 404,
+  // so the refusal never oracles which ids exist elsewhere.
+  const partyScope = (
+    await db.execute<{ subsidiaryId: string | null }>(
+      sql`
       select subsidiary_id as "subsidiaryId" from parties where org_id = ${orgId} and id = ${body.partyId}
     `,
+      "objects",
+    )
+  )[0];
+  if (!partyScope) return notFound("record");
+  const partyDenied = guardSubsidiaryScope(gate, partyScope.subsidiaryId, { orgWideNull: true });
+  if (partyDenied) return partyDenied;
+  if (body.projectId !== undefined && body.projectId !== null && body.projectId !== "") {
+    const projectScope = (
+      await db.execute<{ subsidiaryId: string | null }>(
+        sql`
+        select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${body.projectId}
+      `,
         "objects",
       )
     )[0];
-    if (!partyScope) return notFound("record");
-    const partyDenied = guardSubsidiaryScope(gate, partyScope.subsidiaryId, { orgWideNull: true });
-    if (partyDenied) return partyDenied;
-    if (body.projectId !== undefined && body.projectId !== null && body.projectId !== "") {
-      const projectScope = (
-        await db.execute<{ subsidiaryId: string | null }>(
-          sql`
-        select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${body.projectId}
-      `,
-          "objects",
-        )
-      )[0];
-      if (!projectScope) return notFound("record");
-      const projectDenied = guardSubsidiaryScope(gate, projectScope.subsidiaryId, {
-        orgWideNull: true,
-      });
-      if (projectDenied) return projectDenied;
+    if (!projectScope) return notFound("record");
+    const projectDenied = guardSubsidiaryScope(gate, projectScope.subsidiaryId, {
+      orgWideNull: true,
+    });
+    if (projectDenied) return projectDenied;
+  }
+  // A renewal names the certificate it replaces. Name a certificate that is
+  // not this vendor's, not this requirement's, or already history, and the
+  // supersession quietly matches nothing while the POST still reports {id} —
+  // so validate the link before any write, and refuse it by name.
+  const rawSupersedesId = body.supersedesId ?? null;
+  if (rawSupersedesId !== null && rawSupersedesId !== "") {
+    if (!isUuid(rawSupersedesId)) {
+      return NextResponse.json(
+        { error: "supersedesId must be a valid certificate id" },
+        { status: 400 },
+      );
     }
-    // A renewal names the certificate it replaces. Name a certificate that is
-    // not this vendor's, not this requirement's, or already history, and the
-    // supersession quietly matches nothing while the POST still reports {id} —
-    // so validate the link before any write, and refuse it by name.
-    const rawSupersedesId = body.supersedesId ?? null;
-    if (rawSupersedesId !== null && rawSupersedesId !== "") {
-      if (!isUuid(rawSupersedesId)) {
-        return NextResponse.json(
-          { error: "supersedesId must be a valid certificate id" },
-          { status: 400 },
-        );
-      }
-      const prior = (
-        await db.execute<{ id: string; status: string }>(
-          sql`
+    const prior = (
+      await db.execute<{ id: string; status: string }>(
+        sql`
         select id, status from compliance_records
          where org_id = ${orgId} and id = ${rawSupersedesId}
            and party_id = ${body.partyId} and requirement_id = ${body.requirementId}
            and project_id is not distinct from ${body.projectId ?? null}::uuid
       `,
-          "objects",
-        )
-      )[0];
-      if (!prior) {
-        return NextResponse.json(
-          {
-            error:
-              "supersedesId does not identify a certificate for this vendor, requirement and project",
-          },
-          { status: 422 },
-        );
-      }
-      if (prior.status === "superseded") {
-        return NextResponse.json(
-          { error: "that certificate was already superseded" },
-          { status: 422 },
-        );
-      }
-      if (prior.status !== "pending_review" && prior.status !== "active") {
-        return NextResponse.json(
-          { error: `a ${prior.status} certificate cannot be superseded` },
-          { status: 422 },
-        );
-      }
+        "objects",
+      )
+    )[0];
+    if (!prior) {
+      return NextResponse.json(
+        {
+          error:
+            "supersedesId does not identify a certificate for this vendor, requirement and project",
+        },
+        { status: 422 },
+      );
     }
+    if (prior.status === "superseded") {
+      return NextResponse.json(
+        { error: "that certificate was already superseded" },
+        { status: 422 },
+      );
+    }
+    if (prior.status !== "pending_review" && prior.status !== "active") {
+      return NextResponse.json(
+        { error: `a ${prior.status} certificate cannot be superseded` },
+        { status: 422 },
+      );
+    }
+  }
 
-    try {
-      const id = await db.transaction(async (tx) => {
-        // A renewal files as pending and only POINTS at its predecessor: the
-        // prior certificate stays in force until the renewal is verified, so a
-        // still-valid certificate is never superseded by an unattested upload.
-        const inserted = await tx.execute<{ id: string }>(
-          sql`
+  try {
+    const id = await db.transaction(async (tx) => {
+      // A renewal files as pending and only POINTS at its predecessor: the
+      // prior certificate stays in force until the renewal is verified, so a
+      // still-valid certificate is never superseded by an unattested upload.
+      const inserted = await tx.execute<{ id: string }>(
+        sql`
           insert into compliance_records
             (org_id, party_id, requirement_id, project_id, status, supersedes_id,
              issuer_name, policy_number,
@@ -241,19 +279,25 @@ export const POST = defineRoute({
                   ${actorId}, ${actorId})
           returning id
         `,
-          "objects",
-        );
-        const newId = inserted[0]!.id;
-        await tx.execute(sql`
+        "objects",
+      );
+      const newId = inserted[0]!.id;
+      await tx.execute(sql`
           insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'compliance_records', ${newId}, 'insert',
                   ${JSON.stringify({ after: { ...body, status: "pending_review" } })}::jsonb, ${actorId})
         `);
-        return newId;
-      });
-      return NextResponse.json({ id });
-    } catch (e) {
-      return complianceWriteFailure(e);
-    }
-  },
+      return newId;
+    });
+    return NextResponse.json({ id });
+  } catch (e) {
+    return complianceWriteFailure(e);
+  }
+}
+
+export const POST = defineRoute({
+  permission: "compliance.manage",
+  feature: "subcontractorCompliance",
+  body: requestBodySchema,
+  handler: async ({ authz: gate, body }) => createComplianceEvidence(gate, body),
 });

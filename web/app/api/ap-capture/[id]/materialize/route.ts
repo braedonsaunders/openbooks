@@ -2,15 +2,13 @@ import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
 import {
   materializeCapture,
   CaptureMaterializationError,
 } from "@openbooks/engine/payables/ap-capture-service";
 import { isUuid } from "@/lib/list-params";
-import { apCaptureSubsidiaryScope } from "@openbooks/engine/records/file-cabinet-access";
 import { notFound } from "@/lib/api/responses";
+import { findVisibleApCapture } from "@/lib/ap-capture-actions";
 
 export const runtime = "nodejs";
 
@@ -29,19 +27,12 @@ export const POST = defineRoute({
       // The engine binds the id into a uuid column without validating it; a
       // malformed id must 404 here instead of escaping as a cast-error 500.
       if (!isUuid(id)) return notFound("record");
-      const visible = await db.execute<{ id: string }>(
-        sql`
-        select ci.id
-          from ap_capture_items ci
-          left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
-          left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
-         where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
-         ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
-      `,
-        "objects",
-      );
-      if (!visible[0])
-        return NextResponse.json({ error: "Capture item not found" }, { status: 422 });
+      const visible = await findVisibleApCapture({
+        orgId: gate.user.orgId,
+        captureItemId: id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      });
+      if (!visible) return NextResponse.json({ error: "Capture item not found" }, { status: 422 });
       return NextResponse.json(
         await materializeCapture({
           orgId: gate.user.orgId,
