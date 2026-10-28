@@ -1,0 +1,1 @@
+Creates derived search index tables and fills them from existing documents, document lines and journal lines; it changes no source rows and has no data precondition.

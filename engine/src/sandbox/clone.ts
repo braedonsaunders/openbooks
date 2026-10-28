@@ -1280,6 +1280,8 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       await pacer.afterStatement();
       await db.execute(sql`select openbooks_open_item_balances_rebuild(${opts.sandboxOrgId})`);
       await pacer.afterStatement();
+      await db.execute(sql`select openbooks_search_index_rebuild(${opts.sandboxOrgId})`);
+      await pacer.afterStatement();
       // Evidence for the clone authority asserted above (OM-13): one audit row
       // in the target org recording the provenance and scope of this copy, so
       // closed-period history carried under openbooks.clone is attributable.

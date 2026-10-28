@@ -264,6 +264,11 @@ export const EXCLUDE = new Set([
   // Derived open-item rollup — rebuilt after the copy from the cloned lines
   // and applications.
   "open_item_balances",
+  // Derived search index — rebuilt after the copy from the cloned documents
+  // and journal lines.
+  "document_search_terms",
+  "document_search_amounts",
+  "journal_search_amounts",
   // Executable scheduler work is never copied. scheduler_outbox carries a
   // GLOBAL unique on (kind, occurrence_key), so copying an org-bound row
   // verbatim collides with the source's own row (PG 23505 on

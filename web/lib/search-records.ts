@@ -25,6 +25,7 @@ import {
 import { lintRecordFields, listableFields } from "./record-schema";
 import { SETUP_ENTITY_BY_KEY, resolveSetupEntityGate } from "./setup/registry";
 import { setupEntitySubsidiaryFilter } from "./setup/subsidiary-scope";
+import type { ParsedSearch } from "./search-query";
 import type { RecentRef, SearchGroup, SearchHit, SearchRecordType } from "./search-types";
 
 /**
@@ -46,7 +47,24 @@ import type { RecentRef, SearchGroup, SearchHit, SearchRecordType } from "./sear
 
 const PER_GROUP = 5;
 
-type Match = { kind: "text"; q: string; like: string } | { kind: "ids"; ids: string[] };
+/**
+ * A text match carries each word of the query as a LIKE pattern: a record
+ * must contain every word, in any field the leg reads and in any order.
+ */
+type Match =
+  { kind: "text"; q: string; words: string[]; likes: string[] } | { kind: "ids"; ids: string[] };
+
+function escapeLike(text: string): string {
+  return `%${text.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+}
+
+/** Every word of the query against the fields `predicate` reads. */
+function everyWord(match: Extract<Match, { kind: "text" }>, predicate: (like: string) => SQL): SQL {
+  return sql`(${sql.join(
+    match.likes.map((like) => sql`(${predicate(like)})`),
+    sql` and `,
+  )})`;
+}
 
 type Context = {
   authz: Authz;
@@ -278,12 +296,17 @@ function listSourceLeg(config: ListSourceSearch): Leg {
       const view = defaultListView(config.recordType, {
         multiSubsidiary: await subsidiaryFeatureEnabled(ctx.orgId),
       });
-      const listWhere = source.where(
-        view,
-        { q: match.kind === "text" ? match.q : undefined, filters: {} },
-        ctx.orgId,
-        scope,
-      );
+      // The list's own WHERE builder reads each word, so the leg matches
+      // exactly what the list's search box would for each of them.
+      const listWhere =
+        match.kind === "text"
+          ? sql.join(
+              match.words.map(
+                (word) => sql`(${source.where(view, { q: word, filters: {} }, ctx.orgId, scope)})`,
+              ),
+              sql` and `,
+            )
+          : source.where(view, { q: undefined, filters: {} }, ctx.orgId, scope);
       const idExpr = source.idExpr ?? sql.raw(`${source.alias}.id`);
       const tableSql =
         typeof source.table === "function"
@@ -346,7 +369,11 @@ const subscriptionLeg: Leg = {
     const predicate =
       match.kind === "ids"
         ? sql`s.id = any(${uuidArray(match.ids)})`
-        : sql`(c.display_name ilike ${match.like} or p.name ilike ${match.like} or s.memo ilike ${match.like})`;
+        : everyWord(
+            match,
+            (like) =>
+              sql`c.display_name ilike ${like} or p.name ilike ${like} or s.memo ilike ${like}`,
+          );
     const r = await db.execute<{
       id: string;
       customer_name: string | null;
@@ -395,7 +422,11 @@ const workOrderLeg: Leg = {
     const predicate =
       match.kind === "ids"
         ? sql`r.id = any(${uuidArray(match.ids)})`
-        : sql`(r.number ilike ${match.like} or i.name ilike ${match.like} or i.code ilike ${match.like} or r.campaign_reference ilike ${match.like})`;
+        : everyWord(
+            match,
+            (like) =>
+              sql`r.number ilike ${like} or i.name ilike ${like} or i.code ilike ${like} or r.campaign_reference ilike ${like}`,
+          );
     const order =
       match.kind === "text"
         ? sql`similarity(r.number, ${match.q}) desc, r.created_at desc`
@@ -490,7 +521,10 @@ const customRecordLeg: Leg = {
     const predicate =
       match.kind === "ids"
         ? sql`id = any(${uuidArray(match.ids)})`
-        : sql`(search_text ilike ${match.like.toLowerCase()} or record_number ilike ${match.like})`;
+        : everyWord(
+            match,
+            (like) => sql`search_text ilike ${like.toLowerCase()} or record_number ilike ${like}`,
+          );
     const r = await db.execute<{
       id: string;
       type_id: string;
@@ -544,7 +578,7 @@ const fileLeg: Leg = {
     const predicate =
       match.kind === "ids"
         ? sql`fi.id = any(${uuidArray(match.ids)})`
-        : sql`fi.name ilike ${match.like}`;
+        : everyWord(match, (like) => sql`fi.name ilike ${like}`);
     const order =
       match.kind === "text" ? sql`similarity(fi.name, ${match.q}) desc, fi.name` : sql`fi.name`;
     const r = await db.execute<{ id: string; name: string; folder_name: string | null }>(
@@ -579,7 +613,7 @@ const dashboardLeg: Leg = {
     const predicate =
       match.kind === "ids"
         ? sql`d.id = any(${uuidArray(match.ids)})`
-        : sql`d.name ilike ${match.like}`;
+        : everyWord(match, (like) => sql`d.name ilike ${like} or d.description ilike ${like}`);
     const r = await db.execute<{ id: string; name: string; description: string | null }>(
       sql`
       select d.id, d.name, d.description
@@ -632,7 +666,7 @@ function setupRecordLeg(config: {
       const predicate =
         match.kind === "ids"
           ? sql`${id} = any(${uuidArray(match.ids)})`
-          : sql`(${title} ilike ${match.like} or ${subtitle} ilike ${match.like})`;
+          : everyWord(match, (like) => sql`${title} ilike ${like} or ${subtitle} ilike ${like}`);
       const r = await db.execute<{ id: string; title: string; subtitle: string | null }>(
         sql`
         select ${id} as id, ${title} as title, ${subtitle} as subtitle
@@ -708,11 +742,28 @@ async function context(authz: Authz): Promise<Context> {
   };
 }
 
-/** Search every operational record group the reader may open. */
-export async function searchOperationalRecords(authz: Authz, rawQ: string): Promise<SearchGroup[]> {
-  const q = rawQ.trim().slice(0, 80);
+/**
+ * Search every operational record group the reader may open. These records
+ * are found by their words: a query that names an amount, a date, a status
+ * or a ledger record type describes ledger records, not these.
+ */
+export async function searchOperationalRecords(
+  authz: Authz,
+  rawQ: string,
+  parsed?: ParsedSearch,
+): Promise<SearchGroup[]> {
+  const q = rawQ.trim().slice(0, 200);
   if (q.length < 2) return [];
-  const match: Match = { kind: "text", q, like: `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%` };
+  if (parsed && (parsed.amount || parsed.dates || parsed.status || parsed.scopes.length > 0))
+    return [];
+  const words = parsed
+    ? parsed.words.map((word) => word.text)
+    : q
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((word) => word.toLowerCase());
+  if (words.length === 0) return [];
+  const match: Match = { kind: "text", q, words, likes: words.map(escapeLike) };
   const ctx = await context(authz);
   const results = await Promise.all(LEGS.map((leg) => leg.run(ctx, match)));
   return LEGS.flatMap((leg, index) => {

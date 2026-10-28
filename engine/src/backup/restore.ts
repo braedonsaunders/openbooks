@@ -1180,16 +1180,18 @@ export async function restoreOrgBackup(args: {
             "restore left document open-balance caches inconsistent with the restored ledger",
           );
         }
-        // The row triggers that maintain gl_month_activity, party_payment_stats
-        // and open_item_balances were intentionally disabled during the bulk
-        // copy, and those derived tables are deliberately excluded from archives
-        // in expectation of a rebuild. Rebuild each aggregate explicitly for the
-        // restored organization so reporting is not permanently empty.
+        // The row triggers that maintain gl_month_activity, party_payment_stats,
+        // open_item_balances and the search index were intentionally disabled
+        // during the bulk copy, and those derived tables are deliberately
+        // excluded from archives in expectation of a rebuild. Rebuild each one
+        // explicitly for the restored organization so reporting and search are
+        // not permanently empty.
         await client.query("select openbooks_gl_activity_rebuild($1)", [args.expectedOrgId]);
         await client.query("select openbooks_party_payment_stats_rebuild($1)", [
           args.expectedOrgId,
         ]);
         await client.query("select openbooks_open_item_balances_rebuild($1)", [args.expectedOrgId]);
+        await client.query("select openbooks_search_index_rebuild($1)", [args.expectedOrgId]);
         // Redis queue state is intentionally not replayed by an organization
         // archive. A stored backup also snapshots its own backup_runs row while
         // that row is still "running". Close every in-flight backup ledger row

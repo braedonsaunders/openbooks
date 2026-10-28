@@ -236,6 +236,22 @@ export const HRM_THROUGH_PICK_GUARD_DIGESTS = [
     sha256: "d1f84260a2e8e8cf6c324759fbeef57f032e481e04b07fdd4daa4fc91fe34247",
   },
   {
+    name: "openbooks_search_index_document_delete",
+    sha256: "baded8c2e3d487943d91a874798649e4fa3ac9df21b695d09d3095408cee8290",
+  },
+  {
+    name: "openbooks_search_index_document_line_delete",
+    sha256: "2c493596532abc5eb6957b694d1ff21ea8cf2cebd3f7c8e3da803abfcaf57f01",
+  },
+  {
+    name: "openbooks_search_index_journal_entry_delete",
+    sha256: "0097e63aa63190691b509fc9a86cf42afa296dd6e78b5df931a46d321a5e49de",
+  },
+  {
+    name: "openbooks_search_index_journal_line_delete",
+    sha256: "c5c7c8ec20414a660d93d2cfe75f98de703ea8f9c745bf86c2d4912d835ef8b3",
+  },
+  {
     name: "openbooks_reconciliation_match_guard",
     sha256: "9f1e32b854b8f966e1e37afbac93f1b5bbebbcd05b151da05cb12f64b868ca3b",
   },

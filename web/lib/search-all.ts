@@ -1,7 +1,7 @@
 import "server-only";
 import { withReadMemo } from "@openbooks/engine/platform/database";
 import type { Authz } from "./authz";
-import { globalSearch, resolveRecentCoreRecords } from "./search";
+import { globalSearch, parseQueryFor, resolveRecentCoreRecords } from "./search";
 import { resolveRecentOperationalRecords, searchOperationalRecords } from "./search-records";
 import { resolveRecentCatalog, searchCatalog } from "./search-catalog";
 import type { RecentRef, SearchHit, SearchResponse } from "./search-types";
@@ -15,20 +15,32 @@ import type { RecentRef, SearchHit, SearchResponse } from "./search-types";
  * source consults load once per keystroke, not once per source and leg.
  */
 export async function searchEverything(authz: Authz, rawQ: string): Promise<SearchResponse> {
-  const [core, records, catalog] = await withReadMemo(() =>
-    Promise.all([
+  const [core, records, catalog] = await withReadMemo(async () => {
+    const parsed = rawQ.trim().length >= 2 ? await parseQueryFor(authz, rawQ) : null;
+    // Reports, settings and help are found by name; a query that is all
+    // structure ("$1,200", "overdue last month") names none.
+    const structured = Boolean(parsed && (parsed.amount || parsed.dates || parsed.status));
+    const catalogQuery = structured
+      ? (parsed?.words.map((word) => word.text).join(" ") ?? "")
+      : rawQ;
+    return Promise.all([
       globalSearch(authz, rawQ),
-      searchOperationalRecords(authz, rawQ),
-      searchCatalog(authz, rawQ),
-    ]),
-  );
+      searchOperationalRecords(authz, rawQ, parsed ?? undefined),
+      searchCatalog(authz, catalogQuery),
+    ]);
+  });
   const groups = [
     ...core.groups,
     ...catalog.filter((group) => group.type !== "help"),
     ...records,
     ...catalog.filter((group) => group.type === "help"),
   ];
-  return { q: core.q, groups, total: groups.reduce((n, group) => n + group.hits.length, 0) };
+  return {
+    q: core.q,
+    groups,
+    total: groups.reduce((n, group) => n + group.hits.length, 0),
+    chips: core.chips,
+  };
 }
 
 /**

@@ -241,6 +241,22 @@ export const HRM_THROUGH_PICK_GUARD_ATTRIBUTES = [
     config: [],
   },
   {
+    name: "openbooks_search_index_document_delete",
+    config: ["search_path=pg_catalog,public"],
+  },
+  {
+    name: "openbooks_search_index_document_line_delete",
+    config: ["search_path=pg_catalog,public"],
+  },
+  {
+    name: "openbooks_search_index_journal_entry_delete",
+    config: ["search_path=pg_catalog,public"],
+  },
+  {
+    name: "openbooks_search_index_journal_line_delete",
+    config: ["search_path=pg_catalog,public"],
+  },
+  {
     name: "openbooks_reconciliation_match_guard",
     config: ["search_path=pg_catalog,public"],
   },

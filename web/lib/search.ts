@@ -6,45 +6,52 @@ import { can } from "./authz";
 import { disabledDocKinds } from "./documents.ts";
 import { isFeatureEnabled } from "./features";
 import { subsidiaryVisibleFilter } from "./subsidiaries";
-import { formatMoney } from "@openbooks/engine/money/money";
-import {
-  JOURNAL_GL_NATIVE_ORIGINS,
-  journalScopeWhere,
-} from "./customization/entity-list-query/journal-entries";
-import { canonicalDecimal } from "./exact-decimal";
+import { journalScopeWhere } from "./customization/entity-list-query/journal-entries";
 import { expenseAccess } from "./expense-access";
+import { searchParseOptions } from "./search-context";
+import {
+  parseSearchQuery,
+  SCOPE_KINDS,
+  scopeGroup,
+  type ParsedSearch,
+  type SearchScope,
+} from "./search-query";
+import {
+  displayMoney,
+  documentHits,
+  journalHits,
+  searchDocuments,
+  searchJournalEntries,
+} from "./search-transactions";
 import type { RecentRef, SearchGroup, SearchHit, SearchResponse, SearchType } from "./search-types";
 import {
-  moduleDrawerHref,
   TRANSACTION_KINDS,
   transactionNavigationOnlyFeature,
   transactionModule,
 } from "./txn-links";
 
 /**
- * Global search — one query fans out across every primary entity (contacts,
- * transactions, accounts, items, projects, journal entries) in parallel and
- * returns grouped, ranked hits. Names (parties, accounts, items, projects)
- * match trigram-fuzzy (`col % q`, typo-tolerant via pg_trgm) OR substring
- * (`ILIKE`); document and journal text matches by substring. Hits rank by
- * `similarity()`; a numeric query also matches transaction totals and
- * document numbers. An exact document/entry number always wins: it bypasses
- * the recency-capped candidate legs (which can exclude an old exact row on a
- * large tenant) and orders first. Contacts are also found through their
- * people, phone numbers and migrated-system ids; documents through their
- * line descriptions and integrator references; items through their barcodes
- * and customer part numbers. Org-scoped and permission-filtered. The
- * operational records, reports, settings and help that complete the header
- * search live in search-records.ts and search-catalog.ts.
+ * Global search over the core ledger records — contacts, transactions
+ * (documents and journal entries), accounts, items and projects — in
+ * parallel, grouped and ranked. A query is first read into constraints
+ * (lib/search-query.ts): words, an amount, a date range, a lifecycle status
+ * and a record scope, so "invoices over 1,000 from acme this year",
+ * "inv:3668", "$7,298.08" and "overdue bills" all mean what they say. A
+ * record must satisfy every constraint; a transaction is found by any of its
+ * amounts (total, positive line sum, open balance, tax or a line) and by the
+ * words of its number, references, memo and line descriptions.
  *
- * Row-level security decides the cost model. `%`, LIKE and ILIKE are not
- * LEAKPROOF, so under a tenant policy they can never become index conditions
- * and every text predicate is evaluated row by row across the tenant; only
- * equality and range comparisons (exact numbers, ids) use an index. Large
- * tables are therefore matched by substring alone — a per-row trigram
- * similarity costs several times the scan — in capped legs that run as
- * separate statements, side by side; fuzzy matching stays on the small
- * master-data tables.
+ * Contacts are also found through their people, addresses, phone
+ * numbers and migrated-system ids; items through their barcodes and
+ * customer part numbers. Org-scoped and permission-filtered on every leg.
+ * The operational records, reports, settings and help that complete the
+ * header search live in search-records.ts and search-catalog.ts.
+ *
+ * Row-level security decides the cost model. Pattern and similarity
+ * operators are not LEAKPROOF, so under a tenant policy they never become
+ * index conditions. The small master-data tables are matched directly;
+ * transactions go through the derived search index, whose terms and amounts
+ * are compared with equality and ranges (lib/search-transactions.ts).
  */
 
 export type {
@@ -66,42 +73,26 @@ type SearchContactRow = {
   matched_contact: string | null;
 };
 
-type SearchTransactionRow = {
-  id: string;
-  kind: string;
-  document_number: string;
-  reference_number: string | null;
-  memo: string | null;
-  status: string | null;
-  project_id: string | null;
-  party_name: string | null;
-  amount: unknown;
-  line_match: string | null;
-};
+type SearchAccountRow = { id: string; number: string | null; name: string; type: string };
+type SearchItemRow = { id: string; code: string | null; name: string };
+type SearchProjectRow = { id: string; code: string | null; name: string };
 
-type SearchAccountRow = {
-  id: string;
-  number: string | null;
-  name: string;
-  type: string;
-};
+/** Hits per group in the header panel. */
+export const PANEL_LIMIT = 6;
+const PANEL_TRANSACTION_LIMIT = 8;
 
-type SearchItemRow = {
-  id: string;
-  code: string | null;
-  name: string;
-};
-
-type SearchProjectRow = {
-  id: string;
-  code: string | null;
-  name: string;
-};
+export interface GlobalSearchOptions {
+  /** Hits per group (the header panel shows a few; the results page more). */
+  limit?: number;
+  /** Skip this many hits, for the results page's later pages. */
+  offset?: number;
+  /** Only these groups. */
+  types?: readonly SearchType[];
+}
 
 // Master data (parties, accounts) is usable org-wide when its subsidiary is
 // null — the canonical list predicate is `is null or = any(...)`, not the
-// fail-closed document rule. There is no shared export for this variant yet;
-// keep it next to its single consumer instead of forking subsidiaries.ts.
+// fail-closed document rule.
 function masterDataSubsidiaryFilter(
   column: SQL,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
@@ -112,62 +103,8 @@ function masterDataSubsidiaryFilter(
   return sql`and (${column} is null or ${column} = any(${`{${ids.join(",")}}`}::uuid[]))`;
 }
 
-/**
- * Display an amount from its stored decimal string — never through Number.
- * Beyond 2^53 a float rounds the very amount shown (9007199254740993
- * renders as …992), and grouping through toLocaleString is locale hostage.
- * Exact half-away rounding to cents (formatMoney) plus manual grouping is
- * deterministic everywhere.
- */
-function money(v: unknown): string {
-  if (typeof v !== "string" && typeof v !== "number") return "";
-  let rounded: string;
-  try {
-    rounded = formatMoney(v, 2);
-  } catch {
-    return "";
-  }
-  const negative = rounded.startsWith("-");
-  const [whole = "", fraction = ""] = (negative ? rounded.slice(1) : rounded).split(".");
-  return `${negative ? "-" : ""}${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${fraction}`;
-}
-
-/**
- * Exact amount reading for numeric search. Only strictly-formed shapes
- * count: plain digits or correctly grouped thousands, an optional $ prefix,
- * and at most two decimal places. A malformed comma ("1,2") is NOT a
- * number — stripping its comma invents 12 from a mark decimal-comma
- * locales read as 1.2 — so it stays a text query and never reaches the
- * amount leg. Values never cross Number: past 2^53 a float rounds the
- * amount the leg compares, so the leg binds the exact decimal string.
- */
-function parseSearchAmount(q: string): string | null {
-  const compact = q.trim().replace(/^\$\s*/, "");
-  if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(compact)) return null;
-  return canonicalDecimal(compact.replace(/,/g, ""), 2);
-}
-
-const PER_GROUP = 6;
-
-/**
- * What one search leg matches: the typed query, or — when the header search
- * re-resolves the reader's recently opened results — an explicit id list.
- * Both run through the same leg, so a recent result is visible exactly when
- * a fresh search could surface it.
- */
-type Match =
-  | { kind: "text"; q: string; like: string; amount: string | null; phoneDigits: string | null }
-  | { kind: "ids"; ids: string[] };
-
-function textMatch(rawQ: string): Extract<Match, { kind: "text" }> {
-  const q = rawQ.trim().slice(0, 80);
-  return {
-    kind: "text",
-    q,
-    like: `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`,
-    amount: parseSearchAmount(q),
-    phoneDigits: phoneSearchDigits(q),
-  };
+function likePattern(text: string): string {
+  return `%${text.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
 }
 
 /**
@@ -186,6 +123,18 @@ function uuidArray(ids: readonly string[]): SQL {
   return sql`${`{${ids.join(",")}}`}::uuid[]`;
 }
 
+/**
+ * What one leg matches: the parsed query, or — when the header search
+ * re-resolves the reader's recently opened results — an explicit id list.
+ * Both run through the same leg, so a recent result is visible exactly when
+ * a fresh search could surface it.
+ */
+type Match =
+  | { kind: "text"; q: string; parsed: ParsedSearch; phoneDigits: string | null }
+  | { kind: "ids"; ids: string[] };
+
+type CoreType = "contact" | "transaction" | "account" | "item" | "project";
+
 // Per-kind authorization comes from the native module's own read permission
 // (single source in the nav registry): documents share one table, but access
 // to one module must never make records from another module discoverable.
@@ -197,13 +146,29 @@ function allowedTransactionKinds(authz: Authz): string[] {
   });
 }
 
-type CoreLegs = {
-  contacts: SearchHit[];
-  transactions: SearchHit[];
-  accounts: SearchHit[];
-  items: SearchHit[];
-  projects: SearchHit[];
-};
+type CoreLegs = Record<CoreType, { hits: SearchHit[]; more: boolean }>;
+
+const NONE = { hits: [] as SearchHit[], more: false };
+
+/**
+ * Which groups a parsed query can match. A record scope keeps its own group;
+ * an amount, a date or a status only describes transactions.
+ */
+function queryGroups(parsed: ParsedSearch): Set<CoreType> {
+  if (parsed.scopes.length > 0) {
+    const groups = new Set<CoreType>();
+    for (const scope of parsed.scopes) groups.add(scopeGroup(scope));
+    return groups;
+  }
+  if (parsed.amount || parsed.dates || parsed.status) return new Set(["transaction"]);
+  return new Set(["contact", "transaction", "account", "item", "project"]);
+}
+
+/** The document kinds a scoped query reads, or null for every kind. */
+function scopedKinds(scopes: readonly SearchScope[]): Set<string> | null {
+  const kinds = scopes.flatMap((scope) => SCOPE_KINDS[scope] ?? []);
+  return kinds.length ? new Set(kinds) : null;
+}
 
 /**
  * Run every core leg the reader is entitled to. `matchFor` names the match
@@ -212,11 +177,10 @@ type CoreLegs = {
  */
 async function coreLegs(
   authz: Authz,
-  matchFor: (type: "contact" | "transaction" | "account" | "item" | "project") => Match | null,
+  matchFor: (type: CoreType) => Match | null,
+  options: Required<Pick<GlobalSearchOptions, "limit" | "offset">> & { today: string },
 ): Promise<CoreLegs> {
   const orgId = authz.user.orgId;
-
-  // Permission gates per entity.
   const transactionKinds = allowedTransactionKinds(authz);
   const contactMatch = can(authz, "parties.read") ? matchFor("contact") : null;
   const transactionMatch = matchFor("transaction");
@@ -227,8 +191,12 @@ async function coreLegs(
   // Journal entries carry their own numbers in journal_entries; the gate is
   // the journal module's own read permission, like every other entity above.
   const journalPermission = transactionModule("journal")?.requiredPermission;
+  const journalInScope =
+    transactionMatch?.kind !== "text" ||
+    transactionMatch.parsed.scopes.length === 0 ||
+    transactionMatch.parsed.scopes.includes("journal");
   const canJournals = Boolean(
-    transactionMatch && journalPermission && can(authz, journalPermission),
+    transactionMatch && journalInScope && journalPermission && can(authz, journalPermission),
   );
 
   // Subsidiary visibility rides alongside permissions: a restricted caller's
@@ -249,49 +217,152 @@ async function coreLegs(
       ? await ownExpenseSearchScope(authz)
       : null;
 
-  const [contacts, txns, accounts, items, projects, journals] = await Promise.all([
-    contactMatch ? searchContacts(orgId, contactMatch, scope) : empty(),
-    transactionMatch && (transactionKinds.length || ownExpenses)
-      ? visibleKinds.then((kinds) =>
-          searchTransactions(orgId, transactionMatch, scope, kinds, ownExpenses?.partyId),
-        )
-      : empty(),
-    accountMatch ? searchAccounts(orgId, accountMatch, scope) : empty(),
-    itemMatch ? searchItems(orgId, itemMatch) : empty(),
-    canProjects && projectMatch ? searchProjects(orgId, projectMatch, scope) : empty(),
-    canJournals && transactionMatch
-      ? visibleKinds.then((kinds) => searchJournalEntries(orgId, transactionMatch, scope, kinds))
-      : empty(),
+  const documentsLeg = async (kinds: string[]) => {
+    if (!transactionMatch) return NONE;
+    if (transactionMatch.kind === "ids") {
+      return {
+        hits: await documentsByIds(orgId, transactionMatch.ids, scope, kinds, ownExpenses?.partyId),
+        more: false,
+      };
+    }
+    if (!kinds.length && !ownExpenses) return NONE;
+    const narrowed = scopedKinds(transactionMatch.parsed.scopes);
+    const readable = narrowed ? kinds.filter((kind) => narrowed.has(kind)) : kinds;
+    const ownExpenseParty =
+      ownExpenses && (!narrowed || narrowed.has("expense_report"))
+        ? ownExpenses.partyId
+        : undefined;
+    if (!readable.length && ownExpenseParty === undefined) return NONE;
+    const partiesByWord = can(authz, "parties.read")
+      ? await partiesMatchingWords(orgId, transactionMatch.parsed, scope)
+      : transactionMatch.parsed.words.map(() => []);
+    return searchDocuments({
+      orgId,
+      q: transactionMatch.q,
+      parsed: transactionMatch.parsed,
+      scope,
+      visibleKinds: readable,
+      ownExpenseParty,
+      partiesByWord,
+      limit: options.limit,
+      offset: options.offset,
+      today: options.today,
+    });
+  };
+  const journalsLeg = async (kinds: string[]) => {
+    if (!canJournals || !transactionMatch) return [];
+    if (transactionMatch.kind === "ids")
+      return journalByIds(orgId, transactionMatch.ids, scope, kinds);
+    if (options.offset > 0) return [];
+    return searchJournalEntries({
+      orgId,
+      q: transactionMatch.q,
+      parsed: transactionMatch.parsed,
+      scope,
+      visibleKinds: kinds,
+      limit: options.limit,
+    });
+  };
+
+  const [contacts, documents, journals, accounts, items, projects] = await Promise.all([
+    contactMatch ? searchContacts(orgId, contactMatch, scope, options) : NONE,
+    visibleKinds.then(documentsLeg),
+    visibleKinds.then(journalsLeg),
+    accountMatch ? searchAccounts(orgId, accountMatch, scope, options) : NONE,
+    itemMatch ? searchItems(orgId, itemMatch, options) : NONE,
+    canProjects && projectMatch ? searchProjects(orgId, projectMatch, scope, options) : NONE,
   ]);
-  return { contacts, transactions: [...txns, ...journals], accounts, items, projects };
+  return {
+    contact: contacts,
+    // Journal entries ride inside the transactions group rather than a group
+    // of their own; an exact number tops the merged group from either leg.
+    transaction: { hits: [...documents.hits, ...journals], more: documents.more },
+    account: accounts,
+    item: items,
+    project: projects,
+  };
 }
 
-/** Run the full multi-entity search. `q` should already be trimmed. */
-export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchResponse> {
-  const match = textMatch(rawQ);
-  const q = match.q;
+const GROUP_LABELS: Record<CoreType, string> = {
+  contact: "contacts",
+  transaction: "transactions",
+  account: "accounts",
+  item: "items",
+  project: "projects",
+};
+
+/** Run the full multi-entity search. */
+export async function globalSearch(
+  authz: Authz,
+  rawQ: string,
+  options: GlobalSearchOptions = {},
+): Promise<SearchResponse> {
+  const q = rawQ.trim().slice(0, 200);
   if (q.length < 2) return { q, groups: [], total: 0 };
-  const numeric = match.amount !== null;
-
-  const legs = await coreLegs(authz, () => match);
-
-  // Numeric queries most likely want a transaction; else contacts lead.
-  // Journal entries ride inside the transactions group (each leg internally
-  // exact-first) rather than growing a sixth group the palette would have
-  // to learn. An exact document/entry number tops the merged group no
-  // matter which leg produced it.
-  const txnHits = exactNumberFirst(legs.transactions, q);
-  const ordered: SearchGroup[] = numeric
-    ? [group("transaction", "transactions", txnHits), group("contact", "contacts", legs.contacts)]
-    : [group("contact", "contacts", legs.contacts), group("transaction", "transactions", txnHits)];
-  ordered.push(
-    group("account", "accounts", legs.accounts),
-    group("item", "items", legs.items),
-    group("project", "projects", legs.projects),
+  const parseOptions = await searchParseOptions(authz.user.orgId);
+  const parsed = parseSearchQuery(q, parseOptions);
+  const phoneDigits = phoneSearchDigits(q);
+  const groupsAllowed = queryGroups(parsed);
+  // Digits written like a phone number find the party that has it, whatever
+  // else they could also read as.
+  if (phoneDigits && parsed.scopes.length === 0) groupsAllowed.add("contact");
+  if (options.types) {
+    for (const type of [...groupsAllowed])
+      if (!options.types.includes(type)) groupsAllowed.delete(type);
+  }
+  // A query that is only structure ("$1,200", "overdue invoices") names no
+  // words; the name-matching legs have nothing to look for.
+  const nameLegsApply = parsed.words.length > 0;
+  const match: Match = { kind: "text", q, parsed, phoneDigits };
+  const limit = options.limit;
+  const legs = await coreLegs(
+    authz,
+    (type) =>
+      groupsAllowed.has(type) &&
+      (type === "transaction" || nameLegsApply || (type === "contact" && match.phoneDigits))
+        ? match
+        : null,
+    {
+      limit: limit ?? PANEL_LIMIT,
+      offset: options.offset ?? 0,
+      today: parseOptions.today,
+    },
   );
+  if (limit === undefined) {
+    legs.transaction.hits = legs.transaction.hits.slice(0, PANEL_TRANSACTION_LIMIT);
+  }
+  const transactions = {
+    ...legs.transaction,
+    hits: exactNumberFirst(legs.transaction.hits, q),
+  };
 
-  const groups = ordered.filter((g) => g.hits.length > 0);
-  return { q, groups, total: groups.reduce((n, g) => n + g.hits.length, 0) };
+  // Structured or numeric queries most likely want a transaction; else
+  // contacts lead.
+  const transactionFirst =
+    Boolean(parsed.amount || parsed.dates || parsed.status) ||
+    parsed.words.some((word) => word.amount);
+  const order: CoreType[] = transactionFirst
+    ? ["transaction", "contact", "account", "item", "project"]
+    : ["contact", "transaction", "account", "item", "project"];
+  const groups: SearchGroup[] = order
+    .map((type) => {
+      const leg = type === "transaction" ? transactions : legs[type];
+      const group: SearchGroup = { type, labelKey: GROUP_LABELS[type], hits: leg.hits };
+      if (leg.more) group.more = true;
+      return group;
+    })
+    .filter((g) => g.hits.length > 0);
+  return {
+    q,
+    groups,
+    total: groups.reduce((n, g) => n + g.hits.length, 0),
+    chips: parsed.chips,
+  };
+}
+
+/** The parsed reading of a query, for sources outside the core legs. */
+export async function parseQueryFor(authz: Authz, rawQ: string): Promise<ParsedSearch> {
+  return parseSearchQuery(rawQ, await searchParseOptions(authz.user.orgId));
 }
 
 const CORE_TYPES = new Set<SearchType>(["contact", "transaction", "account", "item", "project"]);
@@ -312,110 +383,138 @@ export async function resolveRecentCoreRecords(
     idsByType.set(ref.type, [...(idsByType.get(ref.type) ?? []), ref.id]);
   }
   if (idsByType.size === 0) return [];
-  const legs = await coreLegs(authz, (type) => {
-    const ids = idsByType.get(type);
-    return ids?.length ? { kind: "ids", ids } : null;
-  });
+  const legs = await coreLegs(
+    authz,
+    (type) => {
+      const ids = idsByType.get(type);
+      return ids?.length ? { kind: "ids", ids } : null;
+    },
+    { limit: PANEL_LIMIT, offset: 0, today: "" },
+  );
   return [
-    ...legs.contacts,
-    ...legs.transactions,
-    ...legs.accounts,
-    ...legs.items,
-    ...legs.projects,
+    ...legs.contact.hits,
+    ...legs.transaction.hits,
+    ...legs.account.hits,
+    ...legs.item.hits,
+    ...legs.project.hits,
   ];
-}
-
-function group(type: SearchType, labelKey: string, hits: SearchHit[]): SearchGroup {
-  return { type, labelKey, hits };
 }
 
 /**
  * Stable exact-first partition for merged transaction hits. Hit titles end
  * in the record's number (`<Module label> <document_number>`,
  * `Journal <entry_number>`), so an exact-number query lifts its record
- * above fuzzy neighbors from every leg. Otherwise a no-op.
+ * above other matches from every leg. Otherwise a no-op.
  */
 function exactNumberFirst(hits: SearchHit[], q: string): SearchHit[] {
-  const suffix = ` ${q}`;
-  if (!hits.some((hit) => hit.title.endsWith(suffix))) return hits;
-  return [
-    ...hits.filter((hit) => hit.title.endsWith(suffix)),
-    ...hits.filter((hit) => !hit.title.endsWith(suffix)),
-  ];
-}
-async function empty(): Promise<SearchHit[]> {
-  return [];
+  const suffix = ` ${q}`.toLowerCase();
+  const exact = (hit: SearchHit) => hit.title.toLowerCase().endsWith(suffix);
+  if (!hits.some(exact)) return hits;
+  return [...hits.filter(exact), ...hits.filter((hit) => !exact(hit))];
 }
 
-/** A document's lifecycle status as a badge; posted is the norm and shows none. */
-function statusBadge(status: string | null): SearchHit["badge"] {
-  return status && status !== "posted" ? { kind: "status", value: status } : undefined;
+/** Party ids whose names carry each word, by word index. */
+async function partiesMatchingWords(
+  orgId: string,
+  parsed: ParsedSearch,
+  scope: ReadonlySet<string> | null,
+): Promise<string[][]> {
+  const words = parsed.words;
+  if (words.length === 0) return [];
+  const subsidiaryFilter = masterDataSubsidiaryFilter(sql`p.subsidiary_id`, scope);
+  const rows = await db.execute<{ i: number; id: string }>(
+    sql`
+    select w.i::int as i, x.id from unnest(${`{${words
+      .map((word) => `"${likePattern(word.text).replace(/["\\]/g, (c) => `\\${c}`)}"`)
+      .join(",")}}`}::text[]) with ordinality w(pattern, i)
+    cross join lateral (
+      select p.id from parties p
+       where p.org_id = ${orgId} ${subsidiaryFilter}
+         and (p.display_name ilike w.pattern or p.legal_name ilike w.pattern or p.short_code ilike w.pattern)
+       order by p.display_name limit 50) x`,
+    "objects",
+  );
+  const byWord: string[][] = words.map(() => []);
+  for (const row of rows) byWord[row.i - 1]?.push(row.id);
+  return byWord;
 }
 
 async function searchContacts(
   orgId: string,
   match: Match,
   scope: ReadonlySet<string> | null,
-): Promise<SearchHit[]> {
+  options: { limit: number; offset: number },
+): Promise<{ hits: SearchHit[]; more: boolean }> {
   // Parties are org-wide when their primary subsidiary is null — the exact
   // predicate the party lists use (`is null or = any(...)`).
   const subsidiaryFilter = masterDataSubsidiaryFilter(sql`p.subsidiary_id`, scope);
-  let candidates: SQL;
+  let where: SQL;
   let ranking: SQL;
   let matchedContact: SQL;
+  let roleFilter = sql``;
   if (match.kind === "ids") {
-    candidates = sql`select p.id from parties p where p.org_id = ${orgId} and p.id = any(${uuidArray(match.ids)})`;
+    where = sql`p.id = any(${uuidArray(match.ids)})`;
     ranking = sql`0`;
     matchedContact = sql`null`;
   } else {
-    const { q, like, phoneDigits } = match;
-    // Independent capped legs keep each predicate on its own index: the
-    // party name/email trigram indexes, the contact-person trigram indexes,
-    // and the source-identity index for ids carried over from a migrated or
-    // mirrored system. One OR across them would scan every party.
-    const phoneLegs = phoneDigits
-      ? sql`
-        union
-        (select p.id from parties p
-          where p.org_id = ${orgId} ${subsidiaryFilter} and p.phone is not null
-            and regexp_replace(p.phone, '[^0-9]', '', 'g') like ${`%${phoneDigits}%`}
-          limit 20)
-        union
-        (select c.party_id from contacts c
-           join parties p on p.id = c.party_id and p.org_id = c.org_id
-          where c.org_id = ${orgId} ${subsidiaryFilter}
-            and (regexp_replace(coalesce(c.phone, ''), '[^0-9]', '', 'g') like ${`%${phoneDigits}%`}
-                 or regexp_replace(coalesce(c.mobile_phone, ''), '[^0-9]', '', 'g') like ${`%${phoneDigits}%`})
-          limit 20)`
+    const { q, parsed, phoneDigits } = match;
+    const roles = parsed.scopes.filter(
+      (scope) => scope === "customer" || scope === "vendor" || scope === "employee",
+    );
+    if (roles.length > 0) {
+      roleFilter = sql`and (${sql.join(
+        roles.map((role) =>
+          role === "customer"
+            ? sql`exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.org_id = p.org_id)`
+            : role === "vendor"
+              ? sql`exists (select 1 from vendor_roles vr where vr.party_id = p.id and vr.org_id = p.org_id)`
+              : sql`exists (select 1 from employee_roles er where er.party_id = p.id and er.org_id = p.org_id)`,
+        ),
+        sql` or `,
+      )})`;
+    }
+    // Every word must appear on the party: its names, code, email or
+    // website, one of its people or an address. Tax identifiers are sealed
+    // and never matched. A single word may also match a name fuzzily, so a
+    // typo still finds the party.
+    const wordConditions = parsed.words.map((word) => {
+      const like = likePattern(word.text);
+      return sql`(p.display_name ilike ${like} or p.legal_name ilike ${like} or p.short_code ilike ${like}
+          or p.email ilike ${like} or p.website ilike ${like}
+          or exists (select 1 from contacts c where c.org_id = p.org_id and c.party_id = p.id
+                       and (c.name ilike ${like} or c.email ilike ${like}))
+          or exists (select 1 from addresses a where a.org_id = p.org_id and a.party_id = p.id
+                       and concat_ws(' ', a.line1, a.line2, a.city, a.region, a.postal_code) ilike ${like}))`;
+    });
+    const text = parsed.words.map((word) => word.text).join(" ");
+    const fuzzy =
+      text.length >= 3
+        ? sql` or p.display_name % ${text} or coalesce(p.legal_name, '') % ${text}`
+        : sql``;
+    const phone = phoneDigits
+      ? sql` or regexp_replace(coalesce(p.phone, ''), '[^0-9]', '', 'g') like ${`%${phoneDigits}%`}
+             or exists (select 1 from contacts c where c.org_id = p.org_id and c.party_id = p.id
+                          and (regexp_replace(coalesce(c.phone, ''), '[^0-9]', '', 'g') like ${`%${phoneDigits}%`}
+                               or regexp_replace(coalesce(c.mobile_phone, ''), '[^0-9]', '', 'g') like ${`%${phoneDigits}%`}))`
       : sql``;
-    candidates = sql`
-      (select p.id from parties p
-        where p.org_id = ${orgId} ${subsidiaryFilter}
-          and (p.display_name % ${q} or p.display_name ilike ${like}
-               or p.legal_name % ${q} or p.email ilike ${like})
-        limit 50)
-      union
-      (select c.party_id from contacts c
-         join parties p on p.id = c.party_id and p.org_id = c.org_id
-        where c.org_id = ${orgId} ${subsidiaryFilter}
-          and (c.name ilike ${like} or c.email ilike ${like})
-        limit 50)
-      union
-      (select p.id from parties p
-        where p.org_id = ${orgId} ${subsidiaryFilter}
-          and p.custom -> 'source' ->> 'externalId' = ${q}
-        limit 5)${phoneLegs}`;
-    ranking = sql`greatest(similarity(p.display_name, ${q}), similarity(coalesce(p.legal_name, ''), ${q}))`;
+    const words = wordConditions.length ? sql.join(wordConditions, sql` and `) : sql`false`;
+    where = sql`((${words})${fuzzy}${phone} or p.custom -> 'source' ->> 'externalId' = ${q})`;
+    ranking = text
+      ? sql`greatest(similarity(p.display_name, ${text}), similarity(coalesce(p.legal_name, ''), ${text}))`
+      : sql`0`;
     // A party found through one of its people names that person, so the
     // reader sees why "Jane" surfaced Acme Corp.
-    matchedContact = sql`(select c.name from contacts c
+    const firstLike = parsed.words[0] ? likePattern(parsed.words[0].text) : null;
+    matchedContact = firstLike
+      ? sql`(select c.name from contacts c
        where c.org_id = p.org_id and c.party_id = p.id
-         and (c.name ilike ${like} or c.email ilike ${like})
-       order by c.is_primary desc, c.name limit 1)`;
+         and (c.name ilike ${firstLike} or c.email ilike ${firstLike})
+         and not (p.display_name ilike ${firstLike})
+       order by c.is_primary desc, c.name limit 1)`
+      : sql`null`;
   }
   const r = await db.execute<SearchContactRow>(
     sql`
-    with party_cand as (${candidates})
     select p.id, p.display_name, p.email, p.legal_name,
            exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.org_id = p.org_id) as is_customer,
            exists (select 1 from vendor_roles vr where vr.party_id = p.id and vr.org_id = p.org_id) as is_vendor,
@@ -423,28 +522,32 @@ async function searchContacts(
            ${matchedContact} as matched_contact,
            ${ranking} as sim
       from parties p
-      join party_cand on party_cand.id = p.id
      where p.org_id = ${orgId}
-       ${subsidiaryFilter}
-     order by sim desc, p.display_name
-     limit ${PER_GROUP}`,
+       ${subsidiaryFilter} ${roleFilter}
+       and ${where}
+     order by sim desc, p.display_name, p.id
+     limit ${options.limit + 1} offset ${options.offset}`,
     "objects",
   );
-  return r.map((row): SearchHit => ({
-    id: row.id,
-    type: "contact",
-    title: row.display_name,
-    subtitle: row.matched_contact || row.email || row.legal_name || undefined,
-    href: `/parties?party=${row.id}`,
-    iconKey: row.is_employee ? "clipboard-check" : "users",
-    badge: row.is_customer
-      ? { kind: "role", value: "customer" }
-      : row.is_vendor
-        ? { kind: "role", value: "vendor" }
-        : row.is_employee
-          ? { kind: "role", value: "employee" }
-          : undefined,
-  }));
+  const rows = r.slice(0, options.limit);
+  return {
+    more: r.length > options.limit,
+    hits: rows.map((row): SearchHit => ({
+      id: row.id,
+      type: "contact",
+      title: row.display_name,
+      subtitle: row.matched_contact || row.email || row.legal_name || undefined,
+      href: `/parties?party=${row.id}`,
+      iconKey: row.is_employee ? "clipboard-check" : "users",
+      badge: row.is_customer
+        ? { kind: "role", value: "customer" }
+        : row.is_vendor
+          ? { kind: "role", value: "vendor" }
+          : row.is_employee
+            ? { kind: "role", value: "employee" }
+            : undefined,
+    })),
+  };
 }
 
 /**
@@ -455,19 +558,6 @@ async function searchContacts(
  * the journal exact arm, so an exact JE number for a subledger posting
  * resolves only inside the posting module's own gate.
  */
-/** The employee whose expense reports a self-service reader may find, when expense reports are enabled. */
-async function ownExpenseSearchScope(authz: Authz): Promise<{ partyId: string | null } | null> {
-  const access = await expenseAccess(authz, "read");
-  if (access?.scope !== "own") return null;
-  if (
-    !(await visibleTransactionKinds(authz.user.orgId, ["expense_report"])).includes(
-      "expense_report",
-    )
-  )
-    return null;
-  return { partyId: access.partyId };
-}
-
 async function visibleTransactionKinds(orgId: string, allowedKinds: string[]): Promise<string[]> {
   const navigationFeatures = [
     ...new Set(
@@ -494,30 +584,27 @@ async function visibleTransactionKinds(orgId: string, allowedKinds: string[]): P
   });
 }
 
-async function searchTransactions(
+/** The employee whose expense reports a self-service reader may find, when expense reports are enabled. */
+async function ownExpenseSearchScope(authz: Authz): Promise<{ partyId: string | null } | null> {
+  const access = await expenseAccess(authz, "read");
+  if (access?.scope !== "own") return null;
+  if (
+    !(await visibleTransactionKinds(authz.user.orgId, ["expense_report"])).includes(
+      "expense_report",
+    )
+  )
+    return null;
+  return { partyId: access.partyId };
+}
+
+/** Recently opened documents, under the same kind allowlist and fence as a search. */
+async function documentsByIds(
   orgId: string,
-  match: Match,
+  ids: string[],
   scope: ReadonlySet<string> | null,
   visibleKinds: string[],
-  /** Set for a self-service expense reader: their own expense reports are also visible (none when null). */
   ownExpenseParty?: string | null,
 ): Promise<SearchHit[]> {
-  // Amounts live on document_lines (documents.total is often 0). A numeric query
-  // matches any transaction that HAS a line of that amount (±sign), and every
-  // result shows the summed positive line total.
-  // Candidate ids come from independent capped legs: document text, party-name
-  // matches via parties→documents_party, line descriptions, line amounts and
-  // exact numbers. One OR across them would join and filter every document
-  // in the tenant per keystroke. Every leg carries an explicit org filter —
-  // the RLS policy's current_setting() comparison is not sargable on its
-  // own. The amount leg is a bounded scan by design: numeric_eq is not
-  // LEAKPROOF, so under RLS a numeric predicate can never become a btree
-  // index condition — an (org_id, amount) index cannot help any
-  // tenant-scoped query.
-  //
-  // Visibility is the shared POSITIVE kind allowlist: every candidate leg
-  // and the final sensitive-field read repeat the same allowlist — a shared
-  // CTE alone would leak across module boundaries.
   const ownExpenses = ownExpenseParty !== undefined;
   if (visibleKinds.length === 0 && !ownExpenses) return [];
   const kindAllowlist =
@@ -531,183 +618,33 @@ async function searchTransactions(
     ownExpenses && ownExpenseParty !== null
       ? sql` or (d.kind = 'expense_report' and d.party_id = ${ownExpenseParty})`
       : sql``;
-  const visibleKindFilter = sql`and (${kindAllowlist}${ownExpenseArm})`;
-  // Fail closed exactly like the documents lists (`d.subsidiary_id = any(...)`
-  // — null-subsidiary documents are invisible to restricted callers); parties
-  // keep their org-wide-null master-data semantics.
-  const documentSubsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope);
-  const partySubsidiaryFilter = masterDataSubsidiaryFilter(sql`p.subsidiary_id`, scope);
-  const resultPartySubsidiaryFilter = masterDataSubsidiaryFilter(sql`pr.subsidiary_id`, scope);
-  const amtExpr = sql`coalesce((select sum(dl.amount) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id and dl.amount > 0), d.total)`;
-
-  if (match.kind === "ids") {
-    const r = await db.execute<SearchTransactionRow>(
-      sql`
-      select d.id, d.kind, d.document_number, d.reference_number, d.memo, d.status, d.project_id,
-             pr.display_name as party_name,
-             ${amtExpr} as amount,
-             null as line_match
-        from documents d
-        left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id ${resultPartySubsidiaryFilter}
-       where d.org_id = ${orgId} ${visibleKindFilter}${documentSubsidiaryFilter}
-         and d.id = any(${uuidArray(match.ids)})`,
-      "objects",
-    );
-    return transactionHits(r);
-  }
-
-  const { q, like, amount } = match;
-  const fence = sql`${visibleKindFilter}${documentSubsidiaryFilter}`;
-  const candidates = async (query: SQL): Promise<string[]> =>
-    (await db.execute<{ id: string }>(query, "objects")).map((row) => row.id);
-  // Each capped leg is its own statement, so the legs run side by side and
-  // the slowest one alone sets the latency; one statement would run them
-  // one after another. Text predicates cannot use an index under row-level
-  // security, so the header leg matches by substring only: a per-row
-  // trigram similarity over every document number cost several times the
-  // whole scan, and ranking below still orders by similarity.
-  const legs: Promise<string[]>[] = [
-    candidates(sql`
-      select d.id from documents d
-       where d.org_id = ${orgId} ${fence}
-         and (d.document_number ilike ${like} or d.reference_number ilike ${like} or d.memo ilike ${like})
-       order by d.created_at desc limit 200`),
-    // A counterparty's documents: the best-matching parties first, then each
-    // one's newest documents through its own index, so a name shared by
-    // every party in a large tenant never sorts the whole ledger.
-    candidates(sql`
-      select d.id from (
-        select p.id from parties p
-         where p.org_id = ${orgId} ${partySubsidiaryFilter}
-           and (p.display_name % ${q} or p.display_name ilike ${like})
-         order by similarity(p.display_name, ${q}) desc, p.id
-         limit 20) p
-      cross join lateral (
-        select d.id from documents d
-         where d.org_id = ${orgId} and d.party_id = p.id ${fence}
-         order by d.created_at desc limit 20) d`),
-    // Line descriptions name what was bought or sold ("forklift rental"),
-    // which neither the number nor the header memo carries.
-    candidates(sql`
-      select dl.document_id as id from document_lines dl
-        join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-       where dl.org_id = ${orgId} and dl.description ilike ${like} ${fence}
-       limit 200`),
-    // Exact document numbers bypass the recency-capped legs: on a large
-    // tenant the newest-200 cap can exclude an old exact row (and admit a
-    // different neighbor set as new documents arrive), so an exact query
-    // would miss its record and rank unstably. A channel's or integrator's
-    // own reference for the document (its order, invoice or payment id) is
-    // an exact number too.
-    candidates(sql`
-      select d.id from documents d
-       where d.org_id = ${orgId} ${fence}
-         and (d.document_number = ${q} or d.external_ref = ${q})
-       limit 5`),
-  ];
-  if (amount != null) {
-    legs.push(
-      candidates(sql`
-        select dl.document_id as id from document_lines dl
-          join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-         where dl.org_id = ${orgId} and dl.amount in (${amount}::numeric, ${`-${amount}`}::numeric) ${fence}
-         limit 200`),
-    );
-  }
-  const ids = [...new Set((await Promise.all(legs)).flat())];
-  if (ids.length === 0) return [];
-  const numOrder = amount != null ? sql`(${amtExpr} = ${amount}::numeric) desc, ` : sql``;
-  // Every visible field is read here, under the same allowlists as the legs.
-  const r = await db.execute<SearchTransactionRow>(
+  const r = await db.execute<Parameters<typeof documentHits>[0][number]>(
     sql`
     select d.id, d.kind, d.document_number, d.reference_number, d.memo, d.status, d.project_id,
+           d.document_date::text as document_date,
            pr.display_name as party_name,
-           ${amtExpr} as amount,
-           (select dl.description from document_lines dl
-             where dl.org_id = ${orgId} and dl.document_id = d.id and dl.description ilike ${like}
-             order by dl.line_number limit 1) as line_match,
-           greatest(similarity(d.document_number, ${q}),
-                    similarity(coalesce(d.reference_number, ''), ${q}),
-                    similarity(coalesce(d.memo, ''), ${q}),
-                    similarity(coalesce(pr.display_name, ''), ${q})) as sim
+           coalesce((select sum(dl.amount) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id and dl.amount > 0), d.total) as amount,
+           null as line_match, null as amount_source, null as amount_line, null as matched_amount
       from documents d
-      left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id ${resultPartySubsidiaryFilter}
-     where d.org_id = ${orgId} and d.id = any(${uuidArray(ids)}) ${fence}
-     order by (d.document_number = ${q} or d.external_ref = ${q}) desc, ${numOrder}sim desc, d.created_at desc, d.id
-     limit ${PER_GROUP + 2}`,
+      left join parties pr on pr.id = d.party_id and pr.org_id = d.org_id ${masterDataSubsidiaryFilter(sql`pr.subsidiary_id`, scope)}
+     where d.org_id = ${orgId} and d.id = any(${uuidArray(ids)})
+       and (${kindAllowlist}${ownExpenseArm})${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}`,
     "objects",
   );
-  return transactionHits(r);
+  return documentHits(r);
 }
-
-function transactionHits(rows: SearchTransactionRow[]): SearchHit[] {
-  // No generic journal fallback: a stored kind without an authorized native
-  // module is dropped rather than linked into the wrong module's ledger view.
-  return rows.flatMap((row): SearchHit[] => {
-    const module = transactionModule(row.kind);
-    const href = moduleDrawerHref(row.kind, row.id, { projectId: row.project_id });
-    if (!module || !href) return [];
-    // A document found through one of its lines shows that line, so the
-    // reader sees why "forklift" surfaced it.
-    const context = row.line_match || row.memo;
-    return [
-      {
-        id: row.id,
-        type: "transaction",
-        title: `${module.label} ${row.document_number}`,
-        subtitle:
-          (row.line_match && row.party_name
-            ? `${row.party_name} · ${row.line_match}`
-            : row.party_name || context) || undefined,
-        href,
-        iconKey: module.iconKey,
-        badge: statusBadge(row.status),
-        amount: money(row.amount),
-      },
-    ];
-  });
-}
-
-type SearchJournalEntryRow = {
-  id: string;
-  entry_number: string;
-  memo: string | null;
-  status: string;
-  created_at: string;
-};
 
 /**
- * Journal entries carry their own numbers (JE-…) in journal_entries, and
- * GL-native entries (closing, allocation, …) have no source document at
- * all — the documents legs can never surface them. Fuzzy matching stays
- * scoped exactly like the journal list (journal/pay_run backed entries
- * plus GL-native origins; entries posted from other subledgers stay
- * discoverable through their document). An exact entry number resolves its
- * entry — a dashboard-visible JE number must never search total zero —
- * but NEVER past the posting module's own gate: a linked entry resolves
- * only when its link scope (journal/pay_run, like the fuzzy leg) or the
- * linked document's kind in the caller's shared allowlist permits it, so a
- * gl.read-only caller cannot pull AP/other subledger memos by number.
- * Unlinked entries resolve under the journal gate alone (no owning module
- * exists to gate them through). The org + subsidiary doorway applies on
- * every arm. Hits open the shared journal-entry drawer directly. A recently
- * opened entry re-resolves under the exact arm's rule, since that is the
- * widest rule any search could have surfaced it under.
+ * Recently opened journal entries re-resolve under the exact arm's rule,
+ * since that is the widest rule any search could have surfaced them under.
  */
-async function searchJournalEntries(
+async function journalByIds(
   orgId: string,
-  match: Match,
+  ids: string[],
   scope: ReadonlySet<string> | null,
   visibleKinds: string[],
 ): Promise<SearchHit[]> {
-  // Subsidiary visibility is the canonical journal predicate — an entry is
-  // visible when a LINE is visible (journalScopeWhere, shared with the
-  // journal list) — never the header's subsidiary alone. A header in scope
-  // whose lines are all out of scope must not disclose its memo here.
   const visibility = journalScopeWhere(orgId, scope);
-  // The linked-document gate for the exact arm: the posting document must
-  // be one the caller could open themselves — same kind allowlist and the
-  // same document subsidiary fence the documents legs enforce.
   const linkedKindGate =
     visibleKinds.length === 0
       ? sql`and false`
@@ -716,179 +653,161 @@ async function searchJournalEntries(
           sql`, `,
         )})`;
   const linkedDocSubsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope);
-  const exactArmLinkRule = sql`(not exists (select 1 from documents d
-                            where d.posted_entry_id = e.id and d.org_id = e.org_id)
-               or exists (select 1 from documents d
-                           where d.posted_entry_id = e.id and d.org_id = e.org_id
-                             and d.kind in ('journal', 'pay_run'))
-               or exists (select 1 from documents d
-                           where d.posted_entry_id = e.id and d.org_id = e.org_id
-                             ${linkedDocSubsidiaryFilter} ${linkedKindGate}))`;
-  if (match.kind === "ids") {
-    const r = await db.execute<SearchJournalEntryRow>(
-      sql`
-      select e.id, e.entry_number, e.memo, e.status, e.created_at
-        from journal_entries e
-       where ${visibility}
-         and e.id = any(${uuidArray(match.ids)})
-         and ${exactArmLinkRule}`,
-      "objects",
-    );
-    return journalHits(r);
-  }
-  const { q, like } = match;
-  const textMatch = sql`(e.entry_number ilike ${like} or e.memo ilike ${like})`;
-  // The fuzzy scope is two small sets, each read from its own index: entries
-  // posted by journal and pay-run documents, and GL-native entries with no
-  // source document. Matching text across every entry first would scan the
-  // whole ledger — the text predicates cannot use an index under row-level
-  // security. UNION forbids expression ORDER BY, so the merged legs sit in a
-  // subquery and the exact-first ordering applies outside it.
-  const r = await db.execute<SearchJournalEntryRow>(
+  const r = await db.execute<Parameters<typeof journalHits>[0][number]>(
     sql`
-    select u.id, u.entry_number, u.memo, u.status, u.created_at from (
-      select e.id, e.entry_number, e.memo, e.status, e.created_at
-        from documents d
-        join journal_entries e on e.org_id = d.org_id and e.id = d.posted_entry_id
-       where d.org_id = ${orgId} and d.kind in ('journal', 'pay_run')
-         and ${visibility}
-         and ${textMatch}
-      union
-      select e.id, e.entry_number, e.memo, e.status, e.created_at
-        from journal_entries e
-       where ${visibility}
-         and e.origin in (${sql.join(
-           JOURNAL_GL_NATIVE_ORIGINS.map((origin) => sql`${origin}`),
-           sql`, `,
-         )})
-         and not exists (select 1 from documents d
-                          where d.posted_entry_id = e.id and d.org_id = e.org_id)
-         and ${textMatch}
-      union
-      (select e.id, e.entry_number, e.memo, e.status, e.created_at
-         from journal_entries e
-        where ${visibility}
-          and e.entry_number = ${q}
-          and ${exactArmLinkRule}
-        limit 5)
-    ) u
-     order by (u.entry_number = ${q}) desc, similarity(u.entry_number, ${q}) desc, u.created_at desc
-     limit ${PER_GROUP}`,
+    select e.id, e.entry_number, e.memo, e.status, e.posting_date::text as posting_date,
+           (select sum(l.amount) from journal_lines l where l.org_id = ${orgId} and l.entry_id = e.id and l.amount > 0) as amount,
+           null as matched_cents
+      from journal_entries e
+     where ${visibility}
+       and e.id = any(${uuidArray(ids)})
+       and (not exists (select 1 from documents d
+                         where d.posted_entry_id = e.id and d.org_id = e.org_id)
+            or exists (select 1 from documents d
+                        where d.posted_entry_id = e.id and d.org_id = e.org_id
+                          and d.kind in ('journal', 'pay_run'))
+            or exists (select 1 from documents d
+                        where d.posted_entry_id = e.id and d.org_id = e.org_id
+                          ${linkedDocSubsidiaryFilter} ${linkedKindGate}))`,
     "objects",
   );
   return journalHits(r);
 }
 
-function journalHits(rows: SearchJournalEntryRow[]): SearchHit[] {
-  return rows.map((row): SearchHit => ({
-    id: row.id,
-    type: "transaction",
-    title: `Journal ${row.entry_number}`,
-    subtitle: row.memo || undefined,
-    href: `/journal?journalEntry=${row.id}`,
-    iconKey: "journal",
-    badge: statusBadge(row.status),
-  }));
+/** Every word on the record's name or number, or one fuzzy name match. */
+function nameMatch(match: Extract<Match, { kind: "text" }>, name: SQL, extra: SQL[]): SQL {
+  const words = match.parsed.words.map((word) => {
+    const like = likePattern(word.text);
+    return sql`(${name} ilike ${like}${sql.join(
+      extra.map((column) => sql` or ${column} ilike ${like}`),
+      sql``,
+    )})`;
+  });
+  const text = match.parsed.words.map((word) => word.text).join(" ");
+  const fuzzy = text.length >= 3 ? sql` or ${name} % ${text}` : sql``;
+  return sql`((${words.length ? sql.join(words, sql` and `) : sql`false`})${fuzzy})`;
+}
+
+function nameText(match: Match): string {
+  return match.kind === "text" ? match.parsed.words.map((word) => word.text).join(" ") : "";
 }
 
 async function searchAccounts(
   orgId: string,
   match: Match,
   scope: ReadonlySet<string> | null,
-): Promise<SearchHit[]> {
+  options: { limit: number; offset: number },
+): Promise<{ hits: SearchHit[]; more: boolean }> {
   const subsidiaryFilter = masterDataSubsidiaryFilter(sql`subsidiary_id`, scope);
   const predicate =
     match.kind === "ids"
       ? sql`id = any(${uuidArray(match.ids)})`
-      : sql`(name % ${match.q} or name ilike ${match.like} or number ilike ${match.like})`;
+      : nameMatch(match, sql`name`, [sql`number`]);
+  const text = nameText(match);
   const order =
     match.kind === "ids"
       ? sql`number nulls last`
-      : sql`similarity(name, ${match.q}) desc, number nulls last`;
+      : sql`(number = ${match.q}) desc, similarity(name, ${text}) desc, number nulls last`;
   const r = await db.execute<SearchAccountRow>(
     sql`
     select id, number, name, type from accounts
      where org_id = ${orgId} and not is_summary
        ${subsidiaryFilter}
        and ${predicate}
-     order by ${order}
-     limit ${PER_GROUP}`,
+     order by ${order}, id
+     limit ${options.limit + 1} offset ${options.offset}`,
     "objects",
   );
-  return r.map((row): SearchHit => ({
-    id: row.id,
-    type: "account",
-    title: `${row.number ? `${row.number} · ` : ""}${row.name}`,
-    subtitle: row.type,
-    href: `/accounts?accountRegister=${row.id}`,
-    iconKey: "layers",
-  }));
+  return {
+    more: r.length > options.limit,
+    hits: r.slice(0, options.limit).map((row): SearchHit => ({
+      id: row.id,
+      type: "account",
+      title: `${row.number ? `${row.number} · ` : ""}${row.name}`,
+      subtitle: row.type,
+      href: `/accounts?accountRegister=${row.id}`,
+      iconKey: "layers",
+    })),
+  };
 }
 
-async function searchItems(orgId: string, match: Match): Promise<SearchHit[]> {
+async function searchItems(
+  orgId: string,
+  match: Match,
+  options: { limit: number; offset: number },
+): Promise<{ hits: SearchHit[]; more: boolean }> {
   // A scanned barcode (GTIN/UPC/EAN) or a customer's own part number names
   // the item exactly; each resolves through its unique per-org index.
-  const candidates =
+  const where =
     match.kind === "ids"
-      ? sql`select id from items where org_id = ${orgId} and id = any(${uuidArray(match.ids)})`
-      : sql`
-      (select id from items
-        where org_id = ${orgId} and (name % ${match.q} or name ilike ${match.like} or code ilike ${match.like})
-        limit 50)
-      union
-      (select item_id as id from item_identifiers where org_id = ${orgId} and value = ${match.q})
-      union
-      (select item_id as id from customer_item_refs where org_id = ${orgId} and customer_sku = ${match.q} limit 5)`;
+      ? sql`i.id = any(${uuidArray(match.ids)})`
+      : sql`(${nameMatch(match, sql`i.name`, [sql`i.code`, sql`i.description`])}
+          or exists (select 1 from item_identifiers ii where ii.org_id = i.org_id and ii.item_id = i.id and ii.value = ${match.q})
+          or exists (select 1 from customer_item_refs cr where cr.org_id = i.org_id and cr.item_id = i.id and cr.customer_sku = ${match.q}))`;
+  const text = nameText(match);
   const order =
-    match.kind === "ids" ? sql`i.name` : sql`similarity(i.name, ${match.q}) desc, i.name`;
+    match.kind === "ids"
+      ? sql`i.name`
+      : sql`(i.code = ${match.q}) desc, similarity(i.name, ${text}) desc, i.name`;
   const r = await db.execute<SearchItemRow>(
     sql`
-    with item_cand as (${candidates})
     select i.id, i.code, i.name from items i
-      join item_cand on item_cand.id = i.id
-     where i.org_id = ${orgId}
-     order by ${order}
-     limit ${PER_GROUP}`,
+     where i.org_id = ${orgId} and ${where}
+     order by ${order}, i.id
+     limit ${options.limit + 1} offset ${options.offset}`,
     "objects",
   );
-  return r.map((row): SearchHit => ({
-    id: row.id,
-    type: "item",
-    title: row.name,
-    subtitle: row.code || undefined,
-    href: `/items?item=${row.id}`,
-    iconKey: "grid",
-  }));
+  return {
+    more: r.length > options.limit,
+    hits: r.slice(0, options.limit).map((row): SearchHit => ({
+      id: row.id,
+      type: "item",
+      title: row.name,
+      subtitle: row.code || undefined,
+      href: `/items?item=${row.id}`,
+      iconKey: "grid",
+    })),
+  };
 }
 
 async function searchProjects(
   orgId: string,
   match: Match,
   scope: ReadonlySet<string> | null,
-): Promise<SearchHit[]> {
+  options: { limit: number; offset: number },
+): Promise<{ hits: SearchHit[]; more: boolean }> {
   // Project records behave like documents: restricted callers see only their
   // subsidiaries (no org-wide null escape hatch).
   const subsidiaryFilter = subsidiaryVisibleFilter(sql`subsidiary_id`, scope);
   const predicate =
     match.kind === "ids"
       ? sql`id = any(${uuidArray(match.ids)})`
-      : sql`(name % ${match.q} or name ilike ${match.like} or code ilike ${match.like})`;
-  const order = match.kind === "ids" ? sql`name` : sql`similarity(name, ${match.q}) desc, name`;
+      : nameMatch(match, sql`name`, [sql`code`]);
+  const text = nameText(match);
+  const order =
+    match.kind === "ids"
+      ? sql`name`
+      : sql`(code = ${match.q}) desc, similarity(name, ${text}) desc, name`;
   const r = await db.execute<SearchProjectRow>(
     sql`
     select id, code, name from projects
      where org_id = ${orgId} ${subsidiaryFilter}
        and ${predicate}
-     order by ${order}
-     limit ${PER_GROUP}`,
+     order by ${order}, id
+     limit ${options.limit + 1} offset ${options.offset}`,
     "objects",
   );
-  return r.map((row): SearchHit => ({
-    id: row.id,
-    type: "project",
-    title: row.name,
-    subtitle: row.code || undefined,
-    href: `/projects?project=${row.id}`,
-    iconKey: "timer",
-  }));
+  return {
+    more: r.length > options.limit,
+    hits: r.slice(0, options.limit).map((row): SearchHit => ({
+      id: row.id,
+      type: "project",
+      title: row.name,
+      subtitle: row.code || undefined,
+      href: `/projects?project=${row.id}`,
+      iconKey: "timer",
+    })),
+  };
 }
+
+export { displayMoney };

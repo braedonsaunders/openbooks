@@ -491,6 +491,9 @@ test(
         "gl_month_activity",
         "party_payment_stats",
         "open_item_balances",
+        "document_search_terms",
+        "document_search_amounts",
+        "journal_search_amounts",
       ]);
       const comparableCounts = (counts: Record<string, number>): Record<string, number> =>
         Object.fromEntries(Object.entries(counts).filter(([name]) => !derivedAggregates.has(name)));
@@ -610,6 +613,15 @@ test(
         openItemVerify,
         [],
         "rebuilt open-item balances must verify against the restored lines and applications",
+      );
+      const searchIndexVerify = await db.execute(
+        sql`select * from openbooks_search_index_verify(${source.orgId})`,
+        "objects",
+      );
+      assert.deepEqual(
+        searchIndexVerify,
+        [],
+        "the rebuilt search index must verify against the restored documents and journal lines",
       );
       for (const name of [
         "journal_entries",

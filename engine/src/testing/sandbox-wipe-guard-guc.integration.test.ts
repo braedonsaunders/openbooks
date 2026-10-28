@@ -42,6 +42,8 @@ test(
       "openbooks_party_payment_stats",
       "openbooks_open_item_balances_application",
       "openbooks_open_item_balances_line",
+      "openbooks_search_index_document_line_delete",
+      "openbooks_search_index_journal_line_delete",
       "posted_document_financial_guard",
       "protect_country_tax_pack_installation",
       "subscription_amendment_immutable_guard",

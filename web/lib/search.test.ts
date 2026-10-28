@@ -111,7 +111,7 @@ const stateKey = Symbol.for("openbooks.search-permission-test");
 
 /** A documents candidate leg: it selects ids for the final read to hydrate. */
 const DOCUMENT_CANDIDATE =
-  /select (?:d\.id|dl\.document_id as id) from (?:documents d|document_lines dl|\()/;
+  /select (?:d\.id|dl\.document_id as id|x\.document_id as id) from (?:documents d|document_lines dl|\(|unnest\()/;
 const JE_POSTED: JournalEntryFixture = {
   id: "je-posted",
   entry_number: "JE-26188661",
@@ -247,6 +247,16 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    // Queries read against English and a fixed business date.
+    "mock:search-context",
+    `
+      import { mergeVocabulary } from ${JSON.stringify(new URL("./search-query.ts", import.meta.url).href)}
+      export async function searchParseOptions() {
+        return { vocabulary: mergeVocabulary(null, null), today: "2026-10-27", dateOrder: "mdy", fiscalYearStartMonth: 1 }
+      }
+    `,
+  ],
+  [
     "mock:authz",
     `
       export function can(authz, permission) {
@@ -302,6 +312,7 @@ const hooks = registerHooks({
       ["./expense-access", "mock:expense-access"],
       ["./documents.ts", "mock:documents"],
       ["./features", "mock:features"],
+      ["./search-context", "mock:search-context"],
     ]).get(specifier);
     // The './documents' mock stands in for web/lib/documents.ts only: schema
     // table modules (schema/src/*.ts) import the same literal specifier for
@@ -391,6 +402,31 @@ function transactionQuery(): CapturedQuery {
     text: matches.map((query) => query.text).join("\n;\n"),
     values: matches.flatMap((query) => query.values),
   };
+}
+
+/**
+ * Every documents statement — each candidate leg and the final read — must
+ * carry the kind allowlist, and the subsidiary fence when the reader is
+ * restricted, whichever table it reads.
+ */
+function assertEveryStatementFenced(options: { subsidiary?: string } = {}) {
+  const statements = documentQueries();
+  assert.ok(statements.length > 0, "documents were queried");
+  for (const statement of statements) {
+    assert.match(
+      statement.text,
+      /\b[dsa]\.kind in \(/,
+      `kind allowlist on: ${statement.text.slice(0, 80)}`,
+    );
+    if (options.subsidiary) {
+      assert.match(
+        statement.text,
+        /\b[dsa]\.subsidiary_id = any/,
+        `subsidiary fence on: ${statement.text.slice(0, 80)}`,
+      );
+      assert.ok(statement.values.includes(`{${options.subsidiary}}`));
+    }
+  }
 }
 
 function boundKinds(query: CapturedQuery): string[] {
@@ -491,11 +527,7 @@ test("each transaction module permission exposes only its own document kinds", a
 
     const query = transactionQuery();
     assert.deepEqual(boundKinds(query), expectedKinds, `${permission}: SQL kind allowlist`);
-    assert.equal(
-      query.text.match(/d\.kind in/g)?.length,
-      5,
-      `${permission}: both candidate legs, the line-description leg, the exact-number leg, and the final read must be permission-filtered`,
-    );
+    assertEveryStatementFenced();
   }
 });
 
@@ -526,7 +558,7 @@ test("mixed and wildcard permissions compose with a native destination for every
   ]);
 
   reset();
-  const superAdmin = await globalSearch(authz("*"), "needle");
+  const superAdmin = await globalSearch(authz("*"), "needle", { limit: 100 });
   assert.deepEqual(transactionHitIds(superAdmin), [...TRANSACTION_KINDS]);
   assert.ok(!transactionHitIds(superAdmin).includes("unmapped_document"));
   for (const hit of transactionHits(superAdmin)) {
@@ -545,14 +577,12 @@ test("numeric amount candidates carry the same permission allowlist as text cand
   assert.deepEqual(transactionHitIds(response), expectedKinds);
 
   const query = transactionQuery();
-  assert.equal(
-    query.text.match(/d\.kind in/g)?.length,
-    6,
-    "text, party, line-description, amount, exact-number, and final result legs must all be permission-filtered",
+  assert.ok(
+    query.text.includes("from document_search_amounts a"),
+    "an amount reads the amount index",
   );
-  for (const kind of expectedKinds) {
-    assert.equal(query.values.filter((value) => value === kind).length, 6, kind);
-  }
+  assertEveryStatementFenced();
+  assert.deepEqual(boundKinds(query), expectedKinds);
 });
 
 test("malformed comma amounts stay text queries instead of inventing a number", async () => {
@@ -560,13 +590,14 @@ test("malformed comma amounts stay text queries instead of inventing a number", 
     reset();
     await globalSearch(authz("ap.read"), ambiguous);
     const query = transactionQuery();
-    assert.equal(
-      query.text.match(/d\.kind in/g)?.length,
-      5,
-      `${ambiguous}: text, party, line-description, exact-number, and final legs only — no amount leg`,
-    );
+    assert.ok(!/a\.cents >= \?::bigint/.test(query.text), `${ambiguous}: no amount leg`);
+    assertEveryStatementFenced();
+    // Stripping the comma would invent a number; neither it nor its cents is ever bound.
+    const invented = ambiguous.replace(/,/g, "");
     assert.ok(
-      !query.values.some((value) => value === 12 || value === "12" || value === "12.34"),
+      !query.values.some(
+        (value) => value === invented || value === `${invented}00` || value === Number(invented),
+      ),
       `${ambiguous}: no invented amount bound`,
     );
   }
@@ -575,13 +606,17 @@ test("malformed comma amounts stay text queries instead of inventing a number", 
 test("well-formed amounts bind exactly, never through Number", async () => {
   reset();
   await globalSearch(authz("ap.read"), "$1,234.56");
-  assert.ok(transactionQuery().values.includes("1234.56"), "grouped amount binds its exact value");
+  assert.ok(transactionQuery().values.includes("123456"), "grouped amount binds its exact cents");
 
   reset();
   await globalSearch(authz("ap.read"), "9007199254740993");
   const big = transactionQuery();
-  assert.equal(big.text.match(/d\.kind in/g)?.length, 6, "huge input still runs the amount leg");
-  assert.ok(big.values.includes("9007199254740993"), "amount binds exactly past 2^53");
+  assert.ok(
+    big.text.includes("from document_search_amounts a"),
+    "huge input still runs the amount leg",
+  );
+  assert.ok(big.values.includes("900719925474099300"), "the amount binds exact cents past 2^53");
+  assert.ok(big.values.includes("9007199254740993"), "the number also binds exactly as typed");
   assert.ok(!big.values.some((value) => value === 9007199254740992), "no rounded float bound");
 });
 
@@ -720,13 +755,7 @@ test("subsidiary restrictions fence documents before sensitive fields are return
     ),
   );
 
-  const query = transactionQuery();
-  assert.equal(
-    query.text.match(/d\.subsidiary_id = any/g)?.length,
-    5,
-    "both text candidates, the line-description leg, the exact-number leg, and the final sensitive-field read must be subsidiary scoped",
-  );
-  assert.ok(query.values.includes(`{${ALLOWED_SUBSIDIARY}}`));
+  assertEveryStatementFenced({ subsidiary: ALLOWED_SUBSIDIARY });
 
   reset({ documents: [deniedDocument] });
   const noSubsidiaries = await globalSearch(scopedAuthz([], "ap.read"), "needle");
@@ -809,11 +838,11 @@ test("exact document numbers bypass the candidate cap and order first", async ()
   assert.ok(transactionHitIds(response).includes("vendor_payment"));
 
   const query = transactionQuery();
-  assert.match(query.text, /d\.document_number = \?/, "exact-equality candidate leg");
+  assert.match(query.text, /d\.document_number in \(\?, \?\)/, "exact-equality candidate leg");
   assert.match(
     query.text,
-    /order by \(d\.document_number = \? or d\.external_ref = \?\) desc/,
-    "exact matches order before fuzzy neighbors",
+    /order by m\.exact_number desc/,
+    "exact matches order before other matches",
   );
   assert.ok(query.values.includes("VENDOR_PAYMENT"), "exact leg binds the raw query");
 });
@@ -836,7 +865,11 @@ test("journal entries are indexed and open the shared entry drawer", async () =>
   assert.ok(entriesQuery, "entries must be queried");
   // The merged legs sit in a subquery (UNION forbids expression ORDER BY),
   // so the exact-first ordering addresses the subquery alias.
-  assert.match(entriesQuery.text, /\(u\.entry_number = \?\) desc/, "exact entries order first");
+  assert.match(
+    entriesQuery.text,
+    /\(lower\(u\.entry_number\) = \?\) desc/,
+    "exact entries order first",
+  );
 });
 
 test("journal entries stay gated by the journal read permission", async () => {
@@ -916,7 +949,7 @@ test("contacts are found through their people and a migrated system id, inside t
   assert.ok(contacts);
   assert.match(
     contacts.text,
-    /from contacts c\s+join parties p on p\.id = c\.party_id/,
+    /from contacts c where c\.org_id = p\.org_id and c\.party_id = p\.id/,
     "contact people reach their party",
   );
   assert.match(
@@ -926,8 +959,8 @@ test("contacts are found through their people and a migrated system id, inside t
   );
   assert.equal(
     contacts.text.match(/p\.subsidiary_id is null or p\.subsidiary_id = any/g)?.length,
-    4,
-    "the name, contact-person and external-id legs and the final read must all be subsidiary scoped",
+    1,
+    "one read over the fenced parties answers every way a party is matched",
   );
   assert.doesNotMatch(contacts.text, /regexp_replace/, "a word is not a phone number");
   // Tax identifiers are sealed server-side: search must never match on them.
@@ -941,7 +974,7 @@ test("a query written like a phone number matches stored phones digit for digit"
     query.text.includes("select p.id, p.display_name"),
   );
   assert.ok(contacts);
-  assert.match(contacts.text, /regexp_replace\(p\.phone, '\[\^0-9\]', '', 'g'\)/);
+  assert.match(contacts.text, /regexp_replace\(coalesce\(p\.phone, ''\), '\[\^0-9\]', '', 'g'\)/);
   assert.match(contacts.text, /regexp_replace\(coalesce\(c\.mobile_phone, ''\)/);
   assert.ok(contacts.values.includes("%5551234567%"), "punctuation is ignored on both sides");
 });
@@ -949,7 +982,7 @@ test("a query written like a phone number matches stored phones digit for digit"
 test("an integrator's own document reference resolves exactly, like a document number", async () => {
   reset();
   await globalSearch(authz("ap.read"), "needle");
-  assert.match(transactionQuery().text, /\(d\.document_number = \? or d\.external_ref = \?\)/);
+  assert.match(transactionQuery().text, /or d\.external_ref = \?\)/);
 });
 
 test("recent transactions re-resolve under the reader's current permissions and subsidiary scope", async () => {

@@ -1,3 +1,7 @@
+import type { SearchChip } from "./search-query";
+
+export type { SearchChip } from "./search-query";
+
 /**
  * Global search wire types, shared by the server (lib/search.ts and its
  * companion sources) and the header search component.
@@ -52,6 +56,15 @@ export type SearchType = SearchRecordType | SearchCatalogType;
 export type SearchBadge =
   { kind: "role"; value: "customer" | "vendor" | "employee" } | { kind: "status"; value: string };
 
+/**
+ * Why a hit matched, when the reason is not its title: the line whose
+ * description matched, or which of a document's amounts did. The client
+ * renders the label in the reader's language.
+ */
+export type SearchMatch =
+  | { kind: "line"; text: string }
+  | { kind: "total" | "open" | "tax" | "lineAmount"; amount: string };
+
 export interface SearchHit {
   id: string;
   type: SearchType;
@@ -61,18 +74,25 @@ export interface SearchHit {
   iconKey: string;
   badge?: SearchBadge;
   amount?: string;
+  /** The record's business date (YYYY-MM-DD), when it has one. */
+  date?: string;
+  match?: SearchMatch;
 }
 
 export interface SearchGroup {
   type: SearchType;
   labelKey: string;
   hits: SearchHit[];
+  /** More hits exist than this group shows. */
+  more?: boolean;
 }
 
 export interface SearchResponse {
   q: string;
   groups: SearchGroup[];
   total: number;
+  /** What the query was understood to mean, in the order it was written. */
+  chips?: SearchChip[];
 }
 
 /**

@@ -336,6 +336,26 @@ export const RECORD_PROTECTION_TRIGGER_CONTRACTS = [
     function: "openbooks_open_item_balances_line",
   },
   {
+    table: "documents",
+    trigger: "search_index_document_delete",
+    function: "openbooks_search_index_document_delete",
+  },
+  {
+    table: "document_lines",
+    trigger: "search_index_document_line_delete",
+    function: "openbooks_search_index_document_line_delete",
+  },
+  {
+    table: "journal_entries",
+    trigger: "search_index_journal_entry_delete",
+    function: "openbooks_search_index_journal_entry_delete",
+  },
+  {
+    table: "journal_lines",
+    trigger: "search_index_journal_line_delete",
+    function: "openbooks_search_index_journal_line_delete",
+  },
+  {
     table: "payment_run_items",
     trigger: "payment_run_item_guard",
     function: "payment_run_item_guard",

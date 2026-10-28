@@ -274,6 +274,7 @@ const COGNATES = new Set<string>([
   // Search group cognates: French and German Budgets and French Provisions are spelled as in English.
   'fr:shell.globalSearch.groups.budgets|Budgets',
   'de:shell.globalSearch.groups.budgets|Budgets',
+  'fr:shell.globalSearch.vocabulary.scopes.contact|contact|contacts',
   'fr:shell.globalSearch.groups.provisions|Provisions',
   // Billing platform product names remain in their registered brand spelling.
   'fr:billingImport.providers.chargebee|Chargebee',
