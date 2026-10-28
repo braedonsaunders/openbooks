@@ -415,12 +415,16 @@ test(
             if (seeded) {
               const exportCodePrefix = `${exportPrefix}-%`;
               const removed = await withOrgTransaction(org.orgId, () =>
-                db.execute(
-                  sql`delete from items
-                  where org_id=${org.orgId} and code like ${exportCodePrefix}`,
+                db.execute<{ n: number }>(
+                  sql`with removed as (
+                    delete from items
+                     where org_id=${org.orgId} and code like ${exportCodePrefix}
+                     returning 1
+                  ) select count(*)::int as n from removed`,
+                  "objects",
                 ),
               );
-              assert.equal(removed.rowCount, 50_001, "the export fixture rows must be removed");
+              assert.equal(removed[0]?.n, 50_001, "the export fixture rows must be removed");
             }
           }
         },
