@@ -231,7 +231,8 @@ test(
         ruleId,
         versionId: draftVersion.id,
         expectedRevision: draftVersion.revision,
-        effectiveFrom: org.date,
+        // Period-based versions start on a period boundary.
+        effectiveFrom: `${org.date.slice(0, 7)}-01`,
         accountScope: { kind: "accounts", accountIds: [org.accounts.adjustment] },
         basisKind: "fixed_percent",
         idempotencyKey: "ledger-update-allocation-version-001",

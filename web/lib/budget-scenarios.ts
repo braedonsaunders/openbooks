@@ -373,12 +373,15 @@ export async function createBudgetScenario(
       `);
     }
 
-    const audit = await tx.execute<{ row_id: string }>(sql`
+    const audit = await tx.execute<{ row_id: string }>(
+      sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${user.orgId}, 'budget_scenarios', ${scenario.id}, 'insert',
         ${JSON.stringify({ name, description, fiscalYear, bookId, kind, sourceScenarioId })}::jsonb, ${user.id})
       returning row_id
-    `);
+    `,
+      "objects",
+    );
     if (audit.length !== 1) throw new Error("Budget scenario audit record was not saved.");
     return scenario;
   });
