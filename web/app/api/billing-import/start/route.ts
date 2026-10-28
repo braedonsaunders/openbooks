@@ -1,21 +1,12 @@
 import { runBillingPreflight, type BillingHistoryProvider } from "@openbooks/engine/sync";
 import { defineRoute } from "@/lib/api/route";
-import { z } from "zod";
-
-const Body = z
-  .object({
-    provider: z.enum(["chargebee", "recurly", "maxio", "zuora"]),
-    externalAccount: z.string().min(1),
-    apiKey: z.string().min(1),
-    site: z.string().min(1).nullish(),
-  })
-  .strict();
+import { billingPreflightBody } from "@/lib/billing-import-schemas";
 
 export const POST = defineRoute({
   permission: "sync.run",
   feature: "billingHistoryImport",
   scope: "unrestricted",
-  body: Body,
+  body: billingPreflightBody,
   handler: async ({ authz, body }) =>
     Response.json(
       await runBillingPreflight(

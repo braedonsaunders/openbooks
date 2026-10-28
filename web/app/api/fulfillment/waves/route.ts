@@ -1,30 +1,12 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { releasePickWave, setPickDispatchPolicy } from "@openbooks/engine/sales/pick-execution";
 import { defineRoute } from "@/lib/api/route";
-import { uuidId } from "@/lib/api/json";
-import { executionKey, warehouseExecutionResponse } from "@/lib/api/warehouse-execution";
-const body = z.discriminatedUnion("action", [
-  z.object({
-    action: z.literal("release"),
-    warehouseId: uuidId,
-    subsidiaryId: uuidId,
-    mode: z.enum(["cutoff", "priority"]),
-    cutoffAt: z.iso.datetime({ offset: true }),
-    pickListIds: z.array(uuidId).min(1).max(500).optional(),
-    commandKey: executionKey,
-  }),
-  z.object({
-    action: z.literal("policy"),
-    pickListId: uuidId,
-    priority: z.number().int().min(-2147483648).max(2147483647),
-    cutoffAt: z.iso.datetime({ offset: true }),
-  }),
-]);
+import { warehouseExecutionResponse } from "@/lib/api/warehouse-execution";
+import { pickWaveBody } from "@/lib/api/pick-wave";
 export const POST = defineRoute({
   permission: "orders.fulfill",
   feature: "fulfillment",
-  body,
+  body: pickWaveBody,
   handler: async ({ authz, body }) =>
     warehouseExecutionResponse(async () =>
       NextResponse.json(

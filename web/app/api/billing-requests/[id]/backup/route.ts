@@ -2,20 +2,20 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/platform/db";
-import { readBillingRequestInvoice } from "@openbooks/engine/projects/billing-requests-read";
 import type { Authz } from "@/lib/authz";
 import { rendererUnavailableResponse } from "@/lib/api/pdf-renderer";
 import { isUuid } from "@/lib/list-params";
 import { pdfResponse, safeName } from "@/lib/export";
 import {
-  assembleInvoiceBackup,
   loadInvoiceBackup,
   InvoiceBackupImmutableError,
   InvoiceBackupNotFoundError,
   InvoiceBackupSourceAccessError,
-  type BackupType,
 } from "@/lib/invoice-backup";
+import {
+  BillingRequestBackupNotReadyError,
+  generateBillingRequestBackup,
+} from "@/lib/billing-request-actions";
 import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
@@ -23,23 +23,20 @@ export const runtime = "nodejs";
 /** POST — assemble + persist the backup package for the request's invoice. */
 async function createBillingRequestBackup(gate: Authz, id: string) {
   if (!isUuid(id)) return notFound("record");
-  const req = await readBillingRequestInvoice(db, gate.user.orgId, id, gate.allowedSubsidiaryIds);
-  if (!req) return notFound("record");
-  if (!req.invoice_document_id)
-    return NextResponse.json(
-      { error: "This request has no invoice to back up yet" },
-      { status: 422 },
-    );
   try {
-    const result = await assembleInvoiceBackup(
+    const result = await generateBillingRequestBackup(
       gate.user.orgId,
       gate.user.id,
-      req.invoice_document_id,
-      req.backup_type as BackupType,
+      id,
       gate.allowedSubsidiaryIds,
     );
-    return NextResponse.json({ fileId: result.fileId, pageCount: result.pageCount });
+    return result
+      ? NextResponse.json({ fileId: result.fileId, pageCount: result.pageCount })
+      : notFound("record");
   } catch (e) {
+    if (e instanceof BillingRequestBackupNotReadyError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     if (e instanceof InvoiceBackupNotFoundError) return notFound("record");
     if (e instanceof InvoiceBackupSourceAccessError)
       return apiErrorResponse(e, { safeStatus: 403 });

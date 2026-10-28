@@ -488,9 +488,9 @@ export async function cancelBillingRequest(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   return db.transaction(async (tx) => {
-    const visible = await tx.execute(
+    const visible = await tx.execute<{ projectId: string }>(
       sql`
-      select br.id from billing_requests br
+      select br.project_id as "projectId" from billing_requests br
         join projects p on p.id = br.project_id and p.org_id = br.org_id
        where br.id = ${id} and br.org_id = ${orgId}
          ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
@@ -499,12 +499,12 @@ export async function cancelBillingRequest(
       "objects",
     );
     if (!visible[0]) throw new Error("Billing request not found");
-    const r = await tx.execute<{ id: string }>(
+    const r = await tx.execute<{ id: string; projectId: string }>(
       sql`
       update billing_requests
          set status = 'cancelled', updated_at = now(), updated_by = ${userId}
        where id = ${id} and org_id = ${orgId} and status = 'open'
-       returning id
+       returning id, project_id as "projectId"
     `,
       "objects",
     );

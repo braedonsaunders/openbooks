@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/database";
 import {
   confirmExecutionTask,
@@ -14,33 +13,11 @@ import {
   executePackDirection,
 } from "@openbooks/engine/sales/handling-units";
 import { defineRoute } from "@/lib/api/route";
-import { uuidId } from "@/lib/api/json";
-import {
-  confirmExecutionBody,
-  executionKey,
-  executionQuantity,
-  warehouseExecutionResponse,
-} from "@/lib/api/warehouse-execution";
-const body = z.discriminatedUnion("action", [
-  confirmExecutionBody,
-  z.object({
-    action: z.literal("pick"),
-    lineId: uuidId,
-    quantity: executionQuantity,
-    reason: z.string().max(500).optional(),
-    commandKey: executionKey,
-  }),
-  z.object({
-    action: z.literal("pack"),
-    unitId: uuidId,
-    lineId: uuidId,
-    commandKey: executionKey,
-  }),
-]);
+import { executionActionBody, warehouseExecutionResponse } from "@/lib/api/warehouse-execution";
 export const POST = defineRoute({
   permission: "orders.fulfill",
   feature: "fulfillment",
-  body,
+  body: executionActionBody,
   handler: async ({ authz, body }) =>
     warehouseExecutionResponse(async () => {
       const org = authz.user.orgId,

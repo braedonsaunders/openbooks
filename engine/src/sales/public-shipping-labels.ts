@@ -7,6 +7,7 @@ export {
   getShipmentRates,
   importBillingAdjustments,
   listBulkCandidates,
+  listAdjustmentsByCarrier,
   listShippingAccounts,
   postBillingAdjustment,
   readLabelFile,

@@ -8,6 +8,7 @@ export {
   type BillingImportConfig,
 } from "./billing-history-import.ts";
 export type { BillingHistoryProvider } from "./billing-history.ts";
+export { BillingHistoryError } from "./billing-history.ts";
 export {
   getStripeBillingOverview,
   importStripeBilling,
