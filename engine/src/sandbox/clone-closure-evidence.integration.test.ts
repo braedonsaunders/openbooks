@@ -61,26 +61,10 @@ async function deleteSandboxesFor(productionOrgId: string): Promise<void> {
   for (const row of rows) await deleteSandbox(row.id);
 }
 
-function expectedBeforeImage(
-  source: Record<string, unknown>,
-  clonedVersion: Record<string, unknown>,
-  sandboxOrgId: string,
-): Record<string, unknown> {
-  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return Object.fromEntries(
-    Object.entries(source).map(([key, value]) => {
-      if (key === "org_id") return [key, sandboxOrgId];
-      if (
-        typeof value === "string" &&
-        uuid.test(value) &&
-        key !== "created_by" &&
-        key !== "updated_by"
-      ) {
-        return [key, clonedVersion[key]];
-      }
-      return [key, value];
-    }),
-  );
+function differingKeys(before: Record<string, unknown>, after: Record<string, unknown>): string[] {
+  return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
+    .sort();
 }
 
 test(
@@ -138,22 +122,48 @@ test(
           reason: "update the position title",
         });
 
-        const sourceEmploymentClosures = await db.execute<{ closed: ClosureEvidence[] }>(
-          sql`select closed_versions as closed from employment_changes
-               where org_id = ${h.org.orgId} and employment_id = ${employmentId}
-                 and change_kind = 'status_changed'`,
+        const sourceEmploymentClosures = await db.execute<{
+          closed: ClosureEvidence[];
+          versionImage: Record<string, unknown>;
+        }>(
+          sql`select c.closed_versions as closed, to_jsonb(v) as "versionImage"
+                from employment_changes c
+                join worker_employment_versions v
+                  on v.org_id = c.org_id and v.closed_by_change_id = c.id
+               where c.org_id = ${h.org.orgId} and c.employment_id = ${employmentId}
+                 and c.change_kind = 'status_changed'`,
           "objects",
         );
         assert.equal(sourceEmploymentClosures.length, 1);
         assert.equal(sourceEmploymentClosures[0]!.closed.length, 1);
-        const sourcePositionClosures = await db.execute<{ closed: ClosureEvidence[] }>(
-          sql`select closed_versions as closed from position_changes
-               where org_id = ${h.org.orgId} and position_id = ${position.id}
-                 and change_kind = 'revised'`,
+        const sourcePositionClosures = await db.execute<{
+          closed: ClosureEvidence[];
+          versionImage: Record<string, unknown>;
+        }>(
+          sql`select c.closed_versions as closed, to_jsonb(v) as "versionImage"
+                from position_changes c
+                join position_versions v
+                  on v.org_id = c.org_id and v.closed_by_change_id = c.id
+               where c.org_id = ${h.org.orgId} and c.position_id = ${position.id}
+                 and c.change_kind = 'revised'`,
           "objects",
         );
         assert.equal(sourcePositionClosures.length, 1);
         assert.equal(sourcePositionClosures[0]!.closed.length, 1);
+        assert.deepEqual(
+          differingKeys(
+            sourcePositionClosures[0]!.closed[0]!.before,
+            sourcePositionClosures[0]!.versionImage,
+          ),
+          ["closed_by_change_id", "recorded_until", "superseded_by"],
+        );
+        assert.deepEqual(
+          differingKeys(
+            sourceEmploymentClosures[0]!.closed[0]!.before,
+            sourceEmploymentClosures[0]!.versionImage,
+          ),
+          ["closed_by_change_id", "recorded_until", "superseded_by"],
+        );
 
         try {
           const created = await createSandbox({
@@ -189,14 +199,7 @@ test(
           assert.equal(employmentEvidence.version_no, sourceEmploymentEvidence.version_no);
           assert.equal(employmentEvidence.row_id, employment.versionId);
           assert.notEqual(employmentEvidence.row_id, sourceEmploymentEvidence.row_id);
-          assert.deepEqual(
-            employmentEvidence.before,
-            expectedBeforeImage(
-              sourceEmploymentEvidence.before,
-              employment.versionImage,
-              created.sandboxOrgId,
-            ),
-          );
+          assert.deepEqual(employmentEvidence.before, employment.versionImage);
 
           const positionClosures = await db.execute<{
             closed: ClosureEvidence[];
@@ -224,14 +227,7 @@ test(
           assert.equal(positionEvidence.version_no, sourcePositionEvidence.version_no);
           assert.equal(positionEvidence.row_id, positionClosure.versionId);
           assert.notEqual(positionEvidence.row_id, sourcePositionEvidence.row_id);
-          assert.deepEqual(
-            positionEvidence.before,
-            expectedBeforeImage(
-              sourcePositionEvidence.before,
-              positionClosure.versionImage,
-              created.sandboxOrgId,
-            ),
-          );
+          assert.deepEqual(positionEvidence.before, positionClosure.versionImage);
         } finally {
           await deleteSandboxesFor(h.org.orgId);
         }

@@ -131,7 +131,9 @@ export function validateClonedFlowGraphScope(
 
 type ClosureEvidenceTable = "employment_changes" | "position_changes";
 
-/** Rebase closure evidence after all copied version rows exist in the target. */
+/** Rebase closure evidence after all copied version rows exist in the target.
+ * The imported before-image must match the row image the clone actually wrote,
+ * including the clone's UUID mapping and masking projection. */
 async function rebaseClosedVersionEvidence(
   args: { sandboxOrgId: string; seed: string },
   table: ClosureEvidenceTable,
@@ -150,32 +152,27 @@ async function rebaseClosedVersionEvidence(
     to_jsonb(ob_rebase((entry.value->>'identity')::uuid, ${args.seed}::uuid)::text), true)`;
   const rebasedRowId = sql`jsonb_set(${rebasedIdentity}, '{row_id}',
     to_jsonb(ob_rebase((entry.value->>'row_id')::uuid, ${args.seed}::uuid)::text), true)`;
-  const rebasedBeforeImage = sql`coalesce((
-    select jsonb_object_agg(snapshot_field.key, case
-      when snapshot_field.key = 'org_id' then to_jsonb(${args.sandboxOrgId}::uuid)
-      when attribute.atttypid = 'uuid'::regtype
-        and snapshot_field.key not in ('created_by', 'updated_by')
-        and jsonb_typeof(snapshot_field.value) = 'string'
-        then to_jsonb(ob_rebase((snapshot_field.value #>> '{}')::uuid, ${args.seed}::uuid)::text)
-      else snapshot_field.value
-    end)
-      from jsonb_each(entry.value->'before') as snapshot_field(key, value)
-      left join pg_class relation
-        on relation.relname = entry.value->>'table' and relation.relkind = 'r'
-       and relation.relnamespace = 'public'::regnamespace
-      left join pg_attribute attribute
-        on attribute.attrelid = relation.oid and attribute.attname = snapshot_field.key
-       and attribute.attnum > 0 and not attribute.attisdropped
-  ), '{}'::jsonb)`;
+  const versionTables =
+    table === "employment_changes"
+      ? ["worker_employment_versions", "employment_assignment_versions", "reporting_relationships"]
+      : ["position_versions"];
+  const clonedVersionImage = sql.join(
+    versionTables.map(
+      (versionTable) => sql`select to_jsonb(version_row) as image
+        from ${sql.identifier(versionTable)} as version_row
+       where entry.value->>'table' = ${versionTable}
+         and version_row.org_id = ${args.sandboxOrgId}
+         and version_row.id = ((${rebasedRowId})->>'row_id')::uuid`,
+    ),
+    sql.raw(" union all "),
+  );
   const rebasedEntry = sql`case when entry.value ? 'before' then
-      jsonb_set(${rebasedRowId}, '{before}',
-        case when jsonb_typeof(entry.value->'before') = 'object'
-          then ${rebasedBeforeImage} else entry.value->'before' end,
-        true)
+      jsonb_set(${rebasedRowId}, '{before}', coalesce(cloned_version.image, 'null'::jsonb), true)
     else ${rebasedRowId} end`;
   const rebasedArray = sql`coalesce((
     select jsonb_agg(${rebasedEntry} order by entry.ordinality)
       from jsonb_array_elements(target.closed_versions) with ordinality as entry(value, ordinality)
+      left join lateral (${clonedVersionImage}) as cloned_version(image) on true
   ), '[]'::jsonb)`;
   const updated = await db.execute<{ id: string }>(
     sql`update ${sql.identifier(table)} as target
