@@ -214,7 +214,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:authz",
     `export async function guardPermission(permission) {
-       if (permission === 'records.manage_types') return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
+       if (permission === 'records.manage_types') return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, permissions: new Set(['records.manage_types']), allowedSubsidiaryIds: null }
        return new Response(null, { status: 403 })
      }`,
   ],

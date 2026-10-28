@@ -107,6 +107,15 @@ import { PAYROLL_APPLICATION_TOOLS } from "./payroll-tools";
 import { CRM_APPLICATION_TOOLS } from "./crm-tools";
 import { ADMIN_APPLICATION_TOOLS } from "./admin-tools";
 import { WORKSPACE_APPLICATION_TOOLS } from "./workspace-tools";
+import { convertApplicationOrder, issueApplicationOrder } from "./orders";
+import {
+  createCustomRecordType,
+  deleteCustomRecordType,
+  getCustomRecordTypeDefinition,
+  listCustomRecordTypeDefinitions,
+  transitionCustomRecordType,
+  updateCustomRecordType,
+} from "./custom-record-types";
 
 export type { ApplicationToolConfirmation, ApplicationToolDefinition } from "./tool-definition";
 
@@ -429,6 +438,241 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     assistantConfirmation: "never",
     visibleTo: visible,
     execute: async (context) => ({ ok: true, recordTypes: await listRecordTypes(context) }),
+  }),
+  definition({
+    name: "list_custom_record_type_definitions",
+    title: "List Custom Record Type Definitions",
+    description:
+      "List draft, published, and archived custom record definitions, including field sections and subsidiary-scoped record counts. Use the id to inspect or change a definition.",
+    inputSchema: z.object({}),
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "never",
+    visibleTo: hasPermission("records.manage_types"),
+    execute: async (context) => ({
+      ok: true,
+      types: await listCustomRecordTypeDefinitions(context),
+    }),
+  }),
+  definition({
+    name: "get_custom_record_type_definition",
+    title: "Get Custom Record Type Definition",
+    description:
+      "Get one custom record definition, including its status, editable FormSection fields, and exact updated_at token. Find its id with list_custom_record_type_definitions.",
+    inputSchema: z.object({ id: UUID.describe("Custom record type id from the definition list.") }),
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "never",
+    visibleTo: hasPermission("records.manage_types"),
+    execute: async (context, input) => ({
+      ok: true,
+      ...settleWrite(await getCustomRecordTypeDefinition(context, input.id)),
+    }),
+  }),
+  definition({
+    name: "create_custom_record_type",
+    title: "Create Custom Record Type",
+    description:
+      "Create an unsaved custom record definition as a draft. Supply its display name and FormSection field structure; use list_custom_record_type_definitions to verify the new id.",
+    inputSchema: z.object({
+      name: z.string().trim().min(1).max(200).describe("Singular record type name."),
+      pluralName: z
+        .string()
+        .max(200)
+        .optional()
+        .describe("Plural label; defaults to the name plus s."),
+      key: z
+        .string()
+        .max(64)
+        .optional()
+        .describe("Optional lowercase URL key; if omitted, one is derived from the name."),
+      iconKey: z
+        .string()
+        .max(32)
+        .optional()
+        .describe("Optional lowercase icon key; defaults to grid."),
+      description: z
+        .string()
+        .max(2000)
+        .nullable()
+        .optional()
+        .describe("Optional purpose shown to users."),
+      fields: z
+        .array(CUSTOM)
+        .max(100)
+        .optional()
+        .describe("FormSection definitions that describe custom fields and repeating groups."),
+      showInNav: z
+        .boolean()
+        .optional()
+        .describe("Whether the published type appears in navigation."),
+      allowedRoles: z
+        .array(z.string().min(1).max(100))
+        .max(50)
+        .nullable()
+        .optional()
+        .describe("Optional role audience for the type."),
+      sortOrder: z
+        .number()
+        .int()
+        .min(-100000)
+        .max(100000)
+        .optional()
+        .describe("Navigation sort order."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: hasPermission("records.manage_types"),
+    authorizeReplay: async (context) =>
+      assertApplicationPermission(context, "records.manage_types"),
+    execute: async (context, input) => {
+      const { idempotencyKey, ...body } = input;
+      const created = settleWrite(await createCustomRecordType(context, body, idempotencyKey));
+      const id = String(created.id);
+      return {
+        ok: true,
+        ...created,
+        status: "draft",
+        href: `/records/types?type=${encodeURIComponent(id)}`,
+      };
+    },
+  }),
+  definition({
+    name: "update_custom_record_type",
+    title: "Update Custom Record Type",
+    description:
+      "Update a draft or published custom record definition with optimistic concurrency. Copy expectedUpdatedAt exactly from get_custom_record_type_definition.",
+    inputSchema: z.object({
+      id: UUID.describe("Custom record type id from the definition list."),
+      expectedUpdatedAt: DOCUMENT_REVISION,
+      allowedRoles: z
+        .array(z.string().min(1).max(100))
+        .max(50)
+        .nullable()
+        .optional()
+        .describe("Replace the role audience."),
+      description: z.string().max(2000).optional().describe("Replace the type description."),
+      fields: z
+        .array(CUSTOM)
+        .max(100)
+        .optional()
+        .describe("Replace the complete FormSection field structure."),
+      iconKey: z.string().max(32).optional().describe("Replace the lowercase icon key."),
+      key: z
+        .string()
+        .max(64)
+        .optional()
+        .describe("Change the URL key while the type is still a draft."),
+      name: z.string().max(200).optional().describe("Replace the singular name."),
+      pluralName: z.string().max(200).optional().describe("Replace the plural label."),
+      showInNav: z.boolean().optional().describe("Replace the navigation visibility flag."),
+      sortOrder: z
+        .number()
+        .int()
+        .min(-100000)
+        .max(100000)
+        .optional()
+        .describe("Replace the navigation sort order."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: hasPermission("records.manage_types"),
+    authorizeReplay: async (context) =>
+      assertApplicationPermission(context, "records.manage_types"),
+    execute: async (context, input) => {
+      const { id, idempotencyKey: _idempotencyKey, ...body } = input;
+      const updated = settleWrite(await updateCustomRecordType(context, id, body));
+      return { ok: true, ...updated, href: `/records/types?type=${encodeURIComponent(id)}` };
+    },
+  }),
+  definition({
+    name: "delete_custom_record_type",
+    title: "Delete Custom Record Type",
+    description:
+      "Delete a draft custom record type only when it has no records. Published types must be archived; find the id with list_custom_record_type_definitions.",
+    inputSchema: z.object({
+      id: UUID.describe("Draft custom record type id."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: true,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: hasPermission("records.manage_types"),
+    authorizeReplay: async (context) =>
+      assertApplicationPermission(context, "records.manage_types"),
+    execute: async (context, input) => ({
+      ok: true,
+      id: input.id,
+      ...settleWrite(await deleteCustomRecordType(context, input.id)),
+      href: "/records/types",
+    }),
+  }),
+  definition({
+    name: "publish_custom_record_type",
+    title: "Publish Custom Record Type",
+    description:
+      "Publish a lint-clean draft or archived custom record type after adding at least one valid field. Include an audit reason and find the id with list_custom_record_type_definitions.",
+    inputSchema: z.object({
+      id: UUID.describe("Draft or archived custom record type id."),
+      reason: z
+        .string()
+        .trim()
+        .min(1)
+        .max(2000)
+        .describe("Reason recorded in the immutable audit event."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: hasPermission("records.manage_types"),
+    authorizeReplay: async (context) =>
+      assertApplicationPermission(context, "records.manage_types"),
+    execute: async (context, input) => ({
+      ok: true,
+      ...settleWrite(await transitionCustomRecordType(context, input.id, "publish", input.reason)),
+      id: input.id,
+      href: `/records/types?type=${encodeURIComponent(input.id)}`,
+    }),
+  }),
+  definition({
+    name: "archive_custom_record_type",
+    title: "Archive Custom Record Type",
+    description:
+      "Archive a published custom record type while retaining its records and audit history. Include an audit reason and find the id with list_custom_record_type_definitions.",
+    inputSchema: z.object({
+      id: UUID.describe("Published custom record type id."),
+      reason: z
+        .string()
+        .trim()
+        .min(1)
+        .max(2000)
+        .describe("Reason recorded in the immutable audit event."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: true,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: hasPermission("records.manage_types"),
+    authorizeReplay: async (context) =>
+      assertApplicationPermission(context, "records.manage_types"),
+    execute: async (context, input) => ({
+      ok: true,
+      ...settleWrite(await transitionCustomRecordType(context, input.id, "archive", input.reason)),
+      id: input.id,
+      href: `/records/types?type=${encodeURIComponent(input.id)}`,
+    }),
   }),
   definition({
     name: "list_records",
@@ -1499,6 +1743,155 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
         ok: true,
         ...result,
         href: applicationDocumentHref(result.kind, input.documentId),
+      };
+    },
+  }),
+  definition({
+    name: "issue_sales_order",
+    title: "Issue Sales Order",
+    description:
+      "Issue a draft sales order after its customer, lines, and exact revision are ready; this can return pending approval. Find the id and expectedUpdatedAt with get_record.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Draft sales-order id from get_record."),
+      expectedUpdatedAt: DOCUMENT_REVISION,
+      creditOverrideReason: z
+        .string()
+        .trim()
+        .min(5)
+        .max(500)
+        .optional()
+        .describe("Reason for a credit override when the native credit gate requires one."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    featureKey: "orders",
+    visibleTo: hasPermission("ar.create"),
+    authorizeReplay: async (context) => assertApplicationPermission(context, "ar.create"),
+    execute: async (context, input) => {
+      const outcome = await issueApplicationOrder(context, input);
+      return {
+        ok: true,
+        ...outcome,
+        href: applicationDocumentHref("sales_order", outcome.result.id),
+      };
+    },
+  }),
+  definition({
+    name: "convert_quote",
+    title: "Convert Quote",
+    description:
+      "Convert an approved quote into a sales order or customer invoice using only its open line quantities. Find the quote id and exact revision with get_record.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Quote id from get_record."),
+      targetKind: z
+        .enum(["sales_order", "customer_invoice"])
+        .describe("Downstream record kind to create."),
+      expectedUpdatedAt: DOCUMENT_REVISION,
+      creditOverrideReason: z
+        .string()
+        .trim()
+        .min(5)
+        .max(500)
+        .optional()
+        .describe("Reason for a credit override when the native credit gate requires one."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    featureKey: "orders",
+    visibleTo: hasPermission("ar.create"),
+    authorizeReplay: async (context, input) => {
+      await convertApplicationOrder(context, { ...input, expectedKind: "quote" });
+    },
+    execute: async (context, input) => {
+      const outcome = await convertApplicationOrder(context, {
+        ...input,
+        expectedKind: "quote",
+      });
+      return {
+        ok: true,
+        ...outcome,
+        href: applicationDocumentHref(outcome.result.kind, outcome.result.id),
+      };
+    },
+  }),
+  definition({
+    name: "convert_sales_order",
+    title: "Convert Sales Order",
+    description:
+      "Convert an issued sales order into a shipment or customer invoice using only its open line quantities. Find the order id and exact revision with get_record.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Issued sales-order id from get_record."),
+      targetKind: z
+        .enum(["sales_fulfillment", "customer_invoice"])
+        .describe("Downstream record kind to create."),
+      expectedUpdatedAt: DOCUMENT_REVISION,
+      creditOverrideReason: z
+        .string()
+        .trim()
+        .min(5)
+        .max(500)
+        .optional()
+        .describe("Reason for a credit override when the native credit gate requires one."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    featureKey: "orders",
+    visibleTo: hasPermission("ar.create"),
+    authorizeReplay: async (context, input) => {
+      await convertApplicationOrder(context, { ...input, expectedKind: "sales_order" });
+    },
+    execute: async (context, input) => {
+      const outcome = await convertApplicationOrder(context, {
+        ...input,
+        expectedKind: "sales_order",
+      });
+      return {
+        ok: true,
+        ...outcome,
+        href: applicationDocumentHref(outcome.result.kind, outcome.result.id),
+      };
+    },
+  }),
+  definition({
+    name: "convert_purchase_order",
+    title: "Convert Purchase Order",
+    description:
+      "Convert an approved purchase order into a goods receipt or vendor bill using only its open line quantities. Find the order id and exact revision with get_record.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Approved purchase-order id from get_record."),
+      targetKind: z
+        .enum(["purchase_receipt", "vendor_bill"])
+        .describe("Downstream record kind to create."),
+      expectedUpdatedAt: DOCUMENT_REVISION,
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    featureKey: "orders",
+    visibleTo: anyPermission("goods_receipts.create", "ap.create"),
+    authorizeReplay: async (context, input) => {
+      await convertApplicationOrder(context, { ...input, expectedKind: "purchase_order" });
+    },
+    execute: async (context, input) => {
+      const outcome = await convertApplicationOrder(context, {
+        ...input,
+        expectedKind: "purchase_order",
+      });
+      return {
+        ok: true,
+        ...outcome,
+        href: applicationDocumentHref(outcome.result.kind, outcome.result.id),
       };
     },
   }),

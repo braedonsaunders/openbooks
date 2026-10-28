@@ -169,6 +169,13 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   post_payment: "documents",
   // Records platform + page layouts.
   list_record_types: "records",
+  list_custom_record_type_definitions: "records",
+  get_custom_record_type_definition: "records",
+  create_custom_record_type: "records",
+  update_custom_record_type: "records",
+  delete_custom_record_type: "records",
+  publish_custom_record_type: "records",
+  archive_custom_record_type: "records",
   list_records: "records",
   get_record: "records",
   create_record: "records",

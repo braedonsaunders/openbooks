@@ -1,20 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
-
-import { isUuid } from "@/lib/list-params";
-import { describeIssue, lintRecordFields, typeKeyError } from "@/lib/record-schema";
-import { auditSetupChange } from "@/lib/setup/audit";
-import { notFound } from "@/lib/api/responses";
+import { applicationContextFromSession } from "@/lib/application/context";
+import { transitionCustomRecordType } from "@/lib/application/custom-record-types";
 
 const requestBodySchema = z
   .object({
     action: z.enum(["archive", "publish"]).optional(),
-    // An omitted reason reaches the named audit-trail refusal below; a
-    // supplied reason must still have the exact wire shape the reader returned.
     reason: z.string().trim().min(1).max(2000).optional(),
   })
   .refine((body) => Object.keys(body).length > 0, {
@@ -23,28 +16,6 @@ const requestBodySchema = z
 
 export const runtime = "nodejs";
 
-type LockedType = {
-  id: string;
-  key: string;
-  name: string;
-  plural_name: string;
-  fields: unknown;
-  status: string;
-};
-
-/**
- * Record-type lifecycle:
- *   publish — draft/archived → published. Requires a complete, lint-clean
- *             definition (name, plural, valid key, ≥1 field, no issues);
- *             the generated module goes live at /records/<key>.
- *   archive — published → archived. Records are kept but the module (and
- *             any nav entry) disappears; publish again to restore.
- *
- * Status is re-read under a row lock and the UPDATE is predicated on the
- * current status. A write that matches zero rows is a named refusal, never
- * `{ok:true}`.
- */
-
 export const POST = defineRoute({
   permission: "records.manage_types",
   feature: {
@@ -52,188 +23,17 @@ export const POST = defineRoute({
   },
   params: z.object({ id: z.string() }),
   body: requestBodySchema,
-  handler: async ({ body, params, authz: routeAuthz }) => {
-    const gate = routeAuthz;
-
-    const { user } = gate;
-    const { id } = params;
-    if (!isUuid(id)) return notFound("record");
-
-    const action = body.action ?? "publish";
-    if (action !== "archive" && action !== "publish") {
-      return NextResponse.json({ error: "unknown action" }, { status: 400 });
-    }
-    // Every publish/archive transition lands in the immutable audit with its
-    // reason — updated_by/updated_at alone only show the last writer. The
-    // reason is required so the audit never carries an unexplained transition;
-    // the builder prompts for it before calling.
-    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
-    if (!reason || reason.length > 2000) {
-      return NextResponse.json(
-        {
-          error:
-            "A reason is required to publish or archive a record type — include a reason for the audit trail",
-        },
-        { status: 422 },
-      );
-    }
-
-    const outcome = await withOrgTransaction(user.orgId, async () => {
-      const locked = (
-        await db.execute<LockedType & { snapshot: Record<string, unknown> }>(
-          sql`
-        select id, key, name, plural_name, fields, status,
-               to_jsonb(custom_record_types) as snapshot
-          from custom_record_types
-         where id = ${id} and org_id = ${user.orgId}
-         for update
-      `,
-          "objects",
-        )
-      )[0];
-      if (!locked) return { kind: "not_found" as const };
-
-      if (action === "archive") {
-        if (locked.status !== "published") {
-          return {
-            kind: "response" as const,
-            response: NextResponse.json(
-              { error: "Only published types can be archived" },
-              { status: 422 },
-            ),
-          };
-        }
-        const archived = await db.execute<{ snapshot: Record<string, unknown> }>(
-          sql`
-          update custom_record_types
-             set status = 'archived',
-                 updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
-                 updated_by = ${user.id}
-           where id = ${id} and org_id = ${user.orgId} and status = 'published'
-          returning to_jsonb(custom_record_types) as snapshot
-        `,
-          "objects",
-        );
-        if (archived.length === 0) {
-          return {
-            kind: "response" as const,
-            response: NextResponse.json(
-              { error: "Only published types can be archived" },
-              { status: 422 },
-            ),
-          };
-        }
-        await auditTransition(locked.snapshot, archived[0]!.snapshot);
-        return { kind: "ok" as const, status: "archived" as const };
-      }
-
-      if (locked.status === "published") {
-        return {
-          kind: "response" as const,
-          response: NextResponse.json({ error: "Already published" }, { status: 422 }),
-        };
-      }
-
-      const keyIssue = typeKeyError(locked.key);
-      if (keyIssue)
-        return {
-          kind: "response" as const,
-          response: NextResponse.json({ error: `Key ${keyIssue}` }, { status: 422 }),
-        };
-      if (!locked.name.trim() || !locked.plural_name.trim()) {
-        return {
-          kind: "response" as const,
-          response: NextResponse.json(
-            { error: "Name and plural name are required" },
-            { status: 422 },
-          ),
-        };
-      }
-      const lint = lintRecordFields(locked.fields, locked.name);
-      if (!lint.success || lint.fields.length === 0) {
-        return {
-          kind: "response" as const,
-          response: NextResponse.json(
-            { error: "Add at least one field before publishing" },
-            { status: 422 },
-          ),
-        };
-      }
-      if (lint.issues.length > 0) {
-        return {
-          kind: "response" as const,
-          response: NextResponse.json(
-            {
-              error: `Resolve ${lint.issues.length} field issue${lint.issues.length === 1 ? "" : "s"} before publishing: ${lint.issues.slice(0, 3).map(describeIssue).join("; ")}`,
-              issues: lint.issues,
-            },
-            { status: 422 },
-          ),
-        };
-      }
-
-      const published = await db.execute<{ snapshot: Record<string, unknown> }>(
-        sql`
-        update custom_record_types
-           set status = 'published',
-               updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
-               updated_by = ${user.id}
-         where id = ${id} and org_id = ${user.orgId} and status in ('draft', 'archived')
-        returning to_jsonb(custom_record_types) as snapshot
-      `,
-        "objects",
-      );
-      if (published.length === 0) {
-        const live = (
-          await db.execute<{ status: string }>(
-            sql`
-          select status from custom_record_types
-           where id = ${id} and org_id = ${user.orgId}
-        `,
-            "objects",
-          )
-        )[0];
-        if (!live) return { kind: "not_found" as const };
-        if (live.status === "published") {
-          return {
-            kind: "response" as const,
-            response: NextResponse.json({ error: "Already published" }, { status: 422 }),
-          };
-        }
-        return {
-          kind: "response" as const,
-          response: NextResponse.json(
-            { error: "This record type changed; reload the type and try again" },
-            { status: 409 },
-          ),
-        };
-      }
-      await auditTransition(locked.snapshot, published[0]!.snapshot);
-      return { kind: "ok" as const, status: "published" as const };
-    });
-
-    /**
-     * One append-only transition event per publish/archive, written in the
-     * same transaction as the status change: before/after status plus the
-     * operator's reason, so the full lifecycle reads from the audit instead
-     * of the last-writer columns.
-     */
-    async function auditTransition(
-      before: Record<string, unknown>,
-      after: Record<string, unknown>,
-    ): Promise<void> {
-      await auditSetupChange({
-        orgId: user.orgId,
-        table: "custom_record_types",
-        rowId: id,
-        action: "update",
-        changes: { before, after, reason },
-        actorId: user.id,
-      });
-    }
-
-    if (outcome.kind === "not_found") return notFound("record");
-    if (outcome.kind === "response") return outcome.response;
-    return NextResponse.json({ ok: true, status: outcome.status });
+  handler: async ({ body, params, authz, request }) => {
+    const result = await transitionCustomRecordType(
+      applicationContextFromSession(
+        authz,
+        "api",
+        request.headers.get("x-request-id") || randomUUID(),
+      ),
+      params.id,
+      body.action ?? "publish",
+      body.reason ?? "",
+    );
+    return NextResponse.json(result.body, { status: result.status });
   },
 });
