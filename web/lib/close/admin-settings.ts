@@ -977,8 +977,9 @@ export async function listCloseSetupConfiguration(orgId: string) {
       ),
       db.execute(
         sql`select id, period_id, book_id, subsidiary_id, modules, status, reason, requested_by,
-                   requested_at, approved_by, approved_at, expires_at, closed_at, cancelled_at
-              from close_reopen_requests where org_id = ${orgId} order by requested_at desc limit 500`,
+                   created_at as requested_at, approved_by, approved_at, expires_at,
+                   reclosed_at
+              from close_reopen_requests where org_id = ${orgId} order by created_at desc limit 500`,
         "objects",
       ),
     ]);

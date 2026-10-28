@@ -1422,6 +1422,7 @@ const SOURCES: Record<string, EntityListSource> = {
     recordType: "financial_change",
     table: "financial_changes",
     alias: "fc",
+    readPermission: "gl.read",
     baseJoins: sql`left join subsidiaries s on s.id=fc.subsidiary_id and s.org_id=fc.org_id`,
     builtInExpr: {
       operation: sql`fc.operation`,

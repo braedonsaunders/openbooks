@@ -781,7 +781,7 @@ test(
       );
       await assert.rejects(
         run("get_accounting_book_replication_status", readContext, {}),
-        /needs multiBookAccounting feature/i,
+        /needs the multiBookAccounting feature/i,
       );
     } finally {
       await dropScratchOrg(foreign.orgId);
