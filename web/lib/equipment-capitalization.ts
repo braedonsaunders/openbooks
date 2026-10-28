@@ -69,12 +69,18 @@ import type { Authz } from "./authz";
 export async function capitalizeEquipmentUnit(
   gate: Authz,
   routeParams: { id: string },
+  dependencies: {
+    isFeatureEnabled?: typeof isFeatureEnabled;
+    ensureDefaultCategory?: typeof ensureDefaultCategory;
+  } = {},
 ): Promise<NextResponse> {
+  const featureEnabled = dependencies.isFeatureEnabled ?? isFeatureEnabled;
+  const getDefaultCategory = dependencies.ensureDefaultCategory ?? ensureDefaultCategory;
   const params = Promise.resolve(routeParams);
   // Capitalize writes a fixed_assets row. Equipment being on is not enough —
   // turning Fixed Assets off must stop new register rows without touching
   // units that already exist.
-  if (!(await isFeatureEnabled(gate.user.orgId, "fixedAssets"))) {
+  if (!(await featureEnabled(gate.user.orgId, "fixedAssets"))) {
     return notFound("record");
   }
   const { id } = await params;
@@ -127,7 +133,7 @@ export async function capitalizeEquipmentUnit(
     return NextResponse.json({ error: "acquisition_cost_invalid" }, { status: 422 });
   }
 
-  const categoryId = await ensureDefaultCategory(orgId, userId);
+  const categoryId = await getDefaultCategory(orgId, userId);
 
   let result: CapitalizationResult;
   try {
