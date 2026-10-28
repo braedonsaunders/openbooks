@@ -33,6 +33,7 @@ export {
   addScheduleLine,
   createSchedule,
   listSchedules,
+  listScheduleLines,
   resolveWage,
   updateScheduleScope,
   type ResolvedWage,

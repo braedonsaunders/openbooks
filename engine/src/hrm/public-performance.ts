@@ -23,3 +23,9 @@ export { listConversationPage, getOneOnOne } from "./performance/one-on-ones.ts"
 export { PerformanceUpgradeRequiredError } from "./performance/authoring-schema.ts";
 
 export { HrmPerformanceError } from "./performance/errors.ts";
+export {
+  getExitRecord,
+  listExitRecords,
+  recordExit,
+  updateExitRecord,
+} from "./performance/exits.ts";

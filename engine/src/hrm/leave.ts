@@ -80,6 +80,8 @@ import { inputGuards } from "./input-guards.ts";
 export type LeaveRequestStatus =
   "draft" | "submitted" | "approved" | "rejected" | "withdrawn" | "cancelled";
 
+export { listOwnLeaveEmploymentOptions } from "./leave-read.ts";
+
 export interface LeaveTypeDTO {
   readonly id: string;
   readonly code: string;

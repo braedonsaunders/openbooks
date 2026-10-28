@@ -2,10 +2,10 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { remindDocument } from "@openbooks/engine/hrm/documents/documents";
+import { remindDocument } from "@openbooks/engine/hrm/documents";
 import { applicationContextFromSession } from "../../../../../../lib/application/context";
 import { executeIdempotent } from "../../../../../../lib/application/idempotency";
-import { deliverSignatureInvitations } from "../../../../../../lib/hrm/document-delivery";
+import { deliverHrDocumentInvitations } from "../../../../../../lib/hrm/document-delivery";
 import { hrmDocumentsErrorResponse } from "../../_lib";
 import { resolveAppBaseUrl } from "../../route";
 /**
@@ -53,7 +53,7 @@ export const POST = defineRoute({
       });
       const { document } = outcome.value;
       if (outcome.replayed) return NextResponse.json({ document, deliveries: [] });
-      const results = await deliverSignatureInvitations({
+      const result = await deliverHrDocumentInvitations({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         appBaseUrl: resolveAppBaseUrl(req),
@@ -63,13 +63,7 @@ export const POST = defineRoute({
       });
       return NextResponse.json({
         document,
-        deliveries: deliveries.map((d) => ({
-          signerId: d.signerId,
-          partyId: d.partyId,
-          signUrl: `${resolveAppBaseUrl(req).replace(/\/$/, "")}/sign/${d.token}`,
-          notified: results.find((r) => r.partyId === d.partyId)?.notified ?? false,
-          emailed: results.find((r) => r.partyId === d.partyId)?.emailed ?? false,
-        })),
+        deliveries: result,
       });
     } catch (e) {
       return hrmDocumentsErrorResponse(e);

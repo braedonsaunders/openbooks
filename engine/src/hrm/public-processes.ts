@@ -10,6 +10,10 @@ export {
   listProcessTemplates,
   updateProcessTemplate,
   completeProcessStep,
+  completeProcess,
+  cancelProcess,
+  openProcess,
+  skipProcessStep,
   HrmProcessError,
 } from "./processes.ts";
 export type { ChecklistDesignerValue, CompleteStepQuery } from "./processes.ts";

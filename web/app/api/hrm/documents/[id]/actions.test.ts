@@ -65,7 +65,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:delivery",
     `
-      export async function deliverSignatureInvitations() {
+      export async function deliverHrDocumentInvitations() {
         return []
       }
     `,
@@ -97,7 +97,7 @@ registerHooks({
       specifier === "./features"
     )
       return { url: "mock:authz", shortCircuit: true };
-    if (specifier === "@openbooks/engine/hrm/documents/documents")
+    if (specifier === "@openbooks/engine/hrm/documents")
       return { url: "mock:service", shortCircuit: true };
     if (specifier === "../../../../../../lib/hrm/document-delivery")
       return { url: "mock:delivery", shortCircuit: true };

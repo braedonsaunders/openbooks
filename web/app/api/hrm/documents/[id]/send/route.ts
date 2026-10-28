@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { sendDocument } from "@openbooks/engine/hrm/documents/documents";
-import { deliverSignatureInvitations } from "../../../../../../lib/hrm/document-delivery";
+import { sendDocument } from "@openbooks/engine/hrm/documents";
+import { deliverHrDocumentInvitations } from "../../../../../../lib/hrm/document-delivery";
 import { hrmDocumentsErrorResponse } from "../../_lib";
 import { resolveAppBaseUrl } from "../../route";
 /**
@@ -23,25 +23,18 @@ export const POST = defineRoute({
         actorId: gate.user.id,
         documentId: id,
       });
-      const results = await deliverSignatureInvitations({
+      const appBaseUrl = resolveAppBaseUrl(req);
+      const result = await deliverHrDocumentInvitations({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
-        appBaseUrl: resolveAppBaseUrl(req),
+        appBaseUrl,
         docTitle: document.title,
         expiresDate: document.expiresAt?.toISOString(),
         recipients: deliveries,
       });
       return NextResponse.json({
         document,
-        deliveries: deliveries.map((d) => ({
-          signerId: d.signerId,
-          partyId: d.partyId,
-          signUrl: `${resolveAppBaseUrl(req).replace(/\/$/, "")}/sign/${d.token}`,
-          notified: results.find((r) => r.partyId === d.partyId)?.notified ?? false,
-          emailed: results.find((r) => r.partyId === d.partyId)?.emailed ?? false,
-          emailSkippedReason:
-            results.find((r) => r.partyId === d.partyId)?.emailSkippedReason ?? null,
-        })),
+        deliveries: result,
       });
     } catch (e) {
       return hrmDocumentsErrorResponse(e);

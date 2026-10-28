@@ -48,6 +48,27 @@ export * from "./benefits/contributions.ts";
 export { requireHrmBenefitsManageOnEmployment } from "./authorization.ts";
 
 export {
+  createDependent,
+  deactivateDependent,
+  linkDependent,
+  unlinkDependent,
+  updateDependent,
+} from "./benefits/dependents.ts";
+export {
+  cancelEnrollment,
+  changeEnrollment,
+  electEnrollment,
+  endEnrollment,
+  waiveEnrollment,
+  withdrawUnusedEnrollment,
+} from "./benefits/enrollments.ts";
+export {
+  closeEnrollmentWindow,
+  createEnrollmentWindow,
+  openEnrollmentWindow,
+} from "./benefits/windows.ts";
+
+export {
   getBenefitTransactionPolicy,
   getBenefitTransactionReferences,
   saveBenefitTransactionPolicy,

@@ -43,6 +43,19 @@ export interface DeliveryResult {
   emailSkippedReason: string | null;
 }
 
+export interface DocumentDeliveryRecipient extends DeliveryRecipient {
+  signerId: string;
+}
+
+export interface DocumentInvitationDelivery {
+  signerId: string;
+  partyId: string;
+  signUrl: string;
+  notified: boolean;
+  emailed: boolean;
+  emailSkippedReason?: string | null;
+}
+
 async function partyName(orgId: string, partyId: string): Promise<string | null> {
   const row = (
     await db.execute<{ name: string }>(
@@ -108,7 +121,7 @@ async function sendEmail(args: {
       {
         deliveryKey: deriveEmailDeliveryKey({
           orgId: args.orgId,
-          scope: `direct:${logId}`,
+          scope: args.scope === "hrm-signature" ? `direct:${logId}` : args.scope,
           to: args.to,
         }),
       },
@@ -139,6 +152,8 @@ export async function deliverSignatureInvitations(args: {
   expiresDate?: string;
   recipients: DeliveryRecipient[];
   reminder?: boolean;
+  /** Stable operation key prevents provider duplication if the caller transaction retries. */
+  deliveryKey?: string;
 }): Promise<DeliveryResult[]> {
   const org = await orgName(args.orgId);
   const results: DeliveryResult[] = [];
@@ -162,7 +177,9 @@ export async function deliverSignatureInvitations(args: {
         subject: email.subject,
         html: email.html,
         text: email.text,
-        scope: "hrm-signature",
+        scope: args.deliveryKey
+          ? `hrm-signature:${args.deliveryKey}:${recipient.partyId}`
+          : "hrm-signature",
       });
       emailed = sent.sent;
       skipped = sent.skippedReason;
@@ -190,6 +207,31 @@ export async function deliverSignatureInvitations(args: {
     });
   }
   return results;
+}
+
+/** Share the same signer-link delivery and result mapping across HRM entry points. */
+export async function deliverHrDocumentInvitations(args: {
+  orgId: string;
+  actorId: string;
+  appBaseUrl: string;
+  docTitle: string;
+  expiresDate?: string;
+  recipients: DocumentDeliveryRecipient[];
+  reminder?: boolean;
+  deliveryKey?: string;
+}): Promise<DocumentInvitationDelivery[]> {
+  const results = await deliverSignatureInvitations(args);
+  return args.recipients.map((recipient) => {
+    const result = results.find((candidate) => candidate.partyId === recipient.partyId);
+    return {
+      signerId: recipient.signerId,
+      partyId: recipient.partyId,
+      signUrl: `${args.appBaseUrl.replace(/\/$/, "")}/sign/${recipient.token}`,
+      notified: result?.notified ?? false,
+      emailed: result?.emailed ?? false,
+      ...(args.reminder ? {} : { emailSkippedReason: result?.emailSkippedReason ?? null }),
+    };
+  });
 }
 
 /** Deliver survey invitations. */
