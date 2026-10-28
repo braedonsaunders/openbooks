@@ -15,9 +15,51 @@ import type { ToolResult, ToolTier } from "./types";
  * is unit-testable with the plain Node runner.
  */
 
-/** A tool with a feature flag lives in the module named by that flag. */
+/** Large feature-backed domains can expose focused discovery slices. */
+const FEATURE_MODULE_OVERRIDES: Record<string, string> = {
+  list_stock_counts: "inventory_counts",
+  get_stock_count: "inventory_counts",
+  create_stock_count: "inventory_counts",
+  start_stock_count: "inventory_counts",
+  record_stock_count_quantity: "inventory_counts",
+  record_second_stock_count: "inventory_counts",
+  request_stock_count_recount: "inventory_counts",
+  submit_stock_count_for_review: "inventory_counts",
+  return_stock_count_to_counting: "inventory_counts",
+  set_stock_count_date: "inventory_counts",
+  post_stock_count: "inventory_counts",
+  cancel_stock_count: "inventory_counts",
+  get_warehouse_execution_task: "warehouse_execution",
+  suggest_receipt_execution: "warehouse_execution",
+  suggest_warehouse_putaway: "warehouse_execution",
+  suggest_count_execution: "warehouse_execution",
+  confirm_warehouse_execution_task: "warehouse_execution",
+  list_inventory_transfer_orders: "inventory_transfers",
+  list_landed_cost_vouchers: "inventory_transfers",
+  create_inventory_transfer_order: "inventory_transfers",
+  ship_inventory_transfer_order: "inventory_transfers",
+  receive_inventory_transfer_order: "inventory_transfers",
+  post_landed_cost_voucher: "inventory_transfers",
+  reverse_landed_cost_voucher: "inventory_transfers",
+  receive_inventory_stock: "inventory_movements",
+  issue_inventory_stock: "inventory_movements",
+  adjust_inventory_stock: "inventory_movements",
+  transfer_inventory_stock: "inventory_movements",
+  build_assembly_stock: "inventory_movements",
+  post_landed_cost_adjustment: "inventory_movements",
+  disassemble_assembly_stock: "inventory_movements",
+  reverse_inventory_movement: "inventory_movements",
+  ensure_item_lot: "inventory_movements",
+  ensure_item_serial: "inventory_movements",
+  set_stock_hold: "inventory_movements",
+  move_consignment_stock: "inventory_movements",
+  list_inventory_shortfalls: "inventory_accounting",
+  attribute_inventory_shortfall_account: "inventory_accounting",
+};
+
+/** Feature flags control visibility; focused module slices control discovery. */
 export function moduleOfTool(name: string, feature?: string | null): string {
-  if (feature) return feature;
+  if (feature) return FEATURE_MODULE_OVERRIDES[name] ?? feature;
   return CORE_TOOL_MODULES[name] ?? "core";
 }
 
@@ -199,6 +241,11 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   // Purchasing commands.
 
   // Inventory and items commands.
+  preview_item_price: "inventory",
+  list_item_price_schedules: "inventory",
+  create_item_price_schedule: "inventory",
+  update_item_price_schedule: "inventory",
+  delete_item_price_schedule: "inventory",
 
   // Manufacturing commands.
 
@@ -396,6 +443,24 @@ export const MODULE_KEYWORDS: Record<string, string[]> = {
   ],
   files: ["file", "files", "upload", "attachment", "folder", "cabinet"],
   inventory: ["inventory", "stock", "item", "items", "warehouse", "sku", "on hand", "quantity"],
+  inventory_counts: ["stock count", "cycle count", "count variance", "count recount"],
+  inventory_movements: [
+    "inventory adjustment",
+    "stock receipt",
+    "stock issue",
+    "stock transfer",
+    "inventory movement",
+    "consignment stock",
+    "lot hold",
+    "serial hold",
+  ],
+  inventory_transfers: [
+    "inventory transfer order",
+    "landed cost voucher",
+    "landed cost allocation",
+  ],
+  warehouse_execution: ["warehouse execution", "putaway task", "receipt scan", "count scan"],
+  inventory_accounting: ["inventory shortfall", "stock shortfall", "shortfall account"],
   orders: [
     "order",
     "orders",

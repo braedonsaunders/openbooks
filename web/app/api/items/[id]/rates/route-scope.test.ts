@@ -43,6 +43,7 @@ stubModules({
     `,
     // Stored feature state: Inventory and Equipment off, so item-kind checks reach the database.
     "../../../../../lib/features": `export async function isFeatureEnabled() { return false }`,
+    "./features": `export async function isFeatureEnabled() { return false }`,
     "@/lib/feature-gates": `
       const state = globalThis[Symbol.for('openbooks.item-rates-scope-test')]
       export async function guardFeaturePermission() {

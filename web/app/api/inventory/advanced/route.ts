@@ -1,6 +1,7 @@
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { exactMoney, isoDate, nullableUuidId, uuidId, nullableExactMoney } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
+import { readLandedCostVouchers } from "@/lib/inventory-advanced-reads";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -186,95 +187,11 @@ export const GET = defineRoute({
     }
 
     if (view === "landed") {
-      // The reversal picker pages this list. A newest-50-only slice strands an
-      // older still-posted voucher behind newer reversed ones, so the list is
-      // server-filtered by status, server-searched by number/memo, and
-      // cursor-paged with a total — every posted voucher stays reachable.
-      const statusParam = url.searchParams.get("status");
-      const status = statusParam === null || statusParam === "" ? null : statusParam;
-      if (status !== null && status !== "posted" && status !== "void") {
-        return NextResponse.json({ error: "status must be posted or void" }, { status: 422 });
-      }
-      const limitParam = url.searchParams.get("limit");
-      let limit = 50;
-      if (limitParam !== null) {
-        limit = Number(limitParam);
-        if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
-          return NextResponse.json(
-            { error: "limit must be an integer between 1 and 100" },
-            { status: 422 },
-          );
-        }
-      }
-      const q = (url.searchParams.get("q") ?? "").trim();
-      const cursorParam = url.searchParams.get("cursor");
-      let cursor: { voucherDate: string; id: string } | null = null;
-      if (cursorParam !== null && cursorParam !== "") {
-        try {
-          const parsed = JSON.parse(
-            Buffer.from(cursorParam, "base64url").toString("utf8"),
-          ) as Partial<{
-            voucherDate: unknown;
-            id: unknown;
-          }>;
-          if (
-            typeof parsed?.voucherDate !== "string" ||
-            typeof parsed?.id !== "string" ||
-            !isUuid(parsed.id)
-          ) {
-            throw new Error("bad cursor");
-          }
-          cursor = { voucherDate: parsed.voucherDate, id: parsed.id };
-        } catch {
-          return NextResponse.json(
-            { error: "page cursor is invalid — reload the list from the first page" },
-            { status: 422 },
-          );
-        }
-      }
-      const statusScope = status === null ? sql`` : sql`and status = ${status}`;
-      const searchScope =
-        q === ""
-          ? sql``
-          : sql`and (document_number ilike ${`%${q}%`} or coalesce(memo, '') ilike ${`%${q}%`})`;
-      const cursorScope =
-        cursor === null
-          ? sql``
-          : sql`and (voucher_date < ${cursor.voucherDate}::date
-            or (voucher_date = ${cursor.voucherDate}::date and id > ${cursor.id}))`;
-      const total = Number(
-        (
-          await db.execute<{ n: string }>(
-            sql`
-        select count(*)::text as n from landed_cost_vouchers
-         where org_id = ${orgId} ${scopeFor(sql`subsidiary_id`)} ${statusScope} ${searchScope}`,
-            "objects",
-          )
-        )[0]?.n ?? 0,
-      );
-      const rows = await db.execute(
-        sql`
-      select id, document_number as "documentNumber", status, amount, basis, voucher_date as "voucherDate", memo
-        from landed_cost_vouchers where org_id = ${orgId}
-       ${scopeFor(sql`subsidiary_id`)} ${statusScope} ${searchScope} ${cursorScope}
-       order by voucher_date desc, id limit ${limit + 1}
-    `,
-        "objects",
-      );
-      const page = rows as Array<{ voucherDate: string; id: string } & Record<string, unknown>>;
-      const hasMore = page.length > limit;
-      const visible = hasMore ? page.slice(0, limit) : page;
-      const last = visible[visible.length - 1];
-      return NextResponse.json({
-        vouchers: visible,
-        totalCount: total,
-        nextCursor:
-          hasMore && last
-            ? Buffer.from(
-                JSON.stringify({ voucherDate: last.voucherDate, id: last.id }),
-                "utf8",
-              ).toString("base64url")
-            : null,
+      return readLandedCostVouchers(orgId, allowedSubsidiaryIds, {
+        status: url.searchParams.get("status"),
+        limit: url.searchParams.get("limit"),
+        search: url.searchParams.get("q"),
+        cursor: url.searchParams.get("cursor"),
       });
     }
 

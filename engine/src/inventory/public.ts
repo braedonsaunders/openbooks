@@ -135,3 +135,4 @@ export { inventoryInquiry, type InventoryInquiry } from "./inquiry.ts";
 export { inventoryTrackingOptions, type InventoryTrackingOptions } from "./tracking-options.ts";
 export { recordSecondCount } from "./second-count.ts";
 export { executeIdempotentInventoryAction } from "./action-idempotency.ts";
+export { getOnHand } from "./position.ts";

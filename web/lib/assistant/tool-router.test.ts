@@ -20,6 +20,14 @@ test("moduleOfTool passes feature flags through as module names", () => {
   assert.equal(moduleOfTool("cash_position", "banking"), "banking");
 });
 
+test("large inventory feature tools use focused discovery modules", () => {
+  assert.equal(moduleOfTool("create_stock_count", "inventory"), "inventory_counts");
+  assert.equal(moduleOfTool("receive_inventory_stock", "inventory"), "inventory_movements");
+  assert.equal(moduleOfTool("create_inventory_transfer_order", "inventory"), "inventory_transfers");
+  assert.equal(moduleOfTool("suggest_warehouse_putaway", "inventory"), "warehouse_execution");
+  assert.equal(moduleOfTool("list_inventory_shortfalls", "inventory"), "inventory_accounting");
+});
+
 test("moduleOfTool maps feature-less tools to their domain module", () => {
   assert.equal(moduleOfTool("tax_return"), "tax");
   assert.equal(moduleOfTool("documents_missing_tax_code"), "tax");

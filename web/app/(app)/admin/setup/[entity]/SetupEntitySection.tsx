@@ -1,4 +1,5 @@
 import { clearSetupChildren, setupNavigationKeys } from "../../../../../lib/setup/navigation";
+import { loadRateBookDrawerData } from "../../../../../lib/item-rate-book-service";
 import Link from "next/link";
 import { sql } from "drizzle-orm";
 import { getLocale, getTimeZone, getTranslations } from "next-intl/server";
@@ -50,7 +51,7 @@ import {
   NewSetupButton,
   SetupDrawer,
 } from "../../../../../components/viewspec/native-widgets.client";
-import { RateBookDrawer, type RateBookLine, type RateBookItemOption } from "./RateBookDrawer";
+import { RateBookDrawer } from "./RateBookDrawer";
 import { ConstructionRateScheduleEditor } from "./ConstructionRateScheduleEditor";
 import { listScheduleLines } from "@openbooks/engine/hrm/construction/rates";
 import { can, getAuthz } from "../../../../../lib/authz";
@@ -515,116 +516,11 @@ export async function SetupEntitySection({
 
   const rateBookDrawerData =
     open && entity.key === "item-rate-books"
-      ? await (async () => {
-          const bookId = open.row ? String(open.row.id) : null;
-          const [versionResult, itemsResult, orgResult] = await Promise.all([
-            bookId
-              ? db.execute<{
-                  id: string;
-                  effective_from: string;
-                  effective_to: string | null;
-                  labor_derivation_policy: "explicit" | "time_type_multipliers" | null;
-                }>(
-                  sql`
-                select v.id, v.effective_from, v.effective_to, p.derivation_policy as labor_derivation_policy
-                  from item_rate_versions v
-                  left join labor_rate_version_policies p on p.org_id = v.org_id and p.version_id = v.id
-                 where v.org_id = ${orgId} and v.rate_book_id = ${bookId} and v.status = 'active'
-                 order by v.effective_from desc
-                 limit 1`,
-                  "objects",
-                )
-              : Promise.resolve(
-                  [] as {
-                    id: string;
-                    effective_from: string;
-                    effective_to: string | null;
-                    labor_derivation_policy: "explicit" | "time_type_multipliers" | null;
-                  }[],
-                ),
-            db.execute<{
-              id: string;
-              code: string | null;
-              name: string;
-              kind: string;
-              unit: string | null;
-              is_active: boolean;
-            }>(
-              sql`
-            select id, code, name, kind, unit, is_active
-              from items
-             where org_id = ${orgId}
-             order by is_active desc, name, code`,
-              "objects",
-            ),
-            db.execute<{ base_currency: string }>(
-              sql`select base_currency from orgs where id = ${orgId}`,
-              "objects",
-            ),
-          ]);
-          const version = versionResult[0];
-          const linesResult = version
-            ? await db.execute<{
-                item_id: string;
-                unit_code: string;
-                unit_name: string;
-                base_quantity: string;
-                cost_rate: string | null;
-                bill_rate: string | null;
-                time_type_bill_rates: Record<string, string> | null;
-                base_unit: string | null;
-                pricing_policy: string | null;
-                invoice_presentation: string | null;
-              }>(
-                sql`
-              select line.item_id, line.unit_code, line.unit_name, line.base_quantity,
-                     line.cost_rate, line.bill_rate, line.time_type_bill_rates,
-                     coalesce(pin.base_unit, profile.base_unit) as base_unit,
-                     coalesce(pin.pricing_policy, profile.pricing_policy) as pricing_policy,
-                     coalesce(pin.invoice_presentation, profile.invoice_presentation) as invoice_presentation
-                from item_rate_lines line
-                left join item_rate_version_profiles pin
-                  on pin.org_id = line.org_id and pin.version_id = line.version_id and pin.item_id = line.item_id
-                left join item_rate_profiles profile
-                  on profile.org_id = line.org_id and profile.item_id = line.item_id
-               where line.org_id = ${orgId} and line.version_id = ${version.id}
-               order by line.sort_order, line.item_id, line.unit_code`,
-                "objects",
-              )
-            : [];
-          return {
-            latestEffectiveFrom: version?.effective_from
-              ? String(version.effective_from).slice(0, 10)
-              : null,
-            latestEffectiveTo: version?.effective_to
-              ? String(version.effective_to).slice(0, 10)
-              : null,
-            latestLaborDerivationPolicy: version?.labor_derivation_policy ?? null,
-            lines: linesResult.map((line): RateBookLine => ({
-              itemId: String(line.item_id),
-              unitCode: String(line.unit_code),
-              unitName: String(line.unit_name),
-              baseQuantity: String(line.base_quantity),
-              costRate: line.cost_rate == null ? "" : String(line.cost_rate),
-              billRate: line.bill_rate == null ? "" : String(line.bill_rate),
-              baseUnit: line.base_unit ? String(line.base_unit) : String(line.unit_code),
-              pricingPolicy: line.pricing_policy ? String(line.pricing_policy) : "capped_ladder",
-              invoicePresentation: line.invoice_presentation
-                ? String(line.invoice_presentation)
-                : "rate_components",
-              timeTypeBillRates: line.time_type_bill_rates ?? {},
-            })),
-            items: itemsResult.map((item): RateBookItemOption => ({
-              id: String(item.id),
-              code: item.code,
-              name: item.name,
-              kind: item.kind,
-              unit: item.unit,
-              isActive: item.is_active,
-            })),
-            baseCurrency: String(orgResult[0]?.base_currency ?? open.row?.currency ?? "USD"),
-          };
-        })()
+      ? await loadRateBookDrawerData(
+          orgId,
+          open.row ? String(open.row.id) : null,
+          String(open.row?.currency ?? "USD"),
+        )
       : null;
 
   const rateScheduleScopeOptions =
