@@ -317,7 +317,7 @@ export const ADMIN_CUSTOM_FIELD_TOOLS: ApplicationToolDefinition[] = [
       });
       settleCustomFieldResult(result);
       if (result.kind !== "created") {
-        throw new ApplicationError("internal_error", "custom field creation was not applied");
+        throw new ApplicationError("internal_error", "custom field creation was not applied", 500);
       }
       return {
         ok: true,
@@ -395,7 +395,7 @@ export const ADMIN_CUSTOM_FIELD_TOOLS: ApplicationToolDefinition[] = [
       });
       settleCustomFieldResult(result);
       if (result.kind !== "updated") {
-        throw new ApplicationError("internal_error", "custom field update was not applied");
+        throw new ApplicationError("internal_error", "custom field update was not applied", 500);
       }
       return { ok: true, fieldId: id, updatedAt: result.updatedAt, href: "/admin/custom-fields" };
     },

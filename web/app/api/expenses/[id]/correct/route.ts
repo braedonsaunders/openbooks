@@ -1,4 +1,6 @@
+import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
+import { isUuid } from "@/lib/list-params";
 import {
   correctExpenseReport,
   expenseReportCorrectionBodySchema,
@@ -10,6 +12,7 @@ export const runtime = "nodejs";
 export const POST = defineRoute({
   permission: "expenses.create",
   feature: "expenses",
+  params: z.object({ id: z.string().refine(isUuid) }),
   body: expenseReportCorrectionBodySchema,
   opaque: {
     extraDims: "segment dimensions are validated by name in prepareExpenseEdit",
