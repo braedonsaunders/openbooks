@@ -247,6 +247,10 @@ export function testManifest() {
 // history notes in the migration-ordinal tests do not match.
 const MIGRATION_RUNNER_PATTERN = /["'`]scripts\/bootstrap\.ts["'`]/;
 const MIGRATION_RUNNER_WEIGHT = 30;
+// A file that prepares and clones every sample-company catalog template does
+// about one partition's work on its own, so it is packed as one.
+const CATALOG_TEMPLATE_PATTERNS = [/\bSAMPLE_COMPANY_PROFILES\b/, /\bprepareIndustryDemo\(/];
+const CATALOG_TEMPLATE_WEIGHT = 140;
 
 const fileWeightCache = new Map();
 
@@ -255,8 +259,10 @@ export function fileWeight(file) {
   if (cached !== undefined) return cached;
   let weight = 1;
   try {
-    if (MIGRATION_RUNNER_PATTERN.test(readFileSync(resolve(ROOT, file), "utf8"))) {
-      weight += MIGRATION_RUNNER_WEIGHT;
+    const source = readFileSync(resolve(ROOT, file), "utf8");
+    if (MIGRATION_RUNNER_PATTERN.test(source)) weight += MIGRATION_RUNNER_WEIGHT;
+    if (CATALOG_TEMPLATE_PATTERNS.every((pattern) => pattern.test(source))) {
+      weight += CATALOG_TEMPLATE_WEIGHT;
     }
   } catch {
     weight = 1;
@@ -273,8 +279,9 @@ export function fileWeight(file) {
  * exactly once" gate re-derives this partition and compares it to what each
  * runner actually executed. Weights are derived from the tree on every run —
  * no hand list of files — and committed timing records stay out of the
- * repository: a quoted migration-runner reference marks the spawner class
- * and everything else weighs one file, which degrades exactly to the
+ * repository: a quoted migration-runner reference marks the spawner class,
+ * a file that prepares every catalog template marks the template class, and
+ * everything else weighs one file, which degrades exactly to the
  * historical round robin. An explicit weight table exists for tests only, so
  * the packing pins without coupling to tree contents.
  */

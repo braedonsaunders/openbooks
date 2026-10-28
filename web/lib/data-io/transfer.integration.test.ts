@@ -17,7 +17,9 @@ import { readExportWindow, finishExportPage, type ExportPage } from "./export-pa
 
 test(
   "durable transfers preserve tenant boundaries, approvals and atomic checkpoints",
-  { skip: !env.OPENBOOKS_DB_URL, timeout: 180_000 },
+  // One subtest seeds and removes 50,001 items to prove the export cursor runs
+  // past the legacy ceiling; the rest of the file fits the default bound.
+  { skip: !env.OPENBOOKS_DB_URL, timeout: 480_000 },
   async (t) => {
     const org = await withBypassContext(() => createScratchOrg());
     let otherOrgId: string | undefined;
@@ -414,17 +416,28 @@ test(
           } finally {
             if (seeded) {
               const exportCodePrefix = `${exportPrefix}-%`;
-              const removed = await withOrgTransaction(org.orgId, () =>
-                db.execute<{ n: number }>(
-                  sql`with removed as (
-                    delete from items
-                     where org_id=${org.orgId} and code like ${exportCodePrefix}
-                     returning 1
-                  ) select count(*)::int as n from removed`,
-                  "objects",
-                ),
-              );
-              assert.equal(removed[0]?.n, 50_001, "the export fixture rows must be removed");
+              // Batches keep each statement well inside the client read timeout.
+              let removed = 0;
+              for (;;) {
+                const batch = await withOrgTransaction(org.orgId, () =>
+                  db.execute<{ n: number }>(
+                    sql`with removed as (
+                      delete from items
+                       where id in (
+                         select id from items
+                          where org_id=${org.orgId} and code like ${exportCodePrefix}
+                          limit 10000
+                       )
+                       returning 1
+                    ) select count(*)::int as n from removed`,
+                    "objects",
+                  ),
+                );
+                const count = batch[0]?.n ?? 0;
+                if (count === 0) break;
+                removed += count;
+              }
+              assert.equal(removed, 50_001, "the export fixture rows must be removed");
             }
           }
         },

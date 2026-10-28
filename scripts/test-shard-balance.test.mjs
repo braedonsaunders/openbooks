@@ -64,10 +64,11 @@ test("the real manifest partitions completely at the counts CI uses", () => {
     assert.deepEqual(partition.flat().slice().sort(), manifest[suite]);
     assert.equal(new Set(partition.flat()).size, manifest[suite].length);
     assert.ok(partition.every((shard) => shard.length > 0));
-    // Weighted packing: shard weights differ by at most one migration-runner spawner.
+    // Weighted packing: shard weights differ by at most the heaviest single file.
     const weights = partition.map((shard) =>
       shard.reduce((sum, file) => sum + fileWeight(file), 0),
     );
-    assert.ok(Math.max(...weights) - Math.min(...weights) <= 31);
+    const heaviest = Math.max(...manifest[suite].map((file) => fileWeight(file)));
+    assert.ok(Math.max(...weights) - Math.min(...weights) <= heaviest);
   }
 });
