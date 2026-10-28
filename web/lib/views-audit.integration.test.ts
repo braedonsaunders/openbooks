@@ -77,28 +77,33 @@ test(
     // bypass, so unscoped writes would die on RLS (inserts) or silently match
     // zero rows (updates/deletes).
     const org = await withBypassContext(() => createScratchOrg());
-    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     try {
+      const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
       const { id } = await createView({ orgId: org.orgId, userId: actorId, name: "Audited view" });
 
       const renamed = await updateView(org.orgId, id, actorId, false, { name: "Renamed view" });
       assert.deepEqual(renamed, { ok: true });
       const editAudits = await audits(org.orgId, id);
-      assert.equal(editAudits.length, 1, "the edit writes exactly one audit row");
-      assert.equal(editAudits[0]!.action, "update");
-      const changes = editAudits[0]!.changes as {
+      assert.equal(editAudits.length, 2);
+      const editAudit = editAudits.filter((event) => event.action === "update");
+      assert.equal(editAudit.length, 1, "the edit writes exactly one audit row");
+      const changes = editAudit[0]!.changes as {
         before: { name: string };
         after: { name: string };
       };
       assert.equal(changes.before.name, "Audited view");
       assert.equal(changes.after.name, "Renamed view");
-      assert.equal(editAudits[0]!.actor_id, actorId);
+      assert.equal(editAudit[0]!.actor_id, actorId);
 
       assert.equal(await deleteView(org.orgId, id, actorId, false), true);
       const all = await audits(org.orgId, id);
-      assert.equal(all.length, 2, "the delete adds its own audit row");
-      assert.equal(all[1]!.action, "delete");
-      assert.equal((all[1]!.changes as { before: { name: string } }).before.name, "Renamed view");
+      assert.equal(all.length, 3, "create, edit, and delete each have one audit row");
+      const deleteAudit = all.find((event) => event.action === "delete");
+      assert.ok(deleteAudit);
+      assert.equal(
+        (deleteAudit.changes as { before: { name: string } }).before.name,
+        "Renamed view",
+      );
     } finally {
       await dropScratchOrg(org.orgId);
     }
@@ -110,8 +115,8 @@ test(
   { skip: !DB },
   async () => {
     const org = await withBypassContext(() => createScratchOrg());
-    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     try {
+      const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
       const { id } = await createView({ orgId: org.orgId, userId: actorId, name: "Shared view" });
       const shared = await updateView(org.orgId, id, actorId, false, {
         scope: "shared",
@@ -129,8 +134,8 @@ test(
 
 test("mistyped view fields refuse naming the field, never 500", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   try {
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
     const { id } = await createView({ orgId: org.orgId, userId: actorId, name: "Typed view" });
     for (const [field, patch] of [
       ["name", { name: 42 }],
@@ -155,10 +160,10 @@ test("mistyped view fields refuse naming the field, never 500", { skip: !DB }, a
 
 test('PATCH {"name": 42} answers 422 naming the field', { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
-  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
-  state.orgId = org.orgId;
-  state.actorId = actorId;
   try {
+    const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+    state.orgId = org.orgId;
+    state.actorId = actorId;
     const { id } = await createView({ orgId: org.orgId, userId: actorId, name: "Route view" });
     const response = await PATCH(
       new Request(`http://openbooks.test/api/views/${id}`, {
