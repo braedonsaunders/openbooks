@@ -13,6 +13,7 @@ import { PAYROLL_PARALLEL_APPLICATION_TOOLS } from "./payroll-tools-parallel";
 import { PAYROLL_CERTIFICATE_APPLICATION_TOOLS } from "./payroll-tools-certificates";
 import { PAYROLL_SOURCE_AUTHORITY_APPLICATION_TOOLS } from "./payroll-tools-source-authority";
 import { PAYROLL_HOLIDAY_ASSERTION_APPLICATION_TOOLS } from "./payroll-tools-holiday-assertions";
+import { PAYROLL_SEPARATION_EVIDENCE_APPLICATION_TOOLS } from "./payroll-tools-separation-evidence";
 
 /** Payroll commands for the assistant, MCP and the v1 command API. */
 export const PAYROLL_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
@@ -29,4 +30,5 @@ export const PAYROLL_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
   ...PAYROLL_CERTIFICATE_APPLICATION_TOOLS,
   ...PAYROLL_SOURCE_AUTHORITY_APPLICATION_TOOLS,
   ...PAYROLL_HOLIDAY_ASSERTION_APPLICATION_TOOLS,
+  ...PAYROLL_SEPARATION_EVIDENCE_APPLICATION_TOOLS,
 ];

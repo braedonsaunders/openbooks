@@ -29,7 +29,8 @@ import {
 
 const APPLICATIONS = [
   "standard_runs",
-  "all_runs",
+  "regular_only",
+  "periodic_and_final",
 ] as const satisfies readonly AssignmentRunApplicability[];
 const exactDecimal = z
   .string()
@@ -96,7 +97,7 @@ export const PAYROLL_OPERATION_APPLICATION_TOOLS: ApplicationToolDefinition[] = 
         .enum(APPLICATIONS)
         .default("standard_runs")
         .describe(
-          "standard_runs applies to regular runs; all_runs also includes eligible off-cycle runs.",
+          "standard_runs includes regular, supplemental, and termination runs; use regular_only or periodic_and_final for narrower eligibility.",
         ),
       effectiveFrom: DATE.describe("First date this assignment applies."),
       effectiveTo: DATE.nullable()

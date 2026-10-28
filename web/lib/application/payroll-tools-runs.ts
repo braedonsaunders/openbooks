@@ -34,10 +34,7 @@ type EmployerLevyAdjustmentMutation = Extract<
   { action: "employer_levy_adjustment" }
 >;
 import { resolvePayrollProfileEmploymentLinks } from "@openbooks/engine/payroll/profile-employment";
-import {
-  payRunApprovalState,
-  recalculateStaleApprovedPayRun,
-} from "@openbooks/engine/payroll/approval";
+import { payRunApprovalState } from "@openbooks/engine/payroll/approval";
 import { withOrgTransaction } from "@openbooks/engine/platform/db";
 import { emailRunStubs } from "../payroll-outputs";
 import { PayrollError } from "@openbooks/engine/payroll/error";
@@ -152,7 +149,7 @@ export const PAYROLL_RUN_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
           dryRun: true,
           allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
         });
-        return { ok: true, ...result, href: PAY_RUN_HREF(input.documentId) };
+        return { ...result, href: PAY_RUN_HREF(input.documentId) };
       } catch (error) {
         settlePayrollRefusal(error);
       }

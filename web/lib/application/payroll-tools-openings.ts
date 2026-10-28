@@ -716,7 +716,12 @@ export const PAYROLL_OPENING_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
         return {
           ok: true,
           ...(await saveEmployerLevyOpening({
-            ...body,
+            rows: body.rows.map((row) => ({
+              country: row.country.trim(),
+              levyKey: row.levyKey.trim(),
+              region: row.region?.trim() || null,
+              baseYtd: row.baseYtd,
+            })),
             orgId: context.authz.user.orgId,
             actorId: context.authz.user.id,
             taxYear: assertTaxYear(body.taxYear),
@@ -808,7 +813,10 @@ export const PAYROLL_OPENING_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
           orgId: context.authz.user.orgId,
           actorId: context.authz.user.id,
           movementDate: assertMovementDate(input.movementDate),
-          rows: input.rows,
+          rows: input.rows.map((row) => ({
+            employeePartyId: row.employeePartyId,
+            amounts: row.amounts ?? {},
+          })),
           allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
           note: input.note?.trim() || null,
         });

@@ -23,9 +23,9 @@ const inputSchema = z.object({
   idempotencyKey: IDEMPOTENCY_KEY,
 });
 
-async function readPayload(response: Response) {
+async function readPayload(response: Response): Promise<Record<string, unknown>> {
   const payload: unknown = await response.json().catch(() => ({}));
-  if (response.ok) return payload;
+  if (response.ok) return payload as Record<string, unknown>;
   const details =
     payload && typeof payload === "object" && !Array.isArray(payload)
       ? (payload as Record<string, unknown>)

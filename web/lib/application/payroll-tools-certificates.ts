@@ -20,9 +20,9 @@ function describeFields<T extends z.ZodRawShape>(shape: T): T {
   return Object.fromEntries(
     Object.entries(shape).map(([key, schema]) => [
       key,
-      (schema as z.ZodTypeAny).describe(`Pack-declared employee certificate ${key}.`),
+      (schema as z.ZodType).describe(`Pack-declared employee certificate ${key}.`),
     ]),
-  ) as T;
+  ) as unknown as T;
 }
 
 const certificateInput = z

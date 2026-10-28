@@ -18,11 +18,11 @@ function withFieldDescriptions<T extends z.ZodRawShape>(shape: T): T {
   return Object.fromEntries(
     Object.entries(shape).map(([key, schema]) => [
       key,
-      (schema as z.ZodTypeAny).describe(
+      (schema as z.ZodType).describe(
         `Payroll profile ${key} value; follow the selected payroll pack contract.`,
       ),
     ]),
-  ) as T;
+  ) as unknown as T;
 }
 
 const profileInputShape = profileBodySchema.omit({ sin: true }).shape;
