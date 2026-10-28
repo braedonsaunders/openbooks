@@ -33,6 +33,7 @@ import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import { PostingError } from "@openbooks/engine/journal/contracts";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { CloseError } from "@openbooks/engine/periods/period-policy";
+import { withOrg } from "@openbooks/engine/platform/db";
 import {
   extendReopenRequest,
   recloseApprovedReopen,
@@ -48,8 +49,16 @@ import {
   saveCalendar,
   savePackage,
   savePolicy,
+  validateCloseAutomation,
+  validateClosePolicy,
   type Body as AdminCloseBody,
 } from "../close/admin-settings";
+import {
+  closeAdminPeriodModules,
+  getAdminBankingCloseStatus,
+  setAdminPeriodLockState,
+} from "../close/admin-period-actions";
+import { assertSubsidiaryAccess } from "./context";
 import { can } from "../authz";
 import { guardCloseScope } from "../close-scope";
 import { historicalTranslationProposalBody } from "../api/historical-translation-schema";
@@ -208,6 +217,72 @@ const extendPeriodReopenInput = closeSetupSchema.extendReopen
 
 const CLOSE_SETUP_TOOLS: ApplicationToolDefinition[] = [
   definition({
+    name: "get_banking_close_status",
+    title: "Get Banking Close Status",
+    description:
+      "Read reconciliation sign-off and unmatched statement line status for a period and book. Use accounting period and book reads for ids; the subsidiary must be in your allowed legal entity scope.",
+    inputSchema: closeSetupSchema.bankingCloseStatus.omit({ action: true }),
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "never",
+    visibleTo: hasPermission("periods.manage"),
+    execute: async (context, input) => {
+      assertApplicationPermission(context, "periods.manage");
+      assertOrganizationWideCloseScope(context);
+      assertSubsidiaryAccess(context, input.subsidiaryId);
+      const result = await withOrg(context.authz.user.orgId, () =>
+        getAdminBankingCloseStatus(context.authz.user.orgId, context.authz.user.id, { ...input }),
+      );
+      return { ...result, href: "/admin/setup/close" };
+    },
+  }),
+  closeSetupMutation({
+    name: "set_period_module_lock",
+    title: "Set Period Module Lock",
+    description:
+      "Open, soft-close, or hard-close one module for a period and book. Use the close setup read for current locks and accounting reads for period, book, and subsidiary ids; hard-closed scopes can only be reopened through approval.",
+    inputSchema: closeSetupSchema.setLock
+      .omit({ action: true })
+      .extend({ idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY }),
+    permission: "periods.manage",
+    destructive: true,
+    execute: async (context, input) => {
+      assertSubsidiaryAccess(context, input.subsidiaryId);
+      const result = await setAdminPeriodLockState(
+        context.authz.user.orgId,
+        context.authz.user.id,
+        { ...input },
+      );
+      return { ...result, status: input.state, href: "/admin/setup/close" };
+    },
+  }),
+  closeSetupMutation({
+    name: "close_period_modules",
+    title: "Close Period Modules",
+    description:
+      "Close selected modules for a period and book, preserving module order and Banking readiness checks. Use the close setup read for current lock state and accounting reads for period, book, and subsidiary ids.",
+    inputSchema: closeSetupSchema.closePeriod
+      .omit({ action: true })
+      .extend({ idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY }),
+    permission: "periods.manage",
+    destructive: true,
+    organizationWide: true,
+    execute: async (context, input) => {
+      assertSubsidiaryAccess(context, input.subsidiaryId);
+      const result = await closeAdminPeriodModules(
+        context.authz.user.orgId,
+        context.authz.user.id,
+        { ...input },
+      );
+      return {
+        ...result,
+        status: result.ok ? "closed" : "partially_closed",
+        href: "/admin/setup/close",
+      };
+    },
+  }),
+  definition({
     name: "list_close_setup_configuration",
     title: "List Close Setup Configuration",
     description:
@@ -285,6 +360,7 @@ const CLOSE_SETUP_TOOLS: ApplicationToolDefinition[] = [
       ok: true,
       id: await saveBlueprint(context.authz.user.orgId, context.authz.user.id, {
         ...input,
+        scopeRules: {},
         action: "save-blueprint",
       } as AdminCloseBody),
       status: "saved",
@@ -296,9 +372,10 @@ const CLOSE_SETUP_TOOLS: ApplicationToolDefinition[] = [
     title: "Save Close Policy",
     description:
       "Create or update a close policy such as a materiality threshold or control rule. Use list_close_setup_configuration for current policies; materiality thresholds must be exact decimal strings.",
-    inputSchema: closeSetupSchema.savePolicy.safeExtend({
-      idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY,
-    }),
+    inputSchema: closeSetupSchema.savePolicyFields
+      .omit({ action: true })
+      .extend({ idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY })
+      .superRefine(validateClosePolicy),
     permission: "periods.manage",
     featureKey: "advancedClose",
     organizationWide: true,
@@ -317,9 +394,10 @@ const CLOSE_SETUP_TOOLS: ApplicationToolDefinition[] = [
     title: "Save Close Automation",
     description:
       "Create or update a close automation rule. Use list_close_setup_configuration for existing rule ids; approvals remain configured through Flows and are not assigned by this command.",
-    inputSchema: closeSetupSchema.saveAutomation.safeExtend({
-      idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY,
-    }),
+    inputSchema: closeSetupSchema.saveAutomationFields
+      .omit({ action: true })
+      .extend({ idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY })
+      .superRefine(validateCloseAutomation),
     permission: "periods.manage",
     featureKey: "advancedClose",
     organizationWide: true,

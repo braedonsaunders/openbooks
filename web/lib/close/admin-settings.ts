@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
+import { db, withOrgContext } from "@openbooks/engine/platform/db";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { CLOSE_MODULES, CloseError } from "@openbooks/engine/periods/period-policy";
@@ -12,51 +12,93 @@ import { canonicalDecimal } from "../exact-decimal";
 import { moneyRefusal } from "../payroll-decimal-refusal";
 
 const closeObject = z.record(z.string(), z.json());
-const closePolicySchema = z
-  .object({
-    action: z.literal("save-policy").describe("Save a close policy."),
-    code: z.string().trim().min(1).max(100).describe("Stable policy code."),
-    name: z.string().trim().min(1).max(200).describe("Policy display name."),
-    policyType: z
-      .enum(["materiality", "lock", "evidence", "exception"])
-      .describe("Policy category."),
-    description: z
-      .string()
-      .max(2000)
-      .nullable()
-      .optional()
-      .describe("Policy description, or null to clear."),
-    rules: closeObject.optional().describe("Category-specific policy rules."),
-    isActive: z.boolean().optional().describe("Whether the policy can apply to new close runs."),
-  })
-  .superRefine((body, ctx) => {
-    if (body.policyType !== "materiality") return;
-    const amount = body.rules?.amount;
-    if (typeof amount !== "string") {
+export function validateClosePolicy(
+  body: { policyType: string; rules?: Record<string, unknown> },
+  ctx: z.RefinementCtx,
+) {
+  if (body.policyType !== "materiality") return;
+  const amount = body.rules?.amount;
+  if (typeof amount !== "string") {
+    ctx.addIssue({
+      code: "custom",
+      path: ["rules", "amount"],
+      message: "Materiality amount must be a decimal string",
+    });
+  } else if (canonicalDecimal(amount, 4) === null) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["rules", "amount"],
+      message: moneyRefusal("Materiality threshold", amount),
+    });
+  }
+  const percent = body.rules?.percent;
+  if (
+    percent !== undefined &&
+    (typeof percent !== "number" || !Number.isFinite(percent) || percent < 0 || percent > 100)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["rules", "percent"],
+      message: "Materiality percent must be between 0 and 100",
+    });
+  }
+}
+
+const closePolicyFields = z.object({
+  action: z.literal("save-policy").describe("Save a close policy."),
+  code: z.string().trim().min(1).max(100).describe("Stable policy code."),
+  name: z.string().trim().min(1).max(200).describe("Policy display name."),
+  policyType: z.enum(["materiality", "lock", "evidence", "exception"]).describe("Policy category."),
+  description: z
+    .string()
+    .max(2000)
+    .nullable()
+    .optional()
+    .describe("Policy description, or null to clear."),
+  rules: closeObject.optional().describe("Category-specific policy rules."),
+  isActive: z.boolean().optional().describe("Whether the policy can apply to new close runs."),
+});
+const closePolicySchema = closePolicyFields.superRefine(validateClosePolicy);
+
+export function validateCloseAutomation(
+  body: { config?: Record<string, unknown> },
+  ctx: z.RefinementCtx,
+) {
+  for (const key of ["reviewerUserId", "reviewerRoleKey"])
+    if (Object.hasOwn(body.config ?? {}, key))
       ctx.addIssue({
         code: "custom",
-        path: ["rules", "amount"],
-        message: "Materiality amount must be a decimal string",
+        path: ["config", key],
+        message:
+          "Configure close task approvals in Flows; assignment rules only choose the preparation owner.",
       });
-    } else if (canonicalDecimal(amount, 4) === null) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["rules", "amount"],
-        message: moneyRefusal("Materiality threshold", amount),
-      });
-    }
-    const percent = body.rules?.percent;
-    if (
-      percent !== undefined &&
-      (typeof percent !== "number" || !Number.isFinite(percent) || percent < 0 || percent > 100)
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["rules", "percent"],
-        message: "Materiality percent must be between 0 and 100",
-      });
-    }
-  });
+}
+const closeAutomationFields = z.object({
+  action: z.literal("save-automation").describe("Create or update a close automation rule."),
+  id: uuidString()
+    .optional()
+    .describe("Existing automation id from list_close_setup_configuration."),
+  name: z.string().trim().min(1).max(200).describe("Automation rule name."),
+  trigger: z
+    .enum(["run_started", "task_ready", "exception_opened", "deadline_approaching", "run_closed"])
+    .describe("Event that triggers this rule."),
+  automationAction: z
+    .enum([
+      "notify",
+      "assign",
+      "run_check",
+      "complete_task",
+      "create_task",
+      "generate_report",
+      "start_flow",
+      "run_allocation",
+    ])
+    .describe("Action performed when the rule triggers."),
+  conditions: closeObject.optional().describe("Conditions that must match before the action runs."),
+  config: closeObject.optional().describe("Action-specific configuration."),
+  isActive: z.boolean().optional().describe("Whether the automation runs."),
+});
+const closeAutomationSchema = closeAutomationFields.superRefine(validateCloseAutomation);
 const closeStepSchema = z.strictObject({
   key: z.string().trim().min(1).max(100).describe("Unique lowercase key for this step."),
   title: z.string().trim().min(1).max(200).describe("Step title shown in the close run."),
@@ -182,50 +224,7 @@ const closeActionSchemas = [
     isDefault: z.boolean().optional().describe("Whether this is the default blueprint."),
   }),
   closePolicySchema,
-  z
-    .object({
-      action: z.literal("save-automation").describe("Create or update a close automation rule."),
-      id: uuidString()
-        .optional()
-        .describe("Existing automation id from list_close_setup_configuration."),
-      name: z.string().trim().min(1).max(200).describe("Automation rule name."),
-      trigger: z
-        .enum([
-          "run_started",
-          "task_ready",
-          "exception_opened",
-          "deadline_approaching",
-          "run_closed",
-        ])
-        .describe("Event that triggers this rule."),
-      automationAction: z
-        .enum([
-          "notify",
-          "assign",
-          "run_check",
-          "complete_task",
-          "create_task",
-          "generate_report",
-          "start_flow",
-          "run_allocation",
-        ])
-        .describe("Action performed when the rule triggers."),
-      conditions: closeObject
-        .optional()
-        .describe("Conditions that must match before the action runs."),
-      config: closeObject.optional().describe("Action-specific configuration."),
-      isActive: z.boolean().optional().describe("Whether the automation runs."),
-    })
-    .superRefine((body, ctx) => {
-      for (const key of ["reviewerUserId", "reviewerRoleKey"])
-        if (Object.hasOwn(body.config ?? {}, key))
-          ctx.addIssue({
-            code: "custom",
-            path: ["config", key],
-            message:
-              "Configure close task approvals in Flows; assignment rules only choose the preparation owner.",
-          });
-    }),
+  closeAutomationSchema,
   z.object({
     action: z.literal("save-package").describe("Create or update a close reporting package."),
     id: uuidString()
@@ -912,7 +911,9 @@ export const ADMIN_CLOSE_ACTION_SCHEMAS = {
   generatePeriods: closeActionSchemas[1],
   saveBlueprint: closeActionSchemas[2],
   savePolicy: closeActionSchemas[3],
+  savePolicyFields: closePolicyFields,
   saveAutomation: closeActionSchemas[4],
+  saveAutomationFields: closeAutomationFields,
   savePackage: closeActionSchemas[5],
   sendPackage: closeActionSchemas[6],
   setLock: closeActionSchemas[7],
@@ -929,66 +930,68 @@ export { generateAccountingPeriods };
 
 /** Return the close setup records and identifiers shown in the native close setup page. */
 export async function listCloseSetupConfiguration(orgId: string) {
-  const [
-    calendars,
-    periods,
-    blueprints,
-    blueprintSteps,
-    policies,
-    automations,
-    packages,
-    reopenRequests,
-  ] = await Promise.all([
-    db.execute(
-      sql`select * from fiscal_calendars where org_id = ${orgId} order by is_default desc, name limit 500`,
-      "objects",
-    ),
-    db.execute(
-      sql`select id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment
+  return withOrgContext(orgId, async () => {
+    const [
+      calendars,
+      periods,
+      blueprints,
+      blueprintSteps,
+      policies,
+      automations,
+      packages,
+      reopenRequests,
+    ] = await Promise.all([
+      db.execute(
+        sql`select * from fiscal_calendars where org_id = ${orgId} order by is_default desc, name limit 500`,
+        "objects",
+      ),
+      db.execute(
+        sql`select id, fiscal_calendar_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment
               from accounting_periods where org_id = ${orgId} order by starts_on desc, period_number limit 500`,
-      "objects",
-    ),
-    db.execute(
-      sql`select * from close_blueprints where org_id = ${orgId} order by is_active desc, is_default desc, name, version desc limit 500`,
-      "objects",
-    ),
-    db.execute(
-      sql`select s.*, coalesce(jsonb_agg(dep.key order by dep.key) filter (where dep.id is not null), '[]'::jsonb) as depends_on
+        "objects",
+      ),
+      db.execute(
+        sql`select * from close_blueprints where org_id = ${orgId} order by is_active desc, is_default desc, name, version desc limit 500`,
+        "objects",
+      ),
+      db.execute(
+        sql`select s.*, coalesce(jsonb_agg(dep.key order by dep.key) filter (where dep.id is not null), '[]'::jsonb) as depends_on
               from close_blueprint_steps s
               left join close_blueprint_dependencies d on d.step_id = s.id and d.org_id = s.org_id
               left join close_blueprint_steps dep on dep.id = d.depends_on_step_id and dep.org_id = s.org_id
              where s.org_id = ${orgId} group by s.id order by s.blueprint_id, s.sort_order limit 2000`,
-      "objects",
-    ),
-    db.execute(
-      sql`select * from close_policies where org_id = ${orgId} and policy_type not in ('review', 'segregation') order by policy_type, name limit 500`,
-      "objects",
-    ),
-    db.execute(
-      sql`select * from close_automation_rules where org_id = ${orgId} order by is_active desc, name limit 500`,
-      "objects",
-    ),
-    db.execute(
-      sql`select * from close_reporting_packages where org_id = ${orgId} order by is_default desc, name limit 500`,
-      "objects",
-    ),
-    db.execute(
-      sql`select id, period_id, book_id, subsidiary_id, modules, status, reason, requested_by,
+        "objects",
+      ),
+      db.execute(
+        sql`select * from close_policies where org_id = ${orgId} and policy_type not in ('review', 'segregation') order by policy_type, name limit 500`,
+        "objects",
+      ),
+      db.execute(
+        sql`select * from close_automation_rules where org_id = ${orgId} order by is_active desc, name limit 500`,
+        "objects",
+      ),
+      db.execute(
+        sql`select * from close_reporting_packages where org_id = ${orgId} order by is_default desc, name limit 500`,
+        "objects",
+      ),
+      db.execute(
+        sql`select id, period_id, book_id, subsidiary_id, modules, status, reason, requested_by,
                    requested_at, approved_by, approved_at, expires_at, closed_at, cancelled_at
               from close_reopen_requests where org_id = ${orgId} order by requested_at desc limit 500`,
-      "objects",
-    ),
-  ]);
-  return {
-    calendars,
-    periods,
-    blueprints,
-    blueprintSteps,
-    policies,
-    automations,
-    packages,
-    reopenRequests,
-  };
+        "objects",
+      ),
+    ]);
+    return {
+      calendars,
+      periods,
+      blueprints,
+      blueprintSteps,
+      policies,
+      automations,
+      packages,
+      reopenRequests,
+    };
+  });
 }
 
 export async function enqueueClosePackageDelivery(input: {

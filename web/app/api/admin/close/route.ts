@@ -9,20 +9,12 @@ import {
   type CloseModule,
 } from "@openbooks/engine/periods/period-policy";
 import {
-  consumeReopenRequestsForClosedModules,
   submitPeriodReopen,
   extendReopenRequest,
   recloseApprovedReopen,
   requestPeriodReopen,
   withdrawPeriodReopen,
 } from "@openbooks/engine/close/reopening";
-import { closePeriodAllModules, setPeriodLockState } from "@openbooks/engine/periods/period-locks";
-import {
-  auditBankingModuleClose,
-  bankingCloseStatus,
-  bankingUnmatchedStatementLines,
-  evaluateBankingModuleClose,
-} from "@openbooks/engine/close/banking-close";
 import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { isFeatureEnabled } from "../../../../lib/features";
@@ -37,6 +29,11 @@ import {
   savePolicy,
   enqueueClosePackageDelivery,
 } from "../../../../lib/close/admin-settings";
+import {
+  closeAdminPeriodModules,
+  getAdminBankingCloseStatus,
+  setAdminPeriodLockState,
+} from "../../../../lib/close/admin-period-actions";
 
 export const POST = defineRoute({
   // Close scope is capability-blind: a selected subsidiary must see 404 for
@@ -178,69 +175,7 @@ export const POST = defineRoute({
           throw new CloseError("invalid lock scope or state");
         const denied = guardSubsidiaryScope(gate, subsidiaryId);
         if (denied) return denied;
-        const lockReason = text(body, "reason", true)!;
-        const acknowledgement =
-          typeof body.bankingAcknowledgement === "string" ? body.bankingAcknowledgement : null;
-        // A Banking close names every account's reconciliation status first:
-        // unsigned or stale reconciliations refuse under a strict org policy
-        // and otherwise require the explicit acknowledgement audited below.
-        const bankingEvaluation =
-          module === "banking" && state !== "open"
-            ? await evaluateBankingModuleClose(orgId, {
-                periodId,
-                bookId,
-                subsidiaryId: subsidiaryId ?? undefined,
-                actorId,
-                acknowledgement,
-              })
-            : null;
-        await setPeriodLockState({
-          orgId,
-          periodId,
-          bookId,
-          subsidiaryId: subsidiaryId ?? undefined,
-          module,
-          state,
-          actorId,
-          reason: lockReason,
-        });
-        if (bankingEvaluation && bankingEvaluation.issues.length > 0) {
-          await auditBankingModuleClose(orgId, {
-            periodId,
-            bookId,
-            subsidiaryId: subsidiaryId ?? undefined,
-            actorId,
-            reason: lockReason,
-            acknowledgement: acknowledgement!.trim(),
-            evaluation: bankingEvaluation,
-          });
-        }
-        // Re-closing a module ends the reopen windows it supersedes: a
-        // request whose modules are all closed here is marked reclosed,
-        // audited, and stops counting for overlap.
-        const reopenConsumed =
-          state !== "open"
-            ? (
-                await consumeReopenRequestsForClosedModules({
-                  orgId,
-                  periodId,
-                  bookId,
-                  subsidiaryId: subsidiaryId ?? undefined,
-                  actorId,
-                  reason: lockReason,
-                })
-              ).consumed
-            : [];
-        return NextResponse.json({
-          ok: true,
-          banking: bankingEvaluation
-            ? {
-                accounts: bankingEvaluation.accounts,
-                strict: bankingEvaluation.strict,
-              }
-            : undefined,
-          reopenConsumed,
-        });
+        return NextResponse.json(await setAdminPeriodLockState(orgId, actorId, body));
       }
       if (action === "close-period") {
         const periodId = text(body, "periodId", true)!;
@@ -250,77 +185,7 @@ export const POST = defineRoute({
           throw new CloseError("invalid lock scope or state");
         const denied = guardSubsidiaryScope(gate, subsidiaryId);
         if (denied) return denied;
-        // Modules, reasons and state arrive schema-validated above; the
-        // engine orders modules GL-last and reports each module's outcome.
-        const scoped = body as {
-          modules?: CloseModule[];
-          moduleReasons?: Partial<Record<CloseModule, string>>;
-          state?: "soft_closed" | "closed";
-        };
-        const periodReason = text(body, "reason", true)!;
-        const closesBanking = (scoped.modules ?? [...CLOSE_MODULES]).includes("banking");
-        // The Banking gate runs before any module closes so a refusal leaves
-        // every module untouched instead of a half-closed period.
-        const periodBanking = closesBanking
-          ? await evaluateBankingModuleClose(orgId, {
-              periodId,
-              bookId,
-              subsidiaryId: subsidiaryId ?? undefined,
-              actorId,
-              acknowledgement:
-                typeof body.bankingAcknowledgement === "string"
-                  ? body.bankingAcknowledgement
-                  : null,
-            })
-          : null;
-        const { results } = await closePeriodAllModules({
-          orgId,
-          periodId,
-          bookId,
-          subsidiaryId: subsidiaryId ?? undefined,
-          actorId,
-          state: scoped.state ?? "closed",
-          modules: scoped.modules,
-          moduleReasons: scoped.moduleReasons,
-          reason: periodReason,
-        });
-        if (periodBanking && periodBanking.issues.length > 0) {
-          await auditBankingModuleClose(orgId, {
-            periodId,
-            bookId,
-            subsidiaryId: subsidiaryId ?? undefined,
-            actorId,
-            reason: periodReason,
-            acknowledgement: (typeof body.bankingAcknowledgement === "string"
-              ? body.bankingAcknowledgement
-              : ""
-            ).trim(),
-            evaluation: periodBanking,
-          });
-        }
-        const reopenConsumed = results.some((result) => result.ok)
-          ? (
-              await consumeReopenRequestsForClosedModules({
-                orgId,
-                periodId,
-                bookId,
-                subsidiaryId: subsidiaryId ?? undefined,
-                actorId,
-                reason: periodReason,
-              })
-            ).consumed
-          : [];
-        return NextResponse.json({
-          ok: results.every((result) => result.ok),
-          results,
-          banking: periodBanking
-            ? {
-                accounts: periodBanking.accounts,
-                strict: periodBanking.strict,
-              }
-            : undefined,
-          reopenConsumed,
-        });
+        return NextResponse.json(await closeAdminPeriodModules(orgId, actorId, body));
       }
       if (action === "banking-close-status") {
         const periodId = text(body, "periodId", true)!;
@@ -330,23 +195,7 @@ export const POST = defineRoute({
           throw new CloseError("invalid lock scope or state");
         const denied = guardSubsidiaryScope(gate, subsidiaryId);
         if (denied) return denied;
-        const accounts = await bankingCloseStatus(orgId, {
-          periodId,
-          bookId,
-          subsidiaryId: subsidiaryId ?? undefined,
-          actorId,
-        });
-        const unmatchedStatementLines = await bankingUnmatchedStatementLines(orgId, {
-          periodId,
-          bookId,
-          subsidiaryId: subsidiaryId ?? undefined,
-        });
-        return NextResponse.json({
-          ok: true,
-          accounts,
-          issues: accounts.filter((account) => account.status !== "signed_off" || account.stale),
-          unmatchedStatementLines,
-        });
+        return NextResponse.json(await getAdminBankingCloseStatus(orgId, actorId, body));
       }
       if (action === "request-reopen") {
         const periodId = text(body, "periodId", true)!;
