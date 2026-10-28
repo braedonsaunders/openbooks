@@ -213,7 +213,7 @@ export const PAYROLL_RUN_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
           allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
         });
         if (!result.ok) throw new PayrollError(result.error);
-        return { ok: true, ...result, href: PAY_RUN_HREF(input.documentId) };
+        return { ...result, href: PAY_RUN_HREF(input.documentId) };
       } catch (error) {
         settlePayrollRefusal(error);
       }
