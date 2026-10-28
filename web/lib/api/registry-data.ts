@@ -782,8 +782,6 @@ export const READONLY_COLUMNS = new Set<string>([
   "type_id",
   "type_key",
   "posted_entry_id",
-  "kind",
-  "status",
 ]);
 
 /** Map a Postgres data type to a canonical API type string. */

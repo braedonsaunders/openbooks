@@ -83,7 +83,14 @@ import { orgVitals } from "./vitals";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { UUID_RE } from "@openbooks/engine/platform/identifiers";
-import { FEATURES, featureEnabled, resolvedFeatureState, type FeatureState } from "../features";
+import {
+  FEATURES,
+  FEATURE_BY_KEY,
+  featureEnabled,
+  featureRequirements,
+  resolvedFeatureState,
+  type FeatureState,
+} from "../features";
 import { applyFeatureChanges, normalizeFeatureChanges } from "../features-admin";
 import { readCompanySettings, updateCompanySettings } from "../company-settings";
 import { createSetupRecord, deleteSetupRecord, updateSetupRecord } from "../setup/write";
@@ -2694,6 +2701,15 @@ export function applicationTool(name: string): ApplicationToolDefinition | undef
   return APPLICATION_TOOLS.find((candidate) => candidate.name === name);
 }
 
+/** The switch an administrator must actually turn on: the deepest disabled requirement. */
+function disabledFeature(state: FeatureState | null | undefined, key: string): string {
+  const def = FEATURE_BY_KEY.get(key);
+  for (const required of def ? featureRequirements(def) : []) {
+    if (!featureEnabled(state, required)) return disabledFeature(state, required);
+  }
+  return key;
+}
+
 /**
  * The one execution gate every transport shares. Permission and feature are
  * both re-checked here, at execution, so a command discovered or proposed
@@ -2707,13 +2723,15 @@ export async function executeApplicationTool(
   rawInput: unknown,
   features?: FeatureState | null,
 ): Promise<Record<string, unknown>> {
-  if (!definition.visibleTo(context.authz)) throw new Error("forbidden");
+  if (!definition.visibleTo(context.authz)) {
+    throw new ApplicationError("forbidden", "forbidden", 403, { command: definition.name });
+  }
   if (definition.featureKey) {
     const state = features ?? (await resolvedFeatureState(context.authz.user.orgId));
     if (!featureEnabled(state, definition.featureKey)) {
       throw new ApplicationError(
         "forbidden",
-        `${definition.name} needs the ${definition.featureKey} feature; an administrator can turn it on in Company Settings → Features`,
+        `${definition.name} needs the ${disabledFeature(state, definition.featureKey)} feature; an administrator can turn it on in Company Settings → Features`,
         403,
       );
     }
