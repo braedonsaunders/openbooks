@@ -346,6 +346,11 @@ test(
         id: subscriptionId,
         idempotencyKey: `subscription-resume-${randomUUID()}`,
       });
+      await run(context, "bill_subscription_now", {
+        action: "billNow",
+        id: subscriptionId,
+        idempotencyKey: `subscription-lifecycle-bill-${randomUUID()}`,
+      });
       await run(context, "cancel_subscription", {
         action: "updateSubscription",
         id: subscriptionId,
