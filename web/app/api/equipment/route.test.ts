@@ -167,6 +167,13 @@ const mockDb = `
   }
 `;
 
+const featureStub = `const state = globalThis[Symbol.for('openbooks.equipment-create-route-test')]
+     export async function isFeatureEnabled(_orgId, key) {
+       if (key === 'fixedAssets') return state.fixedAssetsEnabled
+       if (key === 'projects') return state.projectsEnabled
+       return true
+     }`;
+
 stubModules({
   navigation: false,
   intl: false,
@@ -183,12 +190,9 @@ stubModules({
            : null,
        }
      }`,
-    "../../../lib/features": `const state = globalThis[Symbol.for('openbooks.equipment-create-route-test')]
-     export async function isFeatureEnabled(_orgId, key) {
-       if (key === 'fixedAssets') return state.fixedAssetsEnabled
-       if (key === 'projects') return state.projectsEnabled
-       return true
-     }`,
+    "../../../lib/features": featureStub,
+    // The creation service the route delegates to reads the same switches.
+    "./features": featureStub,
   },
 });
 

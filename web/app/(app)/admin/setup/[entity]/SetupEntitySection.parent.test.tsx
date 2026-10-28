@@ -17,7 +17,7 @@ stubModules({
       "export async function benefitCurrencyOptions() { return [] }",
 
     "@openbooks/engine/platform/db":
-      'export const db = { execute(query, mode) { const inMode = (result) => (mode === "objects" ? result.rows : result); return Promise.resolve(globalThis.__setupParentExecute(query)).then(inMode) } }; export function ambientTenantOrgId() { return null }; export function withBypassContext(fn) { return fn() }; export function currentRequestOrgResolver() { return null }; export function registerRequestOrgResolver() {}',
+      'export const db = { execute(query, mode) { const inMode = (result) => (mode === "objects" ? result.rows : result); return Promise.resolve(globalThis.__setupParentExecute(query)).then(inMode) } }; export function ambientTenantOrgId() { return null }; export function withBypassContext(fn) { return fn() }; export function withOrgTransaction(_orgId, fn) { return fn() }; export function withOrgContext(_orgId, fn) { return fn() }; export function currentRequestOrgResolver() { return null }; export function registerRequestOrgResolver() {}',
   },
 });
 

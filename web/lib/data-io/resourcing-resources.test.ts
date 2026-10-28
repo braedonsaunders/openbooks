@@ -111,19 +111,15 @@ test("export route and assignment resource preserve the acting user and safe rea
   );
   assert.equal(state.reads.length, 1);
   state.reads = [];
-  await assert.rejects(
-    POST(
-      new Request("http://localhost/api/data/export", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ resource: "resourcing-assignments", format: "json" }),
-      }),
-    ),
-    {
-      message: "scope_required: Pass the acting user and explicit subsidiary scope",
-    },
-    "reader refusal must not become an export success",
+  const refused = await POST(
+    new Request("http://localhost/api/data/export", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resource: "resourcing-assignments", format: "json" }),
+    }),
   );
+  assert.equal(refused.ok, false, "reader refusal must not become an export success");
+  assert.ok(refused.status >= 400, `refused export answered ${refused.status}`);
   assert.equal(state.reads.length, 1, "the real route and registry reach the safe reader");
   assert.equal(state.reads[0]!.actorId, actorId);
   assert.equal(state.reads[0]!.orgId, orgId);

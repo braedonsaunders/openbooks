@@ -245,6 +245,16 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     ],
   },
   {
+    file: "engine/src/sandbox/clone-bulk-load.ts",
+    sites: [
+      {
+        stance: "key-members",
+        note: "child-side foreign-key member columns for the bulk-loaded clone's reference proof",
+      },
+      { stance: "key-members", note: "referenced-side member columns of the same proof" },
+    ],
+  },
+  {
     file: "engine/src/sandbox/promote.ts",
     sites: [
       { stance: "presence-probe", note: "which promotable tables carry org_id" },

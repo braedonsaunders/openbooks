@@ -148,7 +148,7 @@ const clampNum = (v: unknown, min: number, max: number, dflt: number): number =>
 type CleanResult =
   { ok: true; category: ForecastCategory } | { ok: false; error: string; status?: 422 };
 const GENERIC_CATEGORY_ERROR =
-  "Each category must include a valid name, method, and method-specific configuration.";
+  "invalid_category: give each category a name, a method, and that method's configuration";
 
 export async function cleanForecastCategory(
   raw: unknown,
@@ -405,7 +405,9 @@ export async function replaceCashflowCategories(input: {
   if (!parsed.success)
     return {
       kind: "invalid_body",
-      message: parsed.error.issues[0]?.message ?? "Invalid cashflow categories.",
+      message:
+        parsed.error.issues[0]?.message ??
+        "invalid_categories: send the categories as a list of category objects",
     };
   if (input.expectedRevision === undefined) return { kind: "revision_required" };
 

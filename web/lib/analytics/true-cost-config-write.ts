@@ -442,7 +442,9 @@ export async function replaceTrueCostConfig(input: {
   if (!parsed.success)
     return {
       kind: "invalid_body",
-      message: parsed.error.issues[0]?.message ?? "Invalid True Cost configuration.",
+      message:
+        parsed.error.issues[0]?.message ??
+        "invalid_true_cost_configuration: correct the configuration fields and save again",
     };
   const expectedRevision = parseRevision(parsed.data.expectedRevision);
   if (expectedRevision === null) return { kind: "revision_required" };

@@ -36,6 +36,30 @@ const routeState: RouteState = {
 // mocked: hand doubles cannot produce the refusals the real modules
 // enforce ('canonicalDecimal() { return null }' refused every amount,
 // valid or not, so no amount case behind it was ever really tested).
+const billingRequestsStub = `
+      const state = globalThis[Symbol.for('openbooks.billing-requests-route-test')]
+      const visible = (allowed) =>
+        allowed === null || allowed === undefined || allowed.has(state.projectSubsidiaryId)
+
+      export async function listBillingRequests(orgId, projectId, allowedSubsidiaryIds) {
+        state.listCalls.push({ orgId, projectId, allowedSubsidiaryIds })
+        return visible(allowedSubsidiaryIds)
+          ? [{ id: 'request-1', projectId }]
+          : []
+      }
+
+      export async function createBillingRequest(orgId, userId, input, allowedSubsidiaryIds) {
+        if (!visible(allowedSubsidiaryIds)) throw new Error('Project not found')
+        state.createCalls.push({
+          orgId,
+          userId,
+          projectId: input.projectId,
+          allowedSubsidiaryIds,
+        })
+        return { id: 'request-1', projectId: input.projectId }
+      }
+    `;
+
 stubModules({
   navigation: false,
   intl: false,
@@ -60,29 +84,9 @@ stubModules({
         }
       }
     `,
-    "@/lib/billing-requests": `
-      const state = globalThis[Symbol.for('openbooks.billing-requests-route-test')]
-      const visible = (allowed) =>
-        allowed === null || allowed === undefined || allowed.has(state.projectSubsidiaryId)
-
-      export async function listBillingRequests(orgId, projectId, allowedSubsidiaryIds) {
-        state.listCalls.push({ orgId, projectId, allowedSubsidiaryIds })
-        return visible(allowedSubsidiaryIds)
-          ? [{ id: 'request-1', projectId }]
-          : []
-      }
-
-      export async function createBillingRequest(orgId, userId, input, allowedSubsidiaryIds) {
-        if (!visible(allowedSubsidiaryIds)) throw new Error('Project not found')
-        state.createCalls.push({
-          orgId,
-          userId,
-          projectId: input.projectId,
-          allowedSubsidiaryIds,
-        })
-        return { id: 'request-1', projectId: input.projectId }
-      }
-    `,
+    "@/lib/billing-requests": billingRequestsStub,
+    // The billing-request action service the route delegates to imports it relatively.
+    "./billing-requests": billingRequestsStub,
   },
 });
 
