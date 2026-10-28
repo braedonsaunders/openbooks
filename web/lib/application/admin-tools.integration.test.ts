@@ -287,7 +287,7 @@ test(
         runAs(otherOrg.orgId, automationContext, "simulate_automation", {
           automationId: createdAutomation.automationId,
         }),
-        (error: unknown) => error instanceof Error && "status" in error && error.status === 404,
+        /needs the automationSimulator feature/,
       );
     } finally {
       await dropScratchOrg(otherOrg.orgId);

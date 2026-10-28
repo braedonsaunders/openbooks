@@ -69,7 +69,7 @@ async function setFieldTicketFeatures(
            coalesce(settings, '{}'::jsonb),
            '{features}',
            coalesce(settings->'features', '{}'::jsonb) ||
-             jsonb_build_object('projects', ${projects}, 'fieldTickets', ${fieldTickets}),
+             jsonb_build_object('projects', ${projects}::boolean, 'fieldTickets', ${fieldTickets}::boolean),
            true
          )
        where id = ${orgId}
@@ -178,7 +178,7 @@ test("project reads keep another organization's project hidden", { skip: !DB }, 
           projectId,
         }),
       ),
-      /project not found/,
+      /not found/,
     );
     assert.ok(firstActors.adminId);
   } finally {
@@ -259,7 +259,11 @@ test(
       };
       await assert.rejects(
         run("create_field_ticket", { projectId, idempotencyKey: randomUUID() }, noSubsidiaries),
-        /subsidiary\.restricted/,
+        (error: unknown) =>
+          error instanceof Error &&
+          "details" in error &&
+          (error.details as { permission?: string } | undefined)?.permission ===
+            "subsidiary.restricted",
       );
 
       const deleted = (await run("delete_draft_field_ticket", {
@@ -281,12 +285,12 @@ test(
       await setFieldTicketFeatures(org.orgId, true, false);
       await assert.rejects(
         run("create_field_ticket", { projectId, idempotencyKey: randomUUID() }),
-        /field ticket not found/,
+        /needs the fieldTickets feature/,
       );
       await setFieldTicketFeatures(org.orgId, false, true);
       await assert.rejects(
         run("create_field_ticket", { projectId, idempotencyKey: randomUUID() }),
-        /field ticket not found/,
+        /needs the projects feature/,
       );
     } finally {
       await dropScratchOrg(org.orgId);

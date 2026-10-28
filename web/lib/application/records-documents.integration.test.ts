@@ -239,9 +239,11 @@ test(
         idempotencyKey: "records-quote-convert-1",
       })) as { result: { id: string; kind: string } };
       assert.equal(convertedQuote.result.kind, "sales_order");
+      // Conversion issues the new order through the native issuance path, which
+      // approves it at once when no approval Flow gates sales orders.
       assert.equal(
         (await readRecord(context, "sales-orders", convertedQuote.result.id)).status,
-        "draft",
+        "approved",
       );
 
       const purchaseOrder = await createDraft(

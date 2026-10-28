@@ -104,27 +104,29 @@ async function seedApprovedPurchaseOrder(
 ) {
   const orderId = randomUUID();
   const lineId = randomUUID();
-  await db.execute(sql`
-    insert into documents
-      (id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
-       currency, status, subtotal, tax_total, total, created_by, updated_by)
-    values
-      (${orderId}, ${orgId}, 'purchase_order', ${`PO-${orderId.slice(0, 8)}`}, ${vendorId},
-       ${subsidiaryId}, ${documentDate}, 'CAD', 'draft', '20', '0', '20', ${actorId}, ${actorId})
-  `);
-  await db.execute(sql`
-    insert into document_lines
-      (id, org_id, document_id, line_number, item_id, account_id, description, quantity,
-       unit, unit_price, amount, tax_amount, quantity_fulfilled, quantity_billed,
-       stock_location_id, custom)
-    values
-      (${lineId}, ${orgId}, ${orderId}, 1, ${itemId}, ${assetAccountId}, 'Widget', '10',
-       'ea', '2', '20', '0', '0', '0', ${stockLocationId}, '{}'::jsonb)
-  `);
-  await db.execute(sql`
-    update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
-    where id = ${orderId} and org_id = ${orgId}
-  `);
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
+         currency, status, subtotal, tax_total, total, created_by, updated_by)
+      values
+        (${orderId}, ${orgId}, 'purchase_order', ${`PO-${orderId.slice(0, 8)}`}, ${vendorId},
+         ${subsidiaryId}, ${documentDate}, 'CAD', 'draft', '20', '0', '20', ${actorId}, ${actorId})
+    `);
+    await db.execute(sql`
+      insert into document_lines
+        (id, org_id, document_id, line_number, item_id, account_id, description, quantity,
+         unit, unit_price, amount, tax_amount, quantity_fulfilled, quantity_billed,
+         stock_location_id, custom)
+      values
+        (${lineId}, ${orgId}, ${orderId}, 1, ${itemId}, ${assetAccountId}, 'Widget', '10',
+         'ea', '2', '20', '0', '0', '0', ${stockLocationId}, '{}'::jsonb)
+    `);
+    await db.execute(sql`
+      update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
+      where id = ${orderId} and org_id = ${orgId}
+    `);
+  });
   return { orderId, lineId };
 }
 
@@ -407,7 +409,7 @@ test("expense report commands use the native writer and lifecycle", { skip: !DB 
     const featureOffId = randomUUID();
     await assert.rejects(
       run(authorized, "create_expense_report", { ...createInput, idempotencyKey: featureOffId }),
-      /expense report not found/,
+      /needs the expenses feature/,
     );
     assert.equal(
       await withOrgContext(first.orgId, () =>

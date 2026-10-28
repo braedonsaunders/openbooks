@@ -150,7 +150,7 @@ test(
              currency, status, subtotal, tax_total, total, created_by, updated_by)
           values
             (${quoteId}, ${org.orgId}, 'quote', ${`Q-${quoteId.slice(0, 8)}`}, ${org.customerId},
-             ${org.subsidiaryId}, ${org.date}, 'CAD', 'approved', '100', '0', '100', ${userId}, ${userId})
+             ${org.subsidiaryId}, ${org.date}, 'CAD', 'draft', '100', '0', '100', ${userId}, ${userId})
         `);
         await db.execute(sql`
           insert into document_lines
@@ -160,6 +160,10 @@ test(
           values
             (${org.orgId}, ${quoteId}, 1, ${org.accounts.revenue}, 'Implementation', '1', 'ea',
              '0', '0', '100', '100', '100', '0', ${userId}, ${userId})
+        `);
+        // Lines are written while the quote is a draft; approval then freezes them.
+        await db.execute(sql`
+          update documents set status = 'approved' where id = ${quoteId} and org_id = ${org.orgId}
         `);
       });
       const revision = (
@@ -295,7 +299,7 @@ test(
             },
           ),
         ),
-        /register not found|POS register/i,
+        /register does not exist in this organization/,
       );
     } finally {
       await dropScratchOrg(org.orgId);

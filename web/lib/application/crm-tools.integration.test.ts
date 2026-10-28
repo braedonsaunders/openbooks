@@ -342,7 +342,7 @@ test(
 
       const other = ctxFor(second.orgId, secondActors.adminId, ["service.manage", "service.read"]);
       await assert.rejects(
-        withOrgContext(first.orgId, () =>
+        withOrgContext(second.orgId, () =>
           executeApplicationTool(applicationTool("get_service_request")!, other, {
             requestId: created.id,
           }),

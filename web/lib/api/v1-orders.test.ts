@@ -84,6 +84,16 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    "mock:application-records",
+    `
+      const state = globalThis[Symbol.for('openbooks.v1-orders-lib-test')]
+      export async function createApplicationRecord(_context, input) {
+        state.created.push(input)
+        return { replayed: false, status: 201, result: { id: "order-1", documentNumber: "Q-1" } }
+      }
+    `,
+  ],
+  [
     "mock:records",
     `
       const state = globalThis[Symbol.for('openbooks.v1-orders-lib-test')]
@@ -104,6 +114,7 @@ const mockUrls = new Map<string, string>([
   ["../application/errors", "mock:errors"],
   ["../application/orders", "mock:orders"],
   ["./v1-records", "mock:records"],
+  ["../application/records", "mock:application-records"],
 ]);
 
 const hooks = registerHooks({
@@ -129,7 +140,7 @@ const {
 } = await import("./v1-orders.ts");
 hooks.deregister();
 
-test("v1CreateOrder maps the record key to the order-cycle kind", async () => {
+test("v1CreateOrder creates through the shared record writer with only the subsidiary", async () => {
   routeState.created = [];
   const response = await v1CreateOrder(
     new Request("http://openbooks.test/api/v1/quotes", {
@@ -142,40 +153,49 @@ test("v1CreateOrder maps the record key to the order-cycle kind", async () => {
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { id: "order-1", documentNumber: "Q-1" });
   assert.deepEqual(routeState.created, [
-    { kind: "quote", idempotencyKey: "key-1", subsidiaryId: null },
+    { typeKey: "quotes", body: { subsidiaryId: null }, idempotencyKey: "key-1" },
   ]);
 });
 
-test("v1CreateOrder maps purchase-orders to purchase_order", async () => {
+test("v1CreateOrder keeps the purchase-orders record key", async () => {
   routeState.created = [];
   await v1CreateOrder(
     new Request("http://openbooks.test/api/v1/purchase-orders", {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": "key-2" },
-      body: "{}",
+      body: JSON.stringify({ memo: "ignored for an empty draft" }),
     }),
     "purchase-orders",
   );
-  assert.equal(routeState.created[0]?.kind, "purchase_order");
+  assert.deepEqual(routeState.created[0], {
+    typeKey: "purchase-orders",
+    body: { subsidiaryId: null },
+    idempotencyKey: "key-2",
+  });
 });
 
-test("v1CreateOrder forwards an explicit subsidiaryId", async () => {
+test("v1CreateOrder forwards an explicit subsidiaryId in either spelling", async () => {
   routeState.created = [];
-  await v1CreateOrder(
-    new Request("http://openbooks.test/api/v1/purchase-orders", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": "key-sub" },
-      body: JSON.stringify({ subsidiaryId: "11111111-1111-4111-8111-111111111111" }),
-    }),
-    "purchase-orders",
+  for (const body of [
+    { subsidiaryId: "11111111-1111-4111-8111-111111111111" },
+    { subsidiary_id: "11111111-1111-4111-8111-111111111111" },
+  ]) {
+    await v1CreateOrder(
+      new Request("http://openbooks.test/api/v1/purchase-orders", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": "key-sub" },
+        body: JSON.stringify(body),
+      }),
+      "purchase-orders",
+    );
+  }
+  assert.deepEqual(
+    routeState.created.map((input) => input.body),
+    [
+      { subsidiaryId: "11111111-1111-4111-8111-111111111111" },
+      { subsidiaryId: "11111111-1111-4111-8111-111111111111" },
+    ],
   );
-  assert.deepEqual(routeState.created, [
-    {
-      kind: "purchase_order",
-      idempotencyKey: "key-sub",
-      subsidiaryId: "11111111-1111-4111-8111-111111111111",
-    },
-  ]);
 });
 
 test("v1ConvertOrder refuses a missing targetKind with the allowed targets", async () => {
@@ -235,45 +255,30 @@ test("v1ConvertOrder binds the route kind so a sibling-kind id cannot convert", 
   assert.equal(routeState.converted[0]?.documentId, "po-1");
 });
 
-test("v1CreateOrder takes the full path when the body carries order content", async () => {
+test("v1CreateOrder passes a sales-order body through whole for the full-order path", async () => {
   routeState.created = [];
-  routeState.full = [];
+  const body = {
+    customer: { id: "11111111-1111-4111-8111-111111111111" },
+    lines: [{ itemCode: "WIDGET", quantity: "2", unitPrice: "19.99" }],
+    externalRef: "EXT-1",
+    externalSource: "shopify",
+  };
   const response = await v1CreateOrder(
     new Request("http://openbooks.test/api/v1/sales-orders", {
       method: "POST",
       headers: { "content-type": "application/json", "idempotency-key": "key-full" },
-      body: JSON.stringify({
-        customer: { id: "11111111-1111-4111-8111-111111111111" },
-        lines: [{ itemCode: "WIDGET", quantity: "2", unitPrice: "19.99" }],
-        externalRef: "EXT-1",
-        externalSource: "shopify",
-      }),
+      body: JSON.stringify(body),
     }),
     "sales-orders",
   );
   assert.equal(response.status, 201);
-  assert.deepEqual(await response.json(), { id: "order-full", documentNumber: "SO-9" });
-  assert.equal(routeState.created.length, 0);
-  assert.equal(routeState.full.length, 1);
-  assert.deepEqual(routeState.full[0], {
-    kind: "sales_order",
-    idempotencyKey: "key-full",
-    subsidiaryId: null,
-    customer: { id: "11111111-1111-4111-8111-111111111111" },
-    documentDate: undefined,
-    dueDate: undefined,
-    currency: undefined,
-    memo: undefined,
-    lines: [{ itemCode: "WIDGET", quantity: "2", unitPrice: "19.99" }],
-    shippingLines: undefined,
-    externalRef: "EXT-1",
-    externalSource: "shopify",
-  });
+  assert.deepEqual(routeState.created, [
+    { typeKey: "sales-orders", body, idempotencyKey: "key-full" },
+  ]);
 });
 
-test("v1CreateOrder keeps the empty draft for a content-free sales-orders body", async () => {
+test("v1CreateOrder sends a content-free sales-orders body unchanged", async () => {
   routeState.created = [];
-  routeState.full = [];
   await v1CreateOrder(
     new Request("http://openbooks.test/api/v1/sales-orders", {
       method: "POST",
@@ -282,8 +287,9 @@ test("v1CreateOrder keeps the empty draft for a content-free sales-orders body",
     }),
     "sales-orders",
   );
-  assert.equal(routeState.full.length, 0);
-  assert.equal(routeState.created.length, 1);
+  assert.deepEqual(routeState.created, [
+    { typeKey: "sales-orders", body: {}, idempotencyKey: "key-empty" },
+  ]);
 });
 
 test("v1ReplaceOrderLines forwards the path id and revision token", async () => {

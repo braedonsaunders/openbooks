@@ -247,7 +247,7 @@ test(
           subsidiaryId: first.subsidiaryId,
           idempotencyKey: randomUUID(),
         }),
-        /manufacturing is disabled/i,
+        /needs the manufacturing feature/,
       );
     } finally {
       await dropScratchOrg(first.orgId);
