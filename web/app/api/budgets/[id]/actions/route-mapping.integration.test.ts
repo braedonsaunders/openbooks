@@ -37,7 +37,10 @@ registerHooks({
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: s.allowed };
       }
     `);
-    if (specifier === "../../../../../lib/authz")
+    if (
+      specifier === "../../../../../lib/authz" ||
+      (specifier === "./authz" && context.parentURL?.includes("/lib/budget-scenario-actions"))
+    )
       return virtual(`
       export function can() { return true }
       export function subsidiariesInScope(gate, ids) {
@@ -49,7 +52,7 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
@@ -65,40 +68,44 @@ interface Org {
 }
 
 async function seedOrg(): Promise<Org> {
-  const org = await createScratchOrg();
-  state.orgId = org.orgId;
-  state.actorId = randomUUID();
-  state.allowed = null;
-  const calendarId = (
-    await db.execute<{ id: string }>(
-      sql`
-    select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`,
-      "objects",
-    )
-  )[0]!.id;
-  // The target year carries exactly one period: any source line outside
-  // period 1 has no destination and must block the action.
-  await db.execute(sql`
-    insert into accounting_periods
-      (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-    values (${randomUUID()}, ${org.orgId}, 2027, 1, '2027-01', '2027-01-01', '2027-01-31', false, ${calendarId})`);
-  return {
-    orgId: org.orgId,
-    bookId: org.bookId,
-    subsidiaryId: org.subsidiaryId,
-    periodId: org.periodId,
-    calendarId,
-    cogsId: org.accounts.cogs,
-    accounts: org.accounts,
-  };
+  return withBypassContext(async () => {
+    const org = await createScratchOrg();
+    state.orgId = org.orgId;
+    state.actorId = randomUUID();
+    state.allowed = null;
+    const calendarId = (
+      await db.execute<{ id: string }>(
+        sql`
+      select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId}`,
+        "objects",
+      )
+    )[0]!.id;
+    // The target year carries exactly one period: any source line outside
+    // period 1 has no destination and must block the action.
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      values (${randomUUID()}, ${org.orgId}, 2027, 1, '2027-01', '2027-01-01', '2027-01-31', false, ${calendarId})`);
+    return {
+      orgId: org.orgId,
+      bookId: org.bookId,
+      subsidiaryId: org.subsidiaryId,
+      periodId: org.periodId,
+      calendarId,
+      cogsId: org.accounts.cogs,
+      accounts: org.accounts,
+    };
+  });
 }
 
 async function seedScenario(org: Org, year: number, name: string): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
-    values (${id}, ${org.orgId}, ${org.bookId}, ${year}, ${name}, 'budget', 'draft')`);
-  return id;
+  return withBypassContext(async () => {
+    const id = randomUUID();
+    await db.execute(sql`
+      insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
+      values (${id}, ${org.orgId}, ${org.bookId}, ${year}, ${name}, 'budget', 'draft')`);
+    return id;
+  });
 }
 
 async function seedLine(
@@ -107,30 +114,34 @@ async function seedLine(
   periodId: string,
   amount: string,
 ): Promise<void> {
-  await db.execute(sql`
-    insert into budget_lines
-      (org_id, scenario_id, account_id, period_id, subsidiary_id, amount, created_by, updated_by)
-    values (${org.orgId}, ${scenarioId}, ${org.cogsId}, ${periodId}, ${org.subsidiaryId},
-            ${amount}, ${state.actorId}, ${state.actorId})`);
+  return withBypassContext(async () => {
+    await db.execute(sql`
+      insert into budget_lines
+        (org_id, scenario_id, account_id, period_id, subsidiary_id, amount, created_by, updated_by)
+      values (${org.orgId}, ${scenarioId}, ${org.cogsId}, ${periodId}, ${org.subsidiaryId},
+              ${amount}, ${state.actorId}, ${state.actorId})`);
+  });
 }
 
 async function seedPostedActual(
   org: Org & { accounts: Record<string, string> },
   periodId: string,
 ): Promise<void> {
-  const entryId = randomUUID();
-  await db.execute(sql`
-    insert into journal_entries
-      (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-    values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'ACT-1', '2026-07-15',
-            ${periodId}, 'draft', 'manual')`);
-  await db.execute(sql`
-    insert into journal_lines
-      (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
-    values (${org.orgId}, ${entryId}, 1, ${org.cogsId}, ${org.subsidiaryId}, 500, 'CAD', 500, 1, ''),
-           (${org.orgId}, ${entryId}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, -500, 'CAD', -500, 1, '')`);
-  await db.execute(sql`
-    update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
+  return withBypassContext(async () => {
+    const entryId = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
+      values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, 'ACT-1', '2026-07-15',
+              ${periodId}, 'draft', 'manual')`);
+    await db.execute(sql`
+      insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo)
+      values (${org.orgId}, ${entryId}, 1, ${org.cogsId}, ${org.subsidiaryId}, 500, 'CAD', 500, 1, ''),
+             (${org.orgId}, ${entryId}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, -500, 'CAD', -500, 1, '')`);
+    await db.execute(sql`
+      update journal_entries set status = 'posted' where id = ${entryId} and org_id = ${org.orgId}`);
+  });
 }
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -253,19 +264,23 @@ test("apply_source refuses an out-of-scope source before clearing target lines",
   const org = await seedOrg();
   try {
     const hidden = (
-      await db.execute<{ id: string }>(
-        sql`
+      await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`
       insert into subsidiaries (org_id, parent_id, name, base_currency, country)
       values (${org.orgId}, ${org.subsidiaryId}, 'Hidden budget entity', 'CAD', 'CA') returning id`,
-        "objects",
+          "objects",
+        ),
       )
     )[0]!.id;
     const sourceId = await seedScenario(org, 2026, "Restricted source");
     await seedLine(org, sourceId, org.periodId, "1200.0000");
-    await db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into budget_lines
         (org_id, scenario_id, account_id, period_id, subsidiary_id, amount, created_by, updated_by)
-      values (${org.orgId}, ${sourceId}, ${org.cogsId}, ${org.periodId}, ${hidden}, '300.0000', ${state.actorId}, ${state.actorId})`);
+      values (${org.orgId}, ${sourceId}, ${org.cogsId}, ${org.periodId}, ${hidden}, '300.0000', ${state.actorId}, ${state.actorId})`),
+    );
     const targetId = await seedScenario(org, 2027, "Restricted target");
     const targetPeriod = (
       await db.execute<{ id: string }>(
@@ -275,10 +290,12 @@ test("apply_source refuses an out-of-scope source before clearing target lines",
       )
     )[0]!.id;
     // Make every source period map so the subsidiary guard is the refusal.
-    await db.execute(sql`
+    await withBypassContext(() =>
+      db.execute(sql`
       insert into accounting_periods
         (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
-      values (${randomUUID()}, ${org.orgId}, 2027, 7, '2027-07', '2027-07-01', '2027-07-31', false, ${org.calendarId})`);
+      values (${randomUUID()}, ${org.orgId}, 2027, 7, '2027-07', '2027-07-01', '2027-07-31', false, ${org.calendarId})`),
+    );
     await seedLine(org, targetId, targetPeriod, "100.0000");
     const before = await scenarioState(targetId, org.orgId);
 

@@ -31,7 +31,10 @@ registerHooks({
         return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: s.allowed };
       }
     `);
-    if (specifier === "../../../../../lib/authz")
+    if (
+      specifier === "../../../../../lib/authz" ||
+      (specifier === "./authz" && context.parentURL?.includes("/lib/budget-scenario-actions"))
+    )
       return virtual(`
       export function can() { return true }
       export function subsidiariesInScope(gate, ids) {
@@ -43,26 +46,28 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 test("copy_prior_actuals refuses a malformed dimension id instead of broadening to the whole budget", async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   state.orgId = org.orgId;
   state.actorId = randomUUID();
   state.allowed = null;
   try {
     const scenarioId = randomUUID();
-    await db.execute(sql`
-      insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
-      values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Dims Target', 'budget', 'draft')`);
-    await db.execute(sql`
-      insert into budget_lines
-        (org_id, scenario_id, account_id, period_id, subsidiary_id, amount, created_by, updated_by)
-      values (${org.orgId}, ${scenarioId}, ${org.accounts.cogs}, ${org.periodId}, ${org.subsidiaryId},
-              '100.0000', ${state.actorId}, ${state.actorId})`);
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into budget_scenarios (id, org_id, book_id, fiscal_year, name, kind, status)
+        values (${scenarioId}, ${org.orgId}, ${org.bookId}, 2026, 'Dims Target', 'budget', 'draft')`);
+      await db.execute(sql`
+        insert into budget_lines
+          (org_id, scenario_id, account_id, period_id, subsidiary_id, amount, created_by, updated_by)
+        values (${org.orgId}, ${scenarioId}, ${org.accounts.cogs}, ${org.periodId}, ${org.subsidiaryId},
+                '100.0000', ${state.actorId}, ${state.actorId})`);
+    });
 
     const response = await withOrgContext(state.orgId, () =>
       POST(
