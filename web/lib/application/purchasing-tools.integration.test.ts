@@ -178,7 +178,7 @@ test(
       try {
         await assert.rejects(
           run(authorized, "purchasing-recall-feature-off"),
-          /expense report not found/,
+          /needs the expenses feature/,
         );
       } finally {
         await withBypassContext(() =>

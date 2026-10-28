@@ -251,7 +251,7 @@ test(
           "create_webhook_endpoint",
           { ...createInput, key: "feature-off-endpoint", idempotencyKey: "admin-webhook-off-01" },
         ),
-        (error: unknown) => error instanceof Error && "status" in error && error.status === 404,
+        /needs the outboundWebhooks feature/,
       );
       const otherEndpoints = await withOrgContext(otherOrg.orgId, () =>
         db.execute<{ id: string }>(

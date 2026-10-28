@@ -157,7 +157,7 @@ test("project tools enforce permissions and child feature gates", { skip: !DB },
       withOrgContext(org.orgId, () =>
         executeApplicationTool(applicationTool("get_project_schedule")!, reader, { projectId }),
       ),
-      /project schedule not found/,
+      /needs the projectScheduling feature/,
     );
   } finally {
     await dropScratchOrg(org.orgId);
@@ -173,7 +173,7 @@ test("project reads keep another organization's project hidden", { skip: !DB }, 
     const projectId = await seedProject(first);
     const foreignContext = contextFor(second.orgId, secondActors.adminId, ["projects.read"]);
     await assert.rejects(
-      withOrgContext(first.orgId, () =>
+      withOrgContext(second.orgId, () =>
         executeApplicationTool(applicationTool("list_project_work_breakdown")!, foreignContext, {
           projectId,
         }),

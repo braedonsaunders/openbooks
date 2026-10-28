@@ -334,7 +334,7 @@ test(
               idempotencyKey: "service-request-feature-off-0001",
             }),
           ),
-          /service record not found/,
+          /needs the serviceDispatch feature/,
         );
       } finally {
         await setServiceEnabled(first.orgId, true);

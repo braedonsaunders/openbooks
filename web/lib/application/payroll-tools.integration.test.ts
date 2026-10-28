@@ -226,7 +226,7 @@ test(
           payBasis: "hourly",
           idempotencyKey: "payroll-profile-feature-off",
         }),
-        (error: unknown) => error instanceof Error && "status" in error && error.status === 404,
+        /needs the payroll feature/,
       );
     } finally {
       await withBypassContext(() => dropScratchOrg(fixture.orgId));

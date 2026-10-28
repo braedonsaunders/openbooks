@@ -207,7 +207,7 @@ test("inventory commands enforce permissions and feature gates", { skip: !DB }, 
     withOrgContext(org.orgId, () =>
       executeApplicationTool(applicationTool("create_item_family")!, manager, input),
     ),
-    /route not found/,
+    /needs the itemVariants feature/,
   );
   const families = await withBypassContext(() =>
     db.execute<{ count: string }>(

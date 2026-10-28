@@ -417,7 +417,7 @@ test(
         interval: "monthly",
         idempotencyKey: "feature-off-refusal-1",
       }),
-      /route not found/,
+      /needs the subscriptionBilling feature/,
     );
   },
 );

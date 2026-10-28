@@ -230,7 +230,7 @@ test(
       })) as { id: string };
       const secondContext = contextFor(second.orgId, secondActor);
       await assert.rejects(
-        withOrgContext(first.orgId, () =>
+        withOrgContext(second.orgId, () =>
           executeApplicationTool(applicationTool("get_manufacturing_record")!, secondContext, {
             view: "work-orders",
             id: order.id,

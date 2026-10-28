@@ -284,7 +284,7 @@ test(
       );
       await seedRegister(other, foreignActor);
       await assert.rejects(
-        withOrgContext(org.orgId, () =>
+        withOrgContext(other.orgId, () =>
           executeApplicationTool(
             applicationTool("open_pos_session")!,
             context(other.orgId, foreignActor, ["pos.drawer"]),

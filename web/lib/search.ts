@@ -958,7 +958,7 @@ export async function searchPreview(authz: Authz, ref: RecentRef): Promise<Searc
       const [open] = await db.execute<{ total: unknown; n: number }>(
         sql`select sum(d.open_balance) as total, count(*)::int as n from documents d
              where d.org_id = ${orgId} and d.party_id = ${ref.id} and d.kind = ${kind}
-               and d.status = 'posted' and d.open_balance > 0 ${fence}`,
+               and d.status = 'posted' and d.open_balance > 0 ${fence} -- Live entries only: a preview shows what is still open today`,
         "objects",
       );
       if (open && open.n > 0) add(labelKey, displayMoney(open.total), "money");
