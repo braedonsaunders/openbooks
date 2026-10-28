@@ -1,0 +1,1 @@
+Replaces the search index verifier with a chunked equivalent; it changes no rows and has no data precondition.
