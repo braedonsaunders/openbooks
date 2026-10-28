@@ -58,6 +58,19 @@ async function setQueryConsole(orgId: string, enabled: boolean) {
   );
 }
 
+async function setProjects(orgId: string, enabled: boolean) {
+  await withBypassContext(() =>
+    db.execute(sql`
+    update orgs set settings = jsonb_set(
+      settings,
+      '{features}',
+      coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ projects: enabled })}::jsonb,
+      true
+    ) where id = ${orgId}
+  `),
+  );
+}
+
 test(
   "workspace commands create folders idempotently and preserve org isolation",
   { skip: !DB },
@@ -85,9 +98,33 @@ test(
       assert.equal(replay.id, created.id);
       assert.ok(await withOrgContext(first.orgId, () => getFolder(first.orgId, created.id)));
 
+      const destination = (await run(ctxA, "create_folder", {
+        name: "Bulk destination",
+        idempotencyKey: "workspace-folder-0002",
+      })) as { id: string };
+      const bulkInput = {
+        folderIds: [created.id],
+        targetFolderId: destination.id,
+        idempotencyKey: "workspace-bulk-move-0001",
+      };
+      const bulkMove = (await run(ctxA, "bulk_move_file_cabinet_items", bulkInput)) as {
+        done: number;
+        replayed: boolean;
+      };
+      const bulkReplay = (await run(ctxA, "bulk_move_file_cabinet_items", bulkInput)) as {
+        replayed: boolean;
+      };
+      assert.equal(bulkMove.done, 1);
+      assert.equal(bulkMove.replayed, false);
+      assert.equal(bulkReplay.replayed, true);
+      assert.equal(
+        (await withOrgContext(first.orgId, () => getFolder(first.orgId, created.id)))?.parentId,
+        destination.id,
+      );
+
       await assert.rejects(
-        run(ctxB, "delete_folder", {
-          folderId: created.id,
+        run(ctxB, "bulk_delete_file_cabinet_items", {
+          folderIds: [created.id],
           idempotencyKey: "workspace-cross-org-1",
         }),
         /forbidden/,
@@ -96,6 +133,85 @@ test(
     } finally {
       await dropScratchOrg(first.orgId);
       await dropScratchOrg(second.orgId);
+    }
+  },
+);
+
+test(
+  "workspace analytics settings share the native configuration writers",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+      const ctx = ctxFor(org.orgId, actors.adminId, ["*"]);
+      const run = (name: string, input: Record<string, unknown> = {}) =>
+        withOrgContext(org.orgId, () => executeApplicationTool(applicationTool(name)!, ctx, input));
+
+      const cashflow = (await run("get_cashflow_categories")) as {
+        revision: number;
+        categories: unknown[];
+      };
+      const cashflowInput = {
+        categories: [],
+        expectedRevision: cashflow.revision,
+        idempotencyKey: "workspace-cashflow-write-0001",
+      };
+      const cashflowWrite = (await run("replace_cashflow_categories", cashflowInput)) as {
+        revision: number;
+        replayed: boolean;
+      };
+      const cashflowReplay = (await run("replace_cashflow_categories", cashflowInput)) as {
+        replayed: boolean;
+      };
+      assert.equal(cashflowWrite.replayed, false);
+      assert.equal(cashflowReplay.replayed, true);
+      const cashflowAfter = (await run("get_cashflow_categories")) as {
+        revision: number;
+        categories: unknown[];
+      };
+      assert.equal(cashflowAfter.revision, cashflowWrite.revision);
+      assert.deepEqual(cashflowAfter.categories, []);
+
+      const ratios = (await run("get_financial_health_ratio_inputs")) as {
+        inputs: { interest_expense: { accounts: unknown[] | null } };
+      };
+      await run("update_financial_health_ratio_input", {
+        key: "interest_expense",
+        accountIds: [],
+        idempotencyKey: "workspace-ratio-write-0001",
+      });
+      const ratiosAfter = (await run("get_financial_health_ratio_inputs")) as {
+        inputs: { interest_expense: { accounts: unknown[] | null } };
+      };
+      assert.ok(ratios.inputs.interest_expense.accounts === null);
+      assert.deepEqual(ratiosAfter.inputs.interest_expense.accounts, []);
+
+      await setProjects(org.orgId, true);
+      const config = (await run("get_true_cost_config")) as {
+        revision: number;
+        activeProfileId: string;
+        profiles: unknown[];
+      };
+      const trueCostInput = {
+        expectedRevision: config.revision,
+        activeProfileId: config.activeProfileId,
+        profiles: config.profiles,
+        idempotencyKey: "workspace-true-cost-write-0001",
+      };
+      const trueCostWrite = (await run("update_true_cost_config", trueCostInput)) as {
+        revision: number;
+        replayed: boolean;
+      };
+      const trueCostReplay = (await run("update_true_cost_config", trueCostInput)) as {
+        replayed: boolean;
+      };
+      assert.equal(trueCostWrite.replayed, false);
+      assert.equal(trueCostReplay.replayed, true);
+      const configAfter = (await run("get_true_cost_config")) as { revision: number };
+      assert.equal(configAfter.revision, trueCostWrite.revision);
+    } finally {
+      await dropScratchOrg(org.orgId);
     }
   },
 );

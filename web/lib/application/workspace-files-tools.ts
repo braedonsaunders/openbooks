@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "@openbooks/engine/platform/db";
 import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import { can } from "../authz";
+import { applyBulkCabinetAction, canMoveCabinetTarget } from "../file-cabinet/bulk-actions";
 import {
   accessAtLeast,
   attachExisting,
@@ -175,11 +176,69 @@ const grantInput = z.object({
   idempotencyKey: IDEMPOTENCY_KEY,
 });
 
+const bulkIds = z.array(UUID).max(500).default([]);
+
+function bulkCabinetTool(action: "move" | "delete"): ApplicationToolDefinition {
+  const moving = action === "move";
+  return definition({
+    name: moving ? "bulk_move_file_cabinet_items" : "bulk_delete_file_cabinet_items",
+    title: moving ? "Move File Cabinet Items" : "Delete File Cabinet Items",
+    description: moving
+      ? "Move selected files and folders together while applying the File Cabinet's per-item Editor and Manager grants. Use list_files and list_folders for ids, and verify each result there."
+      : "Move selected files and folders to the File Cabinet trash while applying each item's Manager grant and retention rules. Use list_files and list_folders for ids, and review per-item refusals in the result.",
+    inputSchema: z
+      .object({
+        fileIds: bulkIds.describe("File ids selected from the File Cabinet."),
+        folderIds: bulkIds.describe("Folder ids selected from the File Cabinet."),
+        ...(moving
+          ? {
+              targetFolderId: UUID.describe(
+                "Destination folder id; the caller needs Editor access.",
+              ),
+            }
+          : {}),
+        idempotencyKey: IDEMPOTENCY_KEY,
+      })
+      .refine((input) => input.fileIds.length > 0 || input.folderIds.length > 0, {
+        message: "Select at least one file or folder.",
+      }),
+    readOnly: false,
+    destructive: !moving,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: permissionlessResourceGate,
+    execute: async (context, input) => {
+      requireAuthenticated(context);
+      const viewer = cabinetViewer(context.authz);
+      const targetFolderId = moving && "targetFolderId" in input ? input.targetFolderId : undefined;
+      if (
+        moving &&
+        (!targetFolderId ||
+          !(await canMoveCabinetTarget(context.authz.user.orgId, viewer, targetFolderId)))
+      ) {
+        throw forbidden("documents.manage");
+      }
+      const result = await applyBulkCabinetAction({
+        orgId: context.authz.user.orgId,
+        actorId: context.authz.user.id,
+        viewer,
+        action,
+        fileIds: input.fileIds,
+        folderIds: input.folderIds,
+        ...(targetFolderId ? { targetFolderId } : {}),
+      });
+      return { ok: true, ...result, href: "/documents" };
+    },
+  });
+}
+
 function permissionlessResourceGate(authz: Parameters<ApplicationToolDefinition["visibleTo"]>[0]) {
   return authz.user.id.length > 0;
 }
 
 export const WORKSPACE_FILE_TOOLS: ApplicationToolDefinition[] = [
+  bulkCabinetTool("move"),
+  bulkCabinetTool("delete"),
   definition({
     name: "create_folder",
     title: "Create Folder",

@@ -2,17 +2,7 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  accessAtLeast,
-  deleteFile,
-  deleteFolder,
-  fileAccessLevel,
-  folderAccessLevel,
-  isRetainedFileEvidence,
-  moveFile,
-  moveFolder,
-} from "../../../../lib/file-cabinet";
-import { inDbTransaction } from "@openbooks/engine/platform/db";
+import { applyBulkCabinetAction, canMoveCabinetTarget } from "@/lib/file-cabinet/bulk-actions";
 import { fileViewer } from "../lib";
 const itemIds = z.array(uuidString("selection ids must be valid UUIDs")).max(500).default([]);
 const postBodySchema = z
@@ -32,13 +22,6 @@ const postBodySchema = z
 
 export const runtime = "nodejs";
 
-type BulkItemResult = {
-  id: string;
-  kind: "file" | "folder";
-  ok: boolean;
-  error?: string;
-};
-
 /**
  * Bulk file/folder actions. Body:
  *   { action: 'delete' | 'move', fileIds?, folderIds?, targetFolderId? }
@@ -56,72 +39,19 @@ export const POST = defineRoute({
 
     const { action, fileIds, folderIds } = routeBody;
     const targetFolderId = routeBody.action === "move" ? routeBody.targetFolderId : null;
-    if (targetFolderId !== null) {
+    if (targetFolderId !== null && !(await canMoveCabinetTarget(orgId, viewer, targetFolderId))) {
       // Destination needs Editor+.
-      if (!accessAtLeast(await folderAccessLevel(orgId, viewer, targetFolderId), "editor")) {
-        return NextResponse.json({ error: "forbidden" }, { status: 403 });
-      }
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
-    const result = await inDbTransaction(async (tx) => {
-      let done = 0;
-      let skipped = 0;
-      const results: BulkItemResult[] = [];
-      const audit = { actorId: gate.user.id, executor: tx, viewer };
-      const record = (id: string, kind: "file" | "folder", ok: boolean, error?: string) => {
-        if (ok) done++;
-        else skipped++;
-        results.push(error ? { id, kind, ok, error } : { id, kind, ok });
-      };
-
-      if (action === "move") {
-        for (const id of fileIds) {
-          if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), "editor")) {
-            record(id, "file", false, "forbidden");
-            continue;
-          }
-          if (await moveFile(orgId, id, targetFolderId!, gate.user.id, audit))
-            record(id, "file", true);
-          else record(id, "file", false, "failed");
-        }
-        for (const id of folderIds) {
-          if (!accessAtLeast(await folderAccessLevel(orgId, viewer, id), "manager")) {
-            record(id, "folder", false, "forbidden");
-            continue;
-          }
-          if (await moveFolder(orgId, id, targetFolderId!, gate.user.id, audit))
-            record(id, "folder", true);
-          else record(id, "folder", false, "failed");
-        }
-      } else {
-        // delete → trash
-        for (const id of fileIds) {
-          if (!accessAtLeast(await fileAccessLevel(orgId, viewer, id), "manager")) {
-            record(id, "file", false, "forbidden");
-            continue;
-          }
-          if (await deleteFile(orgId, id, audit)) record(id, "file", true);
-          else if (await isRetainedFileEvidence(orgId, id)) record(id, "file", false, "retained");
-          else record(id, "file", false, "failed");
-        }
-        for (const id of folderIds) {
-          if (!accessAtLeast(await folderAccessLevel(orgId, viewer, id), "manager")) {
-            record(id, "folder", false, "forbidden");
-            continue;
-          }
-          const res = await deleteFolder(orgId, id, audit);
-          if (res.ok) record(id, "folder", true);
-          else
-            record(
-              id,
-              "folder",
-              false,
-              res.reason === "not found" ? "not_found" : (res.reason ?? "failed"),
-            );
-        }
-      }
-
-      return { done, skipped, results };
+    const result = await applyBulkCabinetAction({
+      orgId,
+      actorId: gate.user.id,
+      viewer,
+      action,
+      fileIds,
+      folderIds,
+      ...(targetFolderId ? { targetFolderId } : {}),
     });
 
     return NextResponse.json({ ok: true, ...result });

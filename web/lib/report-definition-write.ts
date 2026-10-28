@@ -125,6 +125,7 @@ export async function createReportDefinition(
         values (${idempotencyId}, ${orgId}, 'custom', 'query', ${slug}, ${name}, ${description},
                 ${JSON.stringify(query)}::jsonb, ${layout ? JSON.stringify(layout) : null}::jsonb,
                 false, ${userId}, ${userId})
+        -- The idempotency identity is resolved only after its payload is matched.
         on conflict (id) do nothing
         returning id, kind, slug, name, description, query, layout, updated_at
       `,

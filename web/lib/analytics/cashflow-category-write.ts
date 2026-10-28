@@ -1,0 +1,437 @@
+import { randomUUID } from "node:crypto";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { exactMoney } from "@/lib/api/json";
+import { saveCashflowCategories } from "@openbooks/engine/reports/cashflow-categories";
+import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/money/money";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { utcDateFromParts } from "@openbooks/engine/platform/civil-date";
+import { canonicalDecimal } from "@/lib/exact-decimal";
+import type { ForecastCategory } from "@/lib/analytics/cashflow-data";
+import {
+  BANK_ACCOUNT_TYPE,
+  CARD_ACCOUNT_TYPE,
+  validateReferences,
+} from "@/lib/cash/category-references";
+
+const MANUAL_AMOUNT_MAX = "100000000.0000";
+const categoryUuid = (field: string) =>
+  uuidString({ error: `${field} must be a UUID; choose a saved record from this organization` });
+const categoryUuidList = (field: string) =>
+  z.array(categoryUuid(`${field} entry`), { error: `${field} must be a list of UUID references` });
+
+const categoryBase = {
+  id: categoryUuid("id").optional(),
+  name: z.string().trim().min(1, "name is required").max(80),
+  direction: z.enum(["inflow", "outflow"], { error: "direction must be inflow or outflow" }),
+  expectedDay: z.number().int().min(0).max(6).optional(),
+  expectedWeek: z.number().int().min(1).max(4).optional(),
+  adjustmentPct: z.number().finite().min(-90).max(200).optional(),
+  subsidiaryIds: categoryUuidList("subsidiaryIds").max(50).optional(),
+};
+const positiveManualAmount = exactMoney(
+  "amount must be an exact decimal string with at most four decimal places",
+)
+  .refine((value) => compareMoney(value, "0.0000") > 0, {
+    error: "amount must be greater than zero",
+  })
+  .refine((value) => compareMoney(value, MANUAL_AMOUNT_MAX) <= 0, {
+    error: `amount must not exceed ${MANUAL_AMOUNT_MAX}`,
+  });
+const forecastCategorySchema = z.discriminatedUnion("method", [
+  z.object({
+    ...categoryBase,
+    method: z.literal("gl_history_average"),
+    accountIds: categoryUuidList("accountIds").min(1).max(50),
+    historyWeeks: z.number().int().min(1).max(52).optional(),
+    useNetAmt: z.boolean().optional(),
+  }),
+  z
+    .object({
+      ...categoryBase,
+      method: z.literal("vendor_payment_history"),
+      partyIds: categoryUuidList("partyIds").max(50).optional(),
+      partyId: categoryUuid("partyId").optional(),
+      partyName: z.string().max(120).optional(),
+      historyMonths: z.number().int().min(1).max(36).optional(),
+    })
+    .refine((value) => (value.partyIds?.length ?? 0) > 0 || value.partyId !== undefined, {
+      error: "partyIds or partyId must name at least one vendor",
+    }),
+  z
+    .object({
+      ...categoryBase,
+      method: z.literal("vendor_recurring_average"),
+      partyIds: categoryUuidList("partyIds").max(50).optional(),
+      partyId: categoryUuid("partyId").optional(),
+      partyName: z.string().max(120).optional(),
+      historyMonths: z.number().int().min(1).max(36).optional(),
+    })
+    .refine((value) => (value.partyIds?.length ?? 0) > 0 || value.partyId !== undefined, {
+      error: "partyIds or partyId must name at least one vendor",
+    }),
+  z
+    .object({
+      ...categoryBase,
+      method: z.literal("credit_card_cycle"),
+      cardAccountIds: categoryUuidList("cardAccountIds").max(20).optional(),
+      accountIds: categoryUuidList("accountIds").max(20).optional(),
+      historyMonths: z.number().int().min(1).max(24).optional(),
+      significantPaymentThreshold: exactMoney(
+        "significantPaymentThreshold must be an exact decimal string",
+      ).optional(),
+    })
+    .refine(
+      (value) => (value.cardAccountIds?.length ?? 0) > 0 || (value.accountIds?.length ?? 0) > 0,
+      { error: "cardAccountIds or accountIds must name at least one card account" },
+    ),
+  z.object({
+    ...categoryBase,
+    method: z.literal("formula_expression"),
+    formula: z.string().trim().min(1, "formula is required").max(500),
+  }),
+  z.object({
+    ...categoryBase,
+    method: z.literal("bank_register_history"),
+    bankAccountIds: categoryUuidList("bankAccountIds").min(1).max(20),
+    historyWeeks: z.number().int().min(1).max(52).optional(),
+    memoKeywords: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+    includeTransfers: z.boolean().optional(),
+    includeChecks: z.boolean().optional(),
+    includeJournals: z.boolean().optional(),
+  }),
+  z.object({
+    ...categoryBase,
+    method: z.literal("manual_recurring"),
+    amount: positiveManualAmount,
+    anchorDate: z
+      .string({ error: "anchorDate must be a real YYYY-MM-DD calendar date" })
+      .refine(isIsoCalendarDate, { error: "anchorDate must be a real YYYY-MM-DD calendar date" })
+      .optional(),
+    frequency: z.enum(["weekly", "biweekly", "bi_weekly", "monthly"]).optional(),
+  }),
+]);
+export const cashflowCategoryBodySchema = z.object({
+  categories: z.array(forecastCategorySchema).max(50, "too many categories (max 50)"),
+  expectedRevision: z
+    .number()
+    .int()
+    .nonnegative("expectedRevision must be a non-negative integer")
+    .optional(),
+});
+
+/**
+ * Cash Flow forecast-category configuration. Stored as an array at
+ * orgs.settings.analytics.cashflowCategories.
+ * PUT replaces the whole list (the editor sends the full state); each entry is
+ * validated per method (all seven strategies) and unknown fields are
+ * dropped.
+ */
+const METHODS = new Set([
+  "gl_history_average",
+  "vendor_payment_history",
+  "credit_card_cycle",
+  "manual_recurring",
+  "formula_expression",
+  "vendor_recurring_average",
+  "bank_register_history",
+]);
+const FREQUENCIES = new Set(["weekly", "biweekly", "bi_weekly", "monthly"]);
+
+const strList = (v: unknown, max: number): string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x).slice(0, max) : [];
+const clampNum = (v: unknown, min: number, max: number, dflt: number): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : dflt;
+};
+
+type CleanResult =
+  { ok: true; category: ForecastCategory } | { ok: false; error: string; status?: 422 };
+const GENERIC_CATEGORY_ERROR =
+  "Each category must include a valid name, method, and method-specific configuration.";
+
+export async function cleanForecastCategory(
+  raw: unknown,
+  orgId: string,
+  allowedSubsidiaryIds: Set<string> | null,
+): Promise<CleanResult> {
+  const bad = (error: string): CleanResult => ({ ok: false, error });
+  if (!raw || typeof raw !== "object") return bad(GENERIC_CATEGORY_ERROR);
+  const c = raw as Record<string, unknown>;
+  // Every reference list below validates type, existence, and scope in one
+  // pass (see ./category-references): the caller's subsidiary scope rides
+  // along so a restricted writer cannot point a category at hidden books.
+  const check = (
+    field: string,
+    table: "accounts" | "parties",
+    kind: string,
+    ids: string[],
+    expect?: {
+      accountType?: typeof BANK_ACCOUNT_TYPE | typeof CARD_ACCOUNT_TYPE;
+      postable?: boolean;
+      vendorRole?: boolean;
+    },
+  ): Promise<string | null> =>
+    validateReferences(orgId, [
+      {
+        field,
+        table,
+        kind,
+        ids,
+        allowedSubsidiaryIds,
+        expectAccountType: expect?.accountType,
+        expectPostable: expect?.postable,
+        expectVendorRole: expect?.vendorRole,
+      },
+    ]);
+  const name = typeof c.name === "string" ? c.name.trim().slice(0, 80) : "";
+  const method = String(c.method ?? "");
+  // A misspelled direction must refuse, never silently flip the sign: any
+  // value other than exactly 'inflow'/'outflow' (including a missing one)
+  // inverts every forecast week it touches.
+  const direction =
+    c.direction === "inflow" ? "inflow" : c.direction === "outflow" ? "outflow" : null;
+  if (direction === null) return bad(GENERIC_CATEGORY_ERROR);
+  if (!name || !METHODS.has(method)) return bad(GENERIC_CATEGORY_ERROR);
+  const out: ForecastCategory = {
+    id: typeof c.id === "string" && c.id ? c.id : randomUUID(),
+    name,
+    direction,
+    method: method as ForecastCategory["method"],
+  };
+
+  // Shared placement + adjustment knobs (getProrationFactor inputs).
+  const day = Number(c.expectedDay);
+  if (
+    c.expectedDay !== "" &&
+    c.expectedDay !== null &&
+    c.expectedDay !== undefined &&
+    Number.isInteger(day) &&
+    day >= 0 &&
+    day <= 6
+  ) {
+    out.expectedDay = day;
+  }
+  const wk = Number(c.expectedWeek);
+  if (
+    c.expectedWeek !== "" &&
+    c.expectedWeek !== null &&
+    c.expectedWeek !== undefined &&
+    Number.isInteger(wk) &&
+    wk >= 1 &&
+    wk <= 4
+  ) {
+    out.expectedWeek = wk;
+  }
+  const adj = Number(c.adjustmentPct);
+  if (Number.isFinite(adj) && adj !== 0) out.adjustmentPct = Math.min(200, Math.max(-90, adj));
+
+  if (method === "gl_history_average") {
+    const ids = strList(c.accountIds, 50);
+    if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
+    const refError = await check("accountIds", "accounts", "an account", ids, { postable: true });
+    if (refError) return bad(refError);
+    out.accountIds = ids;
+    out.historyWeeks = clampNum(c.historyWeeks, 1, 52, 12);
+    if (c.useNetAmt === true) out.useNetAmt = true;
+  } else if (method === "vendor_payment_history" || method === "vendor_recurring_average") {
+    const ids = strList(c.partyIds, 50);
+    if (!ids.length && typeof c.partyId === "string" && c.partyId) ids.push(c.partyId);
+    if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
+    const refError = await check("partyIds", "parties", "a party", ids, { vendorRole: true });
+    if (refError) return bad(refError);
+    out.partyIds = ids;
+    out.partyId = ids[0];
+    out.partyName = typeof c.partyName === "string" ? c.partyName.slice(0, 120) : undefined;
+    out.historyMonths = clampNum(
+      c.historyMonths,
+      1,
+      36,
+      method === "vendor_recurring_average" ? 3 : 12,
+    );
+  } else if (method === "credit_card_cycle") {
+    const ids = strList(c.cardAccountIds, 20).length
+      ? strList(c.cardAccountIds, 20)
+      : strList(c.accountIds, 20);
+    if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
+    const refError = await check("cardAccountIds", "accounts", "an account", ids, {
+      accountType: CARD_ACCOUNT_TYPE,
+    });
+    if (refError) return bad(refError);
+    out.cardAccountIds = ids;
+    out.historyMonths = clampNum(c.historyMonths, 1, 24, 6);
+    if (c.significantPaymentThreshold !== undefined) {
+      if (typeof c.significantPaymentThreshold !== "string") {
+        return bad(
+          "significantPaymentThreshold must be a decimal string; reload the category and enter an exact amount.",
+        );
+      }
+      const exactThreshold = canonicalDecimal(c.significantPaymentThreshold, 4);
+      if (exactThreshold === null) {
+        return bad(
+          "significantPaymentThreshold must be a valid amount with no more than four decimal places; correct the amount and save again.",
+        );
+      }
+      const threshold = normalizeMoney(exactThreshold);
+      if (compareMoney(threshold, "0.0000") < 0 || compareMoney(threshold, "1000000000.0000") > 0) {
+        return bad(
+          "significantPaymentThreshold must be between 0 and 1000000000.0000; enter a supported amount and save again.",
+        );
+      }
+      out.significantPaymentThreshold = threshold;
+    }
+  } else if (method === "formula_expression") {
+    const formula = typeof c.formula === "string" ? c.formula.trim().slice(0, 500) : "";
+    if (!formula) return bad(GENERIC_CATEGORY_ERROR);
+    out.formula = formula;
+  } else if (method === "bank_register_history") {
+    const ids = strList(c.bankAccountIds, 20);
+    if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
+    const refError = await check("bankAccountIds", "accounts", "an account", ids, {
+      accountType: BANK_ACCOUNT_TYPE,
+    });
+    if (refError) return bad(refError);
+    out.bankAccountIds = ids;
+    out.historyWeeks = clampNum(c.historyWeeks, 1, 52, 12);
+    const keywords = strList(c.memoKeywords, 10)
+      .map((k) => k.trim().slice(0, 40))
+      .filter(Boolean);
+    if (keywords.length) out.memoKeywords = keywords;
+    if (c.includeTransfers === false) out.includeTransfers = false;
+    if (c.includeChecks === false) out.includeChecks = false;
+    if (c.includeJournals === true) out.includeJournals = true;
+  } else {
+    // manual_recurring
+    let amount: string;
+    try {
+      amount = normalizeMoney(String(c.amount ?? ""));
+    } catch {
+      return bad(GENERIC_CATEGORY_ERROR);
+    }
+    if (compareMoney(amount, "0.0000") <= 0) return bad(GENERIC_CATEGORY_ERROR);
+    // An over-limit amount refuses naming the limit — silently clamping it
+    // would store a number nobody typed.
+    if (compareMoney(amount, MANUAL_AMOUNT_MAX) > 0) {
+      return bad(`manual amount ${amount} exceeds the maximum ${MANUAL_AMOUNT_MAX}`);
+    }
+    // The persisted payment anchor pins the monthly/biweekly phase so moving
+    // the forecast date never rephases the schedule. A writer that omits it
+    // gets the org business day stamped (stable from then on); a malformed
+    // one refuses. The forecast also accepts legacy rows without it (they
+    // step from the horizon start, as before) so the backfill is the only
+    // migration path that needs to exist.
+    const rawAnchor = c.anchorDate;
+    if (rawAnchor === undefined || rawAnchor === null || rawAnchor === "") {
+      out.anchorDate = await businessToday(orgId);
+    } else if (
+      typeof rawAnchor === "string" &&
+      /^\d{4}-\d{2}-\d{2}$/.test(rawAnchor) &&
+      !Number.isNaN(Date.parse(`${rawAnchor}T00:00:00Z`))
+    ) {
+      const [y, m, d] = rawAnchor.split("-").map(Number);
+      if (m! < 1 || m! > 12) return bad(GENERIC_CATEGORY_ERROR);
+      const days = utcDateFromParts(y!, m!, 0).getUTCDate();
+      if (d! < 1 || d! > days) return bad(GENERIC_CATEGORY_ERROR);
+      out.anchorDate = rawAnchor;
+    } else {
+      return bad(GENERIC_CATEGORY_ERROR);
+    }
+    // ForecastCategory's legacy declaration still says `number`, but the
+    // persisted/read model is an exact numeric(19,4) string. Keep this route
+    // on the exact-money path without crossing through an unsafe float.
+    (out as unknown as { amount?: string }).amount = amount;
+    // No silent default: the editor shows Weekly when nothing is chosen while
+    // the engine used to assume monthly, so a missing or misspelled frequency
+    // refuses by name instead of forecasting at a cadence nobody picked.
+    if (c.frequency === undefined || c.frequency === null || c.frequency === "") {
+      return {
+        ok: false,
+        status: 422,
+        error: `manual_recurring category "${name}" needs a frequency — choose weekly, biweekly or monthly in the category editor`,
+      };
+    }
+    if (!FREQUENCIES.has(String(c.frequency))) {
+      return {
+        ok: false,
+        status: 422,
+        error: `manual_recurring category "${name}" has an unknown frequency "${String(c.frequency)}" — choose weekly, biweekly or monthly in the category editor`,
+      };
+    }
+    out.frequency = c.frequency as ForecastCategory["frequency"];
+  }
+  // Subsidiary attribution for the org-level strategies (manual, formula):
+  // SQL-backed methods scope through their own accounts/parties, so the
+  // field is meaningless there and not persisted. In a subsidiary-scoped
+  // view an unattributed manual/formula category hides (fail closed).
+  if (method === "manual_recurring" || method === "formula_expression") {
+    const subIds = strList(c.subsidiaryIds, 50);
+    if (subIds.length) {
+      const refError = await validateReferences(orgId, [
+        {
+          field: "subsidiaryIds",
+          table: "subsidiaries",
+          kind: "a subsidiary",
+          ids: subIds,
+          allowedSubsidiaryIds,
+        },
+      ]);
+      if (refError) return bad(refError);
+      out.subsidiaryIds = subIds;
+    }
+  }
+  return { ok: true, category: out };
+}
+
+export type CashflowCategoryWriteResult =
+  | { kind: "invalid_body"; message: string }
+  | { kind: "revision_required" }
+  | { kind: "invalid_category"; index: number; message: string; status: number }
+  | { kind: "missing" }
+  | { kind: "conflict"; revision: number }
+  | { kind: "unwritten" }
+  | { kind: "saved"; categories: ForecastCategory[]; revision: number };
+
+export async function replaceCashflowCategories(input: {
+  orgId: string;
+  actorId: string;
+  allowedSubsidiaryIds: Set<string> | null;
+  categories: unknown[];
+  expectedRevision?: number;
+}): Promise<CashflowCategoryWriteResult> {
+  const parsed = cashflowCategoryBodySchema.safeParse({
+    categories: input.categories,
+    expectedRevision: input.expectedRevision,
+  });
+  if (!parsed.success)
+    return {
+      kind: "invalid_body",
+      message: parsed.error.issues[0]?.message ?? "Invalid cashflow categories.",
+    };
+  if (input.expectedRevision === undefined) return { kind: "revision_required" };
+
+  const cleaned: CleanResult[] = [];
+  for (const raw of input.categories) {
+    cleaned.push(await cleanForecastCategory(raw, input.orgId, input.allowedSubsidiaryIds));
+  }
+  const invalidIndex = cleaned.findIndex((result) => !result.ok);
+  if (invalidIndex !== -1) {
+    const failure = cleaned[invalidIndex] as { ok: false; error: string; status?: 422 };
+    return {
+      kind: "invalid_category",
+      index: invalidIndex,
+      message: failure.error,
+      status: failure.status ?? 400,
+    };
+  }
+  const categories = cleaned.flatMap((result) => (result.ok ? [result.category] : []));
+  const saved = await saveCashflowCategories({
+    orgId: input.orgId,
+    actorId: input.actorId,
+    expectedRevision: input.expectedRevision,
+    categories,
+  });
+  if (saved.kind === "missing") return { kind: "missing" };
+  if (saved.kind === "conflict") return { kind: "conflict", revision: saved.revision };
+  if (saved.kind === "unwritten") return { kind: "unwritten" };
+  return { kind: "saved", categories, revision: saved.revision };
+}

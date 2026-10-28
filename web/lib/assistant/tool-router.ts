@@ -322,6 +322,12 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   // Administration commands.
 
   // Workspace commands.
+  get_cashflow_categories: "analytics",
+  replace_cashflow_categories: "analytics",
+  get_financial_health_ratio_inputs: "analytics",
+  update_financial_health_ratio_input: "analytics",
+  bulk_move_file_cabinet_items: "files",
+  bulk_delete_file_cabinet_items: "files",
   list_insight_cards: "analytics",
   get_insight_card: "analytics",
   create_insight_card: "analytics",

@@ -35,6 +35,7 @@ export async function setInsightDashboardPin(
   await db.execute(sql`
     insert into insight_dashboard_pins (org_id, user_id, dashboard_id, sort_order)
     values (${authz.user.orgId}, ${authz.user.id}, ${dashboardId}, ${next[0]?.n ?? 0})
+    -- A repeated user/dashboard pin already has the desired state.
     on conflict (org_id, user_id, dashboard_id) do nothing
   `);
   return true;

@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import {
   computeNextRunAt,
   normalizeReportRecipientEmails,
@@ -172,7 +173,7 @@ export async function updateReportSchedule(
   requestId: string | null,
 ) {
   if (!can(authz, "reports.schedule")) throw forbidden("reports.schedule");
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw notFound("record");
+  if (!UUID_RE.test(id)) throw notFound("record");
   return withOrgTransaction(authz.user.orgId, async () => {
     const existing = await loadAuthorizedSchedule(authz, id);
     let cadence;
@@ -239,7 +240,7 @@ export async function deleteReportSchedule(
   requestId: string | null,
 ) {
   if (!can(authz, "reports.schedule")) throw forbidden("reports.schedule");
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw notFound("record");
+  if (!UUID_RE.test(id)) throw notFound("record");
   return withOrgTransaction(authz.user.orgId, async () => {
     const existing = await loadAuthorizedSchedule(authz, id);
     const removed = await db.execute<{ id: string }>(
