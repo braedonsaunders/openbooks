@@ -285,7 +285,7 @@ test("workspace query console enforces permission and feature gates", { skip: !D
         ),
       );
     await setQueryConsole(org.orgId, false);
-    await assert.rejects(run(ctx), /query console is disabled/i);
+    await assert.rejects(run(ctx), /needs the queryConsole feature/);
     await assert.rejects(run(ctxFor(org.orgId, actors.adminId, [])), /forbidden/);
     await setQueryConsole(org.orgId, true);
     await assert.rejects(run(ctx, "query_console", "delete from invoices"), /read.only/i);

@@ -213,8 +213,7 @@ test(
           ...scheduleInput,
           idempotencyKey: "time-schedule-feature-off-001",
         }),
-        (error: unknown) =>
-          typeof error === "object" && error !== null && "status" in error && error.status === 404,
+        /needs the payroll feature/,
       );
     } finally {
       await withBypassContext(async () => {

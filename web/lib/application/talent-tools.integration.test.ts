@@ -709,7 +709,7 @@ test(
           payload: { displayName: "Feature Off" },
           idempotencyKey: "talent-feature-off-01",
         }),
-        /not found/i,
+        /needs the hrmRecruiting feature/,
       );
     } finally {
       await dropScratchOrg(org.orgId);
