@@ -109,7 +109,7 @@ const IDEMPOTENCY_KEY = z
   .string()
   .regex(/^[A-Za-z0-9._:-]{8,200}$/)
   .describe("Unique retry key for this exact mutation.");
-function withIdempotency<T extends z.AnyZodObject>(schema: T) {
+function withIdempotency<T extends z.ZodObject>(schema: T) {
   return schema.extend({ idempotencyKey: IDEMPOTENCY_KEY });
 }
 
@@ -163,7 +163,7 @@ function settleServiceRefusal(error: unknown): never {
   throw error;
 }
 
-type ServiceMutationArgs<T extends z.ZodTypeAny> = {
+type ServiceMutationArgs<T extends z.ZodType> = {
   name: string;
   title: string;
   description: string;
@@ -176,7 +176,7 @@ type ServiceMutationArgs<T extends z.ZodTypeAny> = {
   execute: (context: ApplicationContext, input: z.infer<T>) => Promise<Record<string, unknown>>;
 };
 
-function serviceMutation<T extends z.ZodTypeAny>(args: ServiceMutationArgs<T>) {
+function serviceMutation<T extends z.ZodType>(args: ServiceMutationArgs<T>) {
   return definition({
     name: args.name,
     title: args.title,
@@ -203,7 +203,7 @@ function serviceMutation<T extends z.ZodTypeAny>(args: ServiceMutationArgs<T>) {
   });
 }
 
-function serviceRead<T extends z.ZodTypeAny>(args: {
+function serviceRead<T extends z.ZodType>(args: {
   name: string;
   title: string;
   description: string;
@@ -247,8 +247,9 @@ export const CRM_SERVICE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
       "Read a service request with its visits and quotes before editing or closing it. Find request ids with the Service Requests list.",
     inputSchema: z.object({ requestId: UUID }),
     permissions: readService,
-    execute: async (context, input) =>
-      getServiceRequest({ ...serviceActor(context.authz), requestId: input.requestId }),
+    execute: async (context, input) => ({
+      ...(await getServiceRequest({ ...serviceActor(context.authz), requestId: input.requestId })),
+    }),
   }),
   serviceRead({
     name: "get_service_job",
@@ -257,8 +258,9 @@ export const CRM_SERVICE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
       "Read a service job with its scope, visits, deposits, invoices and revision before changing it. Find job ids with the Service Jobs list.",
     inputSchema: z.object({ jobId: UUID }),
     permissions: readService,
-    execute: async (context, input) =>
-      getServiceJob({ ...serviceActor(context.authz), jobId: input.jobId }),
+    execute: async (context, input) => ({
+      ...(await getServiceJob({ ...serviceActor(context.authz), jobId: input.jobId })),
+    }),
   }),
   serviceRead({
     name: "get_service_visit",
@@ -267,8 +269,9 @@ export const CRM_SERVICE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
       "Read a service visit with its work, assignment, revision and customer sign-off before changing its plan or status. Find visit ids on a request, job or dispatch board.",
     inputSchema: z.object({ visitId: UUID }),
     permissions: [...readService, "service.self"],
-    execute: async (context, input) =>
-      getServiceVisit({ ...serviceActor(context.authz), visitId: input.visitId }),
+    execute: async (context, input) => ({
+      ...(await getServiceVisit({ ...serviceActor(context.authz), visitId: input.visitId })),
+    }),
   }),
   serviceRead({
     name: "get_service_agreement",
@@ -277,8 +280,12 @@ export const CRM_SERVICE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
       "Read an agreement, its effective versions and generated visits before changing or closing it. Find agreement ids with the Service Agreements list.",
     inputSchema: z.object({ agreementId: UUID }),
     permissions: readService,
-    execute: async (context, input) =>
-      getServiceAgreement({ ...serviceActor(context.authz), agreementId: input.agreementId }),
+    execute: async (context, input) => ({
+      ...(await getServiceAgreement({
+        ...serviceActor(context.authz),
+        agreementId: input.agreementId,
+      })),
+    }),
   }),
   serviceMutation({
     name: "create_service_request",
@@ -444,18 +451,18 @@ export const CRM_SERVICE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
       permissions: manage,
       destructive: action === "cancel",
       execute: async (context, input) => {
-        const { idempotencyKey: _key, jobId, ...body } = input;
+        const { idempotencyKey: _key, jobId, expectedRevision } = input;
         const actor = {
           ...serviceActor(context.authz),
           jobId,
-          expectedRevision: body.expectedRevision,
+          expectedRevision,
         };
         const result =
-          action === "complete"
+          input.action === "complete"
             ? await completeServiceJob(actor)
-            : action === "reopen"
-              ? await reopenServiceJob({ ...actor, reason: body.reason })
-              : await cancelServiceJob({ ...actor, reason: body.reason });
+            : input.action === "reopen"
+              ? await reopenServiceJob({ ...actor, reason: input.reason })
+              : await cancelServiceJob({ ...actor, reason: input.reason });
         return { ok: true, ...result, href: `/service/jobs/${jobId}` };
       },
     }),
@@ -474,11 +481,11 @@ export const CRM_SERVICE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
         jobId,
         visitId: visitId ?? null,
       });
-      const documentId = String(result.documentId ?? result.invoiceDocumentId ?? "");
+      const documentId = result.invoiceId;
       return {
         ok: true,
         ...result,
-        href: documentId ? `/invoices/${documentId}` : `/service/jobs/${jobId}`,
+        href: `/invoices/${documentId}`,
       };
     },
   }),
@@ -699,7 +706,7 @@ export const CRM_SERVICE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
         quoteDocumentId,
         ...body,
       });
-      const jobId = String(result.jobId ?? "");
+      const jobId = result.job.id;
       return {
         ok: true,
         ...result,

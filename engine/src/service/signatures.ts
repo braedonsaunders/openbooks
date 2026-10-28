@@ -127,10 +127,10 @@ export async function voidVisitSignatureLink(
     )[0];
     if (!request) return { voided: false, requestId: null, status: null };
     if (request.respondedAt) {
-      return { voided: false, requestId: request.id, status: "responded" };
+      return { voided: false, requestId: request.id, status: "responded" as const };
     }
     if (request.revokedAt) {
-      return { voided: false, requestId: request.id, status: "voided" };
+      return { voided: false, requestId: request.id, status: "voided" as const };
     }
     requireOne(
       await db.execute(
@@ -150,7 +150,7 @@ export async function voidVisitSignatureLink(
       before: { revokedAt: null },
       after: { revokedAt: "now" },
     });
-    return { voided: true, requestId: request.id, status: "voided" };
+    return { voided: true, requestId: request.id, status: "voided" as const };
   }).catch((error: unknown) => {
     throw serviceDatabaseRefusal(error);
   });
@@ -187,7 +187,7 @@ export async function getVisitSignatureStatus(actor: ServiceActor & { visitId: s
       )
     )[0];
     if (!row) return { visitId: visit.id, request: null };
-    const status = row.respondedAt
+    const status: "sent" | "expired" | "voided" | "responded" = row.respondedAt
       ? "responded"
       : row.revokedAt
         ? "voided"

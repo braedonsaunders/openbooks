@@ -16,6 +16,11 @@ import { hasGeographicCoverage } from "@openbooks/engine/crm/sales/contracts";
 import { can } from "../authz";
 import { crmSharedScope } from "../crm-scope";
 import { canonicalizeSalesGeography } from "../crm/territory-boundaries";
+import { verifyCrmTerritoryLocation } from "../crm/territory-location";
+import {
+  crmOpportunityEstimateKey,
+  createCrmOpportunityEstimate,
+} from "../crm/opportunity-estimate";
 import {
   createCrmAccountDraft,
   createCrmActivityDraft,
@@ -134,7 +139,7 @@ async function settlePartyAction<T extends Record<string, unknown>>(
   throw new ApplicationError(code, message, status, body);
 }
 
-type CrmMutationArgs<T extends z.ZodTypeAny> = {
+type CrmMutationArgs<T extends z.ZodType> = {
   name: string;
   title: string;
   description: string;
@@ -146,7 +151,7 @@ type CrmMutationArgs<T extends z.ZodTypeAny> = {
   execute: (context: ApplicationContext, input: z.infer<T>) => Promise<Record<string, unknown>>;
 };
 
-function crmMutation<T extends z.ZodTypeAny>(args: CrmMutationArgs<T>) {
+function crmMutation<T extends z.ZodType>(args: CrmMutationArgs<T>) {
   return definition({
     name: args.name,
     title: args.title,
@@ -332,6 +337,48 @@ export const CRM_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
         opportunityId: body.id,
         href: `/crm/opportunities?opportunity=${body.id}`,
       };
+    },
+  }),
+  definition({
+    name: "convert_crm_opportunity_to_quote",
+    title: "Convert CRM Opportunity to Quote",
+    description:
+      "Create a quote draft from an active opportunity with an account and item-backed lines. Use the opportunity id from get_opportunity; this action also requires Accounts Receivable create permission and an enabled Quotes document kind.",
+    inputSchema: z.strictObject({
+      opportunityId: UUID.describe("Active opportunity UUID returned by get_opportunity."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => can(authz, "crm.opportunities.manage") && can(authz, "ar.create"),
+    featureKey: "crm",
+    execute: async (context, input) => {
+      crmPermission(context, "crm.opportunities.manage");
+      crmPermission(context, "ar.create");
+      await requireFeature(context, "crm");
+      const response = await createCrmOpportunityEstimate(
+        context.authz,
+        input.opportunityId,
+        crmOpportunityEstimateKey(input.idempotencyKey),
+      );
+      const payload = (await response.json()) as Record<string, unknown>;
+      if (response.status >= 400) {
+        const message =
+          typeof payload.error === "string" ? payload.error : "Opportunity conversion was refused.";
+        const status = response.status;
+        const code =
+          status === 403
+            ? "forbidden"
+            : status === 404
+              ? "not_found"
+              : status === 409
+                ? "conflict"
+                : "invalid_input";
+        throw new ApplicationError(code, message, status, payload);
+      }
+      return { ok: true, ...payload, href: `/estimates/${String(payload.id)}` };
     },
   }),
   crmMutation({
@@ -537,6 +584,30 @@ export const CRM_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
       } catch (error) {
         settleCrmRefusal(error);
       }
+    },
+  }),
+  crmMutation({
+    name: "verify_crm_territory_location",
+    title: "Verify CRM Territory Location",
+    description:
+      "Save verified coordinates for an account address missing from a geographic territory preview. Use addressId and addressRevision from preview_crm_territory; the address must remain unchanged until verification.",
+    inputSchema: z.strictObject({
+      addressId: UUID.describe("Address UUID returned by preview_crm_territory."),
+      longitude: z.number().min(-180).max(180).describe("Verified longitude from -180 to 180."),
+      latitude: z.number().min(-90).max(90).describe("Verified latitude from -90 to 90."),
+      expectedRevision: z
+        .string()
+        .min(1)
+        .max(100)
+        .describe("Address revision returned by the territory preview."),
+      reason: z.string().trim().min(1).max(1000).describe("Reason the location was verified."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    permission: "crm.accounts.manage",
+    feature: "geographicTerritories",
+    execute: async (context, input) => {
+      await verifyCrmTerritoryLocation(context.authz, input.addressId, input);
+      return { ok: true, id: input.addressId, href: "/crm/sales" };
     },
   }),
   definition({
@@ -814,9 +885,10 @@ export const CRM_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
       const { idempotencyKey: _key, partyId, ...body } = input;
       const result = await sendPartyStatement(context.authz, partyId, body);
       const settled = await settlePartyAction(result);
+      const { ok: _ok, ...statement } = settled;
       return {
         ok: true,
-        ...settled,
+        ...statement,
         partyId,
         href: `/reports/statements/${partyId}?side=${input.side}`,
       };

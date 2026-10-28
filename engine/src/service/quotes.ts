@@ -209,7 +209,7 @@ export async function saveServiceQuoteTerms(
   return withOrgTransaction(actor.orgId, async () => {
     await lockDependentFeature(actor.orgId, "orders", "Orders");
     const quote = await lockQuoteDocument(actor.orgId, actor.quoteDocumentId);
-    await serviceAuthority(actor, "service.manage", quote.subsidiaryId);
+    const allowed = await serviceAuthority(actor, "service.manage", quote.subsidiaryId);
     await lockActorCommandAuthority(
       db,
       actor.orgId,
