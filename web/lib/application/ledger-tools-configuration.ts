@@ -8,7 +8,12 @@ import {
   saveOperatingProfileScope,
 } from "@openbooks/engine/organization/operating-profiles";
 import { readOperatingSetupJourney } from "@openbooks/engine/manufacturing/setup-journey";
-import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { proposeProvisionAssessment } from "@openbooks/engine/provisions";
+import { bookReplicationStatus, listBookReplicationRuns } from "@openbooks/engine/multibook";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db, withOrg, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { readEntityListPage } from "../list/entity-reader";
+import { provisionAssessmentToolSchema } from "../provisions/assessment-schema";
 import { can } from "../authz";
 import { assertApplicationPermission, type ApplicationContext } from "./context";
 import { ApplicationError, forbidden, invalidInput } from "./errors";
@@ -34,9 +39,17 @@ function assertUnrestricted(context: ApplicationContext): void {
 function settleRefusal(error: unknown): never {
   if (error instanceof ApplicationError) throw error;
   if (error instanceof Error) {
-    const typed = error as Error & { status?: unknown; code?: unknown; remedy?: unknown };
+    const typed = error as Error & {
+      status?: unknown;
+      code?: unknown;
+      remedy?: unknown;
+      details?: unknown;
+    };
     if (typeof typed.status === "number") {
       const details = {
+        ...(typed.details && typeof typed.details === "object" && !Array.isArray(typed.details)
+          ? (typed.details as Record<string, unknown>)
+          : {}),
         ...(typeof typed.code === "string" ? { code: typed.code } : {}),
         ...(typeof typed.remedy === "string" ? { remedy: typed.remedy } : {}),
       };
@@ -52,6 +65,87 @@ function settleRefusal(error: unknown): never {
 }
 
 export const LEDGER_CONFIGURATION_TOOLS: ApplicationToolDefinition[] = [
+  definition({
+    name: "get_accounting_book_replication_status",
+    title: "Get Accounting Book Replication Status",
+    description:
+      "Read each active secondary book's replication completeness and change history. Use list_setup_records for the accounting-books entity to find book ids; use the accounting-book-replication setup entity to inspect individual change records.",
+    inputSchema: z.object({}),
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "never",
+    visibleTo: hasPermission("gl.read"),
+    featureKey: "multiBookAccounting",
+    execute: async (context) => {
+      assertApplicationPermission(context, "gl.read");
+      const orgId = context.authz.user.orgId;
+      return withOrg(orgId, async () => ({
+        ok: true,
+        replication: await bookReplicationStatus(orgId, await businessToday(orgId)),
+        replicationRuns: await listBookReplicationRuns(orgId),
+      }));
+    },
+  }),
+  definition({
+    name: "list_accounting_changes",
+    title: "List Accounting Changes",
+    description:
+      "List the accounting change queue with current status, domain, effective date, subject, and reason. Use this to find proposal ids before submitting or reviewing a change.",
+    inputSchema: z.object({
+      page: z.number().int().min(1).max(10_000).optional().describe("Page number, starting at 1."),
+      perPage: z.number().int().min(5).max(100).optional().describe("Rows per page, default 25."),
+    }),
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "never",
+    visibleTo: hasPermission("gl.read"),
+    execute: async (context, input) => {
+      assertApplicationPermission(context, "gl.read");
+      return readEntityListPage({
+        recordType: "financial_change",
+        orgId: context.authz.user.orgId,
+        actorId: context.authz.user.id,
+        allowedSubsidiaryIds:
+          context.authz.allowedSubsidiaryIds === null
+            ? null
+            : new Set(context.authz.allowedSubsidiaryIds),
+        page: input.page,
+        perPage: input.perPage,
+      });
+    },
+  }),
+  definition({
+    name: "propose_provision_assessment",
+    title: "Propose Provision Assessment",
+    description:
+      "Create an evidenced assessment proposal for an existing provision obligation; it remains subject to the accounting approval flow. Use list_records for provision_obligation to find obligation ids and list_accounting_changes to verify the proposal or find it for submission.",
+    inputSchema: provisionAssessmentToolSchema,
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: hasPermission("gl.manage"),
+    execute: async (context, input) => {
+      assertApplicationPermission(context, "gl.manage");
+      try {
+        const id = await proposeProvisionAssessment(
+          context.authz.user.orgId,
+          context.authz.user.id,
+          input,
+        );
+        return {
+          ok: true,
+          id,
+          status: "proposed",
+          href: `/accounting/changes?change=${id}`,
+        };
+      } catch (error) {
+        settleRefusal(error);
+      }
+    },
+  }),
   definition({
     name: "publish_operating_profile",
     title: "Publish Operating Profile",

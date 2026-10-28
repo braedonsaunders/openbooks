@@ -12,7 +12,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } =
+const { createScratchOrg, dropScratchOrg, seedFlowActors, grantScratchPermissions } =
   await import("@openbooks/engine/testing/fixtures");
 const { getRun, getRuleVersion } = await import("@openbooks/engine/allocations/runtime");
 const { postProjectGlEntry } = await import("@openbooks/engine/projects/recognition");
@@ -505,6 +505,123 @@ test(
         /disabled|feature/i,
       );
       assert.equal(await pinnedGroup(foreign.orgId, foreign.accounts.cogs), null);
+    } finally {
+      await dropScratchOrg(foreign.orgId);
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "provision assessment commands preserve proposal replay, permission, readback and tenant scope",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const foreign = await withBypassContext(() => createScratchOrg());
+    try {
+      const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+      const foreignActors = await withBypassContext(() => seedFlowActors(foreign.orgId));
+      const expense = randomUUID();
+      const liability = randomUUID();
+      await withBypassContext(async () => {
+        await db.execute(sql`
+          update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{reportingFramework}', '"ifrs"'::jsonb, true)
+          where id = ${org.orgId}
+        `);
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type) values
+            (${expense}, ${org.orgId}, 'LEDGER-PROV-EXP', 'Provision expense', 'expense'),
+            (${liability}, ${org.orgId}, 'LEDGER-PROV-LIAB', 'Provision liability', 'liability_current_other')
+        `);
+        await grantScratchPermissions(org.orgId, actors.submitterId, ["gl.manage", "gl.read"]);
+        await grantScratchPermissions(foreign.orgId, foreignActors.adminId, ["gl.read"]);
+      });
+
+      const proposal = {
+        obligation: {
+          id: randomUUID(),
+          subsidiaryId: org.subsidiaryId,
+          bookId: org.bookId,
+          name: "Legal settlement obligation",
+          currency: "CAD",
+          expenseAccountId: expense,
+          liabilityAccountId: liability,
+        },
+        effectiveOn: org.date,
+        reason: "Accrue the supported probable settlement obligation",
+        idempotencyKey: "ledger-provision-assessment-001",
+        assessment: {
+          presentObligation: true,
+          outflow: "probable",
+          reliablyEstimable: true,
+          evidence:
+            "Counsel confirms a present legal obligation from defective work and a probable settlement.",
+          discounting: "immaterial",
+          discountEvidence:
+            "Settlement is expected shortly; counsel confirms time value is immaterial.",
+          estimate: { method: "best_estimate", amount: "50000" },
+        },
+      };
+      const manageContext = ctxFor(org.orgId, actors.submitterId, ["gl.manage"]);
+      const readContext = ctxFor(org.orgId, actors.submitterId, ["gl.read"]);
+      const run = (name: string, context: ApplicationContext, input: Record<string, unknown>) =>
+        withOrgContext(context.authz.user.orgId, () =>
+          executeApplicationTool(applicationTool(name)!, context, input),
+        );
+
+      const created = (await run("propose_provision_assessment", manageContext, proposal)) as {
+        id: string;
+        replayed: boolean;
+      };
+      assert.equal(created.replayed, false);
+      const replay = (await run("propose_provision_assessment", manageContext, proposal)) as {
+        id: string;
+        replayed: boolean;
+      };
+      assert.equal(replay.replayed, true);
+      assert.equal(replay.id, created.id);
+
+      const changes = (await run("list_accounting_changes", readContext, {
+        page: 1,
+        perPage: 100,
+      })) as { rows: Array<Record<string, unknown>> };
+      assert.ok(changes.rows.some((row) => row.id === created.id && row.domain === "provision"));
+      const proposalCount = await withBypassContext(() =>
+        db.execute<{ count: string }>(
+          sql`select count(*)::text as count from financial_changes
+               where org_id = ${org.orgId} and id = ${created.id}`,
+          "objects",
+        ),
+      );
+      assert.equal(proposalCount[0]?.count, "1");
+
+      await assert.rejects(
+        run("propose_provision_assessment", ctxFor(org.orgId, actors.submitterId, []), {
+          ...proposal,
+          idempotencyKey: "ledger-provision-assessment-denied",
+        }),
+        /forbidden/i,
+      );
+      const foreignChanges = (await run(
+        "list_accounting_changes",
+        ctxFor(foreign.orgId, foreignActors.adminId, ["gl.read"]),
+        { page: 1, perPage: 100 },
+      )) as { rows: Array<Record<string, unknown>> };
+      assert.equal(
+        foreignChanges.rows.some((row) => row.id === created.id),
+        false,
+      );
+
+      await withBypassContext(() =>
+        db.execute(sql`
+          update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,multiBookAccounting}', 'false'::jsonb, true)
+          where id = ${org.orgId}
+        `),
+      );
+      await assert.rejects(
+        run("get_accounting_book_replication_status", readContext, {}),
+        /needs multiBookAccounting feature/i,
+      );
     } finally {
       await dropScratchOrg(foreign.orgId);
       await dropScratchOrg(org.orgId);
