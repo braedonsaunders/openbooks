@@ -387,9 +387,7 @@ export async function updateCustomRecordType(
         "Keep the subsidiary_id field; removing it would expose records from subsidiaries outside your scope",
     });
   const updated = await loadRecordTypeById(user.orgId, id);
-  return updated
-    ? response(200, { type: updated, issues })
-    : response(404, { error: "not_found" });
+  return updated ? response(200, { type: updated, issues }) : response(404, { error: "not_found" });
 }
 
 export async function deleteCustomRecordType(
