@@ -1,39 +1,14 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { sql } from "drizzle-orm";
 import { isUuid } from "../../../../../lib/list-params";
 import { can } from "../../../../../lib/authz";
-import {
-  canReadContinuousCloseAgent,
-  loadWorkItemAccess,
-  readableContinuousCloseAgents,
-  withLockedWorkItemAccess,
-} from "../../../../../lib/continuous-close";
+import { readableContinuousCloseAgents } from "../../../../../lib/continuous-close";
 import { loadWorkItemDetail } from "../../../../../lib/agents/work-item";
-import { workItemSubjectInScope } from "../../../../../lib/agents/work-item-subsidiary-scope";
 import { findingProposalCommand } from "../../../../../lib/agents/proposals";
-import {
-  addWorkItemNote,
-  listWorkItemNotes,
-  loadWorkItemAssignment,
-  setWorkItemAssignment,
-} from "../../../../../lib/agents/assignments";
+import { listWorkItemNotes, loadWorkItemAssignment } from "../../../../../lib/agents/assignments";
 import { notFound } from "@/lib/api/responses";
-
-const ACTION_STATUS = {
-  review: "in_review",
-  resolve: "resolved",
-  dismiss: "dismissed",
-  reopen: "open",
-} as const;
-
-const ALLOWED_ACTIONS = {
-  open: ["review", "resolve", "dismiss"],
-  in_review: ["resolve", "dismiss", "reopen"],
-  resolved: ["reopen"],
-  dismissed: ["reopen"],
-} as const;
+import { updateContinuousCloseItem } from "../../../../../lib/continuous-close/item-actions";
 
 const itemParams = z.object({ id: z.string() });
 const itemActionBody = z.discriminatedUnion("action", [
@@ -87,103 +62,15 @@ export const PATCH = defineRoute({
   body: itemActionBody,
   handler: async ({ authz, params: { id }, body }) => {
     if (!isUuid(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
-    const access = await loadWorkItemAccess(authz.user.orgId, id, authz.allowedSubsidiaryIds);
-    if (!access) return notFound("record");
-    if (!canReadContinuousCloseAgent(authz, access.agentKey)) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    const result = await updateContinuousCloseItem(authz, id, body);
+    if (!result.ok) {
+      if (result.error === "not_found") return notFound("record");
+      return NextResponse.json({ error: result.error }, { status: result.status });
     }
-    // Out-of-scope subjects share the uniform not-found response.
-    if (
-      !workItemSubjectInScope(
-        authz.allowedSubsidiaryIds,
-        access.subjectType ?? "",
-        access.subjectSubsidiaryId,
-      )
-    ) {
-      return notFound("record");
-    }
-    const action = body.action;
-    if (action === "assign" || action === "note") {
-      const result =
-        action === "assign"
-          ? await setWorkItemAssignment(authz, id, {
-              assigneeUserId:
-                "assigneeUserId" in body ? (body.assigneeUserId as string | null) : undefined,
-              assigneeRole:
-                "assigneeRole" in body ? (body.assigneeRole as string | null) : undefined,
-              dueAt: "dueAt" in body ? (body.dueAt as string | null) : undefined,
-            })
-          : await addWorkItemNote(authz, id, body.body);
-      if (!result.ok) {
-        const status =
-          result.error === "not_found" ? 404 : result.error === "forbidden" ? 403 : 422;
-        return NextResponse.json({ error: result.error }, { status });
-      }
-      if (action === "note" && "id" in result)
-        return NextResponse.json({ ok: true, id: result.id });
-      return NextResponse.json({ ok: true });
-    }
-    if (!(action in ACTION_STATUS))
-      return NextResponse.json({ error: "invalid_action" }, { status: 422 });
-    if (!(ALLOWED_ACTIONS[access.status] as readonly string[]).includes(action)) {
-      return NextResponse.json({ error: "invalid_transition" }, { status: 409 });
-    }
-    const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
-    if (action === "dismiss" && !reason) {
-      return NextResponse.json({ error: "reason_required" }, { status: 422 });
-    }
-    const status = ACTION_STATUS[action as keyof typeof ACTION_STATUS];
-    // Re-resolve agent, scope, and lifecycle inside the row-locked transaction
-    // so a concurrent rehome or status change cannot slip between check and write.
-    const result = await withLockedWorkItemAccess(
-      authz.user.orgId,
-      id,
-      authz.allowedSubsidiaryIds,
-      async (tx, locked) => {
-        if (!canReadContinuousCloseAgent(authz, locked.agentKey))
-          return { error: "forbidden" as const };
-        if (
-          !workItemSubjectInScope(
-            authz.allowedSubsidiaryIds,
-            locked.subjectType ?? "",
-            locked.subjectSubsidiaryId,
-          )
-        ) {
-          return { error: "not_found" as const };
-        }
-        if (!(ALLOWED_ACTIONS[locked.status] as readonly string[]).includes(action)) {
-          return { error: "invalid_transition" as const };
-        }
-        const changed = await tx.execute<{ id: string }>(
-          sql`
-      update ai_work_items set
-        status = ${status},
-        resolved_at = case when ${status} = 'resolved' then now() else null end,
-        resolved_by = case when ${status} = 'resolved' then ${authz.user.id}::uuid else null end,
-        dismissed_at = case when ${status} = 'dismissed' then now() else null end,
-        dismissed_by = case when ${status} = 'dismissed' then ${authz.user.id}::uuid else null end,
-        dismissal_reason = case when ${status} = 'dismissed' then ${reason} else null end,
-        updated_at = now(), updated_by = ${authz.user.id}
-       where id = ${id} and org_id = ${authz.user.orgId} and status = ${locked.status}
-       returning id
-    `,
-          "objects",
-        );
-        if (changed.length === 0) return { error: "conflict" as const };
-        await tx.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${authz.user.orgId}, 'ai_work_items', ${id}, 'update',
-              ${JSON.stringify({ action, status, reason: reason || null })}::jsonb, ${authz.user.id})
-    `);
-        return { status };
-      },
-    );
-    if (!result) return notFound("record");
-    if ("error" in result) {
-      const statusCode =
-        result.error === "not_found" ? 404 : result.error === "forbidden" ? 403 : 409;
-      return NextResponse.json({ error: result.error }, { status: statusCode });
-    }
-    return NextResponse.json({ ok: true, status: result.status });
+    return NextResponse.json({
+      ok: true,
+      ...(result.id ? { id: result.id } : {}),
+      ...(result.status ? { status: result.status } : {}),
+    });
   },
 });

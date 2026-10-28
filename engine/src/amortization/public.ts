@@ -41,12 +41,13 @@ export {
   type AmortizationRunResult,
   type AmortizationRunProblem,
 } from "./run.ts";
+export { listScheduleRows, loadScheduleDetail, type ScheduleListRow } from "./read-model.ts";
 export {
   reconcileDeferralAccounts,
   dueUnpostedAmortization,
   type ReconciliationRow,
 } from "./reconciliation.ts";
-export { loadScheduleDetail, type ScheduleDetail } from "./read-model.ts";
+export type { ScheduleDetail } from "./read-model.ts";
 
 export { amortizationLineRefusal, type AmortizationLineFields } from "./source-fields.ts";
 export { validateSavedAmortizationLines } from "./source-posting.ts";

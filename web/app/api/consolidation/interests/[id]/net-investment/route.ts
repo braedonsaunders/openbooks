@@ -1,4 +1,3 @@
-import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
@@ -7,22 +6,7 @@ import {
   loadNetInvestmentOptions,
   proposeNetInvestmentAssessment,
 } from "@openbooks/engine/consolidation";
-const schema = z
-  .object({
-    pairId: uuidString(),
-    bookId: uuidString(),
-    eliminationSubsidiaryId: uuidString(),
-    ociAccountId: uuidString(),
-    profitLossAccountId: uuidString(),
-    sourceLineIds: z.array(uuidString()).min(1).max(200),
-    notPlannedOrLikely: z.literal(true),
-    nonTrade: z.literal(true),
-    qualificationEvidence: z.string().trim().min(40).max(10000),
-    effectiveOn: z.string(),
-    reason: z.string().trim().min(8).max(1000),
-    idempotencyKey: z.string().min(1).max(120),
-  })
-  .strict();
+import { netInvestmentAssessmentSchema as schema } from "@/lib/consolidation/action-schemas";
 const params = z.object({ id: uuidString() });
 export const GET = defineRoute({
   permission: "close.run",

@@ -9,6 +9,70 @@ import {
   type StoredSchedule,
 } from "./schedule-store.ts";
 
+export interface ScheduleListRow {
+  id: string;
+  schedule_number: string;
+  status: string;
+  source_kind: string;
+  source_document_id: string | null;
+  document_number: string | null;
+  template_code: string;
+  subsidiary_name: string | null;
+  currency: string;
+  total_amount: string;
+  amortized: string;
+  remaining: string;
+  next_period: string | null;
+}
+
+/** The schedule list's native read model, shared by the workspace and API tools. */
+export async function listScheduleRows(
+  runner: SqlExecutor,
+  orgId: string,
+  options: {
+    status?: "open" | "draft" | "active" | "on_hold" | "completed" | "cancelled";
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
+    limit?: number;
+  },
+): Promise<ScheduleListRow[]> {
+  const statusClause =
+    options.status === "open"
+      ? sql`and s.status in ('draft', 'active', 'on_hold')`
+      : options.status
+        ? sql`and s.status = ${options.status}`
+        : sql``;
+  const scopeClause =
+    options.allowedSubsidiaryIds === null
+      ? sql``
+      : sql`and s.subsidiary_id = any(${`{${[...options.allowedSubsidiaryIds].join(",")}}`}::uuid[])`;
+  return runner.execute<ScheduleListRow>(
+    sql`
+    select s.id, s.schedule_number, s.status, s.source_kind, s.source_document_id, d.document_number,
+           t.code as template_code, sub.name as subsidiary_name, s.currency, s.total_amount::text as total_amount,
+           (s.opening_amortized_amount - s.reversed_amount + coalesce(p.posted, 0))::text as amortized,
+           (case when s.status = 'cancelled' then 0
+                 else s.total_amount - s.opening_amortized_amount + s.reversed_amount - coalesce(p.posted, 0) end)::text as remaining,
+           n.next_period::text as next_period
+      from expense_amortization_schedules s
+      join expense_amortization_templates t on t.org_id = s.org_id and t.id = s.template_id
+      left join subsidiaries sub on sub.org_id = s.org_id and sub.id = s.subsidiary_id
+      left join documents d on d.org_id = s.org_id and d.id = s.source_document_id
+      left join lateral (
+        select sum(l.planned_amount) as posted from expense_amortization_schedule_lines l
+         where l.org_id = s.org_id and l.schedule_id = s.id and l.status = 'posted'
+      ) p on true
+      left join lateral (
+        select min(l.period_start) as next_period from expense_amortization_schedule_lines l
+         where l.org_id = s.org_id and l.schedule_id = s.id and l.status = 'planned'
+      ) n on true
+     where s.org_id = ${orgId} ${statusClause} ${scopeClause}
+     order by s.schedule_number desc
+     limit ${Math.min(Math.max(options.limit ?? 2000, 1), 2000)}
+  `,
+    "objects",
+  );
+}
+
 export interface ScheduleDetail {
   schedule: Omit<StoredSchedule, "totalAmount" | "openingAmortized" | "reversed"> & {
     totalAmount: string;

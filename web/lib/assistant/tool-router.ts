@@ -210,6 +210,23 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   list_currencies: "multiCurrency",
 
   // Ledger and close commands.
+  create_recurring_schedule: "ledger",
+  pin_account_group: "ledger",
+  unpin_account_group: "ledger",
+  run_recurring_schedule: "ledger",
+  pause_recurring_schedule: "ledger",
+  update_recurring_schedule: "ledger",
+  delete_recurring_schedule: "ledger",
+  list_operating_profile_choices: "ledger",
+  get_operating_setup_journey: "ledger",
+  publish_operating_profile: "ledger",
+  save_operating_profile_scope: "ledger",
+  submit_net_investment_reversal: "ledger",
+  apply_net_investment_reversal: "ledger",
+  reverse_net_investment_assessment: "ledger",
+  delete_journal_draft: "ledger",
+  assign_gl_audit_numbers: "ledger",
+  run_due_journal_reversals: "ledger",
 
   // Treasury commands.
   list_payment_operation_configs: "banking",

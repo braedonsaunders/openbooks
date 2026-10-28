@@ -142,10 +142,13 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/platform/db", "mock:db"],
   ["../../../../../lib/authz", "mock:authz"],
+  ["./authz", "mock:authz"],
   ["../../../../../lib/feature-gates", "mock:feature-gates"],
   ["@/lib/feature-gates", "mock:feature-gates"],
   ["../../../../../lib/subsidiaries", "mock:subsidiaries"],
+  ["./subsidiaries", "mock:subsidiaries"],
   ["../../../../../lib/budget-mutations", "mock:budget-mutations"],
+  ["./budget-mutations", "mock:budget-mutations"],
 ]);
 
 function mockedQuery(query: unknown): { rows: Record<string, unknown>[] } {

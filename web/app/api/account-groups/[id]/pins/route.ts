@@ -2,12 +2,13 @@ import { z } from "zod";
 import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
-import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
-import { guardSubsidiaryScope, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
+import {
+  AccountGroupPinError,
+  pinAccountToGroup,
+  unpinAccountFromGroup,
+} from "../../../../../lib/account-groups/pins";
 const POSTBodySchema1 = z.object({ accountId: uuidString() });
 
 export const runtime = "nodejs";
@@ -18,16 +19,6 @@ export const runtime = "nodejs";
  * dimension); DELETE removes the pin so the account falls back to rule
  * matching (or Unassigned).
  */
-async function loadGroup(id: string, orgId: string) {
-  const r = await db.execute(
-    sql`
-    select id, dimension from account_groups where id = ${id} and org_id = ${orgId}
-  `,
-    "objects",
-  );
-  return r[0] ?? null;
-}
-
 export const POST = defineRoute({
   permission: "admin.setup.manage",
   feature: {
@@ -44,50 +35,13 @@ export const POST = defineRoute({
     if (typeof accountId !== "string" || !isUuid(accountId)) {
       return NextResponse.json({ error: "accountId required" }, { status: 400 });
     }
-    const group = await loadGroup(id, gate.user.orgId);
-    if (!group) return notFound("record");
-    const pinLockKey = `account-group-pin:${gate.user.orgId}:${group.dimension}:${accountId}`;
-    const denied = await db.transaction(async (tx) => {
-      let account: { subsidiaryId: string | null };
-      try {
-        account = await lockScopeRow(
-          tx,
-          gate.user.orgId,
-          "account",
-          accountId,
-          gate.allowedSubsidiaryIds,
-          "share",
-          { orgWideNull: true },
-        );
-      } catch (error) {
-        if (!(error instanceof ScopeNotFoundError)) throw error;
-        return notFound("record");
-      }
-      const scopeDenied =
-        account.subsidiaryId === null
-          ? guardUnrestrictedScope(gate)
-          : guardSubsidiaryScope(gate, account.subsidiaryId);
-      if (scopeDenied) return scopeDenied;
-      await tx.execute(sql`
-          select pg_advisory_xact_lock(hashtextextended(${pinLockKey}, 0))
-        `);
-      await tx.execute(sql`
-          delete from account_group_members m using account_groups g
-          where m.group_id = g.id and g.org_id = ${gate.user.orgId}
-            and m.org_id = ${gate.user.orgId}
-            and g.dimension = ${group.dimension} and m.account_id = ${accountId}
-        `);
-      await tx.execute(sql`
-          insert into account_group_members (org_id, group_id, account_id, dimension, created_by)
-          values (${gate.user.orgId}, ${id}, ${accountId}, ${group.dimension}, ${gate.user.id})
-          on conflict (org_id, dimension, account_id) do update
-            set group_id = excluded.group_id,
-                updated_at = now(),
-                updated_by = excluded.created_by
-        `);
-      return null;
-    });
-    if (denied) return denied;
+    try {
+      await pinAccountToGroup(gate, id, accountId);
+    } catch (error) {
+      if (!(error instanceof AccountGroupPinError)) throw error;
+      if (error.status === 404) return notFound("record");
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     return NextResponse.json({ ok: true });
   },
 });
@@ -106,42 +60,13 @@ export const DELETE = defineRoute({
     if (!accountId || !isUuid(accountId)) {
       return NextResponse.json({ error: "accountId required" }, { status: 400 });
     }
-    const group = await loadGroup(id, gate.user.orgId);
-    if (!group) return notFound("record");
-    const pinLockKey = `account-group-pin:${gate.user.orgId}:${group.dimension}:${accountId}`;
-    const denied = await db.transaction(async (tx) => {
-      let account: { subsidiaryId: string | null };
-      try {
-        account = await lockScopeRow(
-          tx,
-          gate.user.orgId,
-          "account",
-          accountId,
-          gate.allowedSubsidiaryIds,
-          "share",
-          { orgWideNull: true },
-        );
-      } catch (error) {
-        if (!(error instanceof ScopeNotFoundError)) throw error;
-        return notFound("record");
-      }
-      const scopeDenied =
-        account.subsidiaryId === null
-          ? guardUnrestrictedScope(gate)
-          : guardSubsidiaryScope(gate, account.subsidiaryId);
-      if (scopeDenied) return scopeDenied;
-      await tx.execute(sql`
-          select pg_advisory_xact_lock(hashtextextended(${pinLockKey}, 0))
-        `);
-      await tx.execute(sql`
-          delete from account_group_members
-           where group_id = ${id}
-             and org_id = ${gate.user.orgId}
-             and account_id = ${accountId}
-        `);
-      return null;
-    });
-    if (denied) return denied;
+    try {
+      await unpinAccountFromGroup(gate, id, accountId);
+    } catch (error) {
+      if (!(error instanceof AccountGroupPinError)) throw error;
+      if (error.status === 404) return notFound("record");
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
     return NextResponse.json({ ok: true });
   },
 });

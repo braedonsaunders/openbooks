@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { stubModules } from "../../../../../../testing/stub-modules";
-stubModules({ authz: true });
 import { test } from "node:test";
+import { lossOfControlSchema } from "@/lib/consolidation/action-schemas";
+stubModules({ authz: true });
 const state = { allowed: true, calls: [] as unknown[][], refusal: "" };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("control-loss-route")] =
   state;
@@ -134,4 +135,77 @@ test("control-loss domain refusal and authorization are not swallowed", async ()
   assert.equal(state.calls.length, 0);
   state.allowed = true;
   state.refusal = "";
+});
+test("loss-of-control input canonicalizes exact money before the native proposal", () => {
+  const input = {
+    effectiveOn: "2026-07-15",
+    reason: "Approved disposal assessment",
+    idempotencyKey: "loss-control-test-001",
+    assessment: "Control ended under the executed sale agreement.",
+    ociAssessment: "Reclassify the accumulated translation balance.",
+    eliminationSubsidiaryId: id,
+    proceeds: "123.5",
+    proceedsAccountId: id,
+    parentInvestmentCarrying: "80",
+    parentRetainedCarrying: "20",
+    parentToGroupRate: "1.0000",
+    investmentTranslationAccountId: id,
+    retainedFairValue: "25",
+    retainedPercent: "25",
+    retainedMethod: "equity",
+    retainedAccountId: id,
+    gainLossAccountId: id,
+    parentGainLossAccountId: id,
+    equityIncomeAccountId: id,
+    distributionAccountId: null,
+    distributionIncomeAccountId: null,
+    rates: [{ subsidiaryId: id, rate: "1.0000" }],
+    additionalConsolidationLines: [{ lineId: id, amount: "4.2" }],
+    oci: [
+      {
+        accountId: id,
+        balance: "5.2",
+        treatment: "retained_earnings",
+        destinationAccountId: id,
+        description: "Transfer the cumulative balance.",
+      },
+    ],
+  };
+
+  const parsed = lossOfControlSchema.parse(input);
+  assert.equal(parsed.proceeds, "123.5000");
+  assert.equal(parsed.parentInvestmentCarrying, "80.0000");
+  assert.equal(parsed.additionalConsolidationLines[0]?.amount, "4.2000");
+  assert.equal(parsed.oci[0]?.balance, "5.2000");
+});
+
+test("loss-of-control input refuses invalid dates and inexact money", () => {
+  const input = {
+    effectiveOn: "2026-02-30",
+    reason: "Approved disposal assessment",
+    idempotencyKey: "loss-control-test-002",
+    assessment: "Control ended under the executed sale agreement.",
+    ociAssessment: "Reclassify the accumulated translation balance.",
+    eliminationSubsidiaryId: id,
+    proceeds: "123.45678",
+    proceedsAccountId: id,
+    parentInvestmentCarrying: "80",
+    parentRetainedCarrying: "20",
+    parentToGroupRate: "1.0000",
+    investmentTranslationAccountId: id,
+    retainedFairValue: "25",
+    retainedPercent: "25",
+    retainedMethod: "equity",
+    retainedAccountId: id,
+    gainLossAccountId: id,
+    parentGainLossAccountId: id,
+    equityIncomeAccountId: id,
+    distributionAccountId: null,
+    distributionIncomeAccountId: null,
+    rates: [{ subsidiaryId: id, rate: "1.0000" }],
+    additionalConsolidationLines: [],
+    oci: [],
+  };
+
+  assert.equal(lossOfControlSchema.safeParse(input).success, false);
 });

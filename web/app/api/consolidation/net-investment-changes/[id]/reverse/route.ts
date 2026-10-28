@@ -4,13 +4,7 @@ import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { proposeNetInvestmentReversal } from "@openbooks/engine/consolidation";
-const reversalBodySchema = z
-  .object({
-    effectiveOn: z.string(),
-    reason: z.string().trim().min(8).max(1000),
-    idempotencyKey: z.string().min(1).max(120),
-  })
-  .strict();
+import { netInvestmentReversalSchema as reversalBodySchema } from "@/lib/consolidation/action-schemas";
 
 export const POST = defineRoute({
   permission: "close.run",

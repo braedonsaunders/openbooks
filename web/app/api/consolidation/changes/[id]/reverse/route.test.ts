@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { stubModules } from "../../../../../../testing/stub-modules";
+import { lossOfControlReversalSchema } from "@/lib/consolidation/action-schemas";
 stubModules({ authz: true });
 
 const state = {
@@ -124,4 +125,22 @@ test("a different accounting domain cannot use this reversal and financial refus
   const response = await route.POST(request(body), context);
   assert.equal(response.status, 422);
   assert.equal((await response.json()).error, state.refusal);
+});
+test("loss-of-control reversal schema keeps the audit reason and retry key", () => {
+  const parsed = lossOfControlReversalSchema.parse({
+    reason: "Correct the approved disposal assessment",
+    idempotencyKey: "loss-control-reversal-001",
+  });
+  assert.equal(parsed.reason, "Correct the approved disposal assessment");
+  assert.equal(parsed.idempotencyKey, "loss-control-reversal-001");
+});
+
+test("loss-of-control reversal schema rejects a short reason", () => {
+  assert.equal(
+    lossOfControlReversalSchema.safeParse({
+      reason: "fix",
+      idempotencyKey: "loss-control-reversal-002",
+    }).success,
+    false,
+  );
 });
