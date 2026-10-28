@@ -387,13 +387,39 @@ test(
       );
       const selfReview = cycleRead.reviews.find((row) => row.kind === "self");
       assert.ok(selfReview, "opening the cycle must instantiate the employee's self-review");
-      const reviewContext = contextFor(org.orgId, actors.submitterId, []);
+      const reviewContext = contextFor(org.orgId, actors.submitterId, ["hrm.self.request"]);
       const reviewDraft = await withOrgContext(org.orgId, () =>
         getReviewDetail({
           orgId: org.orgId,
           actorId: actors.submitterId,
           reviewId: selfReview.id,
         }),
+      );
+      const scopedReviewContext = {
+        ...reviewContext,
+        apiKeyId: randomUUID(),
+        authz: { ...reviewContext.authz, permissions: new Set<string>() },
+      };
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          executeApplicationTool(applicationTool("submit_review")!, scopedReviewContext, {
+            reviewId: selfReview.id,
+            payload: {
+              action: "submit",
+              revision: reviewDraft.review.revision,
+              answers: [
+                {
+                  answerId: reviewDraft.answers[0]!.id,
+                  rating: "4",
+                  text: "Consistently delivered the planned work.",
+                },
+              ],
+              overallRating: "4",
+            },
+            idempotencyKey: "talent-review-submit-scoped-denied-01",
+          }),
+        ),
+        /forbidden/i,
       );
       await withOrgContext(org.orgId, () =>
         executeApplicationTool(applicationTool("submit_review")!, reviewContext, {

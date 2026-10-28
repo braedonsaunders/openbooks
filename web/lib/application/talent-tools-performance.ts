@@ -7,7 +7,7 @@ import type { ApplicationToolDefinition } from "./tool-definition";
 import { settleTalentRefusal, talentCommand, type TalentCommandInput } from "./talent-tools-shared";
 import { can } from "../authz";
 import { isFeatureEnabled } from "../features";
-import { notFound } from "./errors";
+import { forbidden, notFound } from "./errors";
 import { definition } from "./tool-definition";
 import { createCycleBody, patchCycleBody } from "@/app/api/hrm/review-cycles/bodies";
 import { saveReviewTemplateBody } from "@/app/api/hrm/review-templates/bodies";
@@ -107,10 +107,18 @@ import {
 const HRM = "hrm";
 const FEATURE = "hrmPerformance";
 const MANAGE = "hrm.performance.manage";
+const TEMPLATE_READ_PERMISSIONS = ["admin.setup.manage", MANAGE, "hrm.performance.read"];
+const SELF_OR_MANAGER = ["hrm.self.request", MANAGE];
+const SELF_OR_MANAGER_READ = ["hrm.self.read", "hrm.performance.read"];
 const actor = (context: ApplicationContext) => ({
   orgId: context.authz.user.orgId,
   actorId: context.authz.user.id,
 });
+function assertAnyApplicationPermission(context: ApplicationContext, permissions: string[]): void {
+  const granted = permissions.find((permission) => can(context.authz, permission));
+  if (!granted) throw forbidden(permissions.join(" or "));
+  assertApplicationPermission(context, granted);
+}
 const href = "/hrm/performance";
 function performanceMutationHref(
   result: Record<string, unknown>,
@@ -180,10 +188,10 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     openWorld: false,
     assistantConfirmation: "never",
     featureKey: FEATURE,
-    visibleTo: (authz) =>
-      can(authz, "admin.setup.manage") || can(authz, MANAGE) || can(authz, "hrm.performance.read"),
+    visibleTo: (authz) => TEMPLATE_READ_PERMISSIONS.some((permission) => can(authz, permission)),
     execute: async (context) => {
       try {
+        assertAnyApplicationPermission(context, TEMPLATE_READ_PERMISSIONS);
         if (!(await isFeatureEnabled(context.authz.user.orgId, FEATURE))) throw notFound(FEATURE);
         return {
           templates: await listTemplateDocuments({ ...actor(context) }),
@@ -199,7 +207,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     title: "Save Review Template",
     description:
       "Create or revise a complete review template, optionally publishing the immutable version for new cycles. Find current ids and revisions with list_review_templates; this organization-wide designer requires unrestricted subsidiary scope.",
-    permission: null,
+    permission: MANAGE,
     featureKey: FEATURE,
     unrestrictedScope: true,
     bodySchema: saveReviewTemplateBody,
@@ -227,9 +235,10 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     openWorld: false,
     assistantConfirmation: "never",
     featureKey: HRM,
-    visibleTo: () => true,
+    visibleTo: (authz) => SELF_OR_MANAGER_READ.some((permission) => can(authz, permission)),
     execute: async (context, input) => {
       try {
+        assertAnyApplicationPermission(context, SELF_OR_MANAGER_READ);
         if (!(await isFeatureEnabled(context.authz.user.orgId, HRM))) throw notFound(HRM);
         if (!(await isFeatureEnabled(context.authz.user.orgId, FEATURE))) throw notFound(FEATURE);
         return { goals: await listGoals({ ...actor(context), employmentId: input.employmentId }) };
@@ -251,9 +260,10 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     openWorld: false,
     assistantConfirmation: "never",
     featureKey: HRM,
-    visibleTo: () => true,
+    visibleTo: (authz) => SELF_OR_MANAGER_READ.some((permission) => can(authz, permission)),
     execute: async (context, input) => {
       try {
+        assertAnyApplicationPermission(context, SELF_OR_MANAGER_READ);
         if (!(await isFeatureEnabled(context.authz.user.orgId, HRM))) throw notFound(HRM);
         if (!(await isFeatureEnabled(context.authz.user.orgId, FEATURE))) throw notFound(FEATURE);
         return getGoal({ ...actor(context), goalId: input.goalId });
@@ -408,6 +418,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
           : `${action[0]!.toUpperCase()}${action.slice(1)} Review`,
       description: `${action} a review using the assigned reviewer or subject identity and the persisted revision. Find the review id and revision with hrm_performance_cycles, then verify its lifecycle state there.`,
       permission: null,
+      permissionAnyOf: SELF_OR_MANAGER,
       featureKey: FEATURE,
       recordId: { name: "reviewId", description: "Review id from hrm_performance_cycles." },
       bodySchema: patchReviewBody,
@@ -447,6 +458,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     description:
       "Create a goal for an employment record with exact decimal weight and optional review-cycle link. Find employment and cycle ids with HRM performance reads, then verify the goal there.",
     permission: null,
+    permissionAnyOf: SELF_OR_MANAGER,
     featureKey: HRM,
     requiredFeatureKeys: [FEATURE],
     bodySchema: createGoalBody,
@@ -474,6 +486,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
           : `${action[0]!.toUpperCase()}${action.slice(1)} Goal`,
       description: `${action} a performance goal and persist its progress evidence. Find the goal id and current state with HRM performance reads, then verify the updated goal there.`,
       permission: null,
+      permissionAnyOf: SELF_OR_MANAGER,
       featureKey: HRM,
       requiredFeatureKeys: [FEATURE],
       recordId: { name: "goalId", description: "Goal id from HRM performance reads." },
@@ -510,6 +523,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     description:
       "Write praise or feedback for an employment record using the native visibility policy. Find the employment id with HRM performance reads, then verify the feedback in its read view.",
     permission: null,
+    permissionAnyOf: SELF_OR_MANAGER,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     bodySchema: writeFeedbackBody,
@@ -534,6 +548,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     description:
       "Respond to a feedback request with its requested visibility. Find the request id with HRM performance reads and verify the created feedback there.",
     permission: null,
+    permissionAnyOf: SELF_OR_MANAGER,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     bodySchema: fulfillRequestBody,
@@ -549,6 +564,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     description:
       "Retract feedback as its author or an authorized HR operator. Find the feedback id with HRM performance reads and verify its retained audit state there.",
     permission: null,
+    permissionAnyOf: SELF_OR_MANAGER,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     recordId: { name: "feedbackId", description: "Feedback id from HRM performance reads." },
@@ -566,7 +582,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     title: "Update Feedback Settings",
     description:
       "Set who may publish public praise across the organization. Requires unrestricted HR scope; verify the effective setting in HRM feedback settings.",
-    permission: null,
+    permission: MANAGE,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     unrestrictedScope: true,
@@ -590,6 +606,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     description:
       "Schedule a manager and report one-on-one with optional recurrence. Find both employment ids with HRM performance reads and verify the meeting there.",
     permission: null,
+    permissionAnyOf: SELF_OR_MANAGER,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     bodySchema: scheduleOneOnOneBody,
@@ -619,6 +636,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
       title: `${action[0]!.toUpperCase()}${action.slice(1)} One-on-One`,
       description: `${action} a scheduled one-on-one while preserving its agenda history. Find the meeting id with HRM performance reads and verify its state there.`,
       permission: null,
+      permissionAnyOf: SELF_OR_MANAGER,
       featureKey: FEATURE,
       requiredFeatureKeys: [HRM],
       recordId: { name: "oneOnOneId", description: "One-on-one id from HRM performance reads." },
@@ -643,6 +661,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     description:
       "Add a shared/private talking point, note, or action item to a one-on-one. Find the meeting and assignee ids with HRM performance reads; verify the item in that meeting.",
     permission: null,
+    permissionAnyOf: SELF_OR_MANAGER,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     recordId: { name: "oneOnOneId", description: "One-on-one id from hrm_one_on_ones." },
@@ -663,6 +682,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     description:
       "Mark an action item done or reopen it. Find the meeting and item ids with HRM performance reads, then verify the item state there.",
     permission: null,
+    permissionAnyOf: SELF_OR_MANAGER,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     recordId: { name: "oneOnOneId", description: "One-on-one id from HRM performance reads." },
@@ -729,7 +749,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
             ? "Set Calibration Potential"
             : "Revert Calibration Entry",
       description: `${action} a calibration entry and preserve its decision evidence. Find the entry id with HRM performance reads; verify the rating, potential or reverted state there.`,
-      permission: null,
+      permission: MANAGE,
       featureKey: FEATURE,
       requiredFeatureKeys: [HRM],
       recordId: { name: "entryId", description: "Calibration entry id from hrm_calibration." },
@@ -767,7 +787,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     title: "Record Talent Review",
     description:
       "Record a nine-box performance/potential assessment and loss-risk evidence for an employment record. Find employment and cycle ids with HRM performance reads; verify it in talent review results.",
-    permission: null,
+    permission: MANAGE,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     bodySchema: recordTalentReviewBody,
@@ -883,7 +903,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     title: "Create Competency Framework",
     description:
       "Create a reusable competency framework for a workforce scope. Find subsidiary and department ids with setup reads, then verify the framework with list_setup_records for hrm-competency-frameworks.",
-    permission: null,
+    permission: MANAGE,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     bodySchema: createFrameworkBody,
@@ -902,7 +922,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     title: "Update Competency Framework",
     description:
       "Activate or deactivate a competency framework while preserving its history. Find the framework id with list_setup_records for hrm-competency-frameworks and verify the resulting state there.",
-    permission: null,
+    permission: MANAGE,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     recordId: { name: "frameworkId", description: "Framework id from setup reads." },
@@ -928,7 +948,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     title: "Create Competency",
     description:
       "Add a competency to an existing framework with its reusable code and description. Find framework ids with list_setup_records, then verify the competency under that framework.",
-    permission: null,
+    permission: MANAGE,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     bodySchema: createCompetencyBody,
@@ -944,7 +964,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     title: "Add Competency Level",
     description:
       "Add a ranked expectation to a competency. Find the competency id with list_setup_records for hrm-competencies and verify the new level under its framework.",
-    permission: null,
+    permission: MANAGE,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     bodySchema: addCompetencyLevelBody,
@@ -959,7 +979,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     title: "Link Competency",
     description:
       "Link a configured competency to a job level, position or review-template section. Find the competency and target ids with HRM setup reads and verify the link in the target view.",
-    permission: null,
+    permission: MANAGE,
     featureKey: FEATURE,
     requiredFeatureKeys: [HRM],
     bodySchema: linkCompetencyBody,
