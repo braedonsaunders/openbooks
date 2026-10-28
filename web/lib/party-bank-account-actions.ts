@@ -494,7 +494,13 @@ export async function retirePartyBankAccount({
   const partyDenied = await denyOutsidePartyScope(gate, partyId);
   if (partyDenied) return partyDenied;
   const body = input as Body;
-  const reason = body.retirementReason.trim();
+  const reason = body.retirementReason?.trim() ?? "";
+  if (reason.length < 5) {
+    return NextResponse.json(
+      { error: "give a retirement reason of at least five characters" },
+      { status: 422 },
+    );
+  }
   if (!body.expectedUpdatedAt) {
     return NextResponse.json(
       { error: "the bank-detail revision is required; reload and try again" },
