@@ -33,11 +33,12 @@ const messages = (await import("../../messages/en")).default;
 // catalog through the provider the app layout supplies.
 const renderInApp = (element: React.ReactNode) =>
   renderToStaticMarkup(
-    React.createElement(
-      NextIntlClientProvider,
-      { locale: "en", messages, timeZone: "UTC" },
-      element,
-    ),
+    React.createElement(NextIntlClientProvider, {
+      locale: "en",
+      messages,
+      timeZone: "UTC",
+      children: element,
+    }),
   );
 const { sql } = await import("drizzle-orm");
 const { drizzleSqlText } = await import("@openbooks/engine/testing/sql-text");
