@@ -6,7 +6,13 @@ import { assertApplicationPermission, type ApplicationContext } from "./context"
 import { type ApplicationToolDefinition } from "./tool-definition";
 import { timeDefinition } from "./time-tool-common";
 import { withOrgTransaction } from "@openbooks/engine/platform/db";
-import { getBoard, listBoards, boardAuthority } from "@openbooks/engine/schedule-boards/boards";
+import {
+  getBoard,
+  listBoards,
+  boardAuthority,
+  type ScheduleBoard,
+} from "@openbooks/engine/schedule-boards/boards";
+import { boardHasCapability } from "@openbooks/engine/schedule-boards/board-types";
 import {
   createAssignment,
   listBoardAssignments,
@@ -24,25 +30,54 @@ import { sendScheduleDistribution } from "@openbooks/engine/schedule-boards/dist
 import { loadBoardWindow } from "@openbooks/engine/schedule-boards/window";
 import { actor, DATE, IDEMPOTENCY_KEY, settleTimeRefusal, UUID } from "./time-tool-common";
 
-const boardPermissions = [
-  "hrm.shifts.manage",
-  "service.dispatch",
-  "projects.manage",
-  "assets.manage",
-] as const;
-const boardReadPermissions = [
-  ...boardPermissions,
-  "hrm.shifts.read",
-  "service.read",
-  "projects.read",
-  "assets.read",
-] as const;
+const boardPermissions = ["hrm.shifts.manage", "service.dispatch", "projects.manage"] as const;
+const boardReadPermissions = ["hrm.shifts.read", "service.read", "projects.read"] as const;
 const BOARD_ID = UUID.describe("Scheduling board id from list_schedule_boards.");
 const ENTRY_ID = UUID.describe("Schedule entry id from list_schedule_board_assignments.");
 const SCHEDULE_DATE = DATE;
 
 function canManageBoard(authz: ApplicationContext["authz"]): boolean {
   return boardPermissions.some((permission) => can(authz, permission));
+}
+
+function boardAuthorityPermissions(
+  board: ScheduleBoard,
+  mode: "read" | "manage" | "publish",
+): readonly string[] {
+  if (board.rowKind === "people") {
+    if (boardHasCapability(board, "dispatch"))
+      return [mode === "read" ? "service.read" : "service.dispatch"];
+    return [
+      mode === "read"
+        ? "hrm.shifts.read"
+        : mode === "publish"
+          ? "hrm.shifts.approve"
+          : "hrm.shifts.manage",
+    ];
+  }
+
+  const projectPermission = mode === "read" ? "projects.read" : "projects.manage";
+  if (board.rowKind === "resources" && board.resourceKind === "equipment") {
+    return [projectPermission, mode === "read" ? "assets.read" : "assets.manage"];
+  }
+  return [projectPermission];
+}
+
+function assertBoardAuthorityPermission(
+  context: ApplicationContext,
+  board: ScheduleBoard,
+  mode: "read" | "manage" | "publish",
+): void {
+  for (const permission of boardAuthorityPermissions(board, mode))
+    assertApplicationPermission(context, permission);
+}
+
+function assertAnyApplicationPermission(
+  context: ApplicationContext,
+  permissions: readonly string[],
+): void {
+  const permission = permissions.find((candidate) => can(context.authz, candidate));
+  assertApplicationPermission(context, permission ?? permissions[0]!);
 }
 
 async function requireBoard(
@@ -53,6 +88,7 @@ async function requireBoard(
   return withOrgTransaction(context.authz.user.orgId, async () => {
     const nativeActor = actor(context);
     const board = await getBoard(nativeActor, boardId);
+    assertBoardAuthorityPermission(context, board, mode);
     await boardAuthority(nativeActor, board, mode);
     return board;
   }).catch((error: unknown) => settleTimeRefusal(error));
@@ -159,8 +195,14 @@ export const SCHEDULING_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     assistantConfirmation: "never",
     visibleTo: (authz) => boardReadPermissions.some((permission) => can(authz, permission)),
     execute: async (context, input) => {
+      assertAnyApplicationPermission(context, boardReadPermissions);
       const rows = await listBoards(actor(context), input);
-      return { ok: true, boards: rows, href: "/scheduling/boards" };
+      const boards = rows.filter((board) =>
+        boardAuthorityPermissions(board, "read").every((permission) =>
+          can(context.authz, permission),
+        ),
+      );
+      return { ok: true, boards, href: "/scheduling/boards" };
     },
   }),
   timeDefinition({
@@ -204,6 +246,7 @@ export const SCHEDULING_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     visibleTo: (authz) => boardReadPermissions.some((permission) => can(authz, permission)),
     execute: async (context, input) => {
       try {
+        await requireBoard(context, input.boardId, "read");
         const window = await loadBoardWindow({
           ...actor(context),
           boardId: input.boardId,
@@ -632,10 +675,13 @@ export const SCHEDULING_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: (authz) => boardReadPermissions.some((permission) => can(authz, permission)),
+    visibleTo: (authz) =>
+      can(authz, "hrm.attendance.manage") &&
+      boardReadPermissions.some((permission) => can(authz, permission)),
     featureKey: "hrmAttendance",
     execute: async (context, input) => {
       try {
+        assertApplicationPermission(context, "hrm.attendance.manage");
         await requireBoard(context, input.boardId, "read");
         const outcomes = await processBoardAttendance({
           ...actor(context),
@@ -671,10 +717,11 @@ export const SCHEDULING_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     destructive: true,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: canManageBoard,
+    visibleTo: (authz) => can(authz, "hrm.shifts.manage") && can(authz, "hrm.attendance.read"),
     featureKey: "hrmShiftClosing",
     execute: async (context, input) => {
       try {
+        assertApplicationPermission(context, "hrm.attendance.read");
         await requireBoard(context, input.boardId, "manage");
         await closeShift({
           ...actor(context),

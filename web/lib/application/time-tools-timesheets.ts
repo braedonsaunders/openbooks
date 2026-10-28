@@ -41,8 +41,14 @@ function assertTimePermission(
   context: ApplicationContext,
   permission: "time.manage" | "time.reopen",
 ) {
-  if (can(context.authz, permission)) return;
-  if (permission === "time.manage" && can(context.authz, "time.self")) return;
+  if (
+    permission === "time.manage" &&
+    !can(context.authz, permission) &&
+    can(context.authz, "time.self")
+  ) {
+    assertApplicationPermission(context, "time.self");
+    return;
+  }
   assertApplicationPermission(context, permission);
 }
 
