@@ -82,6 +82,7 @@ import { LEDGER_OPERATIONS_TOOLS } from "./ledger-tools-operations";
 import { LEDGER_CLOSE_TOOLS } from "./ledger-tools-close";
 import { LEDGER_METRICS_TOOLS } from "./ledger-tools-metrics";
 import { LEDGER_BUDGET_ACTION_TOOLS } from "./ledger-tools-budget-actions";
+import { LEDGER_ACCOUNT_TOOLS } from "./ledger-tools-accounts";
 import {
   canManageAnyContinuousCloseItem,
   updateContinuousCloseItem,
@@ -167,6 +168,7 @@ function settleAccountGroupPinRefusal(error: unknown): never {
 
 /** General ledger, accounting books, allocations, intercompany, consolidation, budgets and period close commands for the assistant, MCP and the v1 command API. */
 export const LEDGER_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
+  ...LEDGER_ACCOUNT_TOOLS,
   ...LEDGER_ALLOCATION_CONFIGURATION_TOOLS,
   ...LEDGER_CONFIGURATION_TOOLS,
   ...LEDGER_CONSOLIDATION_TOOLS,

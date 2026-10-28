@@ -152,9 +152,9 @@ const mockSources = new Map<string, string>([
 // module loads through tsx.
 const mockUrls = new Map<string, string>([
   ["@openbooks/schema", "mock:schema"],
-  ["../../../lib/features", "mock:features"],
-  ["../../../lib/custom-fields", "mock:custom-fields"],
-  ["./_lib", "mock:accounts-lib"],
+  ["@/lib/features", "mock:features"],
+  ["@/lib/custom-fields", "mock:custom-fields"],
+  ["@/lib/accounts/read", "mock:accounts-lib"],
 ]);
 
 const _hooks = registerHooks({

@@ -8,12 +8,12 @@ import {
   type DuplicateAccountNameHolder,
   type DuplicateAccountNameWarning,
   DUPLICATE_ACCOUNT_NAME,
-} from "../../../lib/accounts-hygiene";
+} from "../accounts-hygiene";
 import {
   loadCustomFieldAccessDefs,
   redactHiddenCustomValues,
   type CustomFieldViewer,
-} from "../../../lib/custom-fields";
+} from "../custom-fields";
 
 export interface AccountPayload {
   account: Record<string, unknown>;

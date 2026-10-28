@@ -210,6 +210,8 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   list_currencies: "multiCurrency",
 
   // Ledger and close commands.
+  create_chart_account: "ledger",
+  update_chart_account: "ledger",
   list_accounting_changes: "ledger",
   propose_provision_assessment: "ledger",
   submit_provision_assessment: "ledger",

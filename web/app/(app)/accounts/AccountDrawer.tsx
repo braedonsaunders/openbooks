@@ -19,7 +19,7 @@ import {
   type CustomFieldDefClient,
 } from "../../../components/custom-field-inputs";
 import type { CustomFieldViewer } from "@openbooks/customization";
-import type { AccountPayload } from "../../api/accounts/_lib";
+import type { AccountPayload } from "@/lib/accounts/read";
 import { ReadOnlyValue } from "../../../components/read-only-value";
 import { ApiResponseError, apiJson, refusalMessageFromBody } from "../../../lib/api-error";
 import { useDirtyClose } from "../../../lib/use-dirty-close";

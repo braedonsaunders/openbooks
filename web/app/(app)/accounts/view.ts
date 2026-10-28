@@ -30,12 +30,8 @@ import type { ReportDrillTarget } from "../../../lib/report-drill";
 import { isUuid, mergeHref, parseListParams, pickString } from "../../../lib/list-params";
 import { accountsWithBalances, orgInfo } from "../../../lib/data";
 import { can, requirePermission } from "../../../lib/authz";
-import {
-  customFieldViewerFor,
-  loadFieldDefs,
-  visibleCustomFieldDefs,
-} from "../../../lib/custom-fields";
-import { loadAccount, redactAccountCustomFields } from "../../api/accounts/_lib";
+import { customFieldViewerFor, loadFieldDefs, visibleCustomFieldDefs } from "../custom-fields";
+import { loadAccount, redactAccountCustomFields } from "@/lib/accounts/read";
 import { segmentRegistry } from "../../../lib/segments";
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../lib/features";
 import { accountParentPath, orderAccountHierarchy } from "../../../lib/account-hierarchy";

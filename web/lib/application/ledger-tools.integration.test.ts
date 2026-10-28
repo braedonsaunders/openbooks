@@ -23,6 +23,7 @@ const { getRun, getRuleVersion } = await import("@openbooks/engine/allocations/r
 const { postProjectGlEntry } = await import("@openbooks/engine/projects/recognition");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
 const { getApplicationBudget } = await import("./budgets.ts");
+const { loadAccount } = await import("../accounts/read.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -62,6 +63,101 @@ async function pinnedGroup(orgId: string, accountId: string): Promise<string | n
     return rows[0]?.group_id ?? null;
   });
 }
+
+test(
+  "chart account commands create and edit through the native account actions",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const foreign = await withBypassContext(() => createScratchOrg());
+    try {
+      const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+      const foreignActors = await withBypassContext(() => seedFlowActors(foreign.orgId));
+      const context = ctxFor(org.orgId, actors.adminId, ["gl.manage"]);
+      const run = (name: string, ctx: ApplicationContext, input: Record<string, unknown>) =>
+        withOrgContext(ctx.authz.user.orgId, () =>
+          executeApplicationTool(applicationTool(name)!, ctx, input),
+        );
+      const idempotencyKey = randomUUID();
+      const createInput = {
+        name: `Ledger command account ${idempotencyKey.slice(0, 8)}`,
+        type: "expense",
+        idempotencyKey,
+      };
+      const created = (await run("create_chart_account", context, createInput)) as {
+        replayed: boolean;
+        accountId: string;
+      };
+      assert.equal(created.replayed, false);
+      const nativeCreated = await withOrgContext(org.orgId, () =>
+        loadAccount(created.accountId, org.orgId, null),
+      );
+      assert.equal(nativeCreated?.account.name, createInput.name);
+
+      const replay = (await run("create_chart_account", context, createInput)) as {
+        replayed: boolean;
+        accountId: string;
+      };
+      assert.equal(replay.replayed, true);
+      assert.equal(replay.accountId, created.accountId);
+
+      const updated = (await run("update_chart_account", context, {
+        accountId: created.accountId,
+        name: `${createInput.name} revised`,
+        idempotencyKey: "ledger-update-chart-account-001",
+      })) as { replayed: boolean };
+      assert.equal(updated.replayed, false);
+      const nativeUpdated = await withOrgContext(org.orgId, () =>
+        loadAccount(created.accountId, org.orgId, null),
+      );
+      assert.equal(nativeUpdated?.account.name, `${createInput.name} revised`);
+
+      await assert.rejects(
+        run("create_chart_account", ctxFor(org.orgId, actors.adminId, ["gl.read"]), {
+          name: "No write permission account",
+          type: "expense",
+          idempotencyKey: randomUUID(),
+        }),
+        /forbidden/,
+      );
+
+      const foreignContext = ctxFor(foreign.orgId, foreignActors.adminId, ["gl.manage"]);
+      await assert.rejects(
+        run("update_chart_account", foreignContext, {
+          accountId: created.accountId,
+          name: "Cross organization update",
+          idempotencyKey: "ledger-cross-org-chart-account-001",
+        }),
+        /not_found/,
+      );
+      const afterForeignUpdate = await withOrgContext(org.orgId, () =>
+        loadAccount(created.accountId, org.orgId, null),
+      );
+      assert.equal(afterForeignUpdate?.account.name, `${createInput.name} revised`);
+
+      await withBypassContext(() =>
+        db.execute(sql`
+          update orgs
+             set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,multiCurrency}', 'false'::jsonb, true)
+           where id = ${org.orgId}
+        `),
+      );
+      await assert.rejects(
+        run("update_chart_account", context, {
+          accountId: created.accountId,
+          currencyRestriction: "EUR",
+          idempotencyKey: "ledger-account-currency-feature-001",
+        }),
+        /not_found/,
+      );
+    } finally {
+      await withBypassContext(async () => {
+        await dropScratchOrg(org.orgId);
+        await dropScratchOrg(foreign.orgId);
+      });
+    }
+  },
+);
 
 test(
   "ledger commands pin account groups with replay, permission, feature and tenant guards",
