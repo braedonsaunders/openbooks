@@ -7,7 +7,7 @@ export const mcpControl: DocArticle = {
   order: 8,
   summary:
     "Connect an authorized AI or automation client to OpenBooks through the first-class MCP endpoint, with tenant, permission, workflow, and accounting controls preserved.",
-  updated: "2026-07-31",
+  updated: "2026-10-27",
   keywords: [
     "MCP",
     "Model Context Protocol",
@@ -70,6 +70,19 @@ default_tools_approval_mode = "writes"
 tool_timeout_sec = 120
 ~~~
 
+Example Claude Code configuration, from the project or user that should have
+access:
+
+~~~bash
+claude mcp add --transport http openbooks https://books.example.com/mcp \\
+  --header "Authorization: Bearer $OPENBOOKS_MCP_TOKEN"
+~~~
+
+Clients that cannot speak MCP can call the same commands over HTTPS:
+**GET /api/v1/commands** lists the commands the key may run with each input
+schema, and **POST /api/v1/commands/{name}** executes one with the same
+validation, idempotency, and audit evidence.
+
 Set **OPENBOOKS_MCP_TOKEN** in the environment that starts the client. Do not put
 the plaintext token in a repository, shell history, client instructions, or an
 AI prompt.
@@ -82,9 +95,13 @@ Origin values to reduce DNS-rebinding and cross-origin credential risk.
 
 ## Discovery and available surfaces
 
-Tool discovery is permission-bound. A client sees only assistant tools its actor
-may run. Record tools resolve permissions again after the requested record type
-is known, so discovery never substitutes for execution-time authorization.
+Tool discovery is permission-bound. A client sees only the commands its key may
+run: every command requires a permission the key holds, and commands of modules
+that are switched off in **Company Settings → Features** are not listed. Both are
+checked again when the command executes, so discovery never substitutes for
+execution-time authorization. A key's scopes narrow its owner's permissions;
+services that also check relationships or grants (a manager's reports, a folder
+grant) apply those checks in addition, never instead.
 
 The core MCP surface includes:
 
@@ -119,7 +136,20 @@ The core MCP surface includes:
   year-end filings, entitlements, remittances, and employee profiles with
   confidential identifiers and tax elections excluded;
 - File Cabinet reads that honor per-folder and per-file access grants, and the
-  organization's setup registry and feature switchboard for administrators; and
+  organization's setup registry and feature switchboard for administrators;
+- module commands for every operator workflow, each terminating in the same
+  service its screen uses: quotes, orders, fulfillment, shipping, returns and
+  point of sale; purchasing, AP capture, expenses, subcontracts and compliance;
+  items, stock counts and movements, warehouses and demand planning;
+  manufacturing work orders, MRP and quality; projects, pre-billing, field
+  tickets, equipment, construction and property; time, timesheets, resourcing
+  and scheduling; workforce records, leave, benefits and HR documents;
+  recruiting, performance, training and compensation; payroll runs, filings and
+  remittances; subscriptions, usage rating and revenue recognition; fixed
+  assets, leases, equity, funds and grants; banking, payment runs, tax and
+  collections; general ledger, allocations, intercompany, consolidation and
+  close; CRM and service; and administration, flows, automations, scripts, forms
+  and PDF templates; and
 - the **openbooks://schema/record-types** resource for the current tenant's live
   record metadata.
 
@@ -171,6 +201,12 @@ Document bodies may request **draft**, **submit**, or **post** actions. Submissi
 can create approval gates, and posting can return a pending-approval result. MCP
 does not approve on the user's behalf, skip segregation of duties, override a
 closed period, or suppress an accounting validation.
+
+Some actions deliberately stay with people and have no command: minting,
+rotating, or revoking API keys; deleting backups or changing backup policy;
+answering a public signing, candidate, or payment link; and device kiosk
+punches. An agent asked to do one should say so rather than look for a
+workaround.
 
 ## Approvals and confirmations
 
