@@ -299,16 +299,23 @@ function listSourceLeg(config: ListSourceSearch): Leg {
       const view = defaultListView(config.recordType, {
         multiSubsidiary: await subsidiaryFeatureEnabled(ctx.orgId),
       });
-      // The list's own WHERE builder reads each word, so the leg matches
-      // exactly what the list's search box would for each of them.
+      // The list's own WHERE builder reads the longest word, so the leg
+      // carries exactly the list's fence and search; every other word must
+      // appear in the hit's title or subtitle. Repeating the list's WHERE per
+      // word would repeat its whole visibility fence, which some lists make
+      // expensive enough to multiply rather than add.
+      const [lead, ...rest] =
+        match.kind === "text" ? [...match.words].sort((a, b) => b.length - a.length) : [];
+      const restLikes = rest.map(escapeLike);
       const listWhere =
         match.kind === "text"
-          ? sql.join(
-              match.words.map(
-                (word) => sql`(${source.where(view, { q: word, filters: {} }, ctx.orgId, scope)})`,
+          ? sql`(${source.where(view, { q: lead, filters: {} }, ctx.orgId, scope)})${sql.join(
+              restLikes.map(
+                (like) =>
+                  sql` and concat_ws(' ', (${titleExpr})::text, (${subtitleExpr})::text) ilike ${like}`,
               ),
-              sql` and `,
-            )
+              sql``,
+            )}`
           : source.where(view, { q: undefined, filters: {} }, ctx.orgId, scope);
       const idExpr = source.idExpr ?? sql.raw(`${source.alias}.id`);
       const tableSql =
