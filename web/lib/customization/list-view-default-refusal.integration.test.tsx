@@ -40,6 +40,7 @@ const renderInApp = (element: React.ReactNode) =>
     ),
   );
 const { sql } = await import("drizzle-orm");
+const { drizzleSqlText } = await import("@openbooks/engine/testing/sql-text");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { installTrustedTestDatabaseBypass } =
   await import("@openbooks/engine/testing/database-bypass");
@@ -55,18 +56,6 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 const REMEDY =
   "More than one default view is stored for this scope. Clear the extra default and save again.";
 
-function statementText(query: { queryChunks?: unknown[] }): string {
-  return (query.queryChunks ?? [])
-    .map((chunk) => {
-      if (chunk && typeof chunk === "object" && "value" in chunk) {
-        const value = (chunk as { value: unknown }).value;
-        return Array.isArray(value) ? value.join("") : "";
-      }
-      return "";
-    })
-    .join(" ");
-}
-
 test(
   "record, entity and property lists show the named overlapping-default refusal",
   { skip: !DB },
@@ -74,10 +63,10 @@ test(
     const org = await withBypassContext(() => createScratchOrg());
     const originalExecute = db.execute.bind(db);
     let activeDefaults: Array<Record<string, unknown>> = [];
-    db.execute = ((query: { queryChunks?: unknown[] }, mode?: string) => {
+    db.execute = ((query: unknown, mode?: string) => {
       const inMode = <T extends { rows: unknown }>(result: T) =>
         mode === "objects" ? result.rows : result;
-      if (statementText(query).includes("from list_views"))
+      if (drizzleSqlText(query).includes("from list_views"))
         return Promise.resolve({ rows: activeDefaults }).then(inMode);
       return originalExecute(query as never, mode as never);
     }) as unknown as typeof db.execute;
