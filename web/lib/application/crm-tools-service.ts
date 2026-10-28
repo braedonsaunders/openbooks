@@ -109,8 +109,13 @@ const IDEMPOTENCY_KEY = z
   .string()
   .regex(/^[A-Za-z0-9._:-]{8,200}$/)
   .describe("Unique retry key for this exact mutation.");
-function withIdempotency<T extends z.ZodObject>(schema: T) {
-  return schema.extend({ idempotencyKey: IDEMPOTENCY_KEY });
+type IdempotentSchema<T extends z.ZodType> = z.ZodType<
+  z.output<T> & { idempotencyKey: string },
+  z.input<T> & { idempotencyKey: string }
+>;
+
+function withIdempotency<T extends z.ZodObject>(schema: T): IdempotentSchema<T> {
+  return schema.extend({ idempotencyKey: IDEMPOTENCY_KEY }) as unknown as IdempotentSchema<T>;
 }
 
 function jobLifecycleInput(action: "complete" | "reopen" | "cancel") {
@@ -173,7 +178,10 @@ type ServiceMutationArgs<T extends z.ZodType> = {
   destructive?: boolean;
   openWorld?: boolean;
   unrestricted?: boolean;
-  execute: (context: ApplicationContext, input: z.infer<T>) => Promise<Record<string, unknown>>;
+  execute: (
+    context: ApplicationContext,
+    input: z.output<NoInfer<T>>,
+  ) => Promise<Record<string, unknown>>;
 };
 
 function serviceMutation<T extends z.ZodType>(args: ServiceMutationArgs<T>) {
@@ -209,7 +217,10 @@ function serviceRead<T extends z.ZodType>(args: {
   description: string;
   inputSchema: T;
   permissions: readonly string[];
-  execute: (context: ApplicationContext, input: z.infer<T>) => Promise<Record<string, unknown>>;
+  execute: (
+    context: ApplicationContext,
+    input: z.output<NoInfer<T>>,
+  ) => Promise<Record<string, unknown>>;
 }) {
   return definition({
     name: args.name,

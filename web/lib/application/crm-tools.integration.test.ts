@@ -15,7 +15,7 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("@openbooks/engine/testing/fixtures");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
-const { loadCrmAccount } = await import("../crm");
+const { loadActivity, loadCrmAccount } = await import("../crm");
 const { executeAssistantTool } = await import("../assistant/registry");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 
@@ -88,6 +88,7 @@ test(
       const permissions = [
         "crm.accounts.create",
         "crm.accounts.manage",
+        "crm.activities.manage",
         "crm.forecasts.manage",
         "crm.forecasts.read",
         "crm.setup.manage",
@@ -126,6 +127,43 @@ test(
         loadCrmAccount(lead.partyId, org.orgId, null),
       );
       assert.equal((converted?.profile as Record<string, unknown>).lifecycle_stage, "customer");
+
+      const activity = (await run("create_crm_activity", {
+        kind: "task",
+        subjectKind: "account",
+        subjectId: lead.partyId,
+        idempotencyKey: "crm-task-create-0001",
+      })) as { activityId: string };
+      const activityBefore = await withOrgContext(org.orgId, () =>
+        loadActivity(activity.activityId, org.orgId, null),
+      );
+      assert.ok(activityBefore);
+      const activityUpdateInput = {
+        activityId: activity.activityId,
+        expectedUpdatedAt: String((activityBefore.activity as Record<string, unknown>).updated_at),
+        status: "completed",
+        idempotencyKey: "crm-task-complete-0001",
+      };
+      const completedTask = (await run("update_crm_activity", activityUpdateInput)) as {
+        replayed: boolean;
+      };
+      assert.equal(completedTask.replayed, false);
+      const completedTaskReplay = (await run("update_crm_activity", activityUpdateInput)) as {
+        replayed: boolean;
+      };
+      assert.equal(completedTaskReplay.replayed, true);
+      const activityAfter = await withOrgContext(org.orgId, () =>
+        loadActivity(activity.activityId, org.orgId, null),
+      );
+      assert.equal((activityAfter?.activity as Record<string, unknown>).status, "completed");
+      await run("delete_crm_activity", {
+        activityId: activity.activityId,
+        idempotencyKey: "crm-task-delete-0001",
+      });
+      assert.equal(
+        await withOrgContext(org.orgId, () => loadActivity(activity.activityId, org.orgId, null)),
+        null,
+      );
 
       const forecastInput = {
         periodStart: "2026-10-01",

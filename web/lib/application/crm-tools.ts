@@ -18,6 +18,11 @@ import { crmSharedScope } from "../crm-scope";
 import { canonicalizeSalesGeography } from "../crm/territory-boundaries";
 import { verifyCrmTerritoryLocation } from "../crm/territory-location";
 import {
+  activityToolUpdateSchema,
+  deleteCrmActivity,
+  updateCrmActivity,
+} from "../crm/activity-actions";
+import {
   crmOpportunityEstimateKey,
   createCrmOpportunityEstimate,
 } from "../crm/opportunity-estimate";
@@ -139,6 +144,21 @@ async function settlePartyAction<T extends Record<string, unknown>>(
   throw new ApplicationError(code, message, status, body);
 }
 
+async function settleNativeResponse(response: NextResponse): Promise<Record<string, unknown>> {
+  const body = (await response.json()) as Record<string, unknown>;
+  if (response.status < 400) return body;
+  const message = typeof body.error === "string" ? body.error : "CRM action was refused.";
+  const code =
+    response.status === 403
+      ? "forbidden"
+      : response.status === 404
+        ? "not_found"
+        : response.status === 409
+          ? "conflict"
+          : "invalid_input";
+  throw new ApplicationError(code, message, response.status, body);
+}
+
 type CrmMutationArgs<T extends z.ZodType> = {
   name: string;
   title: string;
@@ -148,7 +168,10 @@ type CrmMutationArgs<T extends z.ZodType> = {
   feature: string;
   destructive?: boolean;
   openWorld?: boolean;
-  execute: (context: ApplicationContext, input: z.infer<T>) => Promise<Record<string, unknown>>;
+  execute: (
+    context: ApplicationContext,
+    input: z.output<NoInfer<T>>,
+  ) => Promise<Record<string, unknown>>;
 };
 
 function crmMutation<T extends z.ZodType>(args: CrmMutationArgs<T>) {
@@ -409,6 +432,54 @@ export const CRM_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
         await createCrmActivityDraft(context.authz, input),
       );
       return { ok: true, activityId: body.id, href: `/crm/activities?activity=${body.id}` };
+    },
+  }),
+  crmMutation({
+    name: "update_crm_activity",
+    title: "Update CRM Activity",
+    description:
+      "Update an activity or task, including its schedule, owner, participants, links or status. Read the activity with get_crm_activity first and include its current revision; completed or cancelled status changes are retained in the native activity history.",
+    inputSchema: activityToolUpdateSchema.safeExtend({
+      activityId: UUID.describe("Activity UUID from get_crm_activity or search_crm_activities."),
+      expectedUpdatedAt: z
+        .string()
+        .min(1)
+        .max(100)
+        .describe("Current revision from get_crm_activity."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    permission: "crm.activities.manage",
+    feature: "crm",
+    execute: async (context, input) => {
+      const { idempotencyKey: _key, activityId, ...body } = input;
+      const result = await settleNativeResponse(
+        await updateCrmActivity(context.authz, { id: activityId }, body, true),
+      );
+      return {
+        ok: true,
+        ...result,
+        activityId,
+        href: `/crm/activities?activity=${activityId}`,
+      };
+    },
+  }),
+  crmMutation({
+    name: "delete_crm_activity",
+    title: "Delete CRM Activity",
+    description:
+      "Delete an activity or task and its links and participants after checking the audit snapshot rules. Find the id with search_crm_activities and confirm the record with get_crm_activity first.",
+    inputSchema: z.strictObject({
+      activityId: UUID.describe("Activity UUID from get_crm_activity or search_crm_activities."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    permission: "crm.activities.manage",
+    feature: "crm",
+    destructive: true,
+    execute: async (context, input) => {
+      const result = await settleNativeResponse(
+        await deleteCrmActivity(context.authz, { id: input.activityId }),
+      );
+      return { ok: true, ...result, activityId: input.activityId, href: "/crm/activities" };
     },
   }),
   crmMutation({

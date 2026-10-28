@@ -207,6 +207,15 @@ export function loadActivity(id: string, orgId: string, allowed?: ReadonlySet<st
   return withScopeSnapshot(orgId, () => loadActivitySnapshot(id, orgId, allowed));
 }
 
+/** Read the activity through its native loader inside an existing tenant transaction. */
+export function loadActivityInCurrentTransaction(
+  id: string,
+  orgId: string,
+  allowed?: ReadonlySet<string> | null,
+) {
+  return loadActivitySnapshot(id, orgId, allowed);
+}
+
 async function loadActivitySnapshot(
   id: string,
   orgId: string,

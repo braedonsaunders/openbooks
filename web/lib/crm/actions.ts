@@ -202,9 +202,9 @@ export async function createCrmOpportunityDraft(
               'Opportunity created', ${user.id}, ${user.id})`);
     return { body: inserted[0], status: 200 } as const;
   });
-  return "response" in opportunity
-    ? { response: opportunity.response }
-    : response(opportunity.body, opportunity.status);
+  if ("response" in opportunity && opportunity.response) return { response: opportunity.response };
+  if ("body" in opportunity) return response(opportunity.body, opportunity.status);
+  return { response: notFound("record") };
 }
 
 /** Create a CRM task or activity draft and attach its optional visible subject. */
@@ -244,7 +244,7 @@ export async function createCrmActivityDraft(
     }
     return { body: inserted[0], status: 200 } as const;
   });
-  return "response" in activity
-    ? { response: activity.response }
-    : response(activity.body, activity.status);
+  if ("response" in activity && activity.response) return { response: activity.response };
+  if ("body" in activity) return response(activity.body, activity.status);
+  return { response: notFound("record") };
 }
