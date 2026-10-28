@@ -7,6 +7,8 @@ import { assertApplicationPermission, type ApplicationContext } from "./context"
 import { ApplicationError, conflict, forbidden, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 
+type CoreZodType = z.core.$ZodType;
+
 export const TALENT_UUID = z
   .string()
   .regex(UUID_RE)
@@ -23,7 +25,7 @@ export const TALENT_IDEMPOTENCY_KEY = z
 const MAX_TOOL_STRING_LENGTH = 100_000;
 const MAX_TOOL_ARRAY_ITEMS = 1_000;
 
-function payloadSchema(bodySchema: z.ZodType | undefined, description: string): z.ZodType {
+function payloadSchema(bodySchema: CoreZodType | undefined, description: string): z.ZodType {
   if (!bodySchema) return z.object({}).describe(description);
   if (bodySchema instanceof z.ZodObject) {
     const describedShape = Object.fromEntries(
@@ -39,7 +41,7 @@ function payloadSchema(bodySchema: z.ZodType | undefined, description: string): 
   return inputSchemaFor(bodySchema).describe(description);
 }
 
-function inputSchemaFor(schema: z.ZodType, propertyName?: string): z.ZodType {
+function inputSchemaFor(schema: CoreZodType, propertyName?: string): z.ZodType {
   if (propertyName && /^(?:id|.+Id)$/.test(propertyName)) return uuidInputFor(schema);
   if (schema instanceof z.ZodPipe) return inputSchemaFor(schema.in, propertyName);
   if (schema instanceof z.ZodOptional)
@@ -72,21 +74,32 @@ function inputSchemaFor(schema: z.ZodType, propertyName?: string): z.ZodType {
       ),
     );
   }
-  const stringFormatSchema = schema as unknown as {
-    _zod?: {
-      def?: {
-        format?: string;
-        pattern?: RegExp;
-        checks?: Array<{ _zod?: { def?: { format?: string; pattern?: RegExp } } }>;
-      };
-    };
-  };
+  const schemaDefinition = schema._zod.def;
+  const directDateTimePattern =
+    "format" in schemaDefinition &&
+    schemaDefinition.format === "datetime" &&
+    "pattern" in schemaDefinition
+      ? schemaDefinition.pattern
+      : undefined;
+  const dateTimeCheck = schemaDefinition.checks?.find((check) => {
+    const checkDefinition = check._zod.def;
+    return (
+      checkDefinition.check === "string_format" &&
+      "format" in checkDefinition &&
+      checkDefinition.format === "datetime"
+    );
+  });
+  const dateTimeCheckDefinition = dateTimeCheck?._zod.def;
+  const dateTimeCheckPattern =
+    dateTimeCheckDefinition && "pattern" in dateTimeCheckDefinition
+      ? dateTimeCheckDefinition.pattern
+      : undefined;
   const dateTimePattern =
-    stringFormatSchema._zod?.def?.format === "datetime"
-      ? stringFormatSchema._zod.def.pattern
-      : stringFormatSchema._zod?.def?.checks?.find(
-          (check) => check._zod?.def?.format === "datetime",
-        )?._zod?.def?.pattern;
+    directDateTimePattern instanceof RegExp
+      ? directDateTimePattern
+      : dateTimeCheckPattern instanceof RegExp
+        ? dateTimeCheckPattern
+        : undefined;
   if (dateTimePattern instanceof RegExp) {
     return z.string().regex(dateTimePattern).max(MAX_TOOL_STRING_LENGTH);
   }
@@ -99,23 +112,42 @@ function arrayBounds(schema: z.ZodArray): { minimum: number; maximum: number } {
   let minimum = 0;
   let maximum = MAX_TOOL_ARRAY_ITEMS;
   for (const check of checks) {
-    const definition = check._zod.def as unknown as {
-      check: string;
-      minimum: number;
-      maximum: number;
-      length: number;
-    };
-    if (definition.check === "min_length") minimum = Math.max(minimum, definition.minimum);
-    if (definition.check === "max_length") maximum = Math.min(maximum, definition.maximum);
-    if (definition.check === "size_equals") {
+    const definition = check._zod.def;
+    if (
+      definition.check === "min_length" &&
+      "minimum" in definition &&
+      typeof definition.minimum === "number"
+    ) {
+      minimum = Math.max(minimum, definition.minimum);
+    }
+    if (
+      definition.check === "max_length" &&
+      "maximum" in definition &&
+      typeof definition.maximum === "number"
+    ) {
+      maximum = Math.min(maximum, definition.maximum);
+    }
+    if (
+      definition.check === "length_equals" &&
+      "length" in definition &&
+      typeof definition.length === "number"
+    ) {
       minimum = Math.max(minimum, definition.length);
       maximum = Math.min(maximum, definition.length);
+    }
+    if (
+      definition.check === "size_equals" &&
+      "size" in definition &&
+      typeof definition.size === "number"
+    ) {
+      minimum = Math.max(minimum, definition.size);
+      maximum = Math.min(maximum, definition.size);
     }
   }
   return { minimum, maximum };
 }
 
-function uuidInputFor(schema: z.ZodType): z.ZodType {
+function uuidInputFor(schema: CoreZodType): z.ZodType {
   if (schema instanceof z.ZodOptional) return z.optional(uuidInputFor(schema.unwrap()));
   if (schema instanceof z.ZodNullable) return z.nullable(uuidInputFor(schema.unwrap()));
   return TALENT_UUID;
@@ -137,13 +169,13 @@ export function talentCommand(args: {
   featureKey?: string;
   requiredFeatureKeys?: string[];
   permissionAnyOf?: string[];
-  idempotencyKeySchema?: z.ZodType;
+  idempotencyKeySchema?: CoreZodType;
   unrestrictedScope?: boolean;
   beforeInvoke?: (context: ApplicationContext) => Promise<void>;
   recordId?: { name: string; description: string };
   relatedId?: { name: string; description: string };
   payloadDescription?: string;
-  bodySchema?: z.ZodType;
+  bodySchema?: CoreZodType;
   validationStatus?: number;
   destructive?: boolean;
   openWorld?: boolean;
