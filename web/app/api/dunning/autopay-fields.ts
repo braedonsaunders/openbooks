@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { sql, type SQL } from "drizzle-orm";
 import {
   AutopayError,
   parseExpiryNoticeDays,
@@ -50,16 +49,6 @@ export function normalizeFinalAction(raw: unknown): "none" | "suspend" | "cancel
  */
 export function normalizeExpiryNoticeDays(raw: unknown): number {
   return parseExpiryNoticeDays(raw);
-}
-
-/** SQL fragment for the integer[] column from a validated offset list. */
-export function retryOffsetsSql(offsets: number[]): SQL {
-  return offsets.length > 0
-    ? sql`ARRAY[${sql.join(
-        offsets.map((offset) => sql`${offset}`),
-        sql`, `,
-      )}]`
-    : sql`'{}'::integer[]`;
 }
 
 export function autopayFieldError(e: unknown): NextResponse | null {

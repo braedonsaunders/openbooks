@@ -4,14 +4,12 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import {
-  resolveFeedSyncOverlapDays,
-  sealCredentials,
-} from "@openbooks/engine/banking/bank-feed-providers";
+import { resolveFeedSyncOverlapDays } from "@openbooks/engine/banking/bank-feed-providers";
 import { isUuid } from "../../../../lib/list-params";
 import { guardSubsidiaryScope } from "../../../../lib/authz";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
 import { reconcilableBankMembership } from "../../../../lib/banking-accounts";
+import { persistBankFeedConnection } from "../../../../lib/bank-feed-connections";
 const SYNC_OVERLAP_DAYS_MESSAGE = "syncOverlapDays must be a whole number of days from 0 to 90";
 const POSTBodySchema1 = z.object({
   name: z.string().trim().min(1),
@@ -32,14 +30,7 @@ const POSTBodySchema1 = z.object({
 export const runtime = "nodejs";
 
 const PROVIDERS = ["manual", "sftp", "plaid", "gocardless", "truelayer"] as const;
-const API_PROVIDERS = new Set(["plaid", "gocardless", "truelayer"]);
 const CADENCES = ["manual", "hourly", "daily"] as const;
-
-/** Audit-safe projection: sealed credentials never enter the trail — presence only. */
-function withoutCredentials(row: Record<string, unknown>): Record<string, unknown> {
-  const { credentials, ...rest } = row;
-  return { ...rest, hasCredentials: credentials != null };
-}
 
 /**
  * Bank feed connections — the registry behind Company Settings → Bank Feeds.
@@ -130,34 +121,19 @@ export const POST = defineRoute({
       return NextResponse.json({ error: "not a reconcilable account" }, { status: 400 });
     const scoped = guardSubsidiaryScope(authz, acct[0]!.subsidiary_id);
     if (scoped) return scoped;
-    const isApi = API_PROVIDERS.has(body.provider);
-    const sealed =
-      isApi && body.credentials ? sealCredentials(authz.user.orgId, body.credentials) : null;
-    const status = isApi ? "pending" : "connected";
-    const cadence = isApi ? (body.syncCadence ?? "daily") : "manual";
-    const id = await db.transaction(async (tx) => {
-      const created = await tx.execute<Record<string, unknown>>(
-        sql`
-          insert into bank_feed_connections (org_id, name, provider, account_id, external_account_id,
-                                             sync_cadence, sync_overlap_days, credentials, status, created_by, updated_by)
-          values (${authz.user.orgId}, ${body.name}, ${body.provider}, ${body.accountId},
-                  ${isApi ? externalAccountId || null : null}, ${cadence}, ${body.syncOverlapDays ?? null},
-                  ${sealed}, ${status},
-                  ${authz.user.id}, ${authz.user.id})
-          returning *
-        `,
-        "objects",
-      );
-      await tx.execute(sql`
-          insert into audit_log
-            (org_id, table_name, row_id, action, changes, actor_id, request_id)
-          values
-            (${authz.user.orgId}, 'bank_feed_connections', ${created[0]!.id}, 'insert',
-             ${JSON.stringify({ after: withoutCredentials(created[0]!) })}::jsonb,
-             ${authz.user.id}, ${req.headers.get("X-Request-Id")})
-        `);
-      return created[0]!.id;
-    });
+    const id = await persistBankFeedConnection(
+      authz,
+      {
+        name: body.name,
+        provider: body.provider as (typeof PROVIDERS)[number],
+        accountId: body.accountId,
+        externalAccountId: externalAccountId || null,
+        syncCadence: (body.syncCadence ?? "daily") as (typeof CADENCES)[number],
+        syncOverlapDays: body.syncOverlapDays ?? null,
+        credentials: body.credentials ?? null,
+      },
+      req.headers.get("X-Request-Id"),
+    );
     return NextResponse.json({ id }, { status: 201 });
   },
 });

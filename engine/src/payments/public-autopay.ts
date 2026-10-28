@@ -10,6 +10,7 @@ export {
   terminalDeclineDetail,
   type DeclineClass,
 } from "./autopay-policy.ts";
+export { runAutopayCollectionForOrg } from "./autopay.ts";
 export {
   cancelEnrollment,
   enrollAutopay,

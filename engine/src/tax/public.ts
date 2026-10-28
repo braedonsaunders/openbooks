@@ -63,6 +63,7 @@ export {
   type SupplyEvidenceInput,
   type ValidateStoredTaxIdOptions,
 } from "./cross-border-records.ts";
+export { listPartyTaxIds, type PartyTaxIdRecord } from "./party-tax-ids-read.ts";
 export {
   findSupplyEvidenceConflicts,
   computeDistanceTurnover,

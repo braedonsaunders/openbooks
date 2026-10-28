@@ -1,8 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
 import { isDunnableDocumentKind } from "@openbooks/engine/receivables/dunning";
 import { normalizeMoney } from "@openbooks/engine/money/money";
 import { guardUnrestrictedScope } from "../../../lib/authz";
@@ -10,14 +8,13 @@ import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
 import { isValidEmailAddress } from "@openbooks/emails";
 import { isUuid } from "@/lib/list-params";
-import { claimSetupCreate, SetupCreateConflict } from "@/lib/api/idempotency";
+import { createDunningPolicyRecord, listDunningPolicies } from "@/lib/dunning-policy-management";
 import {
   autopayFieldError,
   normalizeExpiryNoticeDays,
   normalizeFinalAction,
   normalizeRetryOffsets,
   requireAutopayWrite,
-  retryOffsetsSql,
 } from "./autopay-fields";
 const stageSchema = z.object({
   sequence: z.number().int(),
@@ -142,44 +139,7 @@ export const GET = defineRoute({
     const authz = routeAuthz;
     const scopeDenied = guardUnrestrictedScope(authz);
     if (scopeDenied) return scopeDenied;
-    const policies = await db.execute<Record<string, unknown>>(
-      sql`
-        select id, name, applies_to_kind as "appliesToKind", grace_period_days as "gracePeriodDays",
-               min_balance as "minBalance", reply_to as "replyTo", is_active as "isActive",
-               autopay_retry_offsets_days as "retryOffsetsDays",
-               autopay_insufficient_funds_offsets_days as "insufficientFundsOffsetsDays",
-               autopay_expiry_notice_days as "expiryNoticeDays",
-               autopay_final_action as "finalAction",
-               to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "updatedAt"
-          from dunning_policies where org_id = ${authz.user.orgId} order by name
-      `,
-      "objects",
-    );
-    const stages = await db.execute<Record<string, unknown>>(
-      sql`
-        select id, policy_id as "policyId", sequence, name, offset_days as "offsetDays",
-               subject_template as "subjectTemplate", body_template as "bodyTemplate", escalate
-          from dunning_stages where org_id = ${authz.user.orgId} order by policy_id, sequence
-      `,
-      "objects",
-    );
-    const byPolicy = new Map<string, Record<string, unknown>[]>();
-    for (const s of stages) {
-      const key = s.policyId as string;
-      (byPolicy.get(key) ?? byPolicy.set(key, []).get(key)!).push(s);
-    }
-    // The setup form edits retry rows of {days}; the policy stores an
-    // integer list, so the read maps one shape to the other.
-    const toRetryRows = (offsets: unknown) =>
-      (Array.isArray(offsets) ? offsets : []).map((days) => ({ days }));
-    return NextResponse.json({
-      policies: policies.map((p) => ({
-        ...p,
-        retryOffsetsDays: toRetryRows(p.retryOffsetsDays),
-        insufficientFundsOffsetsDays: toRetryRows(p.insufficientFundsOffsetsDays),
-        stages: byPolicy.get(p.id as string) ?? [],
-      })),
-    });
+    return NextResponse.json({ policies: await listDunningPolicies(authz.user.orgId) });
   },
 });
 
@@ -300,78 +260,25 @@ export const POST = defineRoute({
         throw e;
       }
     }
-    const id = await db.transaction(async (tx) => {
-      const match = {
-        name: body.name,
+    const id = await createDunningPolicyRecord({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+      requestId,
+      input: {
+        name: body.name as string,
         appliesToKind,
         gracePeriodDays,
         minBalance,
-        replyTo: body.replyTo ?? null,
+        replyTo: (body.replyTo as string | null) ?? null,
         isActive: active,
         stages,
-      };
-      if (requestId) {
-        // The request identity serializes creation of the entire policy.
-        await tx.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended(${"dunning-policy-create:" + requestId}, 0))`,
-        );
-        const claim = await claimSetupCreate(tx, {
-          orgId: authz.user.orgId,
-          table: "dunning_policies",
-          key: requestId,
-          match,
-        });
-        if (claim.kind === "replay") return claim.id;
-      }
-      const created = await tx.execute<Record<string, unknown>>(
-        sql`
-          insert into dunning_policies (id, org_id, name, applies_to_kind, grace_period_days, min_balance,
-                                        reply_to, is_active, autopay_retry_offsets_days,
-                                        autopay_insufficient_funds_offsets_days, autopay_expiry_notice_days,
-                                        autopay_final_action,
-                                        created_by, updated_by)
-          values (coalesce(${requestId}::uuid, gen_random_uuid()), ${authz.user.orgId}, ${body.name}, ${appliesToKind},
-                  ${gracePeriodDays}, ${minBalance},
-                  ${(body.replyTo as string | null) ?? null}, ${active},
-                  ${retryOffsets !== undefined ? retryOffsetsSql(retryOffsets) : sql`'{}'::integer[]`},
-                  ${insufficientFundsOffsets !== undefined ? retryOffsetsSql(insufficientFundsOffsets) : sql`'{3,7,14}'::integer[]`},
-                  ${expiryNoticeDays ?? 30},
-                  ${finalAction ?? "none"},
-                  ${authz.user.id}, ${authz.user.id})
-          -- A request identity already claimed cannot create another policy.
-          on conflict (id) do nothing returning *
-        `,
-        "objects",
-      );
-      if (!created[0]) throw new SetupCreateConflict("foreign-key");
-      const policyId = created[0]!.id as string;
-      const insertedStages: Record<string, unknown>[] = [];
-      for (const s of stages) {
-        const stageRow = await tx.execute<Record<string, unknown>>(
-          sql`
-            insert into dunning_stages (org_id, policy_id, sequence, name, offset_days, subject_template,
-                                        body_template, escalate, created_by, updated_by)
-            values (${authz.user.orgId}, ${policyId}, ${s.sequence}, ${s.name}, ${s.offsetDays},
-                    ${s.subjectTemplate}, ${s.bodyTemplate}, ${s.escalate ?? false}, ${authz.user.id}, ${authz.user.id})
-            returning *
-          `,
-          "objects",
-        );
-        if (!stageRow[0])
-          throw new Error("The reminder stage was not created; policy creation was rolled back.");
-        insertedStages.push(stageRow[0]);
-      }
-      // The policy decides how overdue customers are chased; record what was
-      // created (ladder included) in the same transaction as the writes.
-      await tx.execute(sql`
-          insert into audit_log
-            (org_id, table_name, row_id, action, changes, actor_id, request_id)
-          values
-            (${authz.user.orgId}, 'dunning_policies', ${policyId}, 'insert',
-             ${JSON.stringify({ after: { ...created[0], stages: insertedStages }, match })}::jsonb,
-             ${authz.user.id}, ${requestId})
-        `);
-      return policyId;
+        ...(retryOffsets !== undefined ? { retryOffsetsDays: retryOffsets } : {}),
+        ...(insufficientFundsOffsets !== undefined
+          ? { insufficientFundsOffsetsDays: insufficientFundsOffsets }
+          : {}),
+        ...(expiryNoticeDays !== undefined ? { expiryNoticeDays } : {}),
+        ...(finalAction !== undefined ? { finalAction } : {}),
+      },
     });
     return NextResponse.json({ id }, { status: 201 });
   },

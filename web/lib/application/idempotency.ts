@@ -119,6 +119,8 @@ export async function executeIdempotent<T>(args: {
   idempotencyKey: string;
   request: unknown;
   execute: () => Promise<T>;
+  /** Persist a replay-safe response when a fresh result contains a one-time secret. */
+  cacheResponse?: (value: T) => unknown;
   /** Maps a freshly executed command's value onto the transport status to record. */
   successStatus?: (value: T) => number;
   /** Recheck resource authorization before returning a stored response. */
@@ -213,7 +215,7 @@ export async function executeIdempotent<T>(args: {
       const value = await args.execute();
       let serializable;
       try {
-        serializable = toJsonValue(value);
+        serializable = toJsonValue(args.cacheResponse ? args.cacheResponse(value) : value);
       } catch (error) {
         if (error instanceof NonJsonValueError) {
           throw new Error("application operation returned a non-JSON value");

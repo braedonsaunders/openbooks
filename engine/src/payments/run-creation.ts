@@ -65,6 +65,8 @@ interface CreatePaymentRunOptions {
     /** Occurrence status once this run commits: terminal draft, or awaiting scheduled submission. */
     status: "draft_created" | "awaiting_submit";
   } | null;
+  /** Application commands already provide an idempotent outer transaction. */
+  allowExistingTransaction?: boolean;
 }
 
 /** The storage-enforced race when another live run claims the same open item. */
@@ -116,7 +118,15 @@ export async function createPaymentRun(
   // a separate transaction. Nesting would either erase that evidence with the
   // caller or try to write it through an already-aborted transaction.
   if (orgContext.getStore()?.txDb) {
-    throw new PaymentError("payment run creation cannot be nested in another database transaction");
+    if (!opts.allowExistingTransaction) {
+      throw new PaymentError(
+        "payment run creation cannot be nested in another database transaction",
+      );
+    }
+    // API command callers hold the outer idempotency claim in this transaction.
+    // Keep run rows and their drafts atomic with that claim; route callers retain
+    // the separate refusal-evidence transaction below.
+    return createPaymentRunWithinTransaction(opts, () => undefined);
   }
   let releaseEvaluationCompleted = false;
   let evaluatedReleaseDecisions: BillReleaseDecision[] = [];

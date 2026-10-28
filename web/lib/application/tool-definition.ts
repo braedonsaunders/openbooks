@@ -36,9 +36,10 @@ export function definition<T extends ZodTypeAny>(
     inputSchema: T;
     execute: (context: ApplicationContext, input: z.infer<T>) => Promise<Record<string, unknown>>;
     authorizeReplay?: (context: ApplicationContext, input: z.infer<T>) => Promise<void>;
+    cacheResponse?: (value: Record<string, unknown>) => unknown;
   },
 ): ApplicationToolDefinition {
-  const { execute, inputSchema, authorizeReplay, ...metadata } = args;
+  const { execute, inputSchema, authorizeReplay, cacheResponse, ...metadata } = args;
   return {
     ...metadata,
     inputSchema,
@@ -57,6 +58,7 @@ export function definition<T extends ZodTypeAny>(
         idempotencyKey,
         request: parsed,
         authorizeReplay: authorizeReplay ? () => authorizeReplay(context, parsed) : undefined,
+        cacheResponse,
         // The outer catalog claim owns API-key execution evidence. Nested
         // domain idempotency still runs in this same transaction, but must not
         // attempt to write a second transport event for the same command.

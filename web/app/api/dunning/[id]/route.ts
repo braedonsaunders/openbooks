@@ -10,15 +10,17 @@ import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 import { isUuid } from "../../../../lib/list-params";
 import { isValidEmailAddress } from "@openbooks/emails";
-import { dunningStageIdentities } from "@/lib/dunning-stage-identity";
 import { notFound } from "@/lib/api/responses";
+import {
+  deleteDunningPolicyRecord,
+  updateDunningPolicyRecord,
+} from "@/lib/dunning-policy-management";
 import {
   autopayFieldError,
   normalizeExpiryNoticeDays,
   normalizeFinalAction,
   normalizeRetryOffsets,
   requireAutopayWrite,
-  retryOffsetsSql,
 } from "../autopay-fields";
 const stageSchema = z.object({
   id: uuidString().optional(),
@@ -66,24 +68,6 @@ const PATCHBodySchema1 = z
   );
 
 export const runtime = "nodejs";
-
-class PolicyEditConflict extends Error {
-  readonly status = 409;
-  constructor(
-    message = "This policy changed or was removed while you were editing. Close the editor, refresh Policies, and reopen the record before saving.",
-  ) {
-    super(message);
-  }
-}
-
-class PolicyStagesRefusal extends Error {
-  readonly status = 422;
-  constructor() {
-    super(
-      "cannot activate a policy with no stages — add at least one stage or deactivate it first",
-    );
-  }
-}
 
 interface StageInput {
   id?: string;
@@ -278,105 +262,32 @@ export const PATCH = defineRoute({
         throw e;
       }
     }
-    await db.transaction(async (tx) => {
-      // Snapshot the current policy and its ladder before anything changes.
-      const beforePolicy = await tx.execute<Record<string, unknown>>(
-        sql`
-          select *, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as policy_revision
-            from dunning_policies where id = ${id} and org_id = ${authz.user.orgId} for update
-        `,
-        "objects",
-      );
-      const before = beforePolicy[0];
-      if (!before) throw new PolicyEditConflict();
-      if (body.expectedUpdatedAt !== undefined && before.policy_revision !== body.expectedUpdatedAt)
-        throw new PolicyEditConflict();
-      const beforeStages = await tx.execute<Record<string, unknown>>(
-        sql`
-          select * from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId} order by sequence
-        `,
-        "objects",
-      );
-      if ((body.isActive ?? before.is_active) === true && (stages ?? beforeStages).length === 0) {
-        throw new PolicyStagesRefusal();
-      }
-      const sets = [];
-      if ("name" in body) sets.push(sql`name = ${body.name as string}`);
-      if ("appliesToKind" in body)
-        sets.push(sql`applies_to_kind = ${body.appliesToKind as string}`);
-      if (gracePeriodDays !== undefined) sets.push(sql`grace_period_days = ${gracePeriodDays}`);
-      if (minBalance !== undefined) sets.push(sql`min_balance = ${minBalance}`);
-      if ("replyTo" in body) sets.push(sql`reply_to = ${(body.replyTo as string | null) ?? null}`);
-      if ("isActive" in body) sets.push(sql`is_active = ${body.isActive as boolean}`);
-      if (retryOffsets !== undefined)
-        sets.push(sql`autopay_retry_offsets_days = ${retryOffsetsSql(retryOffsets)}`);
-      if (insufficientFundsOffsets !== undefined)
-        sets.push(
-          sql`autopay_insufficient_funds_offsets_days = ${retryOffsetsSql(insufficientFundsOffsets)}`,
-        );
-      if (expiryNoticeDays !== undefined)
-        sets.push(sql`autopay_expiry_notice_days = ${expiryNoticeDays}`);
-      if (finalAction !== undefined) sets.push(sql`autopay_final_action = ${finalAction}`);
-      let afterPolicy: Record<string, unknown> | undefined;
-      if (sets.length || stages !== undefined) {
-        sets.push(sql`updated_at = now()`, sql`updated_by = ${authz.user.id}`);
-        const updated = await tx.execute<Record<string, unknown>>(
-          sql`
-            update dunning_policies set ${sql.join(sets, sql`, `)}
-             where id = ${id} and org_id = ${authz.user.orgId}
-            returning *
-          `,
-          "objects",
-        );
-        afterPolicy = updated[0];
-        if (!afterPolicy) throw new PolicyEditConflict();
-      }
-      let afterStages: Record<string, unknown>[] | undefined;
-      if (stages) {
-        const identities = dunningStageIdentities(
-          beforeStages.map((stage) => ({ id: String(stage.id), sequence: Number(stage.sequence) })),
-          stages,
-        );
-        if (!identities.ok) throw new PolicyEditConflict(identities.error);
-        // Replace atomically to permit sequence swaps under the unique
-        // index. Retain stage ids and creation evidence: delivery claims
-        // remain attached to the same reminder after an ordinary edit.
-        await tx.execute(
-          sql`delete from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId}`,
-        );
-        afterStages = [];
-        for (const [index, s] of stages.entries()) {
-          const stageId = identities.ids[index] ?? null;
-          const original = beforeStages.find((row) => row.id === stageId);
-          const stageRow = await tx.execute<Record<string, unknown>>(
-            sql`
-              insert into dunning_stages (id, org_id, policy_id, sequence, name, offset_days, subject_template,
-                                          body_template, escalate, created_at, created_by, updated_by)
-              values (coalesce(${stageId}::uuid, gen_random_uuid()), ${authz.user.orgId}, ${id}, ${s.sequence}, ${s.name}, ${s.offsetDays},
-                      ${s.subjectTemplate}, ${s.bodyTemplate}, ${s.escalate ?? false}, coalesce(${original?.created_at ?? null}::timestamptz, now()),
-                      ${original?.created_by ?? authz.user.id}, ${authz.user.id})
-              returning *
-            `,
-            "objects",
-          );
-          if (!stageRow[0]) throw new PolicyEditConflict();
-          afterStages.push(stageRow[0]!);
-        }
-      }
-      await tx.execute(sql`
-          insert into audit_log
-            (org_id, table_name, row_id, action, changes, actor_id)
-          values
-            (${authz.user.orgId}, 'dunning_policies', ${id}, 'update',
-             ${JSON.stringify({
-               before: { ...beforePolicy[0], stages: beforeStages },
-               after: {
-                 ...(afterPolicy ?? beforePolicy[0]),
-                 stages: afterStages ?? beforeStages,
-               },
-             })}::jsonb,
-             ${authz.user.id})
-        `);
+    await updateDunningPolicyRecord({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+      policyId: id,
+      input: {
+        ...(body.expectedUpdatedAt !== undefined
+          ? { expectedUpdatedAt: body.expectedUpdatedAt }
+          : {}),
+        ...(body.appliesToKind !== undefined
+          ? { appliesToKind: body.appliesToKind as string }
+          : {}),
+        ...(gracePeriodDays !== undefined ? { gracePeriodDays } : {}),
+        ...(minBalance !== undefined ? { minBalance } : {}),
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(Object.prototype.hasOwnProperty.call(body, "replyTo")
+          ? { replyTo: (body.replyTo as string | null) ?? null }
+          : {}),
+        ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
+        ...(stages !== undefined ? { stages } : {}),
+        ...(retryOffsets !== undefined ? { retryOffsetsDays: retryOffsets } : {}),
+        ...(insufficientFundsOffsets !== undefined
+          ? { insufficientFundsOffsetsDays: insufficientFundsOffsets }
+          : {}),
+        ...(expiryNoticeDays !== undefined ? { expiryNoticeDays } : {}),
+        ...(finalAction !== undefined ? { finalAction } : {}),
+      },
     });
     return NextResponse.json({ ok: true });
   },
@@ -394,43 +305,10 @@ export const DELETE = defineRoute({
     if (scopeDenied) return scopeDenied;
     const { id } = await params;
     if (!isUuid(id)) return notFound("record");
-    const deleted = await db.transaction(async (tx) => {
-      // Snapshot policy and ladder first: deletion removes the only record of
-      // how this org chased overdue invoices.
-      const beforePolicy = await tx.execute<Record<string, unknown>>(
-        sql`
-          select * from dunning_policies where id = ${id} and org_id = ${authz.user.orgId} for update
-        `,
-        "objects",
-      );
-      if (!beforePolicy[0]) return false;
-      const beforeStages = await tx.execute<Record<string, unknown>>(
-        sql`
-          select * from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId} order by sequence
-        `,
-        "objects",
-      );
-      await tx.execute(
-        sql`delete from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId}`,
-      );
-      const removed = (
-        await tx.execute<{ id: string }>(
-          sql`
-          delete from dunning_policies where id = ${id} and org_id = ${authz.user.orgId} returning id
-        `,
-          "objects",
-        )
-      )[0];
-      if (!removed) throw new Error("dunning policy disappeared before deletion");
-      await tx.execute(sql`
-          insert into audit_log
-            (org_id, table_name, row_id, action, changes, actor_id)
-          values
-            (${authz.user.orgId}, 'dunning_policies', ${id}, 'delete',
-             ${JSON.stringify({ before: { ...beforePolicy[0], stages: beforeStages } })}::jsonb,
-             ${authz.user.id})
-        `);
-      return true;
+    const deleted = await deleteDunningPolicyRecord({
+      orgId: authz.user.orgId,
+      actorId: authz.user.id,
+      policyId: id,
     });
     if (!deleted) return notFound("record");
     return NextResponse.json({ ok: true });
