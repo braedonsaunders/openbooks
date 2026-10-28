@@ -102,7 +102,9 @@ test(
       const stored = await db.execute<{ id: string; fulfilled: string; billed: string }>(
         sql`
       select id, quantity_fulfilled::text as fulfilled, quantity_billed::text as billed
-        from document_lines where org_id = ${org.orgId} order by line_number`,
+        from document_lines
+       where org_id = ${org.orgId} and document_id = ${exact.documentId}
+       order by line_number`,
         "objects",
       );
       assert.deepEqual(stored, [
@@ -121,8 +123,9 @@ test(
         "the governed view filters by the query tenant",
       );
 
+      // Scoped to this test's order: a pooled organization may already hold other lines.
       const query = `select id::text as id, quantity_fulfilled::text as fulfilled, quantity_billed::text as billed
-         from document_lines order by line_number`;
+         from document_lines where document_id = '${exact.documentId}' order by line_number`;
       await assert.rejects(
         runUserSql(query, { orgId: org.orgId }),
         /payroll\.read/,

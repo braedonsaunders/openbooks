@@ -283,7 +283,7 @@ test(
         ),
         /forbidden/,
       );
-      // Module off: the execute-time fence matches the routes' 404.
+      // Module off: the shared execution gate refuses before the handler runs.
       await withBypassContext(() =>
         db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
@@ -301,7 +301,7 @@ test(
               idempotencyKey: "a05-start-4",
             }),
           ),
-          /banking not found/,
+          /needs the banking feature/,
         );
       } finally {
         await withBypassContext(() =>
