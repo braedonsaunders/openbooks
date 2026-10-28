@@ -212,6 +212,16 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   // Ledger and close commands.
 
   // Treasury commands.
+  list_payment_operation_configs: "banking",
+  get_party_payment_setup: "banking",
+  create_payment_format: "banking",
+  create_payment_bank_profile: "banking",
+  create_payment_schedule: "banking",
+  create_payment_mandate: "banking",
+  update_payment_format: "banking",
+  update_payment_bank_profile: "banking",
+  update_payment_schedule: "banking",
+  update_payment_mandate: "banking",
   list_payment_runs: "documents",
   get_payment_run: "documents",
   create_payment_run: "documents",

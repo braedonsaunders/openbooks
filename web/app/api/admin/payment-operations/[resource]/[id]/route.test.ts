@@ -53,6 +53,7 @@ const mockSources = new Map<string, string>([
       export const registerRequestOrgResolver = () => {}
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
+      export const schema = { paymentFormats: {} }
       export const db = {
         async execute(query) {
           const text = sqlText(query)
@@ -112,6 +113,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:payment-operations",
     `
+      export async function createPaymentBankProfile() {}
       export async function updatePaymentBankProfile() {}
     `,
   ],
@@ -140,6 +142,8 @@ const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
   ["../../../../../../lib/features", "mock:features"],
   ["../../../../../../lib/countries", "mock:countries"],
+  ["@/lib/payment-operations-audit", "mock:audit"],
+  ["./payment-operations-audit", "mock:audit"],
   ["../../_lib", "mock:audit"],
 ]);
 

@@ -8,7 +8,7 @@ import { TREASURY_COLLECTION_TOOLS } from "./treasury-tools-collections";
 import { TREASURY_WITHHOLDING_TOOLS } from "./treasury-tools-withholding";
 import { TREASURY_TAX_TOOLS } from "./treasury-tools-tax";
 import { TREASURY_DUNNING_TOOLS } from "./treasury-tools-dunning";
-import { TREASURY_INFORMATION_RETURN_TOOLS } from "./treasury-tools-information-returns";
+import { TREASURY_PAYMENT_OPERATION_TOOLS } from "./treasury-tools-payment-operations";
 
 /** Banking, payments, autopay, tax, withholding, stored value, statements and dunning commands for the assistant, MCP and the v1 command API. */
 export const TREASURY_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
@@ -20,5 +20,5 @@ export const TREASURY_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
   ...TREASURY_WITHHOLDING_TOOLS,
   ...TREASURY_TAX_TOOLS,
   ...TREASURY_DUNNING_TOOLS,
-  ...TREASURY_INFORMATION_RETURN_TOOLS,
+  ...TREASURY_PAYMENT_OPERATION_TOOLS,
 ];

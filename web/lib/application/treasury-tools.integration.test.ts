@@ -14,7 +14,7 @@ const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors, seedPostingAccount } =
   await import("@openbooks/engine/testing/fixtures");
-const { loadFilings } = await import("../compliance");
+const { seedApprovedBankAccountFixture } = await import("@openbooks/engine/testing/bank-accounts");
 const { listDunningPolicies: readDunningPolicies } = await import("../dunning-policy-management");
 const { createProgram, loadStoredValueTenderAccount } =
   await import("@openbooks/engine/stored-value/accounts");
@@ -106,58 +106,6 @@ test(
     } finally {
       await dropScratchOrg(org.orgId);
       await dropScratchOrg(other.orgId);
-    }
-  },
-);
-
-test(
-  "information return commands prepare and void through native reads with safe replay",
-  { skip: !DB },
-  async () => {
-    const org = await withBypassContext(() => createScratchOrg());
-    try {
-      const actors = await withBypassContext(() => seedFlowActors(org.orgId));
-      await setFeature(org.orgId, "informationReturns", true);
-      const context = ctxFor(org.orgId, actors.adminId, [
-        "compliance.read",
-        "compliance.manage",
-        "compliance.file",
-      ]);
-      const run = (name: string, input: Record<string, unknown>) =>
-        withOrgContext(org.orgId, () =>
-          executeApplicationTool(applicationTool(name)!, context, input),
-        );
-
-      const input = {
-        formType: "1099-NEC",
-        taxYear: 2025,
-        idempotencyKey: `information-return-${randomUUID()}`,
-      };
-      const first = (await run("prepare_information_return", input)) as {
-        replayed: boolean;
-        id: string;
-      };
-      assert.equal(first.replayed, false);
-      const replay = (await run("prepare_information_return", input)) as {
-        replayed: boolean;
-        id: string;
-      };
-      assert.equal(replay.replayed, true);
-      assert.equal(replay.id, first.id);
-
-      const nativeRows = await withOrgContext(org.orgId, () => loadFilings(org.orgId, null));
-      assert.equal(nativeRows.filter((row) => row.id === first.id).length, 1);
-      assert.equal(nativeRows.find((row) => row.id === first.id)?.status, "draft");
-
-      await run("void_information_return_filing", {
-        filingId: first.id,
-        reason: "Return opened in error",
-        idempotencyKey: `information-return-void-${randomUUID()}`,
-      });
-      const afterVoid = await withOrgContext(org.orgId, () => loadFilings(org.orgId, null));
-      assert.equal(afterVoid.find((row) => row.id === first.id)?.status, "void");
-    } finally {
-      await dropScratchOrg(org.orgId);
     }
   },
 );
@@ -299,68 +247,151 @@ test(
 );
 
 test(
-  "information return commands enforce permission, feature, and organization scope",
+  "payment operation configuration commands create, update, replay, and read scoped records",
   { skip: !DB },
   async () => {
-    const first = await withBypassContext(() => createScratchOrg());
-    const second = await withBypassContext(() => createScratchOrg());
+    const org = await withBypassContext(() => createScratchOrg());
+    const other = await withBypassContext(() => createScratchOrg());
     try {
-      const firstActors = await withBypassContext(() => seedFlowActors(first.orgId));
-      await Promise.all([
-        setFeature(first.orgId, "informationReturns", true),
-        setFeature(second.orgId, "informationReturns", true),
-      ]);
-      const full = ctxFor(first.orgId, firstActors.adminId, [
-        "compliance.manage",
-        "compliance.file",
-      ]);
-      const created = (await withOrgContext(first.orgId, () =>
-        executeApplicationTool(applicationTool("prepare_information_return")!, full, {
-          formType: "1099-NEC",
-          taxYear: 2025,
-          idempotencyKey: `information-return-cross-${randomUUID()}`,
-        }),
-      )) as { id: string };
+      const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+      const context = ctxFor(org.orgId, actors.adminId, ["admin.setup.manage"]);
+      const run = (name: string, input: Record<string, unknown>) =>
+        withOrgContext(org.orgId, () =>
+          executeApplicationTool(applicationTool(name)!, context, input),
+        );
+      const formatInput = {
+        code: `TOOL-${randomUUID().slice(0, 8).toUpperCase()}`,
+        name: "Application test payment format",
+        formatterScript: "return rows;",
+        idempotencyKey: `payment-format-create-${randomUUID()}`,
+      };
+      const format = (await run("create_payment_format", formatInput)) as {
+        replayed: boolean;
+        id: string;
+        record: Record<string, unknown>;
+      };
+      assert.equal(format.replayed, false);
+      assert.equal(format.record.name, formatInput.name);
+      const replay = (await run("create_payment_format", formatInput)) as {
+        replayed: boolean;
+        id: string;
+      };
+      assert.equal(replay.replayed, true);
+      assert.equal(replay.id, format.id);
+      const formatCount = await withOrgContext(org.orgId, () =>
+        db.execute<{ count: string }>(
+          sql`select count(*)::text as count from payment_formats where org_id = ${org.orgId} and id = ${format.id}`,
+          "objects",
+        ),
+      );
+      assert.equal(formatCount[0]?.count, "1");
 
-      const noPermission = ctxFor(first.orgId, firstActors.adminId, []);
+      const update = (await run("update_payment_format", {
+        id: format.id,
+        name: "Updated application payment format",
+        idempotencyKey: `payment-format-update-${randomUUID()}`,
+      })) as { record: Record<string, unknown> };
+      assert.equal(update.record.name, "Updated application payment format");
+
+      const partyBankAccountId = await seedApprovedBankAccountFixture({
+        orgId: org.orgId,
+        actorId: actors.adminId,
+        partyId: org.customerId,
+        bankName: "Application test bank",
+        country: "CA",
+        currency: "CAD",
+        routing: {},
+        lastFour: "4242",
+      });
+      const partySetup = (await run("get_party_payment_setup", {
+        partyId: org.customerId,
+      })) as { bankAccounts: Array<{ id: string }> };
+      assert.ok(partySetup.bankAccounts.some((account) => account.id === partyBankAccountId));
+
+      const profile = (await run("create_payment_bank_profile", {
+        name: "Application test bank profile",
+        bankAccountId: org.accounts.bank,
+        paymentFormatId: format.id,
+        subsidiaryId: org.subsidiaryId,
+        idempotencyKey: `payment-profile-create-${randomUUID()}`,
+      })) as { id: string; record: Record<string, unknown> };
+      assert.equal(profile.record.name, "Application test bank profile");
+      assert.equal(profile.record.has_secrets, false);
+      assert.equal("originator_secrets_encrypted" in profile.record, false);
+
+      const schedule = (await run("create_payment_schedule", {
+        name: "Application test schedule",
+        paymentBankProfileId: profile.id,
+        cron: "0 0 * * *",
+        timezone: "UTC",
+        idempotencyKey: `payment-schedule-create-${randomUUID()}`,
+      })) as { id: string; record: Record<string, unknown> };
+      assert.equal(schedule.record.profile_name, "Application test bank profile");
+      const updatedSchedule = (await run("update_payment_schedule", {
+        id: schedule.id,
+        name: "Updated application schedule",
+        idempotencyKey: `payment-schedule-update-${randomUUID()}`,
+      })) as { record: Record<string, unknown> };
+      assert.equal(updatedSchedule.record.name, "Updated application schedule");
+
+      const mandate = (await run("create_payment_mandate", {
+        partyId: org.customerId,
+        partyBankAccountId,
+        mandateReference: `TOOL-${randomUUID().slice(0, 8)}`,
+        scheme: "custom",
+        signedOn: org.date,
+        idempotencyKey: `payment-mandate-create-${randomUUID()}`,
+      })) as { id: string; status: string; record: Record<string, unknown> };
+      assert.equal(mandate.status, "pending");
+      const updatedMandate = (await run("update_payment_mandate", {
+        id: mandate.id,
+        status: "active",
+        idempotencyKey: `payment-mandate-update-${randomUUID()}`,
+      })) as { status: string };
+      assert.equal(updatedMandate.status, "active");
+
       await assert.rejects(
-        withOrgContext(first.orgId, () =>
-          executeApplicationTool(applicationTool("prepare_information_return")!, noPermission, {
-            formType: "1099-MISC",
-            taxYear: 2025,
-            idempotencyKey: `information-return-permission-${randomUUID()}`,
-          }),
+        withOrgContext(org.orgId, () =>
+          executeApplicationTool(
+            applicationTool("create_payment_format")!,
+            ctxFor(org.orgId, actors.adminId, []),
+            {
+              code: "DENIED-TOOL",
+              name: "Denied format",
+              formatterScript: "return rows;",
+              idempotencyKey: `payment-format-denied-${randomUUID()}`,
+            },
+          ),
         ),
         /forbidden/,
       );
 
-      await setFeature(first.orgId, "informationReturns", false);
-      try {
-        await assert.rejects(
-          withOrgContext(first.orgId, () =>
-            executeApplicationTool(applicationTool("prepare_information_return")!, full, {
-              formType: "1099-MISC",
-              taxYear: 2025,
-              idempotencyKey: `information-return-feature-${randomUUID()}`,
-            }),
-          ),
-          /informationReturns not found/,
-        );
-      } finally {
-        await setFeature(first.orgId, "informationReturns", true);
-      }
+      await setFeature(org.orgId, "multiCurrency", false);
+      await assert.rejects(
+        run("create_payment_format", {
+          code: "CURRENCY-OFF-TOOL",
+          name: "Currency restricted format",
+          formatterScript: "return rows;",
+          currency: "USD",
+          idempotencyKey: `payment-format-feature-${randomUUID()}`,
+        }),
+        /not found/,
+      );
+      await setFeature(org.orgId, "multiCurrency", true);
 
-      const otherOrg = ctxFor(second.orgId, firstActors.adminId, ["compliance.read"]);
-      const otherOrgFilings = (await withOrgContext(second.orgId, () =>
-        executeApplicationTool(applicationTool("list_information_return_filings")!, otherOrg, {}),
-      )) as { filings: Array<{ id: string }> };
+      const otherContext = ctxFor(other.orgId, actors.adminId, ["admin.setup.manage"]);
+      const otherFormats = (await withOrgContext(other.orgId, () =>
+        executeApplicationTool(applicationTool("list_payment_operation_configs")!, otherContext, {
+          resource: "formats",
+        }),
+      )) as { rows: Array<{ id: string }> };
       assert.equal(
-        otherOrgFilings.filings.some((filing) => filing.id === created.id),
+        otherFormats.rows.some((row) => row.id === format.id),
         false,
       );
     } finally {
-      await dropScratchOrg(first.orgId);
-      await dropScratchOrg(second.orgId);
+      await dropScratchOrg(org.orgId);
+      await dropScratchOrg(other.orgId);
     }
   },
 );

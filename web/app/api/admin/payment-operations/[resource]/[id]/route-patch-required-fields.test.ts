@@ -43,6 +43,7 @@ const mockSources = new Map<string, string>([
       export const registerRequestOrgResolver = () => {}
       export const withBypass = (fn) => fn()
       export const withBypassContext = (fn) => fn()
+      export const schema = { paymentFormats: {} }
       const executor = {
         async execute(query, mode) {
           const inMode = (result) => (mode === 'objects' ? result.rows : result)
@@ -69,7 +70,10 @@ const mockSources = new Map<string, string>([
     "mock:countries",
     `export function normalizeCountryCode(value) { return String(value).trim().toUpperCase() }`,
   ],
-  ["mock:payment-operations", `export async function updatePaymentBankProfile() {}`],
+  [
+    "mock:payment-operations",
+    `export async function createPaymentBankProfile() {}; export async function updatePaymentBankProfile() {}`,
+  ],
   [
     "mock:scripting",
     `export function computeNextRunAt() { return new Date('2026-01-01T09:00:00Z') }`,
@@ -85,6 +89,8 @@ const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
   ["../../../../../../lib/features", "mock:features"],
   ["../../../../../../lib/countries", "mock:countries"],
+  ["@/lib/payment-operations-audit", "mock:audit"],
+  ["./payment-operations-audit", "mock:audit"],
   ["../../_lib", "mock:audit"],
 ]);
 
