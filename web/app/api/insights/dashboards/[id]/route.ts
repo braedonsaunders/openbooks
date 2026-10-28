@@ -45,14 +45,21 @@ export const GET = defineRoute({
   },
 });
 
-interface PatchBody {
-  /** Exact `updated_at` token returned by GET; required for every autosave. */
-  expectedUpdatedAt?: unknown;
-  name?: string;
-  description?: string | null;
-  layout?: unknown;
-  allowedRoles?: unknown;
-}
+const dashboardPatchBody = z
+  .strictObject({
+    expectedUpdatedAt: revisionBody,
+    name: z.string().trim().min(1, "name cannot be empty").max(200).optional(),
+    description: z.string().trim().max(2000).nullable().optional(),
+    layout: layoutBody.optional(),
+    allowedRoles: z
+      .array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys"))
+      .nullable()
+      .optional(),
+  })
+  .refine(
+    (body) => Object.keys(body).some((key) => key !== "expectedUpdatedAt"),
+    "provide at least one dashboard field to update",
+  );
 
 export const PATCH = defineRoute({
   permission: "insights.create",
@@ -60,25 +67,11 @@ export const PATCH = defineRoute({
     none: "This insights surface is governed by its permission and has no separate organization feature switch.",
   },
   params: z.object({ id: z.string() }),
-  body: z
-    .strictObject({
-      expectedUpdatedAt: revisionBody,
-      name: z.string().trim().min(1, "name cannot be empty").max(200).optional(),
-      description: z.string().trim().max(2000).nullable().optional(),
-      layout: layoutBody.optional(),
-      allowedRoles: z
-        .array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys"))
-        .nullable()
-        .optional(),
-    })
-    .refine(
-      (body) => Object.keys(body).some((key) => key !== "expectedUpdatedAt"),
-      "provide at least one dashboard field to update",
-    ),
+  body: dashboardPatchBody,
   handler: async ({ authz: gate, params, body: routeBody }) => {
     const { id } = await params;
     if (!isUuid(id)) return notFound("record");
-    return updateInsightDashboard(gate, id, routeBody as PatchBody);
+    return updateInsightDashboard(gate, id, routeBody);
   },
 });
 
