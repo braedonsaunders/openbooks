@@ -1,5 +1,5 @@
 import "server-only";
-import { z, type ZodObject, type ZodRawShape } from "zod";
+import { z } from "zod";
 import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { HrmConstructionError } from "@openbooks/engine/hrm/construction";
@@ -25,11 +25,11 @@ export const HRM_IDEMPOTENCY_KEY = z
   .describe("Unique retry key for this exact mutation.");
 
 /** Preserve a route's validators while ensuring each exposed input has a provider-visible description. */
-export function describeObjectFields<T extends ZodRawShape>(
-  schema: ZodObject<T>,
+export function describeObjectFields<T extends Record<string, z.ZodType>>(
+  schema: z.ZodObject<T>,
   describeField: (key: string) => string = (key) =>
     `Value for ${key} as required by the native HRM contract.`,
-): ZodObject<T> {
+): z.ZodObject<T> {
   const shape = Object.fromEntries(
     Object.entries(schema.shape).map(([key, field]) => [key, field.describe(describeField(key))]),
   ) as T;
@@ -119,32 +119,32 @@ export function settleHrmRefusal(error: unknown): never {
   throw error;
 }
 
-interface MutationSpec<T extends ZodRawShape> {
+interface MutationSpec<T extends Record<string, z.ZodType>> {
   name: string;
   title: string;
   description: string;
-  input: ZodObject<T>;
+  input: z.ZodObject<T>;
   permission: Permission;
   featureKey: string;
   destructive?: boolean;
   openWorld?: boolean;
   execute: (
     context: ApplicationContext,
-    input: z.infer<ZodObject<T>> & { idempotencyKey: string },
+    input: z.output<z.ZodObject<T>> & { idempotencyKey: string },
   ) => Promise<Record<string, unknown>>;
 }
 
-interface ReadSpec<T extends ZodRawShape> {
+interface ReadSpec<T extends Record<string, z.ZodType>> {
   name: string;
   title: string;
   description: string;
-  input: ZodObject<T>;
+  input: z.ZodObject<T>;
   permission: Permission;
   featureKey: string;
   openWorld?: boolean;
   execute: (
     context: ApplicationContext,
-    input: z.infer<ZodObject<T>>,
+    input: z.output<z.ZodObject<T>>,
   ) => Promise<Record<string, unknown>>;
 }
 
@@ -171,7 +171,9 @@ async function requireHrmFeature(orgId: string, featureKey: string): Promise<voi
   if (!(await isFeatureEnabled(orgId, featureKey))) throw notFound("HRM feature");
 }
 
-export function hrmRead<T extends ZodRawShape>(spec: ReadSpec<T>): ApplicationToolDefinition {
+export function hrmRead<T extends Record<string, z.ZodType>>(
+  spec: ReadSpec<T>,
+): ApplicationToolDefinition {
   const permissions = permissionsFor(spec.permission);
   const visibleTo = (authz: Authz) => permissionVisible(authz, permissions);
   return definition({
@@ -197,7 +199,7 @@ export function hrmRead<T extends ZodRawShape>(spec: ReadSpec<T>): ApplicationTo
   });
 }
 
-export function hrmMutation<T extends ZodRawShape>(
+export function hrmMutation<T extends Record<string, z.ZodType>>(
   spec: MutationSpec<T>,
 ): ApplicationToolDefinition {
   const permissions = permissionsFor(spec.permission);
@@ -221,7 +223,10 @@ export function hrmMutation<T extends ZodRawShape>(
       requireVisiblePermission(context, permissions);
       try {
         await requireHrmFeature(context.authz.user.orgId, spec.featureKey);
-        return await spec.execute(context, input);
+        return await spec.execute(
+          context,
+          input as z.output<z.ZodObject<T>> & { idempotencyKey: string },
+        );
       } catch (error) {
         settleHrmRefusal(error);
       }

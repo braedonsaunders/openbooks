@@ -365,7 +365,7 @@ export const HRM_EMPLOYMENT_TOOLS: ApplicationToolDefinition[] = [
         orgId: context.authz.user.orgId,
         actorId: context.authz.user.id,
         requestId: input.requestId,
-        ...(input.reason === undefined ? {} : { reason: input.reason }),
+        reason: input.reason,
         ...(input.action === undefined ? {} : { action: input.action }),
         ...(input.reasonCode === undefined ? {} : { reasonCode: input.reasonCode }),
       });

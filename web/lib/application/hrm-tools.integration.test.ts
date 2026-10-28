@@ -56,11 +56,15 @@ function ctxFor(
 }
 
 async function setHrmEnabled(orgId: string, enabled: boolean): Promise<void> {
-  const result = await db.execute(sql`
+  const result = await db.execute<{ id: string }>(
+    sql`
     update orgs set settings = jsonb_set(settings, '{features,hrm}', ${JSON.stringify(enabled)}::jsonb, true)
      where id = ${orgId}
-  `);
-  assert.equal(result.rowCount, 1, "the scratch organization feature setting was updated");
+     returning id
+  `,
+    "objects",
+  );
+  assert.equal(result.length, 1, "the scratch organization feature setting was updated");
 }
 
 test(
