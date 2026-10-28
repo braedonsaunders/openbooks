@@ -11,7 +11,10 @@ import { ApplicationError } from "./errors";
 import type { ApplicationContext } from "./context";
 import type { ApplicationToolDefinition } from "./tool-definition";
 import { readTool, mutationTool, UUID, DATE, IDEMPOTENCY_KEY } from "./subscription-tools-shared";
-import { executeAdvancedSubscriptionAction } from "@/lib/subscriptions/advanced-actions";
+import {
+  executeAdvancedSubscriptionAction,
+  POSTBodySchema1,
+} from "@/lib/subscriptions/advanced-actions";
 import { executeEntitlementAction } from "@/lib/subscriptions/entitlement-actions";
 import { executeRenewalAction } from "@/lib/subscriptions/renewal-actions";
 
