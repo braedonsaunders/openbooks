@@ -5,39 +5,36 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db, type SqlExecutor } from "@openbooks/engine/platform/db";
+import { db } from "@openbooks/engine/platform/db";
 import {
   ConstructionBillingError,
-  assertProjectIncomeAccountUsable,
   approvePayApplication,
   createPayApplication,
   generatePayApplicationInvoice,
-  projectRetainageHeldSql,
-  projectDefaultIncomeAccount,
   releaseRetainage,
   requireIsoDate,
   submitPayApplication,
   voidPayApplication,
 } from "@openbooks/engine/projects/construction-billing";
-import { projectBillingHasBegun } from "@openbooks/engine/projects/header-controls";
-import {
-  ScopeNotFoundError,
-  lockProjectForScope,
-  withScopeSnapshot,
-} from "@openbooks/engine/organization/scope";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { can, guardSubsidiaryScope } from "../../../lib/authz";
 import { isUuid } from "../../../lib/list-params";
-import { projectCostSummary } from "../../../lib/project-costing";
-import { cmp, normalizeMoney, sum, wholeDigits } from "@openbooks/engine/money";
+import { normalizeMoney, wholeDigits } from "@openbooks/engine/money";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
-import { moneyRefusal, suppliedValue } from "../../../lib/payroll-decimal-refusal";
+import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
 import { guardProjectsFeature } from "../../../lib/projects-gate";
-import { acquireFeatureGateLock } from "../../../lib/features";
-import { lockAndCheckOrgFeature } from "@openbooks/engine/organization/org-feature-lock";
 import { supportsApplicationsForPayment } from "../../../lib/project-billing-procedure";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { isoDate } from "../../../lib/api/json";
 import { notFound } from "@/lib/api/responses";
+import {
+  createConstructionChangeOrder,
+  createConstructionSovLine,
+  deleteConstructionSovLine,
+  loadProjectConstructionBilling,
+  updateConstructionSovLine,
+  voidConstructionChangeOrder,
+} from "../../../lib/project-construction";
 
 const projectId = uuidString("projectId must be a valid UUID");
 // Child row ids resolve through actionProjectScope, where a malformed id and
@@ -211,121 +208,19 @@ export const GET = defineRoute({
       );
     }
 
-    // Committed cost opens its own repeatable-read snapshot on the pool (its
-    // fan-out issues concurrent queries, which a single snapshot connection
-    // cannot serve), so resolve it before pinning the page snapshot below. It
-    // is already scope-filtered, and the locked recheck gates the response: a
-    // rehome landing anywhere around this read still ends in a uniform 404.
-    // A failed cost summary must fail the request, never render as a fake
-    // zero committed cost beside real contract figures.
-    const committed = await projectCostSummary(orgId, projectId, authz.allowedSubsidiaryIds);
-
-    // The page reads run in ONE repeatable-read snapshot with the project
-    // locked for share and the scope rechecked under that lock, so a
-    // concurrent A→B rehome cannot move the project between two reads of one
-    // response and disclose B's financials. Reads run sequentially: the
-    // snapshot holds a single connection, which cannot serve concurrent
-    // queries. A rehomed-out project answers like a missing one.
     try {
-      return await withScopeSnapshot(orgId, async () => {
-        await lockProjectForScope(db, orgId, projectId, authz.allowedSubsidiaryIds, "share");
-        const retAcct = await db.execute<{ acct: string | null }>(
-          sql`
-        select a.id as acct
-          from orgs o
-          join accounts a on a.id = nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')::uuid
-                         and a.org_id = o.id
-         where o.id = ${orgId}
-      `,
-          "objects",
-        );
-        const retainageAccountId = retAcct[0]?.acct ?? null;
-
-        // The org project-revenue default backing the CO income picker,
-        // resolved alongside the page reads, not inside a write tx.
-        const defaultIncomeAccount = await projectDefaultIncomeAccount(db, orgId);
-        const sov = await db.execute(
-          sql`
-        select l.id, l.item_no as "itemNo", l.description, l.scheduled_value as "scheduledValue",
-               l.retainage_percent as "retainagePercent", l.income_account_id as "incomeAccountId",
-               l.sort_order as "sortOrder", l.change_order_id as "changeOrderId",
-               exists(select 1 from pay_application_lines pal
-                 join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
-                where pal.org_id = ${orgId} and pal.sov_line_id = l.id and pa.status <> 'void') as "usedByApplication"
-          from sov_lines l where l.org_id = ${orgId} and l.project_id = ${projectId} order by l.sort_order
-      `,
-          "objects",
-        );
-        const cos = await db.execute(
-          sql`
-        select co.id, co.number, co.description, co.status, co.amount, co.approved_on as "approvedOn",
-               co.target_sov_line_id as "targetSovLineId", sl.description as "targetSovLineDescription",
-               co.income_account_id as "incomeAccountId"
-          from change_orders co
-          left join sov_lines sl on sl.id = co.target_sov_line_id and sl.org_id = co.org_id
-         where co.org_id = ${orgId} and co.project_id = ${projectId} order by co.number
-      `,
-          "objects",
-        );
-        const apps = await db.execute(
-          sql`
-        select pa.id, pa.application_number as "applicationNumber", pa.period_end as "periodEnd", pa.kind,
-               pa.status, pa.retainage_percent as "retainagePercent", pa.invoice_document_id as "invoiceDocumentId",
-               d.document_number as "invoiceNumber", d.total as "invoiceTotal", d.status as "invoiceStatus"
-          from pay_applications pa
-          left join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
-         where pa.org_id = ${orgId} and pa.project_id = ${projectId} order by pa.application_number
-      `,
-          "objects",
-        );
-        const held = retainageAccountId
-          ? await db.execute<{ held: string }>(
-              projectRetainageHeldSql(orgId, projectId, retainageAccountId),
-              "objects",
-            )
-          : [{ held: "0" }];
-
-        const contractSum = sum(sov.map((line) => String(line.scheduledValue ?? "0")));
-        return NextResponse.json({
-          sovLines: sov,
-          changeOrders: cos,
-          defaultIncomeAccountId: defaultIncomeAccount,
-          payApplications: apps,
-          contractSum,
-          retainageHeld: String(held[0]?.held ?? "0"),
-          committedCost: committed.committed.cost,
-          retainageConfigured: Boolean(retainageAccountId),
-        });
-      });
+      return NextResponse.json(
+        await loadProjectConstructionBilling(
+          { orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+          projectId,
+        ),
+      );
     } catch (error) {
       if (error instanceof ScopeNotFoundError) return notFound("record");
       throw error;
     }
   },
 });
-
-async function pinIncomeAccount(
-  exec: SqlExecutor,
-  orgId: string,
-  accountId: unknown,
-  projectSubsidiaryId: string | null,
-  allowedSubsidiaryIds: ReadonlySet<string> | null,
-): Promise<string | null> {
-  if (accountId == null || accountId === "") return null;
-  const id = String(accountId);
-  // A malformed id names no account: same answer as an unknown one, never
-  // a PostgreSQL uuid cast error escaping as a 500.
-  if (!isUuid(id)) throw new ConstructionBillingError("Income account not found");
-  return (
-    await assertProjectIncomeAccountUsable(
-      exec,
-      orgId,
-      id,
-      projectSubsidiaryId,
-      allowedSubsidiaryIds,
-    )
-  ).id;
-}
 
 /** The project a request targets, with the subsidiary that scopes it. */
 interface ProjectScope {
@@ -479,358 +374,62 @@ export const POST = defineRoute({
       }
       scope = resolved;
     }
-    // Recheck the entry scope under the project row lock inside a write
-    // transaction. The child→project link never moves, so the entry project's
-    // id stays the right row to lock; a null here (non-project actions) fails
-    // closed like a missing project.
-    const lockEntryProject = (
-      tx: SqlExecutor,
-    ): Promise<{ id: string; subsidiaryId: string | null }> => {
-      if (!scope) throw new ScopeNotFoundError();
-      return lockProjectForScope(tx, orgId, scope.projectId, authz.allowedSubsidiaryIds);
-    };
-
     try {
       switch (action) {
         case "addSov": {
           if (!(await ownsProject(orgId, body.projectId as string))) return notFound("record");
-          const description = String(body.description ?? "").trim();
-          const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
-          if (scheduledRaw === null)
-            throw new ConstructionBillingError(
-              moneyRefusal("Scheduled value", body.scheduledValue ?? "0"),
-            );
-          const scheduledValue = normalizeMoney(scheduledRaw);
-          // scheduled_value is numeric(19,4): fifteen whole digits. The shape
-          // check admits any magnitude, so a pasted 20-digit figure died in
-          // the insert with a storage error.
-          if (wholeDigits(scheduledValue) > 15)
-            throw new ConstructionBillingError(
-              "Scheduled value is out of range — at most 15 whole digits fit the ledger",
-            );
-          const retainageRaw =
-            body.retainagePercent == null || body.retainagePercent === ""
-              ? null
-              : canonicalDecimal(body.retainagePercent, 4);
-          if (
-            body.retainagePercent != null &&
-            body.retainagePercent !== "" &&
-            retainageRaw === null
-          ) {
-            throw new ConstructionBillingError(
-              moneyRefusal("Retainage percent", body.retainagePercent, "a percent"),
-            );
-          }
-          const retainagePercent = retainageRaw === null ? null : normalizeMoney(retainageRaw);
-          if (!description || cmp(scheduledValue, "0") <= 0)
-            throw new ConstructionBillingError(
-              "Description and a positive scheduled value are required",
-            );
-          if (
-            retainagePercent !== null &&
-            (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0)
-          )
-            throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
-          // sort_order is integer and unknown errors escape as a raw 500, so a
-          // figure the column cannot hold fails closed here with a named 422.
-          const sortOrder =
-            body.sortOrder === undefined || body.sortOrder === null || body.sortOrder === ""
-              ? 0
-              : Number(body.sortOrder);
-          if (!Number.isInteger(sortOrder) || sortOrder > 2147483647 || sortOrder < -2147483648)
-            throw new ConstructionBillingError(
-              "Sort order must be a whole number the schedule can store",
-            );
-          const id = await db.transaction(async (tx) => {
-            // Fenced recheck inside the write transaction: the entry guard
-            // above may be stale by the time this write lands, and a Projects
-            // disable racing this insert must refuse one side or the other.
-            await acquireFeatureGateLock(orgId, tx);
-            if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
-              throw new ConstructionBillingError("Projects feature is disabled");
-            }
-            // The entry scope check is unlocked: recheck under the project
-            // lock, so a rehome racing this insert refuses instead of
-            // billing B's project. Missing and out-of-scope share one 404.
-            const lockedProject = await lockEntryProject(tx);
-            const incomeAccountId = await pinIncomeAccount(
-              tx,
-              orgId,
-              body.incomeAccountId,
-              lockedProject.subsidiaryId,
-              authz.allowedSubsidiaryIds,
-            );
-            // The same billing-has-begun predicate the project header edit
-            // enforces for contract value: one rule, one owner.
-            if (await projectBillingHasBegun(tx, orgId, body.projectId as string))
-              throw new ConstructionBillingError(
-                "After billing begins, contract value must change through an approved change order",
-              );
-            const created = await tx.execute<{ id: string }>(
-              sql`
-            insert into sov_lines (org_id, project_id, item_no, description, scheduled_value, retainage_percent,
-                                   income_account_id, sort_order, created_by, updated_by)
-            values (${orgId}, ${body.projectId}, ${body.itemNo ?? null}, ${description}, ${scheduledValue},
-                    ${retainagePercent}, ${incomeAccountId}, ${sortOrder}, ${userId}, ${userId})
-            returning id
-          `,
-              "objects",
-            );
-            const createdId = created[0]!.id;
-            await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'sov_lines', ${createdId}, 'insert', ${JSON.stringify({ after: { projectId: body.projectId, itemNo: body.itemNo ?? null, description, scheduledValue, retainagePercent, incomeAccountId } })}::jsonb, ${userId})`);
-            return createdId;
-          });
+          const id = await createConstructionSovLine(
+            { orgId, actorId: userId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+            {
+              projectId: body.projectId as string,
+              description: String(body.description ?? ""),
+              scheduledValue: String(body.scheduledValue ?? "0"),
+              retainagePercent:
+                body.retainagePercent == null ? null : String(body.retainagePercent),
+              itemNo: body.itemNo == null ? null : String(body.itemNo),
+              sortOrder: body.sortOrder == null ? 0 : Number(body.sortOrder),
+              incomeAccountId: body.incomeAccountId == null ? null : String(body.incomeAccountId),
+            },
+          );
           return NextResponse.json({ id }, { status: 201 });
         }
         case "updateSov": {
-          await db.transaction(async (tx) => {
-            // Lock the project before its lines: the entry check is unlocked,
-            // and a rehome racing this update must refuse before any line
-            // moves. The child→project link never moves, so the entry
-            // project's id stays the right row to lock.
-            const lockedProject = await lockEntryProject(tx);
-            const before = await tx.execute(
-              sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`,
-              "objects",
-            );
-            if (!before[0]) throw new ConstructionBillingError("Schedule line not found");
-            const stored = before[0];
-            const used = await tx.execute(
-              sql`select 1 from pay_application_lines pal
-                    join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
-                   where pal.org_id = ${orgId} and pal.sov_line_id = ${body.id} and pa.status <> 'void' limit 1`,
-              "objects",
-            );
-            const locked = used.length > 0 || stored.change_order_id != null;
-            const incomeAccountId = await pinIncomeAccount(
-              tx,
-              orgId,
-              body.incomeAccountId,
-              lockedProject.subsidiaryId,
-              authz.allowedSubsidiaryIds,
-            );
-            if (locked) {
-              // Contract value stays controlled once billing begins, but the
-              // income account is posting metadata, not a contract term, so a
-              // locked line still accepts an income-account-only change (the
-              // recovery path an approved application needs to reach invoicing).
-              // Anything beyond the income account still goes through a change
-              // order.
-              const reqItemNo =
-                body.itemNo == null || body.itemNo === "" ? null : String(body.itemNo);
-              const storedItemNo =
-                stored.item_no == null || stored.item_no === "" ? null : String(stored.item_no);
-              const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
-              const retainageRaw =
-                body.retainagePercent == null || body.retainagePercent === ""
-                  ? null
-                  : canonicalDecimal(body.retainagePercent, 4);
-              const storedRetainage =
-                stored.retainage_percent == null ? null : String(stored.retainage_percent);
-              const onlyIncome =
-                reqItemNo === storedItemNo &&
-                String(body.description ?? "").trim() === String(stored.description ?? "") &&
-                scheduledRaw !== null &&
-                cmp(normalizeMoney(scheduledRaw), String(stored.scheduled_value ?? "0")) === 0 &&
-                (retainageRaw === null
-                  ? storedRetainage === null
-                  : storedRetainage !== null &&
-                    cmp(normalizeMoney(retainageRaw), storedRetainage) === 0) &&
-                !(
-                  body.retainagePercent != null &&
-                  body.retainagePercent !== "" &&
-                  retainageRaw === null
-                );
-              if (!onlyIncome) {
-                throw new ConstructionBillingError(
-                  used.length > 0
-                    ? "A schedule line used by an application is immutable; use a change order"
-                    : "A controlled schedule line is immutable; use a change order",
-                );
-              }
-              if ((incomeAccountId ?? null) !== (stored.income_account_id ?? null)) {
-                await tx.execute(sql`
-                update sov_lines set income_account_id = ${incomeAccountId}, updated_at = now(), updated_by = ${userId}
-                 where id = ${body.id} and org_id = ${orgId}
-              `);
-                await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-                values (${orgId}, 'sov_lines', ${body.id}, 'income_account_update', ${JSON.stringify({ before: { incomeAccountId: stored.income_account_id }, after: { incomeAccountId: incomeAccountId } })}::jsonb, ${userId})`);
-              }
-            } else {
-              const description = String(body.description ?? "").trim();
-              const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
-              if (scheduledRaw === null)
-                throw new ConstructionBillingError(
-                  moneyRefusal("Scheduled value", body.scheduledValue ?? "0"),
-                );
-              const scheduledValue = normalizeMoney(scheduledRaw);
-              if (wholeDigits(scheduledValue) > 15)
-                throw new ConstructionBillingError(
-                  "Scheduled value is out of range — at most 15 whole digits fit the ledger",
-                );
-              const retainageRaw =
-                body.retainagePercent == null || body.retainagePercent === ""
-                  ? null
-                  : canonicalDecimal(body.retainagePercent, 4);
-              if (
-                body.retainagePercent != null &&
-                body.retainagePercent !== "" &&
-                retainageRaw === null
-              ) {
-                throw new ConstructionBillingError(
-                  moneyRefusal("Retainage percent", body.retainagePercent, "a percent"),
-                );
-              }
-              const retainagePercent = retainageRaw === null ? null : normalizeMoney(retainageRaw);
-              if (!description || cmp(scheduledValue, "0") <= 0)
-                throw new ConstructionBillingError(
-                  "Description and a positive scheduled value are required",
-                );
-              if (
-                retainagePercent !== null &&
-                (cmp(retainagePercent, "0") < 0 || cmp(retainagePercent, "100") > 0)
-              )
-                throw new ConstructionBillingError("Retainage percent must be between 0 and 100");
-              const after = await tx.execute(
-                sql`
-              update sov_lines set item_no = ${body.itemNo ?? null}, description = ${description}, scheduled_value = ${scheduledValue},
-                     retainage_percent = ${retainagePercent}, income_account_id = ${incomeAccountId}, updated_at = now(), updated_by = ${userId}
-               where id = ${body.id} and org_id = ${orgId} returning *
-            `,
-                "objects",
-              );
-              await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-              values (${orgId}, 'sov_lines', ${body.id}, 'update', ${JSON.stringify({ before: before[0], after: after[0] })}::jsonb, ${userId})`);
-            }
-          });
+          await updateConstructionSovLine(
+            { orgId, actorId: userId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+            {
+              projectId: scope!.projectId,
+              id: String(body.id),
+              description: String(body.description ?? ""),
+              scheduledValue: String(body.scheduledValue ?? "0"),
+              retainagePercent:
+                body.retainagePercent == null ? null : String(body.retainagePercent),
+              itemNo: body.itemNo == null ? null : String(body.itemNo),
+              incomeAccountId: body.incomeAccountId == null ? null : String(body.incomeAccountId),
+            },
+          );
           return NextResponse.json({ ok: true });
         }
         case "deleteSov": {
-          await db.transaction(async (tx) => {
-            // Same rehome race as updateSov: lock the project first, then the
-            // line, so a concurrent A→B move refuses before anything deletes.
-            await lockEntryProject(tx);
-            const before = await tx.execute(
-              sql`select * from sov_lines where id = ${body.id} and org_id = ${orgId} for update`,
-              "objects",
-            );
-            if (!before[0]) throw new ConstructionBillingError("Schedule line not found");
-            const used = await tx.execute(
-              sql`select 1 from pay_application_lines pal
-                    join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
-                   where pal.org_id = ${orgId} and pal.sov_line_id = ${body.id} and pa.status <> 'void' limit 1`,
-              "objects",
-            );
-            if (used.length || before[0].change_order_id)
-              throw new ConstructionBillingError(
-                "A controlled schedule line cannot be deleted; use a reversing change order",
-              );
-            await tx.execute(
-              sql`delete from sov_lines where id = ${body.id} and org_id = ${orgId}`,
-            );
-            await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'sov_lines', ${body.id}, 'delete', ${JSON.stringify({ before: before[0] })}::jsonb, ${userId})`);
-          });
+          await deleteConstructionSovLine(
+            { orgId, actorId: userId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+            scope!.projectId,
+            String(body.id),
+          );
           return NextResponse.json({ ok: true });
         }
         case "addChangeOrder": {
           if (!(await ownsProject(orgId, body.projectId as string))) return notFound("record");
-          const number = String(body.number ?? "").trim();
-          const amountRaw = canonicalDecimal(body.amount ?? "0", 4);
-          if (amountRaw === null)
-            return NextResponse.json(
-              {
-                error: moneyRefusal("Change-order amount", body.amount ?? "0"),
-              },
-              { status: 422 },
-            );
-          const amount = normalizeMoney(amountRaw);
-          // change_orders.amount is numeric(19,4): same bound, same refusal.
-          if (wholeDigits(amount) > 15)
-            return NextResponse.json(
-              {
-                error: `Change-order amount is out of range — at most 15 whole digits fit the ledger; got "${suppliedValue(body.amount)}"`,
-              },
-              { status: 422 },
-            );
-          const targetSovLineId =
-            typeof body.targetSovLineId === "string" && body.targetSovLineId
-              ? body.targetSovLineId
-              : null;
-          if (targetSovLineId && !isUuid(targetSovLineId)) {
-            throw new ConstructionBillingError("The target schedule line id must be a valid UUID");
-          }
-          // The income account the approval lands on the created SOV line.
-          // Targeted orders reprice the line's own
-          // account, so the writer only reads this for untargeted ones;
-          // pinned like a hand-added SOV line either way.
-          if (!number || cmp(amount, "0") === 0)
-            throw new ConstructionBillingError(
-              "Change-order number and a non-zero amount are required",
-            );
-          if (cmp(amount, "0") < 0 && !targetSovLineId)
-            throw new ConstructionBillingError(
-              "A deductive change order must identify the schedule line it reduces",
-            );
-          const id = await db.transaction(async (tx) => {
-            // Fenced recheck inside the write transaction: the entry guard
-            // above may be stale by the time this write lands, and a Projects
-            // disable racing this insert must refuse one side or the other.
-            await acquireFeatureGateLock(orgId, tx);
-            if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
-              throw new ConstructionBillingError("Projects feature is disabled");
-            }
-            // Recheck scope under the project lock: a rehome racing this
-            // insert must refuse before the change order lands on B's project.
-            const lockedProject = await lockEntryProject(tx);
-            // Numbers are unique per project in storage: fail closed with the
-            // domain error here so a double submit or retry never escapes as
-            // a unique violation (the route maps the residual race below).
-            const duplicate = await tx.execute(
-              sql`
-            select 1 from change_orders
-             where org_id = ${orgId} and project_id = ${body.projectId} and number = ${number}
-             limit 1
-          `,
-              "objects",
-            );
-            if (duplicate.length)
-              throw new ConstructionBillingError(
-                "A change order with this number already exists for this project",
-              );
-            if (targetSovLineId) {
-              const target = await tx.execute(
-                sql`
-              select 1 from sov_lines
-               where id = ${targetSovLineId} and org_id = ${orgId} and project_id = ${body.projectId}
-            `,
-                "objects",
-              );
-              if (!target.length)
-                throw new ConstructionBillingError(
-                  "The target schedule line does not belong to this project",
-                );
-            }
-            const incomeAccountId = await pinIncomeAccount(
-              tx,
-              orgId,
-              body.incomeAccountId,
-              lockedProject.subsidiaryId,
-              authz.allowedSubsidiaryIds,
-            );
-            const created = await tx.execute<{ id: string }>(
-              sql`
-            insert into change_orders (org_id, project_id, number, description, amount, target_sov_line_id, income_account_id, created_by, updated_by)
-            values (${orgId}, ${body.projectId}, ${number}, ${body.description ?? null}, ${amount}, ${targetSovLineId}, ${incomeAccountId}, ${userId}, ${userId}) returning id
-          `,
-              "objects",
-            );
-            const createdId = created[0]!.id;
-            await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'change_orders', ${createdId}, 'insert', ${JSON.stringify({ after: { projectId: body.projectId, number, description: body.description ?? null, amount, targetSovLineId, incomeAccountId, status: "draft" } })}::jsonb, ${userId})`);
-            return createdId;
-          });
+          const id = await createConstructionChangeOrder(
+            { orgId, actorId: userId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+            {
+              projectId: body.projectId as string,
+              number: String(body.number ?? ""),
+              description: body.description == null ? null : String(body.description),
+              amount: String(body.amount ?? "0"),
+              targetSovLineId: body.targetSovLineId == null ? null : String(body.targetSovLineId),
+              incomeAccountId: body.incomeAccountId == null ? null : String(body.incomeAccountId),
+            },
+          );
           return NextResponse.json({ id }, { status: 201 });
         }
         case "approveChangeOrder": {
@@ -848,37 +447,11 @@ export const POST = defineRoute({
           );
         }
         case "voidChangeOrder": {
-          await db.transaction(async (tx) => {
-            // Fenced recheck inside the write transaction, like every other
-            // change-order writer: the entry guard may be stale, and a void
-            // must not land on a project whose Projects feature was turned
-            // off in between.
-            await acquireFeatureGateLock(orgId, tx);
-            if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
-              throw new ConstructionBillingError("Projects feature is disabled");
-            }
-            // Lock the project before its change order, like the approval
-            // above: a rehome racing this void must refuse first.
-            await lockEntryProject(tx);
-            const before = await tx.execute(
-              sql`
-            select * from change_orders where id = ${body.id} and org_id = ${orgId} for update
-          `,
-              "objects",
-            );
-            if (!before[0] || before[0].status !== "draft") {
-              throw new ConstructionBillingError("Only a draft change order can be voided");
-            }
-            await tx.execute(sql`
-            update change_orders set status = 'void', updated_at = now(), updated_by = ${userId}
-             where id = ${body.id} and org_id = ${orgId}
-          `);
-            await tx.execute(sql`
-            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${orgId}, 'change_orders', ${body.id}, 'void',
-                    ${JSON.stringify({ before: { status: "draft" }, after: { status: "void" } })}::jsonb, ${userId})
-          `);
-          });
+          await voidConstructionChangeOrder(
+            { orgId, actorId: userId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+            scope!.projectId,
+            String(body.id),
+          );
           return NextResponse.json({ ok: true });
         }
         case "createPayApp": {

@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
-import { syncProjectRevenueContractsInTransaction } from "@openbooks/engine/projects/revenue";
-import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { lockAndCheckOrgFeature } from "@openbooks/engine/organization/org-feature-lock";
 import { isUuid } from "../../../../../lib/list-params";
-import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
 import { notFound } from "@/lib/api/responses";
+import { updateProjectPercentComplete } from "@/lib/project-percent-complete";
 
 /**
  * PUT — set or clear the project's percent-complete OVERRIDE (0–100; null =
@@ -76,84 +71,36 @@ export const PUT = defineRoute({
       );
     }
 
-    const orgId = gate.user.orgId;
-    const today = await businessToday(orgId);
-
-    // The override write and the contract/obligation/multi-book schedule sync are
-    // ONE transaction: a failure after the override (or anywhere in the sync)
-    // rolls back the whole thing, so the displayed override never disagrees with
-    // the obligation or with any book's schedule.
-    const sync = await db.transaction(async (tx) => {
-      if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
-        return NextResponse.json({ error: "projects feature is disabled" }, { status: 404 });
-      }
-      // The row lock serializes concurrent saves; the value decides the winner.
-      // A tab that rendered before a sibling's save committed refuses loudly
-      // instead of re-basing recognition on its stale number.
-      const live = (
-        await tx.execute<{ override: string | null }>(
-          sql`
-      select nullif(custom->>'percentCompleteOverride', '') as override
-        from projects
-       where id = ${id} and org_id = ${orgId}
-       ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
-       for update
-    `,
-          "objects",
-        )
-      )[0];
-      if (!live) return null;
-      const liveValue = live.override === null ? null : Number(live.override);
-      const matches =
-        (liveValue === null && expected === null) ||
-        (liveValue !== null &&
-          expected !== null &&
-          Number.isFinite(liveValue) &&
-          liveValue === expected);
-      if (!matches) {
-        return NextResponse.json(
-          {
-            error:
-              "This override changed after you opened it; reload the project and reapply your value",
-          },
-          { status: 409 },
-        );
-      }
-      const updated = await tx.execute<{ id: string }>(
-        sql`
-      update projects
-         set custom = jsonb_set(coalesce(custom, '{}'::jsonb), '{percentCompleteOverride}',
-                                ${pct === null ? sql`'null'::jsonb` : sql`to_jsonb(${pct}::numeric)`}),
-             updated_by = ${gate.user.id}, updated_at = now()
-       where id = ${id} and org_id = ${orgId}
-       ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
-       returning id`,
-        "objects",
-      );
-      if (!updated[0]) return null;
-      // The override drives revenue recognition, so the change carries the
-      // same before/after audit row every other material project write does —
-      // written before the contract sync, in the same transaction, so a sync
-      // failure rolls the audit back with the write it evidences.
-      await tx.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'projects', ${id}, 'update',
-              ${JSON.stringify({
-                percentCompleteOverride: { before: liveValue, after: pct },
-                source: "percent_complete_override",
-              })}::jsonb, ${gate.user.id})
-    `);
-      return syncProjectRevenueContractsInTransaction(tx, orgId, gate.user.id, today, id);
+    const result = await updateProjectPercentComplete({
+      orgId: gate.user.orgId,
+      actorId: gate.user.id,
+      projectId: id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      percentComplete: pct ?? null,
+      expectedPercentComplete: expected ?? null,
     });
-    if (sync instanceof NextResponse) return sync;
-    if (!sync) return notFound("record");
+    if (result.kind === "feature_disabled") {
+      return NextResponse.json({ error: "projects feature is disabled" }, { status: 404 });
+    }
+    if (result.kind === "revision_conflict") {
+      return NextResponse.json(
+        {
+          error:
+            "This override changed after you opened it; reload the project and reapply your value",
+        },
+        { status: 409 },
+      );
+    }
+    if (result.kind === "not_found") return notFound("record");
 
     // The engine owns the Projects gate and names its skip: an override saved
     // while the sync is skipped must warn, never read back as applied progress.
     return NextResponse.json({
       ok: true,
-      status: sync.synced[0] ?? null,
-      problems: sync.skipped ? [...sync.problems, sync.skipped] : sync.problems,
+      status: result.sync.synced[0] ?? null,
+      problems: result.sync.skipped
+        ? [...result.sync.problems, result.sync.skipped]
+        : result.sync.problems,
     });
   },
 });

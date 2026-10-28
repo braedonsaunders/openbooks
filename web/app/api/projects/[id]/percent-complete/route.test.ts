@@ -106,6 +106,7 @@ const mockSources = new Map<string, string>([
       export const schema = {}
       export const pool = {}
       export const env = {}
+      export function ambientTenantOrgId() { return null }
     `,
   ],
   [

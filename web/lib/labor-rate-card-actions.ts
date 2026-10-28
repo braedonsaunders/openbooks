@@ -1,0 +1,853 @@
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { z } from "zod";
+import { db } from "@openbooks/engine/platform/db";
+import { cmp, normalizeDecimal, normalizeMoney, wholeDigits } from "@openbooks/engine/money";
+import { isUuid } from "./list-params";
+import { UUID_RE } from "@openbooks/engine/platform/identifiers";
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "./custom-fields";
+import { canonicalDecimal, compareDecimal } from "./exact-decimal";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { isFeatureEnabled } from "./features";
+import type { Authz } from "./authz";
+import {
+  ADJUSTMENT_CALCULATIONS,
+  ADJUSTMENT_CATEGORIES,
+  ADJUSTMENT_PRESENTATIONS,
+  ADJUSTMENT_TARGET_TYPES,
+  ADJUSTMENT_TEXT_TARGETS,
+} from "./rate-adjustment-types";
+import { notFound } from "@/lib/api/responses";
+
+export const createLaborRateCardSchema = z.object({
+  name: z.string().trim().min(1).max(200).describe("Name for the new labor rate card."),
+  currency: z
+    .string()
+    .max(3)
+    .optional()
+    .describe("Optional ISO currency; requires multi-currency to be enabled."),
+});
+
+const CUSTOM_FIELD_VALUE = z.union([
+  z.string().max(5000),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.array(z.string().max(200)).max(500),
+]);
+const CUSTOM_FIELD_VALUES = z
+  .record(z.string().max(200), CUSTOM_FIELD_VALUE)
+  .optional()
+  .describe("Custom field values keyed by their Setup field keys.");
+
+export const cardBodySchema = z.object({
+  name: z.string().trim().min(1).max(200).describe("Rate card display name."),
+  code: z.string().trim().min(1).max(80).describe("Unique rate card code."),
+  currency: z
+    .string()
+    .max(3)
+    .optional()
+    .describe("Optional ISO currency; requires multi-currency to be enabled."),
+  effective_from: z.string().max(10).describe("First effective date in YYYY-MM-DD format."),
+  effective_to: z
+    .string()
+    .max(10)
+    .nullable()
+    .optional()
+    .describe("Last effective date in YYYY-MM-DD format, or null for open ended."),
+  status: z.enum(["draft", "active", "retired"]).describe("Rate card version lifecycle status."),
+  derivation_policy: z
+    .enum(["explicit", "time_type_multipliers"])
+    .describe("Policy used to derive bill rates by time type."),
+  custom: CUSTOM_FIELD_VALUES,
+  scopes: z
+    .array(
+      z.object({
+        scopeType: z
+          .string()
+          .max(80)
+          .describe("Scope dimension such as subsidiary, department, or job title."),
+        scopeValueId: z
+          .string()
+          .regex(UUID_RE)
+          .nullable()
+          .optional()
+          .describe("UUID for an id-based scope value."),
+        scopeValueText: z
+          .string()
+          .max(200)
+          .nullable()
+          .optional()
+          .describe("Text value for job title or other scopes."),
+        includeChildren: z
+          .boolean()
+          .optional()
+          .describe("Include descendants when the scope supports hierarchy."),
+      }),
+    )
+    .max(500)
+    .describe("Rate card applicability scopes."),
+  lines: z
+    .array(
+      z.object({
+        id: z.string().regex(UUID_RE).optional().describe("Existing rate line id when editing."),
+        itemId: z.string().regex(UUID_RE).optional().describe("Labor item id for a new rate line."),
+        regular: z
+          .string()
+          .max(40)
+          .nullable()
+          .optional()
+          .describe("Regular exact decimal hourly rate."),
+        timeTypeRates: z
+          .record(z.string().regex(UUID_RE), z.string().max(40))
+          .optional()
+          .describe("Exact decimal rates keyed by time type id."),
+      }),
+    )
+    .max(5000)
+    .describe("Rate lines keyed to labor items."),
+  adjustments: z
+    .array(
+      z.object({
+        code: z.string().trim().min(1).max(80).describe("Stable adjustment code."),
+        name: z.string().trim().min(1).max(200).describe("Adjustment display name."),
+        category: z
+          .string()
+          .max(80)
+          .describe("Adjustment category from the shared rate adjustment vocabulary."),
+        calculation: z
+          .string()
+          .max(80)
+          .describe("Adjustment calculation from the shared rate adjustment vocabulary."),
+        value: z.string().max(40).nullable().optional().describe("Exact decimal adjustment value."),
+        unit: z
+          .string()
+          .max(80)
+          .nullable()
+          .optional()
+          .describe("Unit label for the adjustment value."),
+        presentation: z
+          .string()
+          .max(80)
+          .describe("How the adjustment appears on customer documents."),
+        threshold: z
+          .string()
+          .max(40)
+          .nullable()
+          .optional()
+          .describe("Optional exact decimal threshold."),
+        thresholdUnit: z.string().max(80).nullable().optional().describe("Unit for the threshold."),
+        referenceText: z
+          .string()
+          .max(500)
+          .nullable()
+          .optional()
+          .describe("Optional explanatory text."),
+        targets: z
+          .array(
+            z.object({
+              targetType: z.string().max(80).describe("Adjustment target dimension."),
+              targetValueId: z
+                .string()
+                .regex(UUID_RE)
+                .nullable()
+                .optional()
+                .describe("UUID for an id-based target."),
+              targetValueText: z
+                .string()
+                .max(200)
+                .nullable()
+                .optional()
+                .describe("Text for a text-based target."),
+              includeChildren: z
+                .boolean()
+                .optional()
+                .describe("Include descendants when target hierarchy supports it."),
+            }),
+          )
+          .max(500),
+      }),
+    )
+    .max(1000)
+    .describe("Additional labor bill-rate adjustments."),
+  terms: z
+    .array(
+      z.object({
+        code: z.string().trim().min(1).max(80).describe("Stable term code."),
+        label: z.string().trim().min(1).max(200).describe("Term label."),
+        content: z.string().max(5000).describe("Term text."),
+        placement: z.string().max(80).describe("Document placement for the term."),
+      }),
+    )
+    .max(500)
+    .describe("Customer-facing contract terms for labor billing."),
+});
+
+const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
+
+// The accepted adjustment vocabulary lives in ONE place (the pricing engine
+// and the card UI import the same lists): a type the save accepts but
+// pricing cannot match would bill zero forever.
+const CATEGORIES = ADJUSTMENT_CATEGORIES;
+const CALCULATIONS = ADJUSTMENT_CALCULATIONS;
+const PRESENTATIONS = ADJUSTMENT_PRESENTATIONS;
+const SCOPE_TYPES = [
+  "department",
+  "subsidiary",
+  "location",
+  "class",
+  "trade",
+  "job_title",
+  "other",
+] as const;
+const TARGET_TYPES = ADJUSTMENT_TARGET_TYPES;
+const TEXT_TARGETS = ADJUSTMENT_TEXT_TARGETS;
+const UUID_TARGET_TABLES: Record<string, string> = {
+  item: "items",
+  department: "departments",
+  subsidiary: "subsidiaries",
+  location: "locations",
+  class: "classes",
+  trade: "trades",
+  project: "projects",
+};
+
+function error(errorCode: string, status = 422) {
+  return NextResponse.json({ errorCode }, { status });
+}
+// Bind uuid collections as a PostgreSQL array literal ("{a,b}") instead of a
+// bare JS array: drizzle serializes an array chunk as a row constructor
+// "( $1, $2 )" which any(...::uuid[]) rejects with
+// "cannot cast type record to uuid[]" once it holds more than one element.
+// Elements are isUuid-validated upstream, so the literal needs no escaping.
+function uuidArray(ids: string[]) {
+  return `{${[...new Set(ids)].join(",")}}`;
+}
+function date(value: unknown) {
+  // Strict calendar check: a shape-valid non-day such as February 30 must
+  // fail as the date error here, not as a generic save error from the DATE
+  // column deep inside the transaction.
+  return isIsoCalendarDate(value);
+}
+function nonnegativeMoney(value: unknown, nullable = false): string | null | false {
+  if ((value == null || value === "") && nullable) return null;
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) return false;
+  // Rate columns are numeric(19,4): a wider figure would die in Postgres as a
+  // raw overflow, surfacing the unnamed "save" error. Refuse it named here.
+  if (wholeDigits(exact) > 15) return false;
+  try {
+    const money = normalizeMoney(exact);
+    return cmp(money, "0") >= 0 ? money : false;
+  } catch {
+    return false;
+  }
+}
+
+function nonnegativeDecimal(
+  value: unknown,
+  scale: number,
+  nullable = false,
+): string | null | false {
+  if ((value == null || value === "") && nullable) return null;
+  const exact = canonicalDecimal(value, scale);
+  if (exact === null || compareDecimal(exact, "0") < 0) return false;
+  // Adjustment values are numeric(19,scale): same raw-overflow path as money.
+  if (wholeDigits(exact) > 19 - scale) return false;
+  try {
+    return normalizeDecimal(exact, scale);
+  } catch {
+    return false;
+  }
+}
+
+export async function updateLaborRateCard(
+  gate: Authz,
+  id: string,
+  body: z.infer<typeof cardBodySchema>,
+): Promise<NextResponse> {
+  if (!isUuid(id)) return error("notFound", 404);
+  if (
+    typeof body.name !== "string" ||
+    typeof body.code !== "string" ||
+    !body.name.trim() ||
+    !body.code.trim()
+  )
+    return error("name");
+  // Rate-book currency is Multi-currency configuration. Turning that
+  // switch off must refuse a write; omitting currency keeps the
+  // stored book.
+  if (body.currency !== undefined && !(await isFeatureEnabled(gate.user.orgId, "multiCurrency"))) {
+    return notFound("record");
+  }
+  if (body.currency !== undefined && !/^[A-Z]{3}$/.test(body.currency)) return error("currency");
+  if (
+    !date(body.effective_from) ||
+    (body.effective_to && (!date(body.effective_to) || body.effective_to < body.effective_from!))
+  )
+    return error("effectiveDate");
+  if (!["draft", "active", "retired"].includes(body.status ?? "")) return error("status");
+  if (!["explicit", "time_type_multipliers"].includes(body.derivation_policy ?? ""))
+    return error("derivation");
+  if (
+    !Array.isArray(body.scopes) ||
+    !Array.isArray(body.lines) ||
+    !Array.isArray(body.adjustments) ||
+    !Array.isArray(body.terms)
+  )
+    return error("save");
+  const scopes = body.scopes,
+    lines = body.lines,
+    adjustments = body.adjustments,
+    terms = body.terms;
+  const cardName = body.name.trim(),
+    cardCode = body.code.trim();
+
+  for (const scope of scopes) {
+    if (!SCOPE_TYPES.includes(scope.scopeType as never)) return error("scope");
+    const text = scope.scopeType === "job_title" || scope.scopeType === "other";
+    if (text ? !scope.scopeValueText?.trim() : !scope.scopeValueId || !isUuid(scope.scopeValueId))
+      return error("scope");
+  }
+  const lineIds = new Set<string>(),
+    itemIds = new Set<string>();
+  for (const line of lines) {
+    const regular = nonnegativeMoney(line.regular, true);
+    if (regular === false) return error("item");
+    if (line.itemId != null && line.itemId !== "") {
+      if (!isUuid(line.itemId)) return error("item");
+      itemIds.add(line.itemId);
+    } else if (!line.id) {
+      return error("item");
+    }
+    line.regular = regular;
+    if (line.id) {
+      if (!isUuid(line.id) || lineIds.has(line.id)) return error("item");
+      lineIds.add(line.id);
+    }
+    const timeTypeRates: Record<string, string> = {};
+    for (const [key, value] of Object.entries(line.timeTypeRates ?? {})) {
+      const rate = nonnegativeMoney(value, true);
+      if (rate === false) return error("value");
+      if (rate != null) timeTypeRates[key] = rate;
+    }
+    line.timeTypeRates = timeTypeRates;
+  }
+  const adjustmentCodes = new Set<string>();
+  for (const adjustment of adjustments) {
+    const code = adjustment.code?.trim().toLowerCase();
+    if (!code || !adjustment.name?.trim()) return error("name");
+    if (adjustmentCodes.has(code)) return error("duplicateCode");
+    adjustmentCodes.add(code);
+    if (!CATEGORIES.includes(adjustment.category as never)) return error("category");
+    if (!CALCULATIONS.includes(adjustment.calculation as never)) return error("calculation");
+    if (!PRESENTATIONS.includes(adjustment.presentation as never)) return error("presentation");
+    if (adjustment.calculation !== "text") {
+      // Percents price through the exact 10dp helper; every other
+      // calculation is a money rate, capped at the ledger's 4dp — a fixed
+      // 5.12345 the ledger cannot store is refused here, not at invoicing.
+      const scale = adjustment.calculation === "percent" ? 10 : 4;
+      const value = nonnegativeDecimal(adjustment.value, scale);
+      if (value === false) return error("value");
+      adjustment.value = value;
+    }
+    if (adjustment.threshold != null && adjustment.threshold !== "") {
+      const threshold = nonnegativeMoney(adjustment.threshold, true);
+      if (threshold === false) return error("value");
+      adjustment.threshold = threshold;
+    }
+    if (!Array.isArray(adjustment.targets)) return error("target");
+    const targetKeys = new Set<string>();
+    for (const target of adjustment.targets) {
+      if (!TARGET_TYPES.includes(target.targetType as never)) return error("target");
+      if (target.targetType === "labor" || target.targetType === "material") {
+        // All-labor / all-materials selectors address no row: an id is a
+        // caller error, and the stored text echoes the selector so the
+        // one-value CHECK stays satisfied.
+        if (target.targetValueId) return error("target");
+        target.targetValueId = null;
+        target.targetValueText = target.targetType;
+        const selectorKey = `${target.targetType}:${target.targetType}`;
+        if (targetKeys.has(selectorKey)) return error("duplicateTarget");
+        targetKeys.add(selectorKey);
+        continue;
+      }
+      const isText = TEXT_TARGETS.has(target.targetType!);
+      if (
+        target.targetType === "item" &&
+        (target.targetValueId == null || target.targetValueId === "")
+      ) {
+        continue;
+      }
+      const value = isText ? target.targetValueText?.trim() : target.targetValueId;
+      if (typeof value !== "string" || !value || (!isText && !isUuid(value)))
+        return error("target");
+      const key = `${target.targetType}:${value}`;
+      if (targetKeys.has(key)) return error("duplicateTarget");
+      targetKeys.add(key);
+    }
+  }
+  const termCodes = new Set<string>();
+  for (const term of terms) {
+    const code = term.code?.trim().toLowerCase();
+    if (
+      !code ||
+      !term.label?.trim() ||
+      !term.content?.trim() ||
+      termCodes.has(code) ||
+      !["header", "conditions", "footer"].includes(term.placement ?? "")
+    )
+      return error("term");
+    termCodes.add(code);
+  }
+
+  const rateVersionDefs = await loadFieldDefs("item_rate_versions");
+  const customValidation = validateCustomValues(rateVersionDefs, body.custom);
+  if (!customValidation.ok) return error("custom");
+  // Reference custom values are uuid-SHAPED at this point but nothing proves
+  // the referenced row belongs to the caller: refuse foreign or dangling ids
+  // instead of persisting a cross-tenant pointer.
+  const unownedCustomRefs = await findUnownedCustomReferences(
+    gate.user.orgId,
+    rateVersionDefs,
+    customValidation.cleaned,
+  );
+  if (unownedCustomRefs.length > 0) return error("unknownCustomReference");
+
+  const orgId = gate.user.orgId;
+  const storedItemTargets = await db.execute<{
+    code: string;
+    target_value_id: string;
+    include_children: boolean;
+  }>(
+    sql`
+    select a.code, at.target_value_id, at.include_children
+      from labor_rate_adjustment_targets at
+      join labor_rate_adjustments a on a.id = at.adjustment_id and a.org_id = at.org_id
+     where a.version_id = ${id} and a.org_id = ${orgId}
+       and at.target_type = 'item' and at.target_value_id is not null`,
+    "objects",
+  );
+  const storedTargetIds = new Set(storedItemTargets.map((row) => row.target_value_id));
+  // Stored rate-card lines stay when itemId is omitted. Re-sending the stored
+  // item is allowed. A new inventory / assembly / kit item is Inventory configuration.
+  if (!(await isFeatureEnabled(orgId, "inventory"))) {
+    const stored = await db.execute<{ item_id: string }>(
+      sql`
+      select item_id from item_rate_lines
+       where version_id = ${id} and org_id = ${orgId} and item_id is not null`,
+      "objects",
+    );
+    const storedIds = new Set(stored.map((row) => row.item_id));
+    for (const line of lines) {
+      if (!line.itemId || storedIds.has(line.itemId)) continue;
+      const item = await db.execute<{ kind: string }>(
+        sql`
+        select kind from items where id = ${line.itemId} and org_id = ${orgId}`,
+        "objects",
+      );
+      if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
+        return notFound("record");
+      }
+    }
+    for (const adjustment of adjustments) {
+      for (const target of adjustment.targets ?? []) {
+        if (
+          target.targetType !== "item" ||
+          !target.targetValueId ||
+          storedTargetIds.has(target.targetValueId)
+        )
+          continue;
+        const item = await db.execute<{ kind: string }>(
+          sql`
+          select kind from items where id = ${target.targetValueId} and org_id = ${orgId}`,
+          "objects",
+        );
+        if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind)) {
+          return notFound("record");
+        }
+      }
+    }
+  }
+  try {
+    await db.transaction(async (tx) => {
+      // Shared book saves take this fence before book/version row locks.
+      // Using the same order prevents an editor and replacement from waiting
+      // on each other's header and version locks.
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${orgId}`}, 0))`,
+      );
+      const current = await tx.execute<{ rate_book_id: string }>(
+        sql`select v.rate_book_id from item_rate_versions v
+          join labor_rate_version_policies p on p.version_id=v.id and p.org_id=v.org_id
+          where v.id=${id} and v.org_id=${orgId} for update of v,p`,
+        "objects",
+      );
+      if (!current[0]) throw new Error("notFound");
+      if (lineIds.size) {
+        const kept = await tx.execute<{ id: string }>(
+          sql`
+          select id from item_rate_lines where org_id=${orgId} and version_id=${id}
+           and id=any(${uuidArray([...lineIds])}::uuid[]) for update`,
+          "objects",
+        );
+        if (kept.length !== lineIds.size) throw new Error("item");
+      }
+      const before = await tx.execute<{ snapshot: unknown }>(
+        sql`select jsonb_build_object(
+        'version',(select to_jsonb(v) from item_rate_versions v where v.id=${id} and v.org_id=${orgId}),
+        'book',(select to_jsonb(b) from item_rate_books b where b.id=${current[0].rate_book_id} and b.org_id=${orgId}),
+        'policy',(select to_jsonb(p) from labor_rate_version_policies p where p.version_id=${id} and p.org_id=${orgId}),
+        'scopes',(select coalesce(jsonb_agg(to_jsonb(s)),'[]'::jsonb) from labor_rate_version_scopes s where s.version_id=${id} and s.org_id=${orgId}),
+        'lines',(select coalesce(jsonb_agg(to_jsonb(l)),'[]'::jsonb) from item_rate_lines l where l.version_id=${id} and l.org_id=${orgId}),
+        'adjustments',(select coalesce(jsonb_agg(to_jsonb(a)),'[]'::jsonb) from labor_rate_adjustments a where a.version_id=${id} and a.org_id=${orgId}),
+        'targets',(select coalesce(jsonb_agg(to_jsonb(at)),'[]'::jsonb) from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId}),
+        'terms',(select coalesce(jsonb_agg(to_jsonb(t)),'[]'::jsonb) from labor_rate_terms t where t.version_id=${id} and t.org_id=${orgId})
+      ) snapshot`,
+        "objects",
+      );
+
+      if (itemIds.size) {
+        const found = await tx.execute<{ id: string }>(
+          sql`select id from items where org_id=${orgId} and is_active and id=any(${uuidArray([...itemIds])}::uuid[])`,
+          "objects",
+        );
+        if (found.length !== itemIds.size) throw new Error("item");
+      }
+      for (const [type, table] of Object.entries(UUID_TARGET_TABLES)) {
+        const ids = [
+          ...new Set(
+            adjustments.flatMap((a) =>
+              (a.targets ?? [])
+                .filter((x) => x.targetType === type)
+                .map((x) => x.targetValueId!)
+                .concat(scopes.filter((x) => x.scopeType === type).map((x) => x.scopeValueId!)),
+            ),
+          ),
+        ].filter(Boolean);
+        if (!ids.length) continue;
+        const found = await tx.execute<{ id: string }>(
+          sql`select id from ${sql.raw(table)} where org_id=${orgId} and id=any(${uuidArray(ids)}::uuid[])`,
+          "objects",
+        );
+        if (found.length !== ids.length) throw new Error(type === "item" ? "item" : "target");
+      }
+      const customerIds = [
+        ...new Set(
+          adjustments.flatMap((a) =>
+            (a.targets ?? [])
+              .filter((x) => x.targetType === "customer")
+              .map((x) => x.targetValueId!),
+          ),
+        ),
+      ].filter(Boolean);
+      if (customerIds.length) {
+        const found = await tx.execute<{ id: string }>(
+          sql`select p.id from parties p join customer_roles c on c.party_id=p.id and c.org_id=${orgId} and c.is_active where p.org_id=${orgId} and p.is_active and p.id=any(${uuidArray(customerIds)}::uuid[])`,
+          "objects",
+        );
+        if (found.length !== customerIds.length) throw new Error("target");
+      }
+
+      // Pricing-policy boundary: every entity-bearing reference must sit
+      // inside the caller's subsidiary scope. Unknown, cross-org, and
+      // out-of-scope ids share the same "target" refusal as the existence
+      // checks above, so no oracle distinguishes them. Unrestricted callers
+      // (null scope) skip every check below.
+      if (gate.allowedSubsidiaryIds !== null) {
+        const allowed = gate.allowedSubsidiaryIds;
+        const newSubsidiaryIds = [
+          ...new Set(
+            [
+              ...scopes.filter((x) => x.scopeType === "subsidiary").map((x) => x.scopeValueId!),
+              ...adjustments.flatMap((a) =>
+                (a.targets ?? [])
+                  .filter((x) => x.targetType === "subsidiary")
+                  .map((x) => x.targetValueId!),
+              ),
+            ].filter(Boolean),
+          ),
+        ];
+        if (newSubsidiaryIds.length) {
+          const found = await tx.execute<{ id: string }>(
+            sql`select id from subsidiaries where org_id=${orgId} and id=any(${uuidArray(newSubsidiaryIds)}::uuid[]) and id=any(${uuidArray([...allowed])}::uuid[])`,
+            "objects",
+          );
+          if (found.length !== newSubsidiaryIds.length) throw new Error("target");
+        }
+        const newProjectIds = [
+          ...new Set(
+            adjustments
+              .flatMap((a) =>
+                (a.targets ?? [])
+                  .filter((x) => x.targetType === "project")
+                  .map((x) => x.targetValueId!),
+              )
+              .filter(Boolean),
+          ),
+        ];
+        const storedProjectIds = await tx.execute<{ target_value_id: string }>(
+          sql`
+          select at.target_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='project' and at.target_value_id is not null`,
+          "objects",
+        );
+        const storedCustomerIds = await tx.execute<{ target_value_id: string }>(
+          sql`
+          select at.target_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='customer' and at.target_value_id is not null`,
+          "objects",
+        );
+        const projectLockIds = [
+          ...new Set([...newProjectIds, ...storedProjectIds.map((row) => row.target_value_id)]),
+        ];
+        const customerLockIds = [
+          ...new Set([...customerIds, ...storedCustomerIds.map((row) => row.target_value_id)]),
+        ];
+        // Match the canonical lock order (party before project), while
+        // selecting only live stored references so dangling legacy targets
+        // keep their documented no-op behavior.
+        if (customerLockIds.length) {
+          await tx.execute(sql`
+            select p.id from parties p
+             where p.org_id=${orgId} and p.id=any(${uuidArray(customerLockIds)}::uuid[])
+             order by p.id for share of p`);
+        }
+        if (projectLockIds.length) {
+          await tx.execute(sql`
+            select p.id from projects p
+             where p.org_id=${orgId} and p.id=any(${uuidArray(projectLockIds)}::uuid[])
+             order by p.id for share of p`);
+        }
+        if (newProjectIds.length) {
+          const rows = await tx.execute<{ id: string; subsidiary_id: string | null }>(
+            sql`select id, subsidiary_id from projects where org_id=${orgId} and id=any(${uuidArray(newProjectIds)}::uuid[])`,
+            "objects",
+          );
+          if (rows.length !== newProjectIds.length) throw new Error("target");
+          for (const row of rows) {
+            // A null-subsidiary project fails closed, like unattributed
+            // documents elsewhere: restricted callers never price it.
+            if (!row.subsidiary_id || !allowed.has(row.subsidiary_id)) throw new Error("target");
+          }
+        }
+        if (customerIds.length) {
+          const rows = await tx.execute<{ id: string; subsidiary_id: string | null }>(
+            sql`select p.id, p.subsidiary_id from parties p join customer_roles c on c.party_id=p.id and c.org_id=${orgId} and c.is_active where p.org_id=${orgId} and p.is_active and p.id=any(${uuidArray(customerIds)}::uuid[])`,
+            "objects",
+          );
+          if (rows.length !== customerIds.length) throw new Error("target");
+          for (const row of rows) {
+            if (!row.subsidiary_id || !allowed.has(row.subsidiary_id)) throw new Error("target");
+          }
+        }
+        // Existing entity touch: replacing the scopes and targets of a
+        // version already in use by another entity still rewrites that
+        // entity's labour pricing, so the whole save is not-found to this
+        // caller — uniform with an unknown version id. Dangling stored ids
+        // (their row is gone) price nothing and are ignored; only live
+        // out-of-scope references refuse.
+        const storedSubsidiaryIds = await tx.execute<{ scope_value_id: string }>(
+          sql`
+          select scope_value_id from labor_rate_version_scopes where version_id=${id} and org_id=${orgId} and scope_type='subsidiary' and scope_value_id is not null
+           union
+          select at.target_value_id as scope_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='subsidiary' and at.target_value_id is not null`,
+          "objects",
+        );
+        if (storedSubsidiaryIds.length) {
+          const live = await tx.execute<{ id: string }>(
+            sql`
+            select id from subsidiaries where org_id=${orgId}
+             and id=any(${uuidArray(storedSubsidiaryIds.map((row) => row.scope_value_id))}::uuid[])
+             and not (id=any(${uuidArray([...allowed])}::uuid[])) limit 1`,
+            "objects",
+          );
+          if (live.length) throw new Error("notFound");
+        }
+        if (storedProjectIds.length) {
+          const rows = await tx.execute<{ subsidiary_id: string | null }>(
+            sql`
+            select subsidiary_id from projects where org_id=${orgId} and id=any(${uuidArray(storedProjectIds.map((row) => row.target_value_id))}::uuid[])`,
+            "objects",
+          );
+          if (rows.some((row) => !row.subsidiary_id || !allowed.has(row.subsidiary_id)))
+            throw new Error("notFound");
+        }
+        if (storedCustomerIds.length) {
+          const rows = await tx.execute<{ subsidiary_id: string | null }>(
+            sql`
+            select subsidiary_id from parties where org_id=${orgId} and id=any(${uuidArray(storedCustomerIds.map((row) => row.target_value_id))}::uuid[])`,
+            "objects",
+          );
+          if (rows.some((row) => !row.subsidiary_id || !allowed.has(row.subsidiary_id)))
+            throw new Error("notFound");
+        }
+      }
+
+      // An undefined currency splices as empty text inside a sql template,
+      // so the keep-vs-overwrite branch must select whole statements.
+      const savedBook = await tx.execute(
+        body.currency === undefined
+          ? sql`update item_rate_books set name=${cardName},code=${cardCode},updated_at=now(),updated_by=${gate.user.id} where id=${current[0].rate_book_id} and org_id=${orgId} returning id`
+          : sql`update item_rate_books set name=${cardName},code=${cardCode},currency=${body.currency},updated_at=now(),updated_by=${gate.user.id} where id=${current[0].rate_book_id} and org_id=${orgId} returning id`,
+        "objects",
+      );
+      if (savedBook.length !== 1) throw new Error("notFound");
+      const savedPolicy = await tx.execute(
+        sql`update labor_rate_version_policies set derivation_policy=${body.derivation_policy},updated_at=now(),updated_by=${gate.user.id} where version_id=${id} and org_id=${orgId} returning id`,
+        "objects",
+      );
+      if (savedPolicy.length !== 1) throw new Error("notFound");
+
+      await tx.execute(
+        sql`delete from labor_rate_version_scopes where version_id=${id} and org_id=${orgId}`,
+      );
+      for (const scope of scopes)
+        await tx.execute(
+          sql`insert into labor_rate_version_scopes(org_id,version_id,scope_type,scope_value_id,scope_value_text,include_children,created_by,updated_by) values(${orgId},${id},${scope.scopeType},${scope.scopeValueId || null},${scope.scopeValueText?.trim() || null},${scope.includeChildren === true},${gate.user.id},${gate.user.id})`,
+        );
+
+      if (lineIds.size)
+        await tx.execute(
+          sql`delete from item_rate_lines where version_id=${id} and org_id=${orgId} and not(id=any(${uuidArray([...lineIds])}::uuid[]))`,
+        );
+      else
+        await tx.execute(
+          sql`delete from item_rate_lines where version_id=${id} and org_id=${orgId}`,
+        );
+      for (const [sortOrder, line] of lines.entries()) {
+        if (line.id) {
+          const savedLine = await tx.execute(
+            sql`update item_rate_lines set item_id=${line.itemId ? line.itemId : sql`item_id`},bill_rate=${line.regular || null},time_type_bill_rates=${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,sort_order=${sortOrder},updated_at=now(),updated_by=${gate.user.id} where id=${line.id} and version_id=${id} and org_id=${orgId} returning id`,
+            "objects",
+          );
+          if (savedLine.length !== 1) throw new Error("item");
+        } else
+          await tx.execute(
+            sql`insert into item_rate_lines(org_id,version_id,item_id,unit_code,unit_name,base_quantity,bill_rate,time_type_bill_rates,sort_order,created_by,updated_by) values(${orgId},${id},${line.itemId},'hour','Hour',1,${line.regular || null},${JSON.stringify(line.timeTypeRates ?? {})}::jsonb,${sortOrder},${gate.user.id},${gate.user.id})`,
+          );
+      }
+
+      await tx.execute(
+        sql`delete from labor_rate_adjustment_targets where org_id=${orgId} and adjustment_id in(select id from labor_rate_adjustments where version_id=${id} and org_id=${orgId})`,
+      );
+      await tx.execute(
+        sql`delete from labor_rate_adjustments where version_id=${id} and org_id=${orgId}`,
+      );
+      for (const [sortOrder, adjustment] of adjustments.entries()) {
+        const inserted = await tx.execute<{ id: string }>(
+          sql`insert into labor_rate_adjustments(org_id,version_id,code,name,category,calculation,value,unit,presentation,threshold,threshold_unit,reference_text,sort_order,created_by,updated_by) values(${orgId},${id},${adjustment.code!.trim().toLowerCase()},${adjustment.name!.trim()},${adjustment.category},${adjustment.calculation},${adjustment.calculation === "text" ? null : adjustment.value || null},${adjustment.unit?.trim() || null},${adjustment.presentation},${adjustment.threshold || null},${adjustment.thresholdUnit?.trim() || null},${adjustment.referenceText?.trim() || null},${sortOrder},${gate.user.id},${gate.user.id}) returning id`,
+          "objects",
+        );
+        let wroteItemTarget = false;
+        for (const target of adjustment.targets ?? []) {
+          if (target.targetType === "item" && !target.targetValueId) continue;
+          if (target.targetType === "item" && target.targetValueId) wroteItemTarget = true;
+          await tx.execute(
+            sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted[0]!.id},${target.targetType},${target.targetValueId || null},${target.targetValueText?.trim() || null},${target.includeChildren === true},${gate.user.id},${gate.user.id})`,
+          );
+        }
+        if (!wroteItemTarget) {
+          const code = adjustment.code!.trim().toLowerCase();
+          for (const stored of storedItemTargets.filter((row) => row.code === code)) {
+            await tx.execute(
+              sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id,target_value_text,include_children,created_by,updated_by) values(${orgId},${inserted[0]!.id},'item',${stored.target_value_id},null,${stored.include_children},${gate.user.id},${gate.user.id})`,
+            );
+          }
+        }
+      }
+
+      await tx.execute(
+        sql`delete from labor_rate_terms where version_id=${id} and org_id=${orgId}`,
+      );
+      for (const [sortOrder, term] of terms.entries())
+        await tx.execute(
+          sql`insert into labor_rate_terms(org_id,version_id,code,label,content,placement,sort_order,created_by,updated_by) values(${orgId},${id},${term.code!.trim().toLowerCase()},${term.label!.trim()},${term.content!.trim()},${term.placement},${sortOrder},${gate.user.id},${gate.user.id})`,
+        );
+
+      // The version row moves last: rate_version_child_guard only allows
+      // child writes while the stored status is still draft, so a save that
+      // activates the card must finish rewriting children first.
+      const savedVersion = await tx.execute(
+        sql`update item_rate_versions set effective_from=${body.effective_from},effective_to=${body.effective_to || null},status=${body.status},custom=${JSON.stringify(customValidation.cleaned)}::jsonb,updated_at=now(),updated_by=${gate.user.id} where id=${id} and org_id=${orgId} returning id`,
+        "objects",
+      );
+      if (savedVersion.length !== 1) throw new Error("notFound");
+
+      const audit = await tx.execute(
+        sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id) values(${orgId},'item_rate_versions',${id},'update',${JSON.stringify({ before: before[0]?.snapshot, after: body })}::jsonb,${gate.user.id}) returning id`,
+        "objects",
+      );
+      if (audit.length !== 1) throw new Error("save");
+    });
+    return NextResponse.json({ ok: true, id });
+  } catch (cause) {
+    const code = cause instanceof Error ? cause.message : "save";
+    return error(
+      ["notFound", "item", "target"].includes(code) ? code : "save",
+      code === "notFound" ? 404 : 422,
+    );
+  }
+}
+
+export async function createLaborRateCard(
+  gate: Authz,
+  body: z.infer<typeof createLaborRateCardSchema>,
+): Promise<NextResponse> {
+  // Rate-book currency is Multi-currency configuration. Turning that
+  // switch off must refuse a new write; omitting currency keeps the
+  // org / subsidiary base so a card can still be created and stored books stay.
+  if (body.currency !== undefined && !(await isFeatureEnabled(gate.user.orgId, "multiCurrency"))) {
+    return NextResponse.json({ errorCode: "notFound" }, { status: 404 });
+  }
+  const org = await db.execute<{ base_currency: string }>(
+    sql`
+    select base_currency from orgs where id = ${gate.user.orgId}`,
+    "objects",
+  );
+  const currency =
+    body.currency !== undefined
+      ? String(body.currency).trim().toUpperCase()
+      : (org[0]?.base_currency ?? "");
+  if (typeof body.name !== "string" || !body.name.trim() || !/^[A-Z]{3}$/.test(currency))
+    return NextResponse.json({ errorCode: "save" }, { status: 422 });
+  const name = body.name.trim();
+  const code = `LAB-${Date.now().toString(36).toUpperCase()}`;
+  const today = await businessToday(gate.user.orgId);
+  try {
+    const id = await db.transaction(async (tx) => {
+      // A rate card writes a book and its first version in one unit: take the
+      // same advisory fence the Setup rate-book writer takes so a concurrent
+      // book edit for this organization cannot interleave with card creation.
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${`item-rate-books:${gate.user.orgId}`}, 0))`,
+      );
+      const book = await tx.execute<{ id: string }>(
+        sql`
+        insert into item_rate_books (org_id, code, name, currency, is_default, is_active, created_by, updated_by)
+        values (${gate.user.orgId}, ${code}, ${name}, ${currency}, false, true, ${gate.user.id}, ${gate.user.id})
+        returning id`,
+        "objects",
+      );
+      const bookRow = book[0]!;
+      const version = await tx.execute<{ id: string }>(
+        sql`
+        insert into item_rate_versions (org_id, rate_book_id, effective_from, status, custom, created_by, updated_by)
+        values (${gate.user.orgId}, ${bookRow.id}, ${today}, 'draft', '{}'::jsonb, ${gate.user.id}, ${gate.user.id})
+        returning id`,
+        "objects",
+      );
+      const versionRow = version[0]!;
+      await tx.execute(sql`
+        insert into labor_rate_version_policies (org_id, version_id, derivation_policy, created_by, updated_by)
+        values (${gate.user.orgId}, ${versionRow.id}, 'explicit', ${gate.user.id}, ${gate.user.id})`);
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${gate.user.orgId}, 'item_rate_versions', ${versionRow.id}, 'insert',
+                ${JSON.stringify({ rateBookId: bookRow.id, code, currency, effectiveFrom: today })}::jsonb,
+                ${gate.user.id})`);
+      return versionRow.id;
+    });
+    return NextResponse.json({ id }, { status: 201 });
+  } catch {
+    return NextResponse.json({ errorCode: "save" }, { status: 422 });
+  }
+}
