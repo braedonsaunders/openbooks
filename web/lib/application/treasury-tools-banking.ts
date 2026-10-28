@@ -273,7 +273,6 @@ export const TREASURY_BANKING_TOOLS: ApplicationToolDefinition[] = [
         );
         return {
           ok: !result.error,
-          connectionId: input.connectionId,
           ...result,
           status: result.error ? "error" : "synced",
           href: "/admin/setup/bank-feeds",
@@ -305,7 +304,6 @@ export const TREASURY_BANKING_TOOLS: ApplicationToolDefinition[] = [
           testBankFeedConnectionForActor(context.authz, input.connectionId, context.requestId),
         );
         return {
-          ok: result.ok,
           connectionId: input.connectionId,
           ...result,
           status: result.ok ? "connected" : "error",

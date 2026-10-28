@@ -14,6 +14,7 @@ import { notFound } from "@/lib/api/responses";
 import {
   deleteDunningPolicyRecord,
   updateDunningPolicyRecord,
+  type UpdateDunningPolicyInput,
 } from "@/lib/dunning-policy-management";
 import {
   autopayFieldError,
@@ -262,32 +263,28 @@ export const PATCH = defineRoute({
         throw e;
       }
     }
+    const input: UpdateDunningPolicyInput = {};
+    if (typeof body.expectedUpdatedAt === "string")
+      input.expectedUpdatedAt = body.expectedUpdatedAt;
+    if (body.appliesToKind !== undefined) input.appliesToKind = body.appliesToKind as string;
+    if (gracePeriodDays !== undefined) input.gracePeriodDays = gracePeriodDays;
+    if (minBalance !== undefined) input.minBalance = minBalance;
+    if (body.name !== undefined) input.name = body.name as string;
+    if (Object.prototype.hasOwnProperty.call(body, "replyTo"))
+      input.replyTo = (body.replyTo as string | null) ?? null;
+    if (body.isActive !== undefined) input.isActive = body.isActive as boolean;
+    if (stages !== undefined) input.stages = stages;
+    if (retryOffsets !== undefined) input.retryOffsetsDays = retryOffsets;
+    if (insufficientFundsOffsets !== undefined)
+      input.insufficientFundsOffsetsDays = insufficientFundsOffsets;
+    if (expiryNoticeDays !== undefined) input.expiryNoticeDays = expiryNoticeDays;
+    if (finalAction !== undefined) input.finalAction = finalAction;
+
     await updateDunningPolicyRecord({
       orgId: authz.user.orgId,
       actorId: authz.user.id,
       policyId: id,
-      input: {
-        ...(typeof body.expectedUpdatedAt === "string"
-          ? { expectedUpdatedAt: body.expectedUpdatedAt }
-          : {}),
-        ...(body.appliesToKind !== undefined
-          ? { appliesToKind: body.appliesToKind as string }
-          : {}),
-        ...(gracePeriodDays !== undefined ? { gracePeriodDays } : {}),
-        ...(minBalance !== undefined ? { minBalance } : {}),
-        ...(body.name !== undefined ? { name: body.name } : {}),
-        ...(Object.prototype.hasOwnProperty.call(body, "replyTo")
-          ? { replyTo: (body.replyTo as string | null) ?? null }
-          : {}),
-        ...(body.isActive !== undefined ? { isActive: body.isActive } : {}),
-        ...(stages !== undefined ? { stages } : {}),
-        ...(retryOffsets !== undefined ? { retryOffsetsDays: retryOffsets } : {}),
-        ...(insufficientFundsOffsets !== undefined
-          ? { insufficientFundsOffsetsDays: insufficientFundsOffsets }
-          : {}),
-        ...(expiryNoticeDays !== undefined ? { expiryNoticeDays } : {}),
-        ...(finalAction !== undefined ? { finalAction } : {}),
-      },
+      input,
     });
     return NextResponse.json({ ok: true });
   },
