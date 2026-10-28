@@ -22,7 +22,7 @@ registerHooks({
 
 const { db, withBypass } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
-const { loadAccount } = await import("./_lib.ts");
+const { loadAccount } = await import("../../../lib/accounts/read.ts");
 
 test("URL drawer account reads hide out-of-scope subsidiaries and retain shared chart accounts", async () => {
   const scratch = await withBypass(() => createScratchOrg());
