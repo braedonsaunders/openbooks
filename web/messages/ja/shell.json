@@ -120,6 +120,9 @@
     "resultCount": "{count, plural, one {# 件の結果} other {# 件の結果}}",
     "groups": {
       "pages": "ページ",
+      "customers": "顧客",
+      "vendors": "仕入先",
+      "employees": "従業員",
       "contacts": "連絡先",
       "transactions": "取引",
       "accounts": "勘定",

@@ -120,6 +120,9 @@
     "resultCount": "{count, plural, one {# résultat} other {# résultats}}",
     "groups": {
       "pages": "Pages",
+      "customers": "Clients",
+      "vendors": "Fournisseurs",
+      "employees": "Employés",
       "contacts": "Contacts",
       "transactions": "Transactions",
       "accounts": "Comptes",

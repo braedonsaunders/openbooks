@@ -151,7 +151,9 @@ test(
         "the response says how the query was read",
       );
       assert.ok(
-        !parsed.groups.some((group) => group.type === "contact"),
+        !parsed.groups.some((group) =>
+          ["customer", "vendor", "employee", "contact"].includes(group.type),
+        ),
         "an amount bound describes transactions only",
       );
 

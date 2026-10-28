@@ -44,9 +44,17 @@ export const SEARCH_RECORD_TYPES = [
 
 export const SEARCH_CATALOG_TYPES = ["report", "setting", "help"] as const;
 
+/**
+ * Parties group by role: a customer is found under Customers, not a generic
+ * contacts list. Each hit in these groups is still a `contact` record, so it
+ * opens, previews and is remembered exactly like any other party.
+ */
+export const SEARCH_PARTY_ROLE_GROUPS = ["customer", "vendor", "employee"] as const;
+
 export type SearchRecordType = (typeof SEARCH_RECORD_TYPES)[number];
 export type SearchCatalogType = (typeof SEARCH_CATALOG_TYPES)[number];
-export type SearchType = SearchRecordType | SearchCatalogType;
+export type SearchPartyRoleGroup = (typeof SEARCH_PARTY_ROLE_GROUPS)[number];
+export type SearchType = SearchRecordType | SearchCatalogType | SearchPartyRoleGroup;
 
 /**
  * A small label beside a hit. The server sends a stable value and the client

@@ -120,6 +120,9 @@
     "resultCount": "{count, plural, one {# 条结果} other {# 条结果}}",
     "groups": {
       "pages": "页面",
+      "customers": "客户",
+      "vendors": "供应商",
+      "employees": "员工",
       "contacts": "联系人",
       "transactions": "交易",
       "accounts": "科目",

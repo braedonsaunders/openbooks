@@ -10,7 +10,16 @@ import type { SearchChip, SearchHit, SearchType } from "./search-types";
 /** Hits per results page. */
 export const RESULTS_PAGE_SIZE = 25;
 
-const CORE = new Set<string>(["contact", "transaction", "account", "item", "project"]);
+const CORE = new Set<string>([
+  "customer",
+  "vendor",
+  "employee",
+  "contact",
+  "transaction",
+  "account",
+  "item",
+  "project",
+]);
 const CATALOG = new Set<string>(["report", "setting", "help"]);
 
 export interface SearchResultsTab {

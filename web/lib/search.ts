@@ -23,7 +23,16 @@ import {
   searchDocuments,
   searchJournalEntries,
 } from "./search-transactions";
-import type { RecentRef, SearchGroup, SearchHit, SearchResponse, SearchType } from "./search-types";
+import {
+  SEARCH_PARTY_ROLE_GROUPS,
+  type RecentRef,
+  type SearchBadge,
+  type SearchGroup,
+  type SearchHit,
+  type SearchPartyRoleGroup,
+  type SearchResponse,
+  type SearchType,
+} from "./search-types";
 import {
   TRANSACTION_KINDS,
   transactionNavigationOnlyFeature,
@@ -41,7 +50,9 @@ import {
  * amounts (total, positive line sum, open balance, tax or a line) and by the
  * words of its number, references, memo and line descriptions.
  *
- * Contacts are also found through their people, addresses, phone
+ * Parties group by role, customers first: each shows once, under the first
+ * role it holds (or the role the query named), and a party with no role is
+ * a contact. They are also found through their people, addresses, phone
  * numbers and migrated-system ids; items through their barcodes and
  * customer part numbers. Org-scoped and permission-filtered on every leg.
  * The operational records, reports, settings and help that complete the
@@ -64,6 +75,7 @@ export type {
 
 type SearchContactRow = {
   id: string;
+  party_group: PartyGroup;
   display_name: string;
   email: string | null;
   legal_name: string | null;
@@ -146,7 +158,20 @@ function allowedTransactionKinds(authz: Authz): string[] {
   });
 }
 
-type CoreLegs = Record<CoreType, { hits: SearchHit[]; more: boolean }>;
+type Leg = { hits: SearchHit[]; more: boolean };
+type CoreLegs = Record<Exclude<CoreType, "contact">, Leg> & { contact: PartyLegs };
+
+/** Party groups in display order. */
+const PARTY_GROUPS = [...SEARCH_PARTY_ROLE_GROUPS, "contact"] as const;
+type PartyGroup = SearchPartyRoleGroup | "contact";
+type PartyLegs = Record<PartyGroup, Leg>;
+
+const NO_PARTIES: PartyLegs = {
+  customer: { hits: [], more: false },
+  vendor: { hits: [], more: false },
+  employee: { hits: [], more: false },
+  contact: { hits: [], more: false },
+};
 
 const NONE = { hits: [] as SearchHit[], more: false };
 
@@ -178,7 +203,10 @@ function scopedKinds(scopes: readonly SearchScope[]): Set<string> | null {
 async function coreLegs(
   authz: Authz,
   matchFor: (type: CoreType) => Match | null,
-  options: Required<Pick<GlobalSearchOptions, "limit" | "offset">> & { today: string },
+  options: Required<Pick<GlobalSearchOptions, "limit" | "offset">> & {
+    today: string;
+    partyGroups: readonly PartyGroup[];
+  },
 ): Promise<CoreLegs> {
   const orgId = authz.user.orgId;
   const transactionKinds = allowedTransactionKinds(authz);
@@ -265,7 +293,7 @@ async function coreLegs(
   };
 
   const [contacts, documents, journals, accounts, items, projects] = await Promise.all([
-    contactMatch ? searchContacts(orgId, contactMatch, scope, options) : NONE,
+    contactMatch ? searchContacts(orgId, contactMatch, scope, options) : NO_PARTIES,
     visibleKinds.then(documentsLeg),
     visibleKinds.then(journalsLeg),
     accountMatch ? searchAccounts(orgId, accountMatch, scope, options) : NONE,
@@ -283,7 +311,10 @@ async function coreLegs(
   };
 }
 
-const GROUP_LABELS: Record<CoreType, string> = {
+const GROUP_LABELS: Record<Exclude<CoreType, "contact"> | PartyGroup, string> = {
+  customer: "customers",
+  vendor: "vendors",
+  employee: "employees",
   contact: "contacts",
   transaction: "transactions",
   account: "accounts",
@@ -306,9 +337,14 @@ export async function globalSearch(
   // Digits written like a phone number find the party that has it, whatever
   // else they could also read as.
   if (phoneDigits && parsed.scopes.length === 0) groupsAllowed.add("contact");
+  // A role group (Customers) is a view of the contact leg.
+  const partyGroups = options.types
+    ? PARTY_GROUPS.filter((group) => options.types!.includes(group))
+    : PARTY_GROUPS;
   if (options.types) {
     for (const type of [...groupsAllowed])
-      if (!options.types.includes(type)) groupsAllowed.delete(type);
+      if (type === "contact" ? partyGroups.length === 0 : !options.types.includes(type))
+        groupsAllowed.delete(type);
   }
   // A query that is only structure ("$1,200", "overdue invoices") names no
   // words; the name-matching legs have nothing to look for.
@@ -326,6 +362,7 @@ export async function globalSearch(
       limit: limit ?? PANEL_LIMIT,
       offset: options.offset ?? 0,
       today: parseOptions.today,
+      partyGroups,
     },
   );
   if (limit === undefined) {
@@ -337,16 +374,22 @@ export async function globalSearch(
   };
 
   // Structured or numeric queries most likely want a transaction; else
-  // contacts lead.
+  // parties lead.
   const transactionFirst =
     Boolean(parsed.amount || parsed.dates || parsed.status) ||
     parsed.words.some((word) => word.amount);
-  const order: CoreType[] = transactionFirst
-    ? ["transaction", "contact", "account", "item", "project"]
-    : ["contact", "transaction", "account", "item", "project"];
+  const others = ["account", "item", "project"] as const;
+  const order = transactionFirst
+    ? (["transaction", ...PARTY_GROUPS, ...others] as const)
+    : ([...PARTY_GROUPS, "transaction", ...others] as const);
   const groups: SearchGroup[] = order
     .map((type) => {
-      const leg = type === "transaction" ? transactions : legs[type];
+      const leg =
+        type === "transaction"
+          ? transactions
+          : type === "account" || type === "item" || type === "project"
+            ? legs[type]
+            : legs.contact[type];
       const group: SearchGroup = { type, labelKey: GROUP_LABELS[type], hits: leg.hits };
       if (leg.more) group.more = true;
       return group;
@@ -389,10 +432,10 @@ export async function resolveRecentCoreRecords(
       const ids = idsByType.get(type);
       return ids?.length ? { kind: "ids", ids } : null;
     },
-    { limit: PANEL_LIMIT, offset: 0, today: "" },
+    { limit: PANEL_LIMIT, offset: 0, today: "", partyGroups: PARTY_GROUPS },
   );
   return [
-    ...legs.contact.hits,
+    ...PARTY_GROUPS.flatMap((group) => legs.contact[group].hits),
     ...legs.transaction.hits,
     ...legs.account.hits,
     ...legs.item.hits,
@@ -443,8 +486,8 @@ async function searchContacts(
   orgId: string,
   match: Match,
   scope: ReadonlySet<string> | null,
-  options: { limit: number; offset: number },
-): Promise<{ hits: SearchHit[]; more: boolean }> {
+  options: { limit: number; offset: number; partyGroups: readonly PartyGroup[] },
+): Promise<PartyLegs> {
   // Parties are org-wide when their primary subsidiary is null — the exact
   // predicate the party lists use (`is null or = any(...)`).
   const subsidiaryFilter = masterDataSubsidiaryFilter(sql`p.subsidiary_id`, scope);
@@ -452,6 +495,7 @@ async function searchContacts(
   let ranking: SQL;
   let matchedContact: SQL;
   let roleFilter = sql``;
+  let rolePreference: readonly SearchPartyRoleGroup[] = SEARCH_PARTY_ROLE_GROUPS;
   if (match.kind === "ids") {
     where = sql`p.id = any(${uuidArray(match.ids)})`;
     ranking = sql`0`;
@@ -462,6 +506,8 @@ async function searchContacts(
       (scope) => scope === "customer" || scope === "vendor" || scope === "employee",
     );
     if (roles.length > 0) {
+      // "vendor:acme" files a party that is also a customer under Vendors.
+      rolePreference = roles;
       roleFilter = sql`and (${sql.join(
         roles.map((role) =>
           role === "customer"
@@ -513,41 +559,75 @@ async function searchContacts(
        order by c.is_primary desc, c.name limit 1)`
       : sql`null`;
   }
+  const roleColumn = {
+    customer: sql`m.is_customer`,
+    vendor: sql`m.is_vendor`,
+    employee: sql`m.is_employee`,
+  } as const;
+  const partyGroup = sql`case ${sql.join(
+    rolePreference.map((role) => sql`when ${roleColumn[role]} then ${role}`),
+    sql` `,
+  )} else 'contact' end`;
+  // Each group pages on its own: the panel shows the best few customers and
+  // the best few vendors, and "see all" reads one group deeper.
   const r = await db.execute<SearchContactRow>(
     sql`
-    select p.id, p.display_name, p.email, p.legal_name,
-           exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.org_id = p.org_id) as is_customer,
-           exists (select 1 from vendor_roles vr where vr.party_id = p.id and vr.org_id = p.org_id) as is_vendor,
-           exists (select 1 from employee_roles er where er.party_id = p.id and er.org_id = p.org_id) as is_employee,
-           ${matchedContact} as matched_contact,
-           ${ranking} as sim
-      from parties p
-     where p.org_id = ${orgId}
-       ${subsidiaryFilter} ${roleFilter}
-       and ${where}
-     order by sim desc, p.display_name, p.id
-     limit ${options.limit + 1} offset ${options.offset}`,
+    with matched as (
+      select p.org_id, p.id, p.display_name, p.email, p.legal_name,
+             exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.org_id = p.org_id) as is_customer,
+             exists (select 1 from vendor_roles vr where vr.party_id = p.id and vr.org_id = p.org_id) as is_vendor,
+             exists (select 1 from employee_roles er where er.party_id = p.id and er.org_id = p.org_id) as is_employee,
+             ${ranking} as sim
+        from parties p
+       where p.org_id = ${orgId}
+         ${subsidiaryFilter} ${roleFilter}
+         and ${where}
+    ), ranked as (
+      select g.*, row_number() over (partition by g.party_group order by g.sim desc, g.display_name, g.id) as rn
+        from (select m.*, ${partyGroup} as party_group from matched m) g
+       where g.party_group = any(${`{${options.partyGroups.join(",")}}`}::text[])
+    )
+    select p.id, p.display_name, p.email, p.legal_name, p.is_customer, p.is_vendor, p.is_employee,
+           p.party_group, ${matchedContact} as matched_contact
+      from ranked p
+     where p.rn > ${options.offset} and p.rn <= ${options.offset + options.limit + 1}
+     order by p.rn`,
     "objects",
   );
-  const rows = r.slice(0, options.limit);
-  return {
-    more: r.length > options.limit,
-    hits: rows.map((row): SearchHit => ({
+  const legs: PartyLegs = {
+    customer: { hits: [], more: false },
+    vendor: { hits: [], more: false },
+    employee: { hits: [], more: false },
+    contact: { hits: [], more: false },
+  };
+  for (const row of r) {
+    const leg = legs[row.party_group];
+    if (leg.hits.length === options.limit) {
+      leg.more = true;
+      continue;
+    }
+    leg.hits.push({
       id: row.id,
       type: "contact",
       title: row.display_name,
       subtitle: row.matched_contact || row.email || row.legal_name || undefined,
       href: `/parties?party=${row.id}`,
       iconKey: row.is_employee ? "clipboard-check" : "users",
-      badge: row.is_customer
-        ? { kind: "role", value: "customer" }
-        : row.is_vendor
-          ? { kind: "role", value: "vendor" }
-          : row.is_employee
-            ? { kind: "role", value: "employee" }
-            : undefined,
-    })),
-  };
+      // Recents list parties without role groups, so there the badge names
+      // the party's role itself.
+      badge: partyBadge(row, match.kind === "ids" ? null : row.party_group),
+    });
+  }
+  return legs;
+}
+
+/**
+ * A role the hit's group does not already say. Under Customers a party that
+ * is also a vendor reads "vendor"; under Contacts it carries no badge.
+ */
+function partyBadge(row: SearchContactRow, group: PartyGroup | null): SearchBadge | undefined {
+  const other = SEARCH_PARTY_ROLE_GROUPS.find((role) => role !== group && row[`is_${role}`]);
+  return other ? { kind: "role", value: other } : undefined;
 }
 
 /**
