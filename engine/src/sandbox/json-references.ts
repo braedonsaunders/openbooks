@@ -129,6 +129,69 @@ export function validateClonedFlowGraphScope(
   }
 }
 
+type ClosureEvidenceTable = "employment_changes" | "position_changes";
+
+/** Rebase closure evidence after all copied version rows exist in the target. */
+async function rebaseClosedVersionEvidence(
+  args: { sandboxOrgId: string; seed: string },
+  table: ClosureEvidenceTable,
+): Promise<void> {
+  const expected = (
+    await db.execute<{ count: string }>(
+      sql`select count(*)::text as count from ${sql.identifier(table)}
+           where org_id = ${args.sandboxOrgId} and closed_versions <> '[]'::jsonb`,
+      "objects",
+    )
+  )[0]?.count;
+  const expectedRows = Number(expected ?? 0);
+  if (expectedRows === 0) return;
+
+  const rebasedIdentity = sql`jsonb_set(entry.value, '{identity}',
+    to_jsonb(ob_rebase((entry.value->>'identity')::uuid, ${args.seed}::uuid)::text), true)`;
+  const rebasedRowId = sql`jsonb_set(${rebasedIdentity}, '{row_id}',
+    to_jsonb(ob_rebase((entry.value->>'row_id')::uuid, ${args.seed}::uuid)::text), true)`;
+  const rebasedBeforeImage = sql`coalesce((
+    select jsonb_object_agg(snapshot_field.key, case
+      when snapshot_field.key = 'org_id' then to_jsonb(${args.sandboxOrgId}::uuid)
+      when attribute.atttypid = 'uuid'::regtype
+        and snapshot_field.key not in ('created_by', 'updated_by')
+        and jsonb_typeof(snapshot_field.value) = 'string'
+        then to_jsonb(ob_rebase((snapshot_field.value #>> '{}')::uuid, ${args.seed}::uuid)::text)
+      else snapshot_field.value
+    end)
+      from jsonb_each(entry.value->'before') as snapshot_field(key, value)
+      left join pg_class relation
+        on relation.relname = entry.value->>'table' and relation.relkind = 'r'
+       and relation.relnamespace = 'public'::regnamespace
+      left join pg_attribute attribute
+        on attribute.attrelid = relation.oid and attribute.attname = snapshot_field.key
+       and attribute.attnum > 0 and not attribute.attisdropped
+  ), '{}'::jsonb)`;
+  const rebasedEntry = sql`case when entry.value ? 'before' then
+      jsonb_set(${rebasedRowId}, '{before}',
+        case when jsonb_typeof(entry.value->'before') = 'object'
+          then ${rebasedBeforeImage} else entry.value->'before' end,
+        true)
+    else ${rebasedRowId} end`;
+  const rebasedArray = sql`coalesce((
+    select jsonb_agg(${rebasedEntry} order by entry.ordinality)
+      from jsonb_array_elements(target.closed_versions) with ordinality as entry(value, ordinality)
+  ), '[]'::jsonb)`;
+  const updated = await db.execute<{ id: string }>(
+    sql`update ${sql.identifier(table)} as target
+           set closed_versions = ${rebasedArray}
+         where target.org_id = ${args.sandboxOrgId}
+           and target.closed_versions <> '[]'::jsonb
+         returning target.id`,
+    "objects",
+  );
+  if (updated.length !== expectedRows) {
+    throw new Error(
+      `sandbox ${table} closure evidence rebase updated ${updated.length} of ${expectedRows} rows`,
+    );
+  }
+}
+
 /** Run inside the clone's transaction after every referenced table was copied.
  * Copied policies rebase source identities; preserved policies must already
  * name native sandbox entities. Missing scope targets abort refresh atomically. */
@@ -139,6 +202,12 @@ export async function rebaseClonedJsonReferences(args: {
   tier: string;
   copiedTables: ReadonlySet<string>;
 }): Promise<void> {
+  if (args.copiedTables.has("employment_changes")) {
+    await rebaseClosedVersionEvidence(args, "employment_changes");
+  }
+  if (args.copiedTables.has("position_changes")) {
+    await rebaseClosedVersionEvidence(args, "position_changes");
+  }
   if (args.copiedTables.has("app_roles") || args.copiedTables.has("subsidiaries")) {
     const ids = args.copiedTables.has("app_roles")
       ? await sandboxSubsidiaryMap(args.productionOrgId, args.sandboxOrgId, args.seed)
