@@ -12,8 +12,13 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
-const { createScratchOrg, dropScratchOrg, seedFlowActors, grantScratchPermissions } =
-  await import("@openbooks/engine/testing/fixtures");
+const {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+  seedApprovalFlow,
+  grantScratchPermissions,
+} = await import("@openbooks/engine/testing/fixtures");
 const { getRun, getRuleVersion } = await import("@openbooks/engine/allocations/runtime");
 const { postProjectGlEntry } = await import("@openbooks/engine/projects/recognition");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
@@ -534,7 +539,14 @@ test(
             (${liability}, ${org.orgId}, 'LEDGER-PROV-LIAB', 'Provision liability', 'liability_current_other')
         `);
         await grantScratchPermissions(org.orgId, actors.submitterId, ["gl.manage", "gl.read"]);
+        await grantScratchPermissions(org.orgId, actors.approver1Id, ["flows.approve", "gl.post"]);
         await grantScratchPermissions(foreign.orgId, foreignActors.adminId, ["gl.read"]);
+        await seedApprovalFlow(org.orgId, {
+          subjectKind: "financial_change",
+          assignees: [{ type: "user", userId: actors.approver1Id }],
+          mode: "any",
+          preventSelfApproval: true,
+        });
       });
 
       const proposal = {
@@ -581,11 +593,59 @@ test(
       assert.equal(replay.replayed, true);
       assert.equal(replay.id, created.id);
 
+      const submitted = (await run("submit_provision_assessment", manageContext, {
+        changeId: created.id,
+        idempotencyKey: "ledger-provision-submit-001",
+      })) as { replayed: boolean; status: string };
+      assert.equal(submitted.replayed, false);
+      assert.equal(submitted.status, "pending");
+      const submitReplay = (await run("submit_provision_assessment", manageContext, {
+        changeId: created.id,
+        idempotencyKey: "ledger-provision-submit-001",
+      })) as { replayed: boolean; status: string };
+      assert.equal(submitReplay.replayed, true);
+      assert.equal(submitReplay.status, submitted.status);
+
+      const gates = await withBypassContext(() =>
+        db.execute<{ id: string }>(
+          sql`select id from flow_gates
+               where org_id = ${org.orgId} and subject_kind = 'financial_change'
+                 and subject_id = ${created.id} and status = 'pending'`,
+          "objects",
+        ),
+      );
+      assert.equal(gates.length, 1);
+      const approverContext = ctxFor(org.orgId, actors.approver1Id, ["flows.approve", "gl.post"]);
+      await run("decide_approval", approverContext, {
+        gateId: gates[0]!.id,
+        decision: "approved",
+        comment: "Independent review supports the estimate.",
+        idempotencyKey: "ledger-provision-approval-001",
+      });
+      const applied = (await run("apply_provision_assessment", approverContext, {
+        changeId: created.id,
+        idempotencyKey: "ledger-provision-apply-001",
+      })) as { replayed: boolean; status: string; entryId: string | null; liability: string };
+      assert.equal(applied.replayed, false);
+      assert.equal(applied.status, "applied");
+      assert.equal(applied.liability, "50000.0000");
+      assert.ok(applied.entryId);
+      const applyReplay = (await run("apply_provision_assessment", approverContext, {
+        changeId: created.id,
+        idempotencyKey: "ledger-provision-apply-001",
+      })) as { replayed: boolean; entryId: string | null };
+      assert.equal(applyReplay.replayed, true);
+      assert.equal(applyReplay.entryId, applied.entryId);
+
       const changes = (await run("list_accounting_changes", readContext, {
         page: 1,
         perPage: 100,
       })) as { rows: Array<Record<string, unknown>> };
-      assert.ok(changes.rows.some((row) => row.id === created.id && row.domain === "provision"));
+      assert.ok(
+        changes.rows.some(
+          (row) => row.id === created.id && row.domain === "provision" && row.status === "applied",
+        ),
+      );
       const proposalCount = await withBypassContext(() =>
         db.execute<{ count: string }>(
           sql`select count(*)::text as count from financial_changes

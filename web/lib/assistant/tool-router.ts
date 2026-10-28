@@ -212,6 +212,8 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   // Ledger and close commands.
   list_accounting_changes: "ledger",
   propose_provision_assessment: "ledger",
+  submit_provision_assessment: "ledger",
+  apply_provision_assessment: "ledger",
   list_close_setup_configuration: "ledger",
   save_fiscal_calendar: "ledger",
   generate_accounting_periods: "ledger",

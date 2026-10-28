@@ -1,6 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { sql } from "drizzle-orm";
 import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import {
   listOperatingProfileChoices,
@@ -8,15 +9,20 @@ import {
   saveOperatingProfileScope,
 } from "@openbooks/engine/organization/operating-profiles";
 import { readOperatingSetupJourney } from "@openbooks/engine/manufacturing/setup-journey";
-import { proposeProvisionAssessment } from "@openbooks/engine/provisions";
+import { applyProvisionAssessment, proposeProvisionAssessment } from "@openbooks/engine/provisions";
+import { submitFinancialChange } from "@openbooks/engine/flows/financial-changes-adapter";
 import { bookReplicationStatus, listBookReplicationRuns } from "@openbooks/engine/multibook";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { db, withOrg, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { readEntityListPage } from "../list/entity-reader";
 import { provisionAssessmentToolSchema } from "../provisions/assessment-schema";
 import { can } from "../authz";
-import { assertApplicationPermission, type ApplicationContext } from "./context";
-import { ApplicationError, forbidden, invalidInput } from "./errors";
+import {
+  assertApplicationPermission,
+  assertSubsidiaryAccess,
+  type ApplicationContext,
+} from "./context";
+import { ApplicationError, forbidden, invalidInput, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 
 const UUID = z.string().regex(UUID_RE).describe("UUID returned by a native setup read.");
@@ -34,6 +40,47 @@ const hasPermission = (permission: string) => (authz: ApplicationContext["authz"
 
 function assertUnrestricted(context: ApplicationContext): void {
   if (context.authz.allowedSubsidiaryIds !== null) throw forbidden("subsidiary.unrestricted");
+}
+
+async function requireProvisionChange(
+  context: ApplicationContext,
+  changeId: string,
+  permission: "gl.manage" | "gl.post",
+): Promise<void> {
+  assertApplicationPermission(context, permission);
+  const orgId = context.authz.user.orgId;
+  const change = await withOrg(
+    orgId,
+    async () =>
+      (
+        await db.execute<{
+          domain: string;
+          operation: string;
+          subsidiaryId: string;
+          requiredSubsidiaryIds: unknown;
+        }>(
+          sql`select domain, operation, subsidiary_id as "subsidiaryId",
+                   payload->'requiredSubsidiaryIds' as "requiredSubsidiaryIds"
+              from financial_changes where org_id = ${orgId} and id = ${changeId}`,
+          "objects",
+        )
+      )[0],
+  );
+  if (!change || change.domain !== "provision" || change.operation !== "provision_assessment")
+    throw notFound("provision assessment");
+  const allowed = context.authz.allowedSubsidiaryIds;
+  if (allowed !== null) {
+    const required = Array.isArray(change.requiredSubsidiaryIds)
+      ? change.requiredSubsidiaryIds.filter((id): id is string => typeof id === "string")
+      : null;
+    if (
+      !required ||
+      !allowed.has(change.subsidiaryId) ||
+      required.some((subsidiaryId) => !allowed.has(subsidiaryId))
+    ) {
+      throw notFound("provision assessment");
+    }
+  }
 }
 
 function settleRefusal(error: unknown): never {
@@ -129,6 +176,7 @@ export const LEDGER_CONFIGURATION_TOOLS: ApplicationToolDefinition[] = [
     visibleTo: hasPermission("gl.manage"),
     execute: async (context, input) => {
       assertApplicationPermission(context, "gl.manage");
+      assertSubsidiaryAccess(context, input.obligation.subsidiaryId);
       try {
         const id = await proposeProvisionAssessment(
           context.authz.user.orgId,
@@ -140,6 +188,97 @@ export const LEDGER_CONFIGURATION_TOOLS: ApplicationToolDefinition[] = [
           id,
           status: "proposed",
           href: `/accounting/changes?change=${id}`,
+        };
+      } catch (error) {
+        settleRefusal(error);
+      }
+    },
+  }),
+  definition({
+    name: "submit_provision_assessment",
+    title: "Submit Provision Assessment",
+    description:
+      "Submit a proposed provision assessment to the configured approval flow. Use list_accounting_changes to find the change id; only its proposer can submit it, and it must remain in your subsidiary scope.",
+    inputSchema: z.object({
+      changeId: UUID.describe("Provision assessment change id from list_accounting_changes."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: hasPermission("gl.manage"),
+    authorizeReplay: (context, input) =>
+      requireProvisionChange(context, input.changeId, "gl.manage"),
+    execute: async (context, input) => {
+      try {
+        await requireProvisionChange(context, input.changeId, "gl.manage");
+        await submitFinancialChange(
+          context.authz.user.orgId,
+          input.changeId,
+          context.authz.user.id,
+        );
+        const status = await withOrg(
+          context.authz.user.orgId,
+          async () =>
+            (
+              await db.execute<{ status: string }>(
+                sql`select status from financial_changes
+                   where org_id = ${context.authz.user.orgId} and id = ${input.changeId}`,
+                "objects",
+              )
+            )[0]?.status,
+        );
+        if (!status) throw notFound("provision assessment");
+        return {
+          ok: true,
+          changeId: input.changeId,
+          status,
+          href: `/accounting/changes?change=${input.changeId}`,
+        };
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "only the proposer can submit this accounting event"
+        ) {
+          throw new ApplicationError("forbidden", error.message, 403, {
+            remedy: "Only the user who created this assessment can submit it.",
+          });
+        }
+        settleRefusal(error);
+      }
+    },
+  }),
+  definition({
+    name: "apply_provision_assessment",
+    title: "Apply Provision Assessment",
+    description:
+      "Apply an approved provision assessment and post its liability adjustment when required. Use list_accounting_changes to find the change id; it must have an independent approval and remain in your subsidiary scope.",
+    inputSchema: z.object({
+      changeId: UUID.describe("Approved provision assessment id from list_accounting_changes."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: hasPermission("gl.post"),
+    authorizeReplay: (context, input) => requireProvisionChange(context, input.changeId, "gl.post"),
+    execute: async (context, input) => {
+      assertApplicationPermission(context, "gl.post");
+      try {
+        await requireProvisionChange(context, input.changeId, "gl.post");
+        const result = await applyProvisionAssessment(
+          context.authz.user.orgId,
+          input.changeId,
+          context.authz.user.id,
+        );
+        return {
+          ok: true,
+          changeId: input.changeId,
+          ...result,
+          status: "applied",
+          href: `/accounting/changes?change=${input.changeId}`,
         };
       } catch (error) {
         settleRefusal(error);
