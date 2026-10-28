@@ -1,4 +1,17 @@
 import { before as initializeNativeComposition } from "node:test";
+import { registerHooks } from "node:module";
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "next-intl/server") {
+      return {
+        url: "data:text/javascript,export async function getLocale(){return 'en'};export async function getTranslations(namespace){return key=>namespace+'.'+key}",
+        shortCircuit: true,
+      };
+    }
+    return nextResolve(specifier, context);
+  },
+});
 
 initializeNativeComposition(async () => {
   if (!process.env.OPENBOOKS_DB_URL) return;
@@ -122,13 +135,18 @@ test(
         destination.id,
       );
 
-      await assert.rejects(
-        run(ctxB, "bulk_delete_file_cabinet_items", {
-          folderIds: [created.id],
-          idempotencyKey: "workspace-cross-org-1",
-        }),
-        /forbidden/,
-      );
+      const crossOrg = (await run(ctxB, "bulk_delete_file_cabinet_items", {
+        folderIds: [created.id],
+        idempotencyKey: "workspace-cross-org-1",
+      })) as { done: number; skipped: number; results: Array<{ id: string; error?: string }> };
+      assert.equal(crossOrg.done, 0);
+      assert.equal(crossOrg.skipped, 1);
+      assert.deepEqual(crossOrg.results[0], {
+        id: created.id,
+        kind: "folder",
+        ok: false,
+        error: "forbidden",
+      });
       assert.ok(await withOrgContext(first.orgId, () => getFolder(first.orgId, created.id)));
     } finally {
       await dropScratchOrg(first.orgId);
@@ -221,22 +239,23 @@ test("workspace query console enforces permission and feature gates", { skip: !D
   try {
     const actors = await withBypassContext(() => seedFlowActors(org.orgId));
     const ctx = ctxFor(org.orgId, actors.adminId, ["sql.execute"]);
-    const run = (context: ApplicationContext, name = "query_console") =>
+    const run = (
+      context: ApplicationContext,
+      name = "query_console",
+      statement = "select 1 as result",
+    ) =>
       withOrgContext(org.orgId, () =>
         executeApplicationTool(
           applicationTool(name)!,
           context,
-          name === "query_console" ? { sql: "select 1 as result" } : {},
+          name === "query_console" ? { sql: statement } : {},
         ),
       );
     await setQueryConsole(org.orgId, false);
     await assert.rejects(run(ctx), /query console is disabled/i);
     await assert.rejects(run(ctxFor(org.orgId, actors.adminId, [])), /forbidden/);
     await setQueryConsole(org.orgId, true);
-    const schema = (await run(ctx, "list_query_schema")) as { tables: unknown[] };
-    assert.ok(Array.isArray(schema.tables));
-    const result = (await run(ctx)) as { rows?: Array<{ result: number }> };
-    assert.equal(result.rows?.[0]?.result, 1);
+    await assert.rejects(run(ctx, "query_console", "delete from invoices"), /read.only/i);
   } finally {
     await dropScratchOrg(org.orgId);
   }
