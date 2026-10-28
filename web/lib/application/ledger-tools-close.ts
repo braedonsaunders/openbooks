@@ -33,6 +33,23 @@ import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import { PostingError } from "@openbooks/engine/journal/contracts";
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { CloseError } from "@openbooks/engine/periods/period-policy";
+import {
+  extendReopenRequest,
+  recloseApprovedReopen,
+  withdrawPeriodReopen,
+} from "@openbooks/engine/close/reopening";
+import {
+  ADMIN_CLOSE_ACTION_SCHEMAS,
+  enqueueClosePackageDelivery,
+  generateAccountingPeriods,
+  listCloseSetupConfiguration,
+  saveAutomation,
+  saveBlueprint,
+  saveCalendar,
+  savePackage,
+  savePolicy,
+  type Body as AdminCloseBody,
+} from "../close/admin-settings";
 import { can } from "../authz";
 import { guardCloseScope } from "../close-scope";
 import { historicalTranslationProposalBody } from "../api/historical-translation-schema";
@@ -128,7 +145,317 @@ function periodEndSubsidiaries(context: ApplicationContext): string[] | null {
   return allowed === null ? null : [...allowed];
 }
 
+const CLOSE_SETUP_IDEMPOTENCY_KEY = z
+  .string()
+  .regex(/^[A-Za-z0-9._:-]{8,200}$/)
+  .describe("Unique retry key for this exact close setup action.");
+
+function assertOrganizationWideCloseScope(context: ApplicationContext): void {
+  if (context.authz.allowedSubsidiaryIds !== null) throw notFound("close setup record");
+}
+
+function settleCloseSetupRefusal(error: unknown): never {
+  if (error instanceof ApplicationError) throw error;
+  if (error instanceof CloseError) throw new ApplicationError("invalid_input", error.message, 422);
+  settleRefusal(error);
+}
+
+function closeSetupMutation<S extends z.ZodType>(args: {
+  name: string;
+  title: string;
+  description: string;
+  inputSchema: S;
+  permission: string;
+  featureKey?: string;
+  destructive?: boolean;
+  openWorld?: boolean;
+  organizationWide?: boolean;
+  execute: (context: ApplicationContext, input: z.infer<S>) => Promise<Record<string, unknown>>;
+}): ApplicationToolDefinition {
+  return definition({
+    name: args.name,
+    title: args.title,
+    description: args.description,
+    inputSchema: args.inputSchema,
+    readOnly: false,
+    destructive: args.destructive ?? false,
+    openWorld: args.openWorld ?? false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => can(authz, args.permission),
+    ...(args.featureKey ? { featureKey: args.featureKey } : {}),
+    execute: async (context, input) => {
+      assertApplicationPermission(context, args.permission);
+      if (args.organizationWide) assertOrganizationWideCloseScope(context);
+      try {
+        return await args.execute(context, input);
+      } catch (error) {
+        settleCloseSetupRefusal(error);
+      }
+    },
+  });
+}
+
+const closeSetupSchema = ADMIN_CLOSE_ACTION_SCHEMAS;
+const withdrawPeriodReopenInput = closeSetupSchema.withdrawReopen
+  .omit({ action: true })
+  .extend({ idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY });
+const reclosePeriodReopenInput = closeSetupSchema.recloseReopen
+  .omit({ action: true })
+  .extend({ idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY });
+const extendPeriodReopenInput = closeSetupSchema.extendReopen
+  .omit({ action: true })
+  .extend({ idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY });
+
+const CLOSE_SETUP_TOOLS: ApplicationToolDefinition[] = [
+  definition({
+    name: "list_close_setup_configuration",
+    title: "List Close Setup Configuration",
+    description:
+      "List fiscal calendars, periods, close blueprints, policies, automation rules, reporting packages, and reopen request ids. Use this before changing configuration or acting on a reopen request.",
+    inputSchema: z.object({}),
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "never",
+    visibleTo: hasPermission("periods.manage"),
+    execute: async (context) => {
+      assertApplicationPermission(context, "periods.manage");
+      assertOrganizationWideCloseScope(context);
+      return {
+        ok: true,
+        ...(await listCloseSetupConfiguration(context.authz.user.orgId)),
+        href: "/admin/setup/close",
+      };
+    },
+  }),
+  closeSetupMutation({
+    name: "save_fiscal_calendar",
+    title: "Save Fiscal Calendar",
+    description:
+      "Create or update an organization fiscal calendar. Use list_close_setup_configuration for calendar ids; calendars with generated periods cannot change cadence, year start, or anchor.",
+    inputSchema: closeSetupSchema.saveCalendar
+      .omit({ action: true })
+      .extend({ idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY }),
+    permission: "periods.manage",
+    organizationWide: true,
+    execute: async (context, input) => ({
+      ok: true,
+      id: await saveCalendar(context.authz.user.orgId, context.authz.user.id, {
+        ...input,
+        action: "save-calendar",
+      } as AdminCloseBody),
+      status: "saved",
+      href: "/admin/setup/close",
+    }),
+  }),
+  closeSetupMutation({
+    name: "generate_accounting_periods",
+    title: "Generate Accounting Periods",
+    description:
+      "Generate fiscal periods for a calendar and year. Find the calendar id with list_close_setup_configuration; existing period schedules and calendar rules are validated by the native generator.",
+    inputSchema: closeSetupSchema.generatePeriods
+      .omit({ action: true })
+      .extend({ idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY }),
+    permission: "periods.manage",
+    organizationWide: true,
+    execute: async (context, input) => ({
+      ok: true,
+      ...(await generateAccountingPeriods(
+        context.authz.user.orgId,
+        input.calendarId,
+        input.fiscalYear,
+        context.authz.user.id,
+      )),
+      status: "generated",
+      href: "/admin/setup/close",
+    }),
+  }),
+  closeSetupMutation({
+    name: "save_close_blueprint",
+    title: "Save Close Blueprint",
+    description:
+      "Create a new version of a close task blueprint. Use list_close_setup_configuration for existing blueprint ids and step keys; dependencies must form an acyclic graph.",
+    inputSchema: closeSetupSchema.saveBlueprint
+      .omit({ action: true })
+      .extend({ idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY }),
+    permission: "periods.manage",
+    featureKey: "advancedClose",
+    organizationWide: true,
+    execute: async (context, input) => ({
+      ok: true,
+      id: await saveBlueprint(context.authz.user.orgId, context.authz.user.id, {
+        ...input,
+        action: "save-blueprint",
+      } as AdminCloseBody),
+      status: "saved",
+      href: "/admin/setup/close",
+    }),
+  }),
+  closeSetupMutation({
+    name: "save_close_policy",
+    title: "Save Close Policy",
+    description:
+      "Create or update a close policy such as a materiality threshold or control rule. Use list_close_setup_configuration for current policies; materiality thresholds must be exact decimal strings.",
+    inputSchema: closeSetupSchema.savePolicy.safeExtend({
+      idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY,
+    }),
+    permission: "periods.manage",
+    featureKey: "advancedClose",
+    organizationWide: true,
+    execute: async (context, input) => ({
+      ok: true,
+      id: await savePolicy(context.authz.user.orgId, context.authz.user.id, {
+        ...input,
+        action: "save-policy",
+      } as AdminCloseBody),
+      status: "saved",
+      href: "/admin/setup/close",
+    }),
+  }),
+  closeSetupMutation({
+    name: "save_close_automation",
+    title: "Save Close Automation",
+    description:
+      "Create or update a close automation rule. Use list_close_setup_configuration for existing rule ids; approvals remain configured through Flows and are not assigned by this command.",
+    inputSchema: closeSetupSchema.saveAutomation.safeExtend({
+      idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY,
+    }),
+    permission: "periods.manage",
+    featureKey: "advancedClose",
+    organizationWide: true,
+    execute: async (context, input) => ({
+      ok: true,
+      id: await saveAutomation(context.authz.user.orgId, context.authz.user.id, {
+        ...input,
+        action: "save-automation",
+      } as AdminCloseBody),
+      status: "saved",
+      href: "/admin/setup/close",
+    }),
+  }),
+  closeSetupMutation({
+    name: "save_close_reporting_package",
+    title: "Save Close Reporting Package",
+    description:
+      "Create or update a close reporting package and its report attachments and recipients. Use list_close_setup_configuration for existing package ids; every report slug and recipient address must be valid.",
+    inputSchema: closeSetupSchema.savePackage
+      .omit({ action: true })
+      .extend({ idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY }),
+    permission: "periods.manage",
+    featureKey: "advancedClose",
+    organizationWide: true,
+    execute: async (context, input) => ({
+      ok: true,
+      id: await savePackage(context.authz.user.orgId, context.authz.user.id, {
+        ...input,
+        action: "save-package",
+      } as AdminCloseBody),
+      status: "saved",
+      href: "/admin/setup/close",
+    }),
+  }),
+  closeSetupMutation({
+    name: "send_close_reporting_package",
+    title: "Send Close Reporting Package",
+    description:
+      "Queue an email delivery for an active close reporting package and accounting period. Find package ids with list_close_setup_configuration, and period and book ids with the native accounting reads.",
+    inputSchema: closeSetupSchema.sendPackage
+      .omit({ action: true, idempotencyKey: true })
+      .extend({ idempotencyKey: CLOSE_SETUP_IDEMPOTENCY_KEY }),
+    permission: "periods.manage",
+    featureKey: "advancedClose",
+    destructive: false,
+    openWorld: true,
+    organizationWide: true,
+    execute: async (context, input) => {
+      await enqueueClosePackageDelivery({
+        orgId: context.authz.user.orgId,
+        actorId: context.authz.user.id,
+        packageId: input.packageId,
+        periodId: input.periodId,
+        bookId: input.bookId,
+        idempotencyKey: evidenceRequestId(input.idempotencyKey),
+      });
+      return {
+        ok: true,
+        packageId: input.packageId,
+        status: "queued",
+        href: "/admin/setup/close",
+      };
+    },
+  }),
+  ...(
+    [
+      [
+        "withdraw_period_reopen",
+        "Withdraw Period Reopen",
+        "Withdraw a pending reopen request. Use list_close_setup_configuration to find its id; approved, closed, or otherwise non-pending requests refuse.",
+        withdrawPeriodReopenInput,
+        true,
+      ],
+      [
+        "reclose_period_reopen",
+        "Reclose Period Reopen",
+        "Reclose a period governed by an approved reopen request. Use list_close_setup_configuration to find the request id; the request must still be approved.",
+        reclosePeriodReopenInput,
+        true,
+      ],
+      [
+        "extend_period_reopen",
+        "Extend Period Reopen",
+        "Extend an approved period reopen window or add modules to it. Use list_close_setup_configuration to find the request id; the request must be active and approved.",
+        extendPeriodReopenInput,
+        false,
+      ],
+    ] as const
+  ).map(([name, title, description, schema, destructive]) =>
+    closeSetupMutation({
+      name,
+      title,
+      description,
+      inputSchema: schema,
+      permission: "close.reopen",
+      destructive,
+      organizationWide: true,
+      execute: async (context, input) => {
+        const { idempotencyKey: _key, ...body } = input;
+        const request = {
+          orgId: context.authz.user.orgId,
+          actorId: context.authz.user.id,
+          requestId: body.requestId,
+          reason: body.reason,
+        };
+        let result: unknown;
+        if (name === "withdraw_period_reopen") {
+          result = await withdrawPeriodReopen(request);
+        } else if (name === "reclose_period_reopen") {
+          result = await recloseApprovedReopen(request);
+        } else {
+          result = await extendReopenRequest({
+            ...request,
+            additionalHours: "additionalHours" in body ? body.additionalHours : undefined,
+            addModules: "addModules" in body ? body.addModules : undefined,
+          });
+        }
+        return {
+          ok: true,
+          ...(typeof result === "object" && result !== null ? result : {}),
+          requestId: body.requestId,
+          status:
+            name === "withdraw_period_reopen"
+              ? "withdrawn"
+              : name === "reclose_period_reopen"
+                ? "reclosed"
+                : "extended",
+          href: "/admin/setup/close",
+        };
+      },
+    }),
+  ),
+];
+
 export const LEDGER_CLOSE_TOOLS: ApplicationToolDefinition[] = [
+  ...CLOSE_SETUP_TOOLS,
   definition({
     name: "preview_period_end_journals",
     title: "Preview Period End Journals",

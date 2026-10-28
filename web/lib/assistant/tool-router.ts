@@ -210,6 +210,12 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   list_currencies: "multiCurrency",
 
   // Ledger and close commands.
+  list_close_setup_configuration: "ledger",
+  save_fiscal_calendar: "ledger",
+  generate_accounting_periods: "ledger",
+  withdraw_period_reopen: "ledger",
+  reclose_period_reopen: "ledger",
+  extend_period_reopen: "ledger",
   create_recurring_schedule: "ledger",
   pin_account_group: "ledger",
   unpin_account_group: "ledger",

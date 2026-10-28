@@ -84,6 +84,150 @@ test(
           executeApplicationTool(applicationTool(name)!, ctx, input),
         );
 
+      const closeContext = ctxFor(org.orgId, actors.adminId, ["periods.manage"]);
+      const blueprintDraft = {
+        name: "Ledger close blueprint",
+        steps: [
+          {
+            key: "review-ledger",
+            title: "Review ledger",
+            workstream: "gl",
+            taskType: "check",
+            completionMode: "manual",
+            gateType: "hard",
+            description: "Review the general ledger close balances.",
+            dueOffsetBusinessDays: 1,
+            evidenceRequired: true,
+            defaultOwnerRoleKey: null,
+            applicability: {},
+            dependsOn: [],
+          },
+        ],
+        idempotencyKey: "ledger-close-blueprint-feature-001",
+      };
+      await withBypassContext(() =>
+        db.execute(sql`
+          update orgs
+             set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,advancedClose}', 'false'::jsonb, true)
+           where id = ${org.orgId}
+        `),
+      );
+      await assert.rejects(
+        run("save_close_blueprint", closeContext, blueprintDraft),
+        /needs advancedClose feature/i,
+      );
+      await withBypassContext(() =>
+        db.execute(sql`
+          update orgs
+             set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,advancedClose}', 'true'::jsonb, true)
+           where id = ${org.orgId}
+        `),
+      );
+
+      const initialCalendar = await withBypassContext(async () => {
+        const rows = await db.execute<{
+          id: string;
+          name: string;
+          cadence: string;
+          year_start_month: number;
+          week_starts_on: number;
+          anchor_date: string | null;
+          time_zone: string;
+          adjustment_period_enabled: boolean;
+          is_default: boolean;
+          is_active: boolean;
+          config: Record<string, unknown>;
+        }>(
+          sql`select * from fiscal_calendars where org_id = ${org.orgId} and is_default and is_active limit 1`,
+          "objects",
+        );
+        return rows[0];
+      });
+      assert.ok(initialCalendar);
+      const calendarCadences = [
+        "monthly",
+        "four_four_five",
+        "four_five_four",
+        "five_four_four",
+        "thirteen_period",
+        "custom",
+      ] as const;
+      assert.ok(
+        calendarCadences.includes(initialCalendar.cadence as (typeof calendarCadences)[number]),
+      );
+      const calendarInput = {
+        id: initialCalendar.id,
+        name: "Ledger tool fiscal calendar",
+        cadence: initialCalendar.cadence as (typeof calendarCadences)[number],
+        yearStartMonth: initialCalendar.year_start_month,
+        weekStartsOn: initialCalendar.week_starts_on,
+        anchorDate: initialCalendar.anchor_date,
+        timeZone: initialCalendar.time_zone,
+        adjustmentPeriodEnabled: initialCalendar.adjustment_period_enabled,
+        isDefault: true,
+        isActive: true,
+        config: initialCalendar.config,
+        idempotencyKey: "ledger-save-calendar-001",
+      };
+      const savedCalendar = (await run("save_fiscal_calendar", closeContext, calendarInput)) as {
+        id: string;
+        replayed: boolean;
+      };
+      assert.equal(savedCalendar.replayed, false);
+      assert.equal(savedCalendar.id, initialCalendar.id);
+      const calendarRead = await withBypassContext(() =>
+        db.execute<{ name: string }>(
+          sql`select name from fiscal_calendars where id = ${savedCalendar.id} and org_id = ${org.orgId}`,
+          "objects",
+        ),
+      );
+      assert.equal(calendarRead[0]?.name, "Ledger tool fiscal calendar");
+      const auditCount = await withBypassContext(() =>
+        db.execute<{ count: string }>(
+          sql`select count(*)::text as count from audit_log
+               where org_id = ${org.orgId} and table_name = 'fiscal_calendars' and row_id = ${savedCalendar.id}`,
+          "objects",
+        ),
+      );
+      const calendarReplay = (await run("save_fiscal_calendar", closeContext, calendarInput)) as {
+        replayed: boolean;
+        id: string;
+      };
+      assert.equal(calendarReplay.replayed, true);
+      assert.equal(calendarReplay.id, savedCalendar.id);
+      const replayAuditCount = await withBypassContext(() =>
+        db.execute<{ count: string }>(
+          sql`select count(*)::text as count from audit_log
+               where org_id = ${org.orgId} and table_name = 'fiscal_calendars' and row_id = ${savedCalendar.id}`,
+          "objects",
+        ),
+      );
+      assert.equal(replayAuditCount[0]?.count, auditCount[0]?.count);
+      const closeConfiguration = (await run(
+        "list_close_setup_configuration",
+        closeContext,
+        {},
+      )) as {
+        calendars: Array<{ id: string; name: string }>;
+      };
+      assert.equal(
+        closeConfiguration.calendars.find((calendar) => calendar.id === savedCalendar.id)?.name,
+        "Ledger tool fiscal calendar",
+      );
+      await assert.rejects(
+        run("save_fiscal_calendar", ctxFor(org.orgId, actors.adminId, []), calendarInput),
+        /forbidden/i,
+      );
+      const foreignCloseConfiguration = (await run(
+        "list_close_setup_configuration",
+        ctxFor(foreign.orgId, foreignActors.adminId, ["periods.manage"]),
+        {},
+      )) as { calendars: Array<{ id: string }> };
+      assert.equal(
+        foreignCloseConfiguration.calendars.some((calendar) => calendar.id === savedCalendar.id),
+        false,
+      );
+
       const first = (await run("pin_account_group", context, {
         groupId,
         accountId,
