@@ -4,7 +4,6 @@ import { can } from "../authz";
 import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import {
   listBillableFieldTickets,
-  listBillingRequests,
   cancelBillingRequest,
   BillingRequestValidationError,
 } from "../billing-requests";
@@ -16,9 +15,7 @@ import {
 } from "../invoice-backup";
 import { isRendererUnavailable } from "../api/pdf-renderer";
 import {
-  BillingRequestAmountError,
   BillingRequestBackupNotReadyError,
-  createProjectBillingRequest,
   generateBillingRequestBackup,
 } from "../billing-request-actions";
 import { createInvoiceFromBillingRequest } from "../billing-request-invoice";
@@ -26,7 +23,6 @@ import { assertApplicationPermission } from "./context";
 import { ApplicationError, conflict, invalidInput, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 import { listRecordDrawerHref } from "../cross-module-drawer-links";
-import { projectBillingRequestBody } from "../billing-request-schemas";
 
 const UUID = z
   .string()
@@ -85,32 +81,6 @@ function settleBillingRequest(error: unknown): never {
 
 export const SALES_BILLING_REQUEST_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
   definition({
-    name: "list_project_billing_requests",
-    title: "List Project Billing Requests",
-    description:
-      "List billing requests for a project before preparing or cancelling an invoice. Find the project id with project reads.",
-    inputSchema: z.object({ projectId: UUID }),
-    readOnly: true,
-    destructive: false,
-    openWorld: false,
-    assistantConfirmation: "never",
-    featureKey: "projects",
-    visibleTo: visible("projects.read"),
-    execute: async (context, input) => {
-      assertApplicationPermission(context, "projects.read");
-      try {
-        const requests = await listBillingRequests(
-          context.authz.user.orgId,
-          input.projectId,
-          context.authz.allowedSubsidiaryIds,
-        );
-        return { ok: true, requests, href: `/projects?project=${input.projectId}` };
-      } catch (error) {
-        settleBillingRequest(error);
-      }
-    },
-  }),
-  definition({
     name: "list_billable_field_tickets",
     title: "List Billable Field Tickets",
     description:
@@ -131,34 +101,6 @@ export const SALES_BILLING_REQUEST_APPLICATION_TOOLS: ApplicationToolDefinition[
           context.authz.allowedSubsidiaryIds,
         );
         return { ok: true, fieldTickets, href: `/projects?project=${input.projectId}` };
-      } catch (error) {
-        settleBillingRequest(error);
-      }
-    },
-  }),
-  definition({
-    name: "create_project_billing_request",
-    title: "Create Project Billing Request",
-    description:
-      "Create a billing request for an active project, choosing progress or final billing and its configured basis. Find the project id with project reads and use the returned request id for conversion.",
-    inputSchema: projectBillingRequestBody.extend({ idempotencyKey: KEY }),
-    readOnly: false,
-    destructive: false,
-    openWorld: false,
-    assistantConfirmation: "always",
-    featureKey: "projects",
-    visibleTo: visible("projects.manage"),
-    execute: async (context, input) => {
-      assertApplicationPermission(context, "projects.manage");
-      try {
-        const { idempotencyKey: _key, ...body } = input;
-        const created = await createProjectBillingRequest(
-          context.authz.user.orgId,
-          context.authz.user.id,
-          body,
-          context.authz.allowedSubsidiaryIds,
-        );
-        return { ok: true, ...created, href: `/projects?project=${input.projectId}` };
       } catch (error) {
         settleBillingRequest(error);
       }

@@ -9,10 +9,6 @@ import {
   saveQuoteTerm,
 } from "@openbooks/engine/billing/quote-to-cash";
 import { listActiveSubscriptionPlans } from "@openbooks/engine/billing/quote-to-cash-read";
-import {
-  sendQuoteSignatureRequest,
-  voidQuoteSignatureRequest,
-} from "../quote-to-cash/signature-actions";
 import { assertApplicationPermission } from "./context";
 import { ApplicationError, conflict, invalidInput, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
@@ -222,89 +218,6 @@ export const SALES_QUOTE_TO_CASH_APPLICATION_TOOLS: ApplicationToolDefinition[] 
           input.termId,
           context.authz.allowedSubsidiaryIds,
         );
-        return { ok: true, ...result, href: listRecordDrawerHref("quote", input.quoteId) };
-      } catch (error) {
-        settleQuoteCash(error);
-      }
-    },
-  }),
-  definition({
-    name: "send_quote_for_signature",
-    title: "Send Quote For Signature",
-    description:
-      "Create a signature request and email its link to the named signer when organization email is configured. Use preview_quote_cash_terms to confirm the quote and its recurring value; provide the public OpenBooks origin for the returned sign link.",
-    inputSchema: z.object({
-      quoteId: UUID,
-      signerName: z
-        .string()
-        .min(1)
-        .max(300)
-        .describe("Signer name shown in the signature request."),
-      signerEmail: z
-        .string()
-        .max(320)
-        .regex(/^[^@\s]+@[^@\s]+\.[^@\s]+$/)
-        .describe("Signer email address."),
-      expiresInDays: z
-        .number()
-        .int()
-        .nullable()
-        .optional()
-        .describe("Optional expiry interval in days."),
-      publicOrigin: z
-        .string()
-        .max(2048)
-        .regex(/^https?:\/\/[^/\s?#]+$/)
-        .describe("Public OpenBooks origin, such as https://erp.example.com."),
-      idempotencyKey: KEY,
-    }),
-    readOnly: false,
-    destructive: false,
-    openWorld: true,
-    assistantConfirmation: "always",
-    featureKey: "quoteToCash",
-    visibleTo: visible("estimates.create"),
-    execute: async (context, input) => {
-      assertApplicationPermission(context, "estimates.create");
-      const origin = new URL(input.publicOrigin);
-      if (
-        origin.pathname !== "/" ||
-        origin.search ||
-        origin.hash ||
-        !["http:", "https:"].includes(origin.protocol)
-      )
-        throw invalidInput("publicOrigin must be an HTTP(S) origin without a path.");
-      try {
-        const sent = await sendQuoteSignatureRequest({
-          authz: context.authz,
-          quoteId: input.quoteId,
-          signerName: input.signerName,
-          signerEmail: input.signerEmail,
-          expiresInDays: input.expiresInDays,
-          request: new Request(`${origin.origin}/api/quote-signature-command`),
-        });
-        return { ok: true, ...sent, href: listRecordDrawerHref("quote", input.quoteId) };
-      } catch (error) {
-        settleQuoteCash(error);
-      }
-    },
-  }),
-  definition({
-    name: "cancel_quote_signature_request",
-    title: "Cancel Quote Signature Request",
-    description:
-      "Void all open signature links for a quote so they can no longer be used. Find the quote id with get_record; a replacement request can then be sent.",
-    inputSchema: z.object({ quoteId: UUID, idempotencyKey: KEY }),
-    readOnly: false,
-    destructive: true,
-    openWorld: false,
-    assistantConfirmation: "always",
-    featureKey: "quoteToCash",
-    visibleTo: visible("estimates.create"),
-    execute: async (context, input) => {
-      assertApplicationPermission(context, "estimates.create");
-      try {
-        const result = await voidQuoteSignatureRequest(context.authz, input.quoteId);
         return { ok: true, ...result, href: listRecordDrawerHref("quote", input.quoteId) };
       } catch (error) {
         settleQuoteCash(error);
