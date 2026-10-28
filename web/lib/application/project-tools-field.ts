@@ -63,7 +63,6 @@ function settleFieldTicket(error: unknown): never {
   if (error instanceof FieldTicketNotFoundError) throw notFound("field ticket");
   if (error instanceof FieldTicketError) {
     const status = "status" in error && typeof error.status === "number" ? error.status : 422;
-    if (status === 404) throw notFound("field ticket");
     if (status === 409)
       throw conflict(error.message, {
         ...(error instanceof Error

@@ -308,13 +308,13 @@ export const PROJECT_PROPERTY_TOOLS: ApplicationToolDefinition[] = [
       idempotencyKey: KEY,
     }),
     execute: async (context, input) => {
-      const result = await deleteManagedProperty(
+      await deleteManagedProperty(
         context.authz.user.orgId,
         context.authz.user.id,
         context.authz.allowedSubsidiaryIds,
         input.propertyId,
       );
-      return { ok: true, ...(result as object), href: "/property-management" };
+      return { ok: true, href: "/property-management" };
     },
   }),
   propertyWrite({
@@ -388,13 +388,13 @@ export const PROJECT_PROPERTY_TOOLS: ApplicationToolDefinition[] = [
     destructive: true,
     inputSchema: z.object({ unitId: UUID.describe("Property unit id."), idempotencyKey: KEY }),
     execute: async (context, input) => {
-      const result = await deletePropertyUnit(
+      await deletePropertyUnit(
         context.authz.user.orgId,
         context.authz.user.id,
         context.authz.allowedSubsidiaryIds,
         input.unitId,
       );
-      return { ok: true, ...(result as object), href: "/property-management" };
+      return { ok: true, href: "/property-management" };
     },
   }),
   propertyWrite({
@@ -464,6 +464,8 @@ export const PROJECT_PROPERTY_TOOLS: ApplicationToolDefinition[] = [
       const result = await createPropertyLease({
         ...common(context),
         ...data,
+        securityDepositRequired: data.securityDepositRequired ?? undefined,
+        lateFeeValue: data.lateFeeValue ?? undefined,
         requestId: context.requestId,
       });
       return { ok: true, ...result, href: "/property-management" };
@@ -537,13 +539,13 @@ export const PROJECT_PROPERTY_TOOLS: ApplicationToolDefinition[] = [
     destructive: true,
     inputSchema: z.object({ leaseId: UUID, idempotencyKey: KEY }),
     execute: async (context, input) => {
-      const result = await cancelPropertyLease(
+      await cancelPropertyLease(
         context.authz.user.orgId,
         context.authz.user.id,
         context.authz.allowedSubsidiaryIds,
         input.leaseId,
       );
-      return { ok: true, ...result, href: "/property-management" };
+      return { ok: true, href: "/property-management" };
     },
   }),
   propertyWrite({
@@ -565,7 +567,7 @@ export const PROJECT_PROPERTY_TOOLS: ApplicationToolDefinition[] = [
       idempotencyKey: KEY,
     }),
     execute: async (context, input) => {
-      const result = await terminatePropertyLease(
+      await terminatePropertyLease(
         context.authz.user.orgId,
         context.authz.user.id,
         context.authz.allowedSubsidiaryIds,
@@ -573,7 +575,7 @@ export const PROJECT_PROPERTY_TOOLS: ApplicationToolDefinition[] = [
         input.terminatedOn,
         input.reason,
       );
-      return { ok: true, ...result, href: "/property-management" };
+      return { ok: true, href: "/property-management" };
     },
   }),
   propertyWrite({
@@ -810,7 +812,6 @@ export const PROJECT_PROPERTY_TOOLS: ApplicationToolDefinition[] = [
       const result = await recordSecurityDeposit({
         ...common(context),
         ...data,
-        requestId: context.requestId,
       });
       return { ok: true, ...result, href: "/property-management" };
     },
@@ -841,7 +842,6 @@ export const PROJECT_PROPERTY_TOOLS: ApplicationToolDefinition[] = [
         transactionId: input.transactionId,
         occurredOn: input.occurredOn,
         reason: input.reason,
-        requestId: context.requestId,
       });
       return { ok: true, ...result, href: "/property-management" };
     },
@@ -921,13 +921,13 @@ export const PROJECT_PROPERTY_TOOLS: ApplicationToolDefinition[] = [
     destructive: true,
     inputSchema: z.object({ poolId: UUID, idempotencyKey: KEY }),
     execute: async (context, input) => {
-      const result = await cancelCamPool(
+      await cancelCamPool(
         context.authz.user.orgId,
         context.authz.user.id,
-        input.poolId,
         context.authz.allowedSubsidiaryIds,
+        input.poolId,
       );
-      return { ok: true, ...result, href: "/property-management" };
+      return { ok: true, href: "/property-management" };
     },
   }),
   propertyWrite({
@@ -948,14 +948,14 @@ export const PROJECT_PROPERTY_TOOLS: ApplicationToolDefinition[] = [
       idempotencyKey: KEY,
     }),
     execute: async (context, input) => {
-      const result = await reopenFinalizedCamPool(
+      await reopenFinalizedCamPool(
         context.authz.user.orgId,
         context.authz.user.id,
+        context.authz.allowedSubsidiaryIds,
         input.poolId,
         input.reason,
-        context.authz.allowedSubsidiaryIds,
       );
-      return { ok: true, ...result, href: "/property-management" };
+      return { ok: true, href: "/property-management" };
     },
   }),
   propertyWrite({
@@ -969,8 +969,8 @@ export const PROJECT_PROPERTY_TOOLS: ApplicationToolDefinition[] = [
       const result = await finalizeCamPool(
         context.authz.user.orgId,
         context.authz.user.id,
-        input.poolId,
         context.authz.allowedSubsidiaryIds,
+        input.poolId,
       );
       return { ok: true, ...result, href: "/property-management" };
     },
@@ -986,9 +986,9 @@ export const PROJECT_PROPERTY_TOOLS: ApplicationToolDefinition[] = [
       const result = await billCamReconciliation(
         context.authz.user.orgId,
         context.authz.user.id,
-        input.poolId,
-        input.invoiceDate ?? null,
         context.authz.allowedSubsidiaryIds,
+        input.poolId,
+        input.invoiceDate ?? undefined,
       );
       return { ok: true, ...result, href: "/property-management" };
     },

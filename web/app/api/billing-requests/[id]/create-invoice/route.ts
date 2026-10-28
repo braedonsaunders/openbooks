@@ -23,7 +23,7 @@ async function createInvoiceFromBillingRequest(gate: Authz, id: string) {
     return NextResponse.json({
       documentId: result.id,
       documentNumber: result.documentNumber,
-      backup,
+      backup: result.backup,
     });
   } catch (e) {
     if (e instanceof BillingError && e.message === "Billing request not found")

@@ -197,7 +197,7 @@ export async function createConstructionSovLine(
         "objects",
       );
       const id = created[0]?.id;
-      if (!id) throw new ConstructionBillingError("The schedule line was not saved", 409);
+      if (!id) throw new ConstructionBillingError("The schedule line was not saved");
       await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${actor.orgId}, 'sov_lines', ${id}, 'insert', ${JSON.stringify({ after: { projectId: input.projectId, itemNo: input.itemNo ?? null, description, scheduledValue, retainagePercent, incomeAccountId } })}::jsonb, ${actor.actorId})`);
       return id;
@@ -224,7 +224,7 @@ export async function updateConstructionSovLine(
         sql`select * from sov_lines where id = ${input.id} and org_id = ${actor.orgId} and project_id = ${input.projectId} for update`,
         "objects",
       );
-      if (!before[0]) throw new ConstructionBillingError("Schedule line not found", 404);
+      if (!before[0]) throw new ConstructionBillingError("Schedule line not found");
       const stored = before[0];
       const used = await tx.execute(
         sql`select 1 from pay_application_lines pal
@@ -277,7 +277,7 @@ export async function updateConstructionSovLine(
             "objects",
           );
           if (saved.length !== 1)
-            throw new ConstructionBillingError("Schedule line changed; reload and retry", 409);
+            throw new ConstructionBillingError("Schedule line changed; reload and retry");
           await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${actor.orgId}, 'sov_lines', ${input.id}, 'income_account_update', ${JSON.stringify({ before: { incomeAccountId: stored.income_account_id }, after: { incomeAccountId } })}::jsonb, ${actor.actorId})`);
         }
@@ -317,7 +317,7 @@ export async function updateConstructionSovLine(
         "objects",
       );
       if (after.length !== 1)
-        throw new ConstructionBillingError("Schedule line changed; reload and retry", 409);
+        throw new ConstructionBillingError("Schedule line changed; reload and retry");
       await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${actor.orgId}, 'sov_lines', ${input.id}, 'update', ${JSON.stringify({ before: stored, after: after[0] })}::jsonb, ${actor.actorId})`);
     }),
@@ -336,7 +336,7 @@ export async function deleteConstructionSovLine(
         sql`select * from sov_lines where id = ${id} and org_id = ${actor.orgId} and project_id = ${projectId} for update`,
         "objects",
       );
-      if (!before[0]) throw new ConstructionBillingError("Schedule line not found", 404);
+      if (!before[0]) throw new ConstructionBillingError("Schedule line not found");
       const used = await tx.execute(
         sql`select 1 from pay_application_lines pal
       join pay_applications pa on pa.id = pal.pay_application_id and pa.org_id = pal.org_id
@@ -352,7 +352,7 @@ export async function deleteConstructionSovLine(
         "objects",
       );
       if (deleted.length !== 1)
-        throw new ConstructionBillingError("Schedule line changed; reload and retry", 409);
+        throw new ConstructionBillingError("Schedule line changed; reload and retry");
       await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${actor.orgId}, 'sov_lines', ${id}, 'delete', ${JSON.stringify({ before: before[0] })}::jsonb, ${actor.actorId})`);
     }),
@@ -424,7 +424,7 @@ export async function createConstructionChangeOrder(
         "objects",
       );
       const id = created[0]?.id;
-      if (!id) throw new ConstructionBillingError("Change order was not saved", 409);
+      if (!id) throw new ConstructionBillingError("Change order was not saved");
       await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${actor.orgId}, 'change_orders', ${id}, 'insert', ${JSON.stringify({ after: { projectId: input.projectId, number, description: input.description ?? null, amount, targetSovLineId, incomeAccountId, status: "draft" } })}::jsonb, ${actor.actorId})`);
       return id;
@@ -455,7 +455,7 @@ export async function voidConstructionChangeOrder(
         "objects",
       );
       if (updated.length !== 1)
-        throw new ConstructionBillingError("Change order changed; reload and retry", 409);
+        throw new ConstructionBillingError("Change order changed; reload and retry");
       await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${actor.orgId}, 'change_orders', ${id}, 'void', ${JSON.stringify({ before: { status: "draft" }, after: { status: "void" } })}::jsonb, ${actor.actorId})`);
     }),
