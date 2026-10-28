@@ -16,7 +16,7 @@ import {
   voidFiling,
   type FormType,
 } from "@openbooks/engine/compliance/information-returns";
-import { can } from "../authz";
+import { can, guardSubsidiaryScope } from "../authz";
 import { isFeatureEnabled } from "../features";
 import { loadFiling, loadFilings, loadInformationReturnFilingScope } from "../compliance";
 import { assertApplicationPermission } from "./context";
@@ -31,7 +31,6 @@ import {
   actOnComplianceEvidence,
   requestBodySchema as certificateActionBodySchema,
 } from "@/app/api/compliance/records/[id]/route";
-import { guardSubsidiaryScope } from "../authz";
 import { loadLienWaivers } from "../compliance";
 import {
   createLienWaiver,

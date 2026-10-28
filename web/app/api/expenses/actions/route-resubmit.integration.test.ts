@@ -26,9 +26,9 @@ registerHooks({
       return virtual(`
       export async function getAuthz() {
         const s = globalThis.__expenseActionsResubmitState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: ['expenses.create', 'ap.post'], allowedSubsidiaryIds: null };
+        return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['expenses.create', 'ap.post']), allowedSubsidiaryIds: null };
       }
-      export function can(authz, permission) { return authz.permissions.includes(permission) }
+      export function can(authz, permission) { return authz.permissions.has(permission) }
       export function guardSubsidiaryScope() { return null }
       export { subsidiaryScopeAllows } from '${root}engine/src/organization/subsidiary-scope.ts'
     `);

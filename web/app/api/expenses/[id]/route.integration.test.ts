@@ -40,10 +40,14 @@ registerHooks({
     if (
       specifier === "@openbooks/engine/platform/db" &&
       (context.parentURL?.endsWith("/web/lib/expenses.ts") ||
+        decodeURIComponent(context.parentURL ?? "").endsWith(
+          "/web/lib/expense-report-actions.ts",
+        ) ||
         decodeURIComponent(context.parentURL ?? "").endsWith("/web/app/api/expenses/[id]/route.ts"))
     )
       return virtual(`
-      import { db as realDb } from ${JSON.stringify(root + "engine/src/platform/db.ts")};
+      import { db as realDb, withOrgTransaction } from ${JSON.stringify(root + "engine/src/platform/db.ts")};
+      export { withOrgTransaction };
       export const db = new Proxy(realDb, { get(target, key) {
         if (key !== 'execute') return Reflect.get(target, key);
         return async (query, mode) => {

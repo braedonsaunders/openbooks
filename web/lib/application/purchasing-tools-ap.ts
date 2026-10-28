@@ -12,12 +12,7 @@ import {
   takeMailboxOwnership,
   updateMailbox,
 } from "@openbooks/engine/payables/ap-capture-service";
-import {
-  InboxError,
-  actOnInboxItem,
-  listInbox,
-  type InboxKind,
-} from "@openbooks/engine/inbox/runtime";
+import { listInbox, type InboxKind } from "@openbooks/engine/inbox/runtime";
 import { can } from "../authz";
 import { inboxContext, INBOX_FILTER_KINDS, toInboxNoticeViews } from "../inbox-context";
 import { findVisibleApCapture, rejectApCapture, reprocessApCapture } from "../ap-capture-actions";
@@ -34,7 +29,6 @@ import { db } from "@openbooks/engine/platform/db";
 import { apCaptureSubsidiaryScope } from "@openbooks/engine/records/file-cabinet-access";
 import { apCaptureReviewBodySchema } from "@/app/api/ap-capture/[id]/route";
 import { reviewApCapture } from "../ap-capture-actions";
-import { TimeApprovalRefusal } from "../time-approval-refusal";
 
 const UUID = z.string().regex(UUID_RE).describe("UUID copied from the relevant capture record.");
 const IDEMPOTENCY_KEY = z
@@ -606,8 +600,9 @@ export const PURCHASING_AP_TOOLS: ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: () => true,
+    visibleTo: (authz) => can(authz, "assistant.use"),
     execute: async (context, input) => {
+      assertApplicationPermission(context, "assistant.use");
       const notices: Parameters<typeof toInboxNoticeViews>[0] = [];
       const filter = input.filter ?? "all";
       const kinds =
@@ -623,65 +618,6 @@ export const PURCHASING_AP_TOOLS: ApplicationToolDefinition[] = [
         items: filter === "overdue" ? items.filter((item) => item.priority === "overdue") : items,
         notices: toInboxNoticeViews(notices),
       };
-    },
-  }),
-  definition({
-    name: "act_on_inbox_item",
-    title: "Act on Inbox Item",
-    description:
-      "Complete one action displayed on a visible inbox item, such as an approval or task decision. Use the exact item id and action key returned by list_inbox_items; reasons are required when the item says so.",
-    inputSchema: z.object({
-      itemId: z.string().min(1).max(300).describe("Stable inbox item id from list_inbox_items."),
-      actionKey: z.string().min(1).max(80).describe("Action key listed on the inbox item."),
-      reason: z
-        .string()
-        .max(2000)
-        .optional()
-        .describe("Decision reason, required by some inbox actions."),
-      idempotencyKey: IDEMPOTENCY_KEY,
-    }),
-    readOnly: false,
-    destructive: true,
-    openWorld: false,
-    assistantConfirmation: "always",
-    visibleTo: () => true,
-    execute: async (context, input) => {
-      try {
-        await actOnInboxItem(
-          await inboxContext(context.authz),
-          input.itemId,
-          input.actionKey,
-          input.reason,
-        );
-      } catch (error) {
-        if (error instanceof InboxError) {
-          const status = error.code === "NOT_FOUND" ? 404 : 422;
-          throw new ApplicationError(
-            status === 404 ? "not_found" : "invalid_input",
-            error.message,
-            status,
-            { code: error.code },
-          );
-        }
-        if (error instanceof TimeApprovalRefusal) {
-          throw new ApplicationError(
-            error.status === 404
-              ? "not_found"
-              : error.status === 409
-                ? "conflict"
-                : "invalid_input",
-            error.message,
-            error.status,
-            {
-              code: error.code,
-              remedy: error.remedy,
-              ...(error.details ? { details: error.details } : {}),
-            },
-          );
-        }
-        throw error;
-      }
-      return { ok: true, id: input.itemId, status: "completed", href: "/inbox" };
     },
   }),
 ];

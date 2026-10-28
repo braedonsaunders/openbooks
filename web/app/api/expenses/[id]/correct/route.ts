@@ -1,141 +1,19 @@
-import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from "@/lib/api/error-response";
-import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
-import { DocumentVoidError } from "@openbooks/engine/ledger/document-void";
-import { correctPostedExpenseReport } from "@openbooks/engine/ledger/document-correction-editing";
-import { can, guardSubsidiaryScope } from "../../../../../lib/authz";
 import {
-  DocumentEditError,
-  requireDocumentEditRevision,
-  validateCorrectionReason,
-} from "@openbooks/engine/records/document-edit-policy";
-import type { ExpenseCorrectionBody } from "../../../../../lib/expense-edit";
-import { isUuid } from "../../../../../lib/list-params";
-import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z
-  .object({
-    // Omitted values reach the named revision/reason refusals below; a
-    // narrower schema either 400s before them or silently drops submitted
-    // edits (memo, lines) while still answering 201. The correction draft
-    // runs the same validation the draft PATCH runs.
-    amendmentReason: z.string().trim().min(1).optional(),
-    expectedUpdatedAt: z.string().min(1).optional(),
-    documentDate: z.string().optional(),
-    memo: z.string().nullable().optional(),
-    partyId: z.string().nullable().optional(),
-    paymentCardId: z.string().nullable().optional(),
-    extraDims: z.record(z.string(), z.unknown()).optional(),
-    custom: z.record(z.string(), z.unknown()).optional(),
-    lines: z.array(z.looseObject({})).optional(),
-  })
-  .refine((body) => Object.keys(body).length > 0, {
-    message: "At least one field must be provided.",
-  });
+  correctExpenseReport,
+  expenseReportCorrectionBodySchema,
+} from "../../../../../lib/expense-report-actions";
 
 export const runtime = "nodejs";
 
-/**
- * Correct a posted expense report — the expense half of the documents
- * correct contract (POST /api/documents/[id]/correct), in expense
- * vocabulary. The replacement draft starts as a faithful copy of the
- * posted source with the submitted edit body applied, and the source is
- * voided under control, atomically: a void that fails for any reason rolls
- * the replacement and its lineage back with it.
- *
- * Expense reports are absent from the generic DOC_KINDS map (they keep
- * their own drawer, edit validation, and permissions), so the generic
- * route answers 422 for them — this route is their dedicated correction
- * workflow.
- */
+/** Correct a posted report through its native replacement and controlled-void workflow. */
 export const POST = defineRoute({
   permission: "expenses.create",
   feature: "expenses",
-  body: POSTBodySchema1,
+  body: expenseReportCorrectionBodySchema,
   opaque: {
     extraDims: "segment dimensions are validated by name in prepareExpenseEdit",
     custom: "custom values are validated against the live definitions in prepareExpenseEdit",
   },
-  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
-    const params = Promise.resolve(routeParams as { id: string });
-    const gate = routeAuthz;
-    const user = gate.user;
-    const { id } = await params;
-    if (!isUuid(id)) return notFound("record");
-    const found = await db.execute<{
-      status: string;
-      subsidiaryId: string | null;
-      custom: Record<string, unknown> | null;
-      documentDate: string;
-    }>(
-      sql`
-        select status, subsidiary_id as "subsidiaryId", custom,
-               document_date as "documentDate"
-          from documents
-         where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}
-      `,
-      "objects",
-    );
-    const source = found[0];
-    if (!source) return notFound("record");
-    const denied = guardSubsidiaryScope(gate, source.subsidiaryId);
-    if (denied) return denied;
-    if (!can(gate, "expenses.create")) {
-      return NextResponse.json({ error: "missing permission: expenses.create" }, { status: 403 });
-    }
-    if (!can(gate, "ap.post")) {
-      return NextResponse.json({ error: "missing permission: ap.post" }, { status: 403 });
-    }
-    if (source.status !== "posted") {
-      return NextResponse.json(
-        { error: "only a posted expense report can be corrected" },
-        { status: 422 },
-      );
-    }
-
-    const body = routeBody as ExpenseCorrectionBody;
-    try {
-      requireDocumentEditRevision(body.expectedUpdatedAt);
-      validateCorrectionReason(body.amendmentReason);
-    } catch (e) {
-      if (e instanceof DocumentEditError) {
-        return apiErrorResponse(e);
-      }
-      throw e;
-    }
-    try {
-      // The replacement draft (and its mandatory `reverses` evidence) plus the
-      // source's controlled void are one atomic unit under the source's row
-      // lock, rechecked against the caller's scope — the same guarantee as
-      // POST /api/documents/[id]/correct. Expense drafts are flow-silent until
-      // submitted, so there is no post-commit flow dispatch here.
-      const corrected = await correctPostedExpenseReport(
-        {
-          orgId: user.orgId,
-          userId: user.id,
-          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-          source: "ui",
-        },
-        { documentId: id, correction: body },
-      );
-      const outcome = { replacement: corrected.replacement, result: corrected.voidResult };
-      return NextResponse.json(
-        {
-          ok: true,
-          correctionId: outcome.replacement.id,
-          correctionNumber: outcome.replacement.documentNumber,
-          voidStatus: outcome.result.status,
-          requestId: outcome.result.runId,
-        },
-        { status: outcome.result.status === "pending_approval" ? 202 : 201 },
-      );
-    } catch (error) {
-      if (error instanceof DocumentEditError || error instanceof DocumentVoidError) {
-        return apiErrorResponse(error);
-      }
-      throw error;
-    }
-  },
+  handler: async ({ authz, params, body }) => correctExpenseReport(authz, params.id, body),
 });

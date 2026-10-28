@@ -79,6 +79,19 @@ async function seedApprovedExpense(
   return { documentId, revision };
 }
 
+async function seedExpenseEmployee(orgId: string, label: string): Promise<string> {
+  const employeeId = randomUUID();
+  await db.execute(sql`
+    insert into parties (id, org_id, kind, display_name, is_active, custom)
+    values (${employeeId}, ${orgId}, 'employee', ${label}, true, '{}'::jsonb)
+  `);
+  await db.execute(sql`
+    insert into employee_roles (id, org_id, party_id)
+    values (${randomUUID()}, ${orgId}, ${employeeId})
+  `);
+  return employeeId;
+}
+
 async function seedApprovedPurchaseOrder(
   orgId: string,
   actorId: string,
@@ -189,6 +202,224 @@ test(
     }
   },
 );
+
+test("expense report commands use the native writer and lifecycle", { skip: !DB }, async () => {
+  const first = await withBypassContext(() => createScratchOrg());
+  const second = await withBypassContext(() => createScratchOrg());
+  try {
+    const firstActors = await withBypassContext(() => seedFlowActors(first.orgId));
+    const secondActors = await withBypassContext(() => seedFlowActors(second.orgId));
+    const employeeId = await withBypassContext(() =>
+      seedExpenseEmployee(first.orgId, "Expense command owner"),
+    );
+    await withBypassContext(() =>
+      db.execute(sql`
+        update orgs set settings = jsonb_set(
+          coalesce(settings, '{}'::jsonb), '{features}', '{"expenses":true}'::jsonb, true)
+        where id in (${first.orgId}, ${second.orgId})
+      `),
+    );
+    const authorized = context(first.orgId, firstActors.adminId, ["expenses.create", "ap.post"]);
+    const run = (ctx: ApplicationContext, name: string, input: Record<string, unknown>) =>
+      withOrgContext(ctx.authz.user.orgId, () =>
+        executeApplicationTool(applicationTool(name)!, ctx, input),
+      );
+    const createKey = randomUUID();
+    const createInput = {
+      idempotencyKey: createKey,
+      documentDate: first.date,
+      partyId: employeeId,
+      memo: "Travel expense",
+      lines: [
+        {
+          accountId: first.accounts.cogs,
+          amount: "12.50",
+          quantity: "1",
+          unitPrice: "12.50",
+          description: "Travel meal",
+          settlementType: "out_of_pocket",
+        },
+      ],
+    };
+
+    await assert.rejects(
+      run(context(first.orgId, firstActors.adminId, []), "create_expense_report", {
+        ...createInput,
+        idempotencyKey: randomUUID(),
+      }),
+      /forbidden/,
+    );
+
+    const created = (await run(authorized, "create_expense_report", createInput)) as {
+      id: string;
+      status: string;
+      replayed: boolean;
+    };
+    assert.equal(created.replayed, false);
+    assert.equal(created.status, "draft");
+    const createdRead = await withOrgContext(first.orgId, () =>
+      loadExpenseReport(created.id, first.orgId, null, ALL_EXPENSE_REPORTS),
+    );
+    assert.equal(createdRead?.doc.status, "draft");
+    assert.equal(createdRead?.lines.length, 1);
+
+    const replay = (await run(authorized, "create_expense_report", createInput)) as {
+      replayed: boolean;
+    };
+    assert.equal(replay.replayed, true);
+
+    const updateInput = {
+      documentId: created.id,
+      expectedUpdatedAt: String(createdRead?.doc.updated_at),
+      idempotencyKey: "purchasing-expense-update-1",
+      memo: "Updated travel expense",
+      lines: [
+        {
+          accountId: first.accounts.cogs,
+          amount: "13.50",
+          quantity: "1",
+          unitPrice: "13.50",
+          description: "Updated travel meal",
+          settlementType: "out_of_pocket",
+        },
+      ],
+    };
+    const updated = (await run(authorized, "update_expense_report", updateInput)) as {
+      replayed: boolean;
+    };
+    assert.equal(updated.replayed, false);
+    const updatedRead = await withOrgContext(first.orgId, () =>
+      loadExpenseReport(created.id, first.orgId, null, ALL_EXPENSE_REPORTS),
+    );
+    assert.equal(updatedRead?.doc.memo, "Updated travel expense");
+    assert.equal(updatedRead?.doc.total, "13.5000");
+    assert.equal(
+      ((await run(authorized, "update_expense_report", updateInput)) as { replayed: boolean })
+        .replayed,
+      true,
+    );
+
+    await assert.rejects(
+      run(
+        context(second.orgId, secondActors.adminId, ["expenses.create", "ap.post"]),
+        "update_expense_report",
+        { ...updateInput, idempotencyKey: "purchasing-expense-cross-org" },
+      ),
+      (error: unknown) => (error as { code?: string }).code === "not_found",
+    );
+
+    await assert.rejects(
+      run(authorized, "submit_document", {
+        documentId: created.id,
+        idempotencyKey: "purchasing-expense-generic-submit",
+      }),
+      /dedicated lifecycle/,
+    );
+    await run(authorized, "submit_expense_report", {
+      documentId: created.id,
+      idempotencyKey: "purchasing-expense-submit-1",
+    });
+    const submitted = await withOrgContext(first.orgId, () =>
+      loadExpenseReport(created.id, first.orgId, null, ALL_EXPENSE_REPORTS),
+    );
+    assert.equal(submitted?.doc.status, "approved");
+    await assert.rejects(
+      run(authorized, "post_document", {
+        documentId: created.id,
+        idempotencyKey: "purchasing-expense-generic-post",
+      }),
+      /dedicated lifecycle/,
+    );
+    await run(authorized, "post_expense_report", {
+      documentId: created.id,
+      idempotencyKey: "purchasing-expense-post-1",
+    });
+    const posted = await withOrgContext(first.orgId, () =>
+      loadExpenseReport(created.id, first.orgId, null, ALL_EXPENSE_REPORTS),
+    );
+    assert.equal(posted?.doc.status, "posted");
+
+    await assert.rejects(
+      run(authorized, "correct_document", {
+        documentId: created.id,
+        correction: {
+          amendmentReason: "Correct the report after final receipts arrived",
+          expectedUpdatedAt: String(posted?.doc.updated_at),
+        },
+        idempotencyKey: "purchasing-expense-generic-correct",
+      }),
+      /dedicated correction workflow/,
+    );
+    const corrected = (await run(authorized, "correct_expense_report", {
+      documentId: created.id,
+      expectedUpdatedAt: String(posted?.doc.updated_at),
+      amendmentReason: "Correct the report after final receipts arrived",
+      memo: "Corrected travel expense",
+      lines: [
+        {
+          accountId: first.accounts.cogs,
+          amount: "15.00",
+          quantity: "1",
+          unitPrice: "15.00",
+          description: "Corrected travel meal",
+          settlementType: "out_of_pocket",
+        },
+      ],
+      idempotencyKey: "purchasing-expense-correct-1",
+    })) as { id: string; status: string };
+    assert.equal(corrected.status, "draft");
+    const correctionRead = await withOrgContext(first.orgId, () =>
+      loadExpenseReport(corrected.id, first.orgId, null, ALL_EXPENSE_REPORTS),
+    );
+    assert.equal(correctionRead?.doc.status, "draft");
+    assert.equal(correctionRead?.doc.total, "15.0000");
+    const sourceRead = await withOrgContext(first.orgId, () =>
+      loadExpenseReport(created.id, first.orgId, null, ALL_EXPENSE_REPORTS),
+    );
+    assert.equal(sourceRead?.doc.status, "voided");
+
+    const deleteKey = randomUUID();
+    const deletable = (await run(authorized, "create_expense_report", {
+      ...createInput,
+      idempotencyKey: deleteKey,
+    })) as { id: string };
+    const deleteRead = await withOrgContext(first.orgId, () =>
+      loadExpenseReport(deletable.id, first.orgId, null, ALL_EXPENSE_REPORTS),
+    );
+    await run(authorized, "delete_expense_report", {
+      documentId: deletable.id,
+      expectedUpdatedAt: String(deleteRead?.doc.updated_at),
+      idempotencyKey: "purchasing-expense-delete-1",
+    });
+    assert.equal(
+      await withOrgContext(first.orgId, () =>
+        loadExpenseReport(deletable.id, first.orgId, null, ALL_EXPENSE_REPORTS),
+      ),
+      null,
+    );
+
+    await withBypassContext(() =>
+      db.execute(sql`
+        update orgs set settings = jsonb_set(settings, '{features}', '{"expenses":false}'::jsonb, true)
+        where id = ${first.orgId}
+      `),
+    );
+    const featureOffId = randomUUID();
+    await assert.rejects(
+      run(authorized, "create_expense_report", { ...createInput, idempotencyKey: featureOffId }),
+      /expense report not found/,
+    );
+    assert.equal(
+      await withOrgContext(first.orgId, () =>
+        loadExpenseReport(featureOffId, first.orgId, null, ALL_EXPENSE_REPORTS),
+      ),
+      null,
+    );
+  } finally {
+    await dropScratchOrg(first.orgId);
+    await dropScratchOrg(second.orgId);
+  }
+});
 
 test(
   "purchase-order receipt runs once and is visible through the native order read",

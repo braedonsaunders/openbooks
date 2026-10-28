@@ -283,7 +283,6 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   transfer_ap_capture_mailbox_ownership: "purchasing",
   list_ap_capture_inbound_messages: "purchasing",
   list_inbox_items: "purchasing",
-  act_on_inbox_item: "purchasing",
   create_direct_debit_run: "purchasing",
   update_vendor_compliance_settings: "purchasing",
 
@@ -709,7 +708,6 @@ export const MODULE_KEYWORDS: Record<string, string[]> = {
   propertyManagement: ["property", "lease", "tenant", "rent", "landlord", "rent roll"],
   subscriptionBilling: ["subscription", "mrr", "churn", "subscription plan"],
   fieldTickets: ["field ticket"],
-  subcontracts: ["subcontract", "subcontractor", "sub contract"],
   preBilling: ["wip", "prebill", "pre-bill", "schedule of values"],
   multiCurrency: ["currency", "fx", "forex", "exchange rate", "revalu", "consolidation"],
   multiSubsidiary: ["subsidiary", "subsidiaries", "consolidation", "eliminat"],

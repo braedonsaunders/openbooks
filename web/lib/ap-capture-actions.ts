@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { apCaptureReprocessJobId, enqueueApCapture } from "@openbooks/jobs";
-import { db, type SqlExecutor } from "@openbooks/engine/platform/db";
+import { db, withOrgTransaction, type SqlExecutor } from "@openbooks/engine/platform/db";
 import { lockScopeRows, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { apCaptureSubsidiaryScope } from "@openbooks/engine/records/file-cabinet-access";
 import { NextResponse } from "next/server";

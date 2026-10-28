@@ -130,6 +130,7 @@ export const PURCHASING_ORDER_TOOLS: ApplicationToolDefinition[] = [
     featureKey: "orders",
     execute: async (context, input) => {
       assertApplicationPermission(context, "purchase_orders.read");
+      assertApplicationPermission(context, "ap.create");
       const outcome = await convertApplicationOrder(context, {
         documentId: input.documentId,
         expectedKind: "purchase_order",
@@ -364,6 +365,7 @@ export const PURCHASING_ORDER_TOOLS: ApplicationToolDefinition[] = [
     visibleTo: (authz) => can(authz, "items.post"),
     featureKey: "dropShipping",
     execute: async (context, input) => {
+      assertApplicationPermission(context, "items.post");
       const scope = await dropShipRecordScope(
         context.authz.user.orgId,
         input.purchaseOrderId,

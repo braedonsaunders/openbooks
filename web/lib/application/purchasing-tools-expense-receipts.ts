@@ -18,6 +18,7 @@ import {
   EXPENSE_RECEIPT_MAX_FILES,
 } from "../expense-receipt-actions";
 import type { ApplicationContext } from "./context";
+import { assertApplicationPermission } from "./context";
 import { ApplicationError, forbidden, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 
@@ -38,6 +39,10 @@ const BASE64 = z
 async function expenseAccess(context: ApplicationContext, authority: "read" | "edit") {
   const scope = expenseGrantScope((permission) => can(context.authz, permission), authority);
   if (scope === null) throw forbidden(authority === "read" ? "expenses.read" : "expenses.create");
+  assertApplicationPermission(
+    context,
+    scope === "own" ? "expenses.self" : authority === "read" ? "expenses.read" : "expenses.create",
+  );
   return expenseAccessForScope(db, context.authz.user.orgId, context.authz.user.id, scope);
 }
 

@@ -138,7 +138,12 @@ const mockSources = new Map<string, string>([
       export async function loadExpenseReport(id, orgId) {
         return state.report
       }
+      export async function expenseReportCurrency() { return 'CAD' }
     `,
+  ],
+  [
+    "mock:route-expense-access",
+    `export async function expenseAccess() { return { scope: 'all' } }`,
   ],
 ]);
 
@@ -148,6 +153,7 @@ const mockUrls = new Map<string, string>([
   ["../../../../lib/feature-gates", "mock:feature-gates"],
   ["@/lib/feature-gates", "mock:feature-gates"],
   ["../../../../lib/expenses", "mock:expenses-loader"],
+  ["@/lib/expenses", "mock:expenses-loader"],
 ]);
 
 // Engine modules reach the database through relative imports as well; those
@@ -164,6 +170,18 @@ registerHooks({
     if (mocked) return { url: mocked, shortCircuit: true };
     if (specifier === "./authz" && context.parentURL?.endsWith("/web/lib/expense-access.ts")) {
       return { url: "mock:expense-authz", shortCircuit: true };
+    }
+    if (
+      specifier === "./expense-access" &&
+      context.parentURL?.endsWith("/web/lib/expense-report-actions.ts")
+    ) {
+      return { url: "mock:route-expense-access", shortCircuit: true };
+    }
+    if (
+      specifier === "./expenses" &&
+      context.parentURL?.endsWith("/web/lib/expense-report-actions.ts")
+    ) {
+      return { url: "mock:expenses-loader", shortCircuit: true };
     }
     const resolved = nextResolve(specifier, context);
     if (resolved.url === DATABASE_MODULE_URL) return { url: "mock:db", shortCircuit: true };

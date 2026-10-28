@@ -34,7 +34,7 @@ const REVISION = z
   .max(100)
   .describe("Exact updatedAt revision token copied from the subcontract read.");
 
-type CommandSchema = z.AnyZodObject;
+type CommandSchema = z.ZodObject;
 
 async function subcontractHrefId(
   orgId: string,
@@ -121,12 +121,14 @@ function makeSubcontractCommand(args: {
         throw new ApplicationError(code, message, status, payload);
       }
       const detail = await subcontractHrefId(orgId, context.authz, args.action, fields, payload);
+      const subcontractId = String(detail.subcontract.id);
+      const status = String(detail.subcontract.status);
       return {
         ok: true,
         ...payload,
         subcontract: detail,
-        status: detail.status,
-        href: `/subcontracts?id=${detail.id}`,
+        status,
+        href: `/subcontracts?id=${subcontractId}`,
       };
     },
   });
