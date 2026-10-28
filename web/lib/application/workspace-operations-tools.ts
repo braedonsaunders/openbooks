@@ -196,13 +196,15 @@ export const WORKSPACE_OPERATION_TOOLS: ApplicationToolDefinition[] = [
         settleSqlRefusal(error);
       }
       try {
-        return await runUserSql(input.sql, {
-          orgId: context.authz.user.orgId,
-          maxRows: Math.min(Math.max(Math.trunc(input.maxRows ?? 500) || 500, 1), 5_000),
-          timeoutMs: 30_000,
-          payrollRead: can(context.authz, "payroll.read"),
-          expenseRead: expenseScope(context.authz, "read") === "all",
-        });
+        return {
+          ...(await runUserSql(input.sql, {
+            orgId: context.authz.user.orgId,
+            maxRows: Math.min(Math.max(Math.trunc(input.maxRows ?? 500) || 500, 1), 5_000),
+            timeoutMs: 30_000,
+            payrollRead: can(context.authz, "payroll.read"),
+            expenseRead: expenseScope(context.authz, "read") === "all",
+          })),
+        };
       } catch (error) {
         if (error instanceof UserSqlRefusal) settleSqlRefusal(error);
         console.error("[query-console] execution failed", error);

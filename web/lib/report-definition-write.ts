@@ -51,7 +51,7 @@ export async function loadReportDefinitionRevision(
 export async function createReportDefinition(
   authz: Authz,
   input: ReportDefinitionInput,
-  idempotencyId = randomUUID(),
+  idempotencyId: string = randomUUID(),
 ): Promise<{ definition: Record<string, unknown>; replayed: boolean }> {
   if (!can(authz, "reports.create")) {
     throw forbidden("reports.create");

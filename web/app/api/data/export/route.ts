@@ -30,7 +30,7 @@ export const POST = defineRoute({
     none: "Data import and export are permission-gated and have no organization feature switch.",
   },
   body: exportBody,
-  handler: async ({ authz, body }) => {
+  handler: async ({ request: req, authz, body }) => {
     const resourceKey = String(body.resource ?? "");
     const format: ExportFormat | null = requestedExportFormat(body.format);
     if (format === null) {
@@ -41,7 +41,7 @@ export const POST = defineRoute({
     try {
       exportData = await readDataExport(authz, resourceKey, body.columns);
     } catch (error) {
-      return apiErrorResponse(error, { request: _req });
+      return apiErrorResponse(error, { request: req });
     }
     const cols = exportData.columns;
     const rows = exportData.rows;

@@ -13,7 +13,13 @@ import {
   snapshotReportAuthorization,
 } from "./report-execution-context";
 import { loadReportDefinition } from "./custom-reports";
-import { conflict, forbidden, invalidInput, notFound } from "./application/errors";
+import {
+  ApplicationError,
+  conflict,
+  forbidden,
+  invalidInput,
+  notFound,
+} from "./application/errors";
 
 export type CreateReportScheduleInput = {
   definitionId: string;
