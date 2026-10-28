@@ -416,15 +416,17 @@ const recordReader = (authz: Authz): boolean =>
   RECORD_READ_PERMISSIONS.some((permission) => can(authz, permission));
 const recordWriter = (authz: Authz): boolean =>
   RECORD_WRITE_PERMISSIONS.some((permission) => can(authz, permission));
-const documentActor = anyPermission(
-  "gl.post",
-  "ap.create",
-  "ap.post",
-  "ar.create",
-  "ar.post",
-  "ap.pay",
-  "ar.pay",
-);
+const DOCUMENT_ACTION_PERMISSIONS = [
+  ...new Set([
+    "ap.pay",
+    "ar.pay",
+    ...Array.from(RECORD_TYPE_BY_KEY.values())
+      .filter((recordType) => recordType.writer.kind === "document")
+      .flatMap((recordType) => [recordType.writePermission, recordType.postPermission])
+      .filter((permission): permission is string => permission !== null),
+  ]),
+];
+const documentActor = anyPermission(...DOCUMENT_ACTION_PERMISSIONS);
 
 /**
  * Canonical external capability catalog. MCP and the in-app assistant are
