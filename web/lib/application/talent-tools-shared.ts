@@ -1,5 +1,5 @@
 import "server-only";
-import { z, type ZodTypeAny } from "zod";
+import { z } from "zod";
 import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import { can } from "../authz";
 import { isFeatureEnabled } from "../features";
@@ -23,7 +23,7 @@ export const TALENT_IDEMPOTENCY_KEY = z
 const MAX_TOOL_STRING_LENGTH = 100_000;
 const MAX_TOOL_ARRAY_ITEMS = 1_000;
 
-function payloadSchema(bodySchema: ZodTypeAny | undefined, description: string): ZodTypeAny {
+function payloadSchema(bodySchema: z.ZodType | undefined, description: string): z.ZodType {
   if (!bodySchema) return z.object({}).describe(description);
   if (bodySchema instanceof z.ZodObject) {
     const describedShape = Object.fromEntries(
@@ -39,7 +39,7 @@ function payloadSchema(bodySchema: ZodTypeAny | undefined, description: string):
   return inputSchemaFor(bodySchema).describe(description);
 }
 
-function inputSchemaFor(schema: ZodTypeAny, propertyName?: string): ZodTypeAny {
+function inputSchemaFor(schema: z.ZodType, propertyName?: string): z.ZodType {
   if (propertyName && /^(?:id|.+Id)$/.test(propertyName)) return uuidInputFor(schema);
   if (schema instanceof z.ZodPipe) return inputSchemaFor(schema.in, propertyName);
   if (schema instanceof z.ZodOptional)
@@ -48,7 +48,7 @@ function inputSchemaFor(schema: ZodTypeAny, propertyName?: string): ZodTypeAny {
     return z.nullable(inputSchemaFor(schema.unwrap(), propertyName));
   if (schema instanceof z.ZodUnion) {
     return z.union(
-      schema.options.map((option) => inputSchemaFor(option)) as [ZodTypeAny, ...ZodTypeAny[]],
+      schema.options.map((option) => inputSchemaFor(option)) as [z.ZodType, ...z.ZodType[]],
     );
   }
   if (schema instanceof z.ZodIntersection)
@@ -72,7 +72,7 @@ function inputSchemaFor(schema: ZodTypeAny, propertyName?: string): ZodTypeAny {
       ),
     );
   }
-  const stringFormatSchema = schema as ZodTypeAny & {
+  const stringFormatSchema = schema as unknown as {
     _zod?: {
       def?: {
         format?: string;
@@ -99,7 +99,12 @@ function arrayBounds(schema: z.ZodArray): { minimum: number; maximum: number } {
   let minimum = 0;
   let maximum = MAX_TOOL_ARRAY_ITEMS;
   for (const check of checks) {
-    const definition = check._zod.def;
+    const definition = check._zod.def as unknown as {
+      check: string;
+      minimum: number;
+      maximum: number;
+      length: number;
+    };
     if (definition.check === "min_length") minimum = Math.max(minimum, definition.minimum);
     if (definition.check === "max_length") maximum = Math.min(maximum, definition.maximum);
     if (definition.check === "size_equals") {
@@ -110,7 +115,7 @@ function arrayBounds(schema: z.ZodArray): { minimum: number; maximum: number } {
   return { minimum, maximum };
 }
 
-function uuidInputFor(schema: ZodTypeAny): ZodTypeAny {
+function uuidInputFor(schema: z.ZodType): z.ZodType {
   if (schema instanceof z.ZodOptional) return z.optional(uuidInputFor(schema.unwrap()));
   if (schema instanceof z.ZodNullable) return z.nullable(uuidInputFor(schema.unwrap()));
   return TALENT_UUID;
@@ -132,13 +137,13 @@ export function talentCommand(args: {
   featureKey?: string;
   requiredFeatureKeys?: string[];
   permissionAnyOf?: string[];
-  idempotencyKeySchema?: ZodTypeAny;
+  idempotencyKeySchema?: z.ZodType;
   unrestrictedScope?: boolean;
   beforeInvoke?: (context: ApplicationContext) => Promise<void>;
   recordId?: { name: string; description: string };
   relatedId?: { name: string; description: string };
   payloadDescription?: string;
-  bodySchema?: ZodTypeAny;
+  bodySchema?: z.ZodType;
   validationStatus?: number;
   destructive?: boolean;
   openWorld?: boolean;
@@ -149,7 +154,7 @@ export function talentCommand(args: {
     payload: Record<string, unknown>,
   ) => Promise<Record<string, unknown>>;
 }): ApplicationToolDefinition {
-  const shape: Record<string, ZodTypeAny> = {
+  const shape: Record<string, z.ZodType> = {
     ...(args.recordId
       ? {
           [args.recordId.name]: TALENT_UUID.describe(args.recordId.description),

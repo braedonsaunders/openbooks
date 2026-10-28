@@ -557,7 +557,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     invoke: async (context, input) => ({
       feedback: (await retractFeedback({
         ...actor(context),
-        feedbackId: input.recordId!,
+        id: input.recordId!,
       })) as unknown as Record<string, unknown>,
     }),
   }),
@@ -709,7 +709,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
       invoke: async (context, input) => ({
         session: (await (action === "open" ? openCalibrationSession : closeCalibrationSession)({
           ...actor(context),
-          sessionId: input.recordId!,
+          id: input.recordId!,
         })) as unknown as Record<string, unknown>,
       }),
     }),
@@ -821,7 +821,7 @@ export const PERFORMANCE_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     href: performanceMutationHref,
     invoke: async (context, input, p) => {
       const body = p as { status?: string; notes?: string | null };
-      const common = { ...actor(context), planId: input.recordId! };
+      const common = { ...actor(context), id: input.recordId! };
       if (body.status)
         await setSuccessionPlanStatus({
           ...common,
