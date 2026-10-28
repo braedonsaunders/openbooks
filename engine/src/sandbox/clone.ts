@@ -1342,9 +1342,13 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       await pacer.afterStatement();
       await db.execute(sql`select openbooks_open_item_balances_rebuild(${opts.sandboxOrgId})`);
       await pacer.afterStatement();
+      // The search-index rebuild derives each document's terms and amounts
+      // from its own lines. Keep the normal planner available for those
+      // per-document lookups; the hash-join override above is for the
+      // organization-wide projection rebuilds.
+      await preferSetJoins(false);
       await db.execute(sql`select openbooks_search_index_rebuild(${opts.sandboxOrgId})`);
       await pacer.afterStatement();
-      await preferSetJoins(false);
       phases.mark("rebuilds");
       // Evidence for the clone authority asserted above (OM-13): one audit row
       // in the target org recording the provenance and scope of this copy, so
