@@ -14,6 +14,7 @@ const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("@openbooks/engine/testing/fixtures");
+const { FieldTicketError, loadFieldTicket } = await import("../field-tickets");
 const { loadWorkBreakdownTasks } = await import("../project-work-breakdown");
 const { listBudgetBaselines } = await import("@openbooks/engine/projects/budget-baselines");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
@@ -54,6 +55,26 @@ async function seedProject(org: { orgId: string; subsidiaryId: string; customerI
   `),
   );
   return projectId;
+}
+
+async function setFieldTicketFeatures(
+  orgId: string,
+  projects: boolean,
+  fieldTickets: boolean,
+): Promise<void> {
+  await withBypassContext(() =>
+    db.execute(sql`
+      update orgs
+         set settings = jsonb_set(
+           coalesce(settings, '{}'::jsonb),
+           '{features}',
+           coalesce(settings->'features', '{}'::jsonb) ||
+             jsonb_build_object('projects', ${projects}, 'fieldTickets', ${fieldTickets}),
+           true
+         )
+       where id = ${orgId}
+    `),
+  );
 }
 
 test(
@@ -165,3 +186,110 @@ test("project reads keep another organization's project hidden", { skip: !DB }, 
     await dropScratchOrg(second.orgId);
   }
 });
+
+test(
+  "field ticket draft commands use native create and delete services with scope and feature gates",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+      await setFieldTicketFeatures(org.orgId, true, true);
+      const projectId = await seedProject(org);
+      const baseContext = contextFor(org.orgId, actors.adminId, ["time.manage"]);
+      const manager: ApplicationContext = {
+        ...baseContext,
+        authz: {
+          ...baseContext.authz,
+          allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+        },
+      };
+      const run = (
+        name: string,
+        input: Record<string, unknown>,
+        context: ApplicationContext = manager,
+      ) =>
+        withOrgContext(org.orgId, () =>
+          executeApplicationTool(applicationTool(name)!, context, input),
+        );
+
+      const requestId = randomUUID();
+      const created = (await run("create_field_ticket", {
+        projectId,
+        idempotencyKey: requestId,
+      })) as {
+        id: string;
+        documentNumber: string;
+        status: string;
+        revision: string;
+        replayed: boolean;
+      };
+      assert.match(
+        created.id,
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+      assert.equal(created.status, "draft");
+      assert.equal(created.replayed, false);
+
+      const replay = (await run("create_field_ticket", {
+        projectId,
+        idempotencyKey: requestId,
+      })) as { id: string; replayed: boolean };
+      assert.equal(replay.id, created.id);
+      assert.equal(replay.replayed, true);
+
+      const persisted = await withOrgContext(org.orgId, () =>
+        loadFieldTicket(org.orgId, created.id, {
+          allowedSubsidiaryIds: manager.authz.allowedSubsidiaryIds,
+        }),
+      );
+      assert.equal(persisted.documentNumber, created.documentNumber);
+      assert.equal(persisted.projectId, projectId);
+      assert.equal(persisted.status, "draft");
+      assert.equal(persisted.revision, created.revision);
+
+      const noPermission = contextFor(org.orgId, actors.adminId, []);
+      await assert.rejects(
+        run("create_field_ticket", { projectId, idempotencyKey: randomUUID() }, noPermission),
+        /forbidden/,
+      );
+      const noSubsidiaries: ApplicationContext = {
+        ...manager,
+        authz: { ...manager.authz, allowedSubsidiaryIds: new Set() },
+      };
+      await assert.rejects(
+        run("create_field_ticket", { projectId, idempotencyKey: randomUUID() }, noSubsidiaries),
+        /subsidiary\.restricted/,
+      );
+
+      const deleted = (await run("delete_draft_field_ticket", {
+        ticketId: created.id,
+        expectedRevision: created.revision,
+        idempotencyKey: randomUUID(),
+      })) as { id: string };
+      assert.equal(deleted.id, created.id);
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          loadFieldTicket(org.orgId, created.id, {
+            allowedSubsidiaryIds: manager.authz.allowedSubsidiaryIds,
+          }),
+        ),
+        (error: unknown) =>
+          error instanceof FieldTicketError && /Ticket not found/.test(error.message),
+      );
+
+      await setFieldTicketFeatures(org.orgId, true, false);
+      await assert.rejects(
+        run("create_field_ticket", { projectId, idempotencyKey: randomUUID() }),
+        /field ticket not found/,
+      );
+      await setFieldTicketFeatures(org.orgId, false, true);
+      await assert.rejects(
+        run("create_field_ticket", { projectId, idempotencyKey: randomUUID() }),
+        /field ticket not found/,
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

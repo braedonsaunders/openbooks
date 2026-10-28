@@ -1,4 +1,5 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
@@ -12,6 +13,7 @@ import { can, type Authz } from "../authz";
 import { isFeatureEnabled } from "../features";
 import {
   addTicketLine,
+  createFieldTicket,
   discardEmptyTicketDraft,
   FieldTicketError,
   FieldTicketNotFoundError,
@@ -23,7 +25,7 @@ import {
 import { addTicketQuantity, removeTicketQuantity } from "../field-ticket-production";
 import { sendTicketForSignature } from "../field-ticket-signing";
 import type { ApplicationContext } from "./context";
-import { assertApplicationPermission } from "./context";
+import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { conflict, invalidInput, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 
@@ -47,6 +49,16 @@ const DATE = z
 const canRead = (authz: Authz) => can(authz, "time.read");
 const canManage = (authz: Authz) => can(authz, "time.manage");
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
+
+function fieldTicketRequestId(orgId: string, idempotencyKey: string): string {
+  const digest = createHash("sha256")
+    .update(`field-ticket-create:${orgId}:${idempotencyKey}`)
+    .digest();
+  digest[6] = (digest[6]! & 0x0f) | 0x50;
+  digest[8] = (digest[8]! & 0x3f) | 0x80;
+  const hex = digest.subarray(0, 16).toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 async function requireFieldTickets(context: ApplicationContext, child?: string): Promise<void> {
   const orgId = context.authz.user.orgId;
@@ -96,6 +108,69 @@ const crewRow = z.object({
 });
 
 export const PROJECT_FIELD_TOOLS: ApplicationToolDefinition[] = [
+  definition({
+    name: "create_field_ticket",
+    title: "Create Field Ticket",
+    description:
+      "Create a draft field ticket for an optional project, date, and period. Use get_field_ticket or list_field_tickets to verify the saved ticket and revision.",
+    inputSchema: z.object({
+      projectId: UUID.optional().describe(
+        "Active project id; its customer and subsidiary are inherited.",
+      ),
+      date: DATE.optional().describe(
+        "Ticket work date; defaults to the organization's business date.",
+      ),
+      period: z
+        .enum(["shift", "daily", "weekly"])
+        .optional()
+        .describe("Ticket period; defaults to the effective Field Ticket policy."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: canManage,
+    featureKey: "fieldTickets",
+    execute: async (context, input) => {
+      assertApplicationPermission(context, "time.manage");
+      await requireFieldTickets(context);
+      const orgId = context.authz.user.orgId;
+      if (input.projectId) {
+        const project = await db.execute<{ subsidiaryId: string | null }>(
+          sql`
+            select subsidiary_id as "subsidiaryId"
+              from projects
+             where id = ${input.projectId} and org_id = ${orgId} and is_active
+          `,
+          "objects",
+        );
+        if (!project[0]) throw notFound("record");
+        assertSubsidiaryAccess(context, project[0].subsidiaryId);
+      }
+      try {
+        const created = await createFieldTicket(orgId, context.authz.user.id, {
+          projectId: input.projectId,
+          date: input.date,
+          period: input.period,
+          allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+          requestId: fieldTicketRequestId(orgId, input.idempotencyKey),
+        });
+        const ticket = await readTicket(context, created.id);
+        return {
+          ok: true,
+          id: created.id,
+          documentNumber: created.documentNumber,
+          status: ticket.status,
+          revision: ticket.revision,
+          ticket,
+          href: `/field-tickets/${created.id}`,
+        };
+      } catch (error) {
+        settleFieldTicket(error);
+      }
+    },
+  }),
   definition({
     name: "list_field_ticket_source_certification_candidates",
     title: "List Field Ticket Certification Candidates",
@@ -565,10 +640,10 @@ export const PROJECT_FIELD_TOOLS: ApplicationToolDefinition[] = [
     },
   }),
   definition({
-    name: "discard_empty_field_ticket_draft",
-    title: "Discard Empty Field Ticket Draft",
+    name: "delete_draft_field_ticket",
+    title: "Delete Draft Field Ticket",
     description:
-      "Discard an untouched draft ticket using its current revision; tickets with content, signatures, links, or later status are refused. Find and verify it with get_field_ticket.",
+      "Delete an untouched draft ticket using its current revision; tickets with content, signatures, links, or later status are refused. Find and verify it with get_field_ticket.",
     inputSchema: z.object({
       ticketId: UUID,
       expectedRevision: REVISION,
