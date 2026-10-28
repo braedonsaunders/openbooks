@@ -1,6 +1,6 @@
 // source-pin-contract: MCP skill playbooks must only name registered assistant/MCP tools (or named non-tool terms). The catalog sources import server-only code, so the prose-to-catalog cross-check reads their tool names from source; the subject (skill bodies) is the imported registry, never hand-listed.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { ZodError, z } from "zod";
@@ -39,58 +39,15 @@ function toolNamesFrom(...relativePaths: string[]): Set<string> {
   return names;
 }
 
-const TOOL_NAMES = toolNamesFrom(
-  "../application/tool-catalog.ts",
-  "../assistant/tools.ts",
-  "../assistant/tools-write.ts",
-  "../assistant/tools-analytics.ts",
-  "../assistant/tools-reports.ts",
-  "../assistant/tools-banking.ts",
-  "../assistant/tools-close.ts",
-  "../assistant/tools-fx.ts",
-  "../assistant/tools-budgets.ts",
-  "../assistant/tools-admin.ts",
-  "../assistant/tools-payroll.ts",
-  "../assistant/tools-hrm.ts",
-  "../assistant/tools-files.ts",
-  "../assistant/tools-ops.ts",
-  "../assistant/tools-inventory.ts",
-  "../assistant/tools-fulfillment.ts",
-  "../assistant/tools-orders.ts",
-  "../assistant/tools-assets.ts",
-  "../assistant/tools-equipment.ts",
-  "../assistant/tools-subcontracts.ts",
-  "../assistant/tools-setup.ts",
-  "../assistant/tools-projects.ts",
-  "../assistant/tools-tax.ts",
-  "../assistant/tools-construction.ts",
-  "../assistant/tools-meta.ts",
-  "../apps/tools.ts",
-  "../assistant/tools-crm.ts",
-  "../assistant/tools-subscriptions.ts",
-  "../assistant/tools-allocations.ts",
-  "../assistant/tools-property.ts",
-  "../assistant/tools-time.ts",
-  "../assistant/tools-expenses.ts",
-  "../assistant/tools-migration.ts",
-  "../application/migration-tools.ts",
-  "../application/ledger-tools.ts",
-  "../application/treasury-tools.ts",
-  "../application/capital-tools.ts",
-  "../application/sales-tools.ts",
-  "../application/purchasing-tools.ts",
-  "../application/inventory-tools.ts",
-  "../application/manufacturing-tools.ts",
-  "../application/subscription-tools.ts",
-  "../application/project-tools.ts",
-  "../application/time-tools.ts",
-  "../application/hrm-tools.ts",
-  "../application/talent-tools.ts",
-  "../application/payroll-tools.ts",
-  "../application/crm-tools.ts",
-  "../application/admin-tools.ts",
-  "../application/workspace-tools.ts",
+// Every catalog source is found by directory listing, so a module that adds a
+// command file is covered the day it lands, with no list to keep in step.
+const catalogSources = ["../application", "../assistant"].flatMap((dir) =>
+  readdirSync(join(here, dir))
+    .filter((file) => /tools|tool-catalog/.test(file) && file.endsWith(".ts"))
+    .filter((file) => !file.includes(".test."))
+    .map((file) => `${dir}/${file}`),
 );
+const TOOL_NAMES = toolNamesFrom(...catalogSources, "../apps/tools.ts");
 
 // Snake_case terms in playbook prose that are deliberately not tool names.
 const NON_TOOL_TERMS = new Set([
