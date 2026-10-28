@@ -6,7 +6,8 @@ import { stubModules } from "../../testing/stub-modules.ts";
 
 stubModules({
   intl: true,
-  navigation: false,
+  // The lists' search field reads the router; the static render needs only its shape.
+  navigation: true,
   authz: false,
   features: false,
   extra: {
@@ -26,6 +27,18 @@ registerHooks({
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { renderToStaticMarkup } = await import("react-dom/server");
+const { NextIntlClientProvider } = await import("next-intl");
+const messages = (await import("../../messages/en")).default;
+// Client components inside the lists (search, filters) read the message
+// catalog through the provider the app layout supplies.
+const renderInApp = (element: React.ReactNode) =>
+  renderToStaticMarkup(
+    React.createElement(
+      NextIntlClientProvider,
+      { locale: "en", messages, timeZone: "UTC" },
+      element,
+    ),
+  );
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { installTrustedTestDatabaseBypass } =
@@ -116,8 +129,8 @@ test(
           sp: {},
         }),
       );
-      const recordHtml = renderToStaticMarkup(recordElement);
-      const entityHtml = renderToStaticMarkup(entityElement);
+      const recordHtml = renderInApp(recordElement);
+      const entityHtml = renderInApp(entityElement);
       assert.ok(
         recordHtml.includes(REMEDY),
         "record lists render the named remedy in the in-page refusal",
