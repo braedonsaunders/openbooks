@@ -18,12 +18,7 @@ import {
 } from "@openbooks/engine/compliance/information-returns";
 import { can } from "../authz";
 import { isFeatureEnabled } from "../features";
-import {
-  guardSubsidiaryScope,
-  loadFiling,
-  loadFilings,
-  loadInformationReturnFilingScope,
-} from "../compliance";
+import { loadFiling, loadFilings, loadInformationReturnFilingScope } from "../compliance";
 import { assertApplicationPermission } from "./context";
 import { ApplicationError, forbidden, notFound } from "./errors";
 import type { ApplicationContext } from "./context";
