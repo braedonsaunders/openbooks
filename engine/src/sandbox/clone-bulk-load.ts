@@ -96,6 +96,9 @@ interface ForeignKey {
   parentColumns: string[];
 }
 
+/** Journal entries per call of the ledger's balance and currency-residual checks. */
+const LEDGER_CHECK_BATCH = 1000;
+
 const ident = (name: string): string => `"${name.replace(/"/g, '""')}"`;
 
 /**
@@ -165,11 +168,21 @@ export async function verifyBulkLoadedClone(args: {
     );
   }
   if (byName.has("journal_lines")) {
-    await db.execute(sql`
-      select public.journal_lines_check_balanced_entries(
-        array(select distinct entry_id from journal_lines where org_id = ${org}))`);
-    await db.execute(sql`
-      select public.journal_lines_check_fx_residual_entries(
-        array(select distinct entry_id from journal_lines where org_id = ${org}), true)`);
+    // The ledger's own checks take the entries one posting touches; a whole
+    // organization's entries go through them in batches of that scale.
+    const entries = await db.execute<{ id: string }>(
+      sql`select distinct entry_id::text as id from journal_lines where org_id = ${org} order by 1`,
+      "objects",
+    );
+    for (let start = 0; start < entries.length; start += LEDGER_CHECK_BATCH) {
+      const batch = entries
+        .slice(start, start + LEDGER_CHECK_BATCH)
+        .map((row) => row.id)
+        .join(",");
+      await db.execute(sql`
+        select public.journal_lines_check_balanced_entries(string_to_array(${batch}, ',')::uuid[])`);
+      await db.execute(sql`
+        select public.journal_lines_check_fx_residual_entries(string_to_array(${batch}, ',')::uuid[], true)`);
+    }
   }
 }
