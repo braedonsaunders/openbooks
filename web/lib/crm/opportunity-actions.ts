@@ -302,11 +302,16 @@ async function orgUuidExists(
 
 type ClosePermissionCheck = () => Promise<NextResponse | null>;
 
+async function closePermissionRefusal(): Promise<NextResponse | null> {
+  const result = await guardPermission("crm.opportunities.close");
+  return result instanceof NextResponse ? result : null;
+}
+
 export async function patchCrmOpportunity(
   gate: Authz,
   id: string,
   rawBody: Record<string, unknown>,
-  checkClosePermission: ClosePermissionCheck = () => guardPermission("crm.opportunities.close"),
+  checkClosePermission: ClosePermissionCheck = closePermissionRefusal,
   readInCurrentTransaction = false,
 ): Promise<NextResponse> {
   const { user } = gate;

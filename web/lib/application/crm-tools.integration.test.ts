@@ -359,14 +359,18 @@ test(
       };
       assert.equal(bankUpdateReplay.replayed, true);
       const pendingFixture = await withOrgContext(org.orgId, () =>
-        db.execute(sql`
+        db.execute(
+          sql`
           update party_bank_accounts
              set approval_status = 'pending', is_active = false,
                  approved_at = null, approved_by = null, updated_at = now(), updated_by = ${actors.adminId}
            where id = ${bankCreate.bankAccountId} and party_id = ${org.customerId} and org_id = ${org.orgId}
-        `),
+           returning id
+        `,
+          "objects",
+        ),
       );
-      assert.equal(pendingFixture.rowCount, 1);
+      assert.equal(pendingFixture.length, 1);
       const pendingRead = (await run("get_party_bank_accounts", {
         partyId: org.customerId,
       })) as { bankAccounts: Array<Record<string, unknown>> };
@@ -538,7 +542,7 @@ test(
               idempotencyKey: "crm-stage-feature-off-0001",
             }),
           ),
-          /crm record not found/,
+          /needs the crm feature/,
         );
       } finally {
         await setCrmEnabled(first.orgId, true);

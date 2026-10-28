@@ -483,7 +483,7 @@ export async function retirePartyBankAccount({
   request: req,
   authz: gate,
   params,
-  body,
+  body: input,
 }: BankRouteContext): Promise<NextResponse> {
   const { user } = gate;
   const { id: partyId } = params;
@@ -493,6 +493,7 @@ export async function retirePartyBankAccount({
   }
   const partyDenied = await denyOutsidePartyScope(gate, partyId);
   if (partyDenied) return partyDenied;
+  const body = input as Body;
   const reason = body.retirementReason.trim();
   if (!body.expectedUpdatedAt) {
     return NextResponse.json(
