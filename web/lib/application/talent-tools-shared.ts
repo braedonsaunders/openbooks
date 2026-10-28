@@ -25,7 +25,7 @@ export const TALENT_IDEMPOTENCY_KEY = z
 const MAX_TOOL_STRING_LENGTH = 100_000;
 const MAX_TOOL_ARRAY_ITEMS = 1_000;
 
-function payloadSchema(bodySchema: CoreZodType | undefined, description: string): z.ZodType {
+function payloadSchema(bodySchema: z.ZodType | undefined, description: string): z.ZodType {
   if (!bodySchema) return z.object({}).describe(description);
   if (bodySchema instanceof z.ZodObject) {
     const describedShape = Object.fromEntries(
@@ -169,13 +169,13 @@ export function talentCommand(args: {
   featureKey?: string;
   requiredFeatureKeys?: string[];
   permissionAnyOf?: string[];
-  idempotencyKeySchema?: CoreZodType;
+  idempotencyKeySchema?: z.ZodType;
   unrestrictedScope?: boolean;
   beforeInvoke?: (context: ApplicationContext) => Promise<void>;
   recordId?: { name: string; description: string };
   relatedId?: { name: string; description: string };
   payloadDescription?: string;
-  bodySchema?: CoreZodType;
+  bodySchema?: z.ZodType;
   validationStatus?: number;
   destructive?: boolean;
   openWorld?: boolean;
