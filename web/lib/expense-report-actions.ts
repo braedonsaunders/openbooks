@@ -424,6 +424,7 @@ export async function createExpenseReport(
            currency, subtotal, tax_total, total, created_by)
         values (${key}, ${user.orgId}, 'expense_report', ${subsidiaryId}, ${documentNumber},
                 ${body.documentDate ?? today}, ${reportCurrency}, '0', '0', '0', ${user.id})
+        -- A concurrent create with the same id returns no row and is refused below.
         on conflict (id) do nothing
         returning id
       `,
