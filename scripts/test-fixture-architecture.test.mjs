@@ -637,9 +637,13 @@ test(
         "accounts",
         "app_roles",
         "document_lines",
+        // Document and journal search indexes are maintained by database triggers.
+        "document_search_amounts",
+        "document_search_terms",
         "documents",
         "journal_entries",
         "journal_lines",
+        "journal_search_amounts",
         // The open-item lines above maintain their balance projection.
         "open_item_balances",
         "orgs",
