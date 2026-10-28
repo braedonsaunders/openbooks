@@ -15,6 +15,7 @@ import { publishProjectFinancialProfileInTransaction } from "@openbooks/engine/p
 import { isUuid } from "../../../../../lib/list-params";
 import { guardUnrestrictedScope, subsidiariesInScope } from "../../../../../lib/authz";
 import { acquireFeatureGateLock } from "../../../../../lib/features";
+import { guardProjectsFeature } from "../../../../../lib/projects-gate";
 import {
   OverheadZeroOverStandardError,
   publishOverheadRates,
@@ -147,13 +148,18 @@ function postgresErrorCode(error: unknown): string | undefined {
 
 export const POST = defineRoute({
   permission: "admin.setup.manage",
-  feature: "projects",
+  feature: {
+    none: "The handler retains the Projects feature gate alongside its action-specific checks.",
+  },
   body: requestBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ body, authz: routeAuthz }) => {
     const gate = routeAuthz;
 
     const orgId = gate.user.orgId;
+
+    const projectsFeature = await guardProjectsFeature(orgId);
+    if (projectsFeature) return projectsFeature;
 
     if (requiresUnrestrictedOverheadScope(body)) {
       const scopeDenied = guardUnrestrictedScope(gate);
