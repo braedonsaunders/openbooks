@@ -18,7 +18,6 @@ import {
   BillingRequestBackupNotReadyError,
   generateBillingRequestBackup,
 } from "../billing-request-actions";
-import { createInvoiceFromBillingRequest } from "../billing-request-invoice";
 import { assertApplicationPermission } from "./context";
 import { ApplicationError, conflict, invalidInput, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
@@ -132,40 +131,6 @@ export const SALES_BILLING_REQUEST_APPLICATION_TOOLS: ApplicationToolDefinition[
           ...cancelled,
           status: "cancelled",
           href: `/projects?project=${cancelled.projectId}`,
-        };
-      } catch (error) {
-        settleBillingRequest(error);
-      }
-    },
-  }),
-  definition({
-    name: "convert_billing_request_to_invoice",
-    title: "Convert Billing Request To Invoice",
-    description:
-      "Create a draft customer invoice from an open billing request, including any required supporting backup packet. Find the request id with list_project_billing_requests.",
-    inputSchema: z.object({ requestId: UUID, idempotencyKey: KEY }),
-    readOnly: false,
-    destructive: false,
-    openWorld: false,
-    assistantConfirmation: "always",
-    featureKey: "projects",
-    visibleTo: visible("ar.create"),
-    execute: async (context, input) => {
-      assertApplicationPermission(context, "ar.create");
-      try {
-        const result = await createInvoiceFromBillingRequest({
-          orgId: context.authz.user.orgId,
-          actorId: context.authz.user.id,
-          requestId: input.requestId,
-          allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
-        });
-        return {
-          ok: true,
-          documentId: result.id,
-          documentNumber: result.documentNumber,
-          backup: result.backup,
-          status: "draft",
-          href: listRecordDrawerHref("customer_invoice", result.id),
         };
       } catch (error) {
         settleBillingRequest(error);
