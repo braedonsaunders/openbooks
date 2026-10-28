@@ -363,8 +363,6 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   update_org_navigation_config: "admin",
   list_backup_runs: "admin",
   run_backup_now: "admin",
-  update_backup_policy: "admin",
-  delete_backup_run: "admin",
   test_document_capture_provider: "admin",
   withdraw_approval_command: "admin",
   list_approval_delegations: "admin",

@@ -80,9 +80,7 @@ export async function saveEmailSettingsAction(
   body: EmailSettingsBody,
 ) {
   if (!isDocumentRevisionToken(body.expectedUpdatedAt))
-    throw new OrgEmailConfigConflictError(
-      "Reload the email settings and supply their exact revision before saving",
-    );
+    throw new OrgEmailConfigConflictError(body.expectedUpdatedAt ?? "", "");
   const clearableStr = (value: unknown) =>
     value === undefined
       ? undefined

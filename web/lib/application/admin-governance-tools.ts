@@ -1,7 +1,8 @@
 import "server-only";
 import { z } from "zod";
+import { sql } from "drizzle-orm";
 import { UUID_RE } from "@openbooks/engine/platform/identifiers";
-import { isDocumentRevisionToken } from "@openbooks/engine/records/revision";
+import { documentRevisionSql, isDocumentRevisionToken } from "@openbooks/engine/records/revision";
 import { AiRailsError } from "@openbooks/engine/hrm/ai/errors";
 import {
   createCustomFieldDefinition,
@@ -315,6 +316,9 @@ export const ADMIN_CUSTOM_FIELD_TOOLS: ApplicationToolDefinition[] = [
         input: { ...input, config: normalizeCustomFieldConfig(input.config) },
       });
       settleCustomFieldResult(result);
+      if (result.kind !== "created") {
+        throw new ApplicationError("internal_error", "custom field creation was not applied");
+      }
       return {
         ok: true,
         fieldId: result.id,
@@ -390,6 +394,9 @@ export const ADMIN_CUSTOM_FIELD_TOOLS: ApplicationToolDefinition[] = [
         normalizeConfig: normalizeCustomFieldConfig,
       });
       settleCustomFieldResult(result);
+      if (result.kind !== "updated") {
+        throw new ApplicationError("internal_error", "custom field update was not applied");
+      }
       return { ok: true, fieldId: id, updatedAt: result.updatedAt, href: "/admin/custom-fields" };
     },
   }),

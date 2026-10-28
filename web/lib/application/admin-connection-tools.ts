@@ -19,7 +19,7 @@ const UUID = z
   .string()
   .regex(UUID_RE)
   .describe("Connection id returned by list_platform_connections.");
-const RUN_MODES = [...CONNECTION_RUN_MODES] as [string, ...string[]];
+const RUN_MODES = CONNECTION_RUN_MODES;
 const IDEMPOTENCY_KEY = z
   .string()
   .regex(/^[A-Za-z0-9._:-]{8,200}$/)

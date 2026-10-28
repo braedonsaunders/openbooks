@@ -44,7 +44,7 @@ async function runUserMutation(
   };
 }
 
-function userTool<T extends z.ZodTypeAny>(args: {
+function userTool<T extends z.ZodType>(args: {
   name: string;
   title: string;
   description: string;

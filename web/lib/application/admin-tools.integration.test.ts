@@ -149,6 +149,39 @@ test(
 );
 
 test(
+  "user administration commands preserve the native self-role-assignment refusal",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+      const roles = await withOrgContext(org.orgId, () =>
+        db.execute<{ id: string }>(
+          sql`select id from app_roles where org_id = ${org.orgId} and key = 'approver' limit 1`,
+          "objects",
+        ),
+      );
+      assert.ok(roles[0], "the native fixture must create an assignable organization role");
+      const context = ctxFor(org.orgId, actors.adminId, ["admin.users.manage"]);
+      await assert.rejects(
+        runAs(org.orgId, context, "assign_user_role", {
+          userId: actors.adminId,
+          roleId: roles[0]!.id,
+          idempotencyKey: "admin-user-self-role-refusal-01",
+        }),
+        (error: unknown) =>
+          error instanceof Error &&
+          "status" in error &&
+          error.status === 403 &&
+          error.message.includes("you cannot grant a role to yourself"),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "admin webhook commands isolate organizations and refuse missing permission or disabled feature",
   { skip: !DB },
   async () => {

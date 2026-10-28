@@ -121,7 +121,8 @@ export function matchAutomationRules(rules: AutomationRules, snapshot: SubjectSn
     if (predicate.op === "eq" && actual !== predicate.value) return false;
     if (predicate.op === "neq" && actual === predicate.value) return false;
     if (predicate.op === "in") {
-      if (!Array.isArray(predicate.value) || !predicate.value.includes(actual)) return false;
+      if (!Array.isArray(predicate.value) || !predicate.value.some((value) => value === actual))
+        return false;
     }
   }
   return true;

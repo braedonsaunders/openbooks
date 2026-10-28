@@ -1,18 +1,13 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import { db } from "@openbooks/engine/platform/db";
-import { computeNextRunAt, type BackupPolicyShape } from "@openbooks/engine/backup/backup";
-import { saveBackupPolicy } from "@openbooks/engine/backup/policy";
 import { can } from "../authz";
 import { assertApplicationPermission, type ApplicationContext } from "./context";
 import { ApplicationError, conflict, forbidden, invalidInput } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 import { queueBackupAction } from "@/app/api/admin/backups/run/route";
-import { deleteStoredBackupAction } from "@/app/api/admin/backups/[id]/route";
 
-const UUID = z.string().regex(UUID_RE).describe("Backup run id returned by list_backup_runs.");
 const IDEMPOTENCY_KEY = z
   .string()
   .regex(/^[A-Za-z0-9._:-]{8,200}$/)
@@ -40,7 +35,7 @@ export const ADMIN_BACKUP_TOOLS: ApplicationToolDefinition[] = [
     name: "list_backup_runs",
     title: "List Backup Runs",
     description:
-      "Read the latest backup run ledger, including status and retention evidence. Use this to find the id before deleting a stored archive; backup contents and download streams are not returned.",
+      "Read the latest backup run ledger, including status and retention evidence. Backup contents and download streams are not returned; manage retention and deletion in the browser.",
     inputSchema: z.object({}),
     readOnly: true,
     destructive: false,
@@ -90,75 +85,6 @@ export const ADMIN_BACKUP_TOOLS: ApplicationToolDefinition[] = [
         ok: true,
         ...result,
         href: runId ? `/admin/backups?run=${runId}` : "/admin/backups",
-      };
-    },
-  }),
-  definition({
-    name: "update_backup_policy",
-    title: "Update Backup Policy",
-    description:
-      "Set the organization backup schedule and retention count. Use list_backup_runs to read the current policy and verify the saved cadence.",
-    inputSchema: z.object({
-      enabled: z.boolean().describe("Whether scheduled backups run."),
-      frequency: z.enum(["daily", "weekly", "monthly"]).describe("Backup cadence."),
-      hourUtc: z.number().int().min(0).max(23).describe("UTC hour when the backup should run."),
-      dayOfWeek: z
-        .number()
-        .int()
-        .min(0)
-        .max(6)
-        .describe("Day of week for weekly schedules, Sunday is zero."),
-      dayOfMonth: z.number().int().min(1).max(28).describe("Day of month for monthly schedules."),
-      maxKeep: z.number().int().min(1).max(100).describe("Maximum retained backups."),
-      idempotencyKey: IDEMPOTENCY_KEY,
-    }),
-    readOnly: false,
-    destructive: false,
-    openWorld: false,
-    assistantConfirmation: "always",
-    visibleTo: (authz) => can(authz, "admin.backups.manage"),
-    execute: async (context, input) => {
-      assertBackupAdmin(context);
-      const { idempotencyKey: _key, ...body } = input;
-      const shape = {
-        frequency: body.frequency,
-        hourUtc: body.hourUtc,
-        dayOfWeek: body.dayOfWeek,
-        dayOfMonth: body.dayOfMonth,
-      } satisfies BackupPolicyShape;
-      const nextRunAt = body.enabled ? computeNextRunAt(shape, new Date()).toISOString() : null;
-      await saveBackupPolicy(
-        context.authz.user.orgId,
-        context.authz.user.id,
-        { ...shape, enabled: body.enabled, maxKeep: body.maxKeep },
-        nextRunAt,
-      );
-      return { ok: true, nextRunAt, href: "/admin/backups" };
-    },
-  }),
-  definition({
-    name: "delete_backup_run",
-    title: "Delete Backup Archive",
-    description:
-      "Purge one completed stored backup while retaining its ledger evidence. Use list_backup_runs to find the id; queued or running backups cannot be deleted.",
-    inputSchema: z.object({ id: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
-    readOnly: false,
-    destructive: true,
-    openWorld: true,
-    assistantConfirmation: "always",
-    visibleTo: (authz) => can(authz, "admin.backups.manage"),
-    execute: async (context, input) => {
-      assertBackupAdmin(context);
-      const response = await deleteStoredBackupAction(
-        new Request("https://openbooks.invalid/api/admin/backups"),
-        { params: Promise.resolve({ id: input.id }) },
-        context.authz,
-      );
-      return {
-        ok: true,
-        ...(await routePayload(response)),
-        runId: input.id,
-        href: "/admin/backups",
       };
     },
   }),
