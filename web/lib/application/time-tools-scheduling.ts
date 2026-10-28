@@ -720,8 +720,7 @@ export const SCHEDULING_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     execute: async (context, input) => {
       try {
         await requireBoard(context, input.boardId, "manage");
-        const result = await sendScheduleDistribution({
-          ...actor(context),
+        const result = await sendScheduleDistribution(actor(context), {
           boardId: input.boardId,
           from: input.from,
           through: input.through,

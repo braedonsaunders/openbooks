@@ -138,12 +138,6 @@ const batchWithdrawAction = z
 const batchPostAction = z
   .object({ action: z.literal("post").describe("Post approved time and equipment charges.") })
   .strict();
-type CrewBatchAction =
-  | z.infer<typeof batchLinesAction>
-  | z.infer<typeof batchSubmitAction>
-  | z.infer<typeof batchWithdrawAction>
-  | z.infer<typeof batchPostAction>;
-
 function canKiosk(authz: Parameters<typeof can>[0]) {
   return can(authz, "time.kiosk.manage");
 }

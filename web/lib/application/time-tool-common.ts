@@ -14,7 +14,7 @@ import { TimeWorkTargetError } from "@openbooks/engine/projects/time-work-target
 import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { TimeAmendmentRefusal } from "../time-amendment";
 
-export function timeDefinition<TSchema extends z.ZodTypeAny>(
+export function timeDefinition<TSchema extends z.ZodType>(
   args: Omit<ApplicationToolDefinition, "execute" | "inputSchema" | "mutationProtection"> & {
     inputSchema: TSchema;
     execute: (
@@ -85,8 +85,6 @@ export function settleTimeRefusal(error: unknown): never {
       remedy: error.remedy,
       ...(error.field ? { field: error.field } : {}),
     };
-    if (error.status === 403) throw new ApplicationError("forbidden", error.message, 403, details);
-    if (error.status === 404) throw new ApplicationError("not_found", error.message, 404, details);
     if (error.status === 409) throw conflict(error.message, details);
     if (error.status === 400)
       throw new ApplicationError("invalid_input", error.message, 400, details);

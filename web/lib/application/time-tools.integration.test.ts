@@ -250,22 +250,34 @@ test(
       const boardId = randomUUID();
       const entryId = randomUUID();
       await withBypassContext(async () => {
-        const project = await db.execute(sql`
+        const project = await db.execute(
+          sql`
           insert into projects (id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
-          values (${projectId},${org.orgId},${org.subsidiaryId},'TIME-OPS','Time ops project',${org.customerId},'active',true,'{}'::jsonb)`);
-        assert.equal(project.rowCount, 1);
-        const employee = await db.execute(sql`
+          values (${projectId},${org.orgId},${org.subsidiaryId},'TIME-OPS','Time ops project',${org.customerId},'active',true,'{}'::jsonb) returning id`,
+          "objects",
+        );
+        assert.equal(project.length, 1);
+        const employee = await db.execute(
+          sql`
           insert into parties (id,org_id,kind,display_name,subsidiary_id,is_active,custom)
-          values (${employeeId},${org.orgId},'person','Time ops employee',${org.subsidiaryId},true,'{}'::jsonb)`);
-        assert.equal(employee.rowCount, 1);
-        const role = await db.execute(sql`
+          values (${employeeId},${org.orgId},'person','Time ops employee',${org.subsidiaryId},true,'{}'::jsonb) returning id`,
+          "objects",
+        );
+        assert.equal(employee.length, 1);
+        const role = await db.execute(
+          sql`
           insert into employee_roles (id,org_id,party_id,job_title,hired_on,is_active)
-          values (${randomUUID()},${org.orgId},${employeeId},'Time operations','2026-01-01',true)`);
-        assert.equal(role.rowCount, 1);
-        const board = await db.execute(sql`
+          values (${randomUUID()},${org.orgId},${employeeId},'Time operations','2026-01-01',true) returning id`,
+          "objects",
+        );
+        assert.equal(role.length, 1);
+        const board = await db.execute(
+          sql`
           insert into schedule_boards (id,org_id,code,name,row_kind,views,default_view,time_zone,publish_policy,subsidiary_id)
-          values (${boardId},${org.orgId},'TIME-OPS','Time operations','people','{grid}','grid','America/Toronto','live',${org.subsidiaryId})`);
-        assert.equal(board.rowCount, 1);
+          values (${boardId},${org.orgId},'TIME-OPS','Time operations','people','{grid}','grid','America/Toronto','live',${org.subsidiaryId}) returning id`,
+          "objects",
+        );
+        assert.equal(board.length, 1);
       });
 
       const run = (name: string, input: Record<string, unknown>) =>

@@ -685,8 +685,8 @@ export const RESOURCING_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
         return {
           ok: true,
           retainerId: input.retainerId,
-          drawdownId: result.drawdown.id,
-          status: result.drawdown.state,
+          drawdownId: result.id,
+          status: "draft",
           drawdown: result,
           href: "/resourcing/retainers",
         };
