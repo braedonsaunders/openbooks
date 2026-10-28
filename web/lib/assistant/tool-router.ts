@@ -292,6 +292,11 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   // Payroll commands.
 
   // CRM and service commands.
+  assign_party_roles: "crm",
+  get_party_relationships: "crm",
+  remove_party_role: "crm",
+  replace_party_relationships: "crm",
+  send_party_statement: "crm",
 
   // Administration commands.
 

@@ -15,11 +15,18 @@ import {
   resolveOrgEmailTransportDetailed,
 } from "@openbooks/engine/delivery/email-config";
 import type { SentServiceQuote } from "@openbooks/engine/service/quotes";
+import { ServiceError } from "@openbooks/engine/service/errors";
 
 /** The application origin links are built on: the configured URL, else the request's own. */
-export function appBaseUrl(request: Request): string {
+export function appBaseUrl(request?: Request): string {
   const configured = process.env.OPENBOOKS_APP_URL?.trim().replace(/\/+$/, "");
   if (configured) return configured;
+  if (!request) {
+    throw new ServiceError("The public application URL is not configured.", {
+      code: "service_configuration_missing",
+      remedy: "Set OPENBOOKS_APP_URL before sending signer links from the command API.",
+    });
+  }
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}`;
 }
@@ -38,7 +45,7 @@ export interface ServiceLinkDelivery {
 export async function deliverServiceQuote(input: {
   orgId: string;
   actorId: string;
-  request: Request;
+  request?: Request;
   sent: SentServiceQuote;
   quoteDocumentId: string;
   message?: string | null;

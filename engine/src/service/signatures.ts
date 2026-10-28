@@ -109,6 +109,105 @@ export async function issueVisitSignatureLink(
   });
 }
 
+/** Withdraw the current open customer-signature link for a visit. */
+export async function voidVisitSignatureLink(
+  actor: ServiceActor & { visitId: string },
+): Promise<{ voided: boolean; requestId: string | null; status: "voided" | "responded" | null }> {
+  return withOrgTransaction(actor.orgId, async () => {
+    const visit = await lockVisit(actor.orgId, actor.visitId);
+    await visitFieldAuthority(actor, visit);
+    const request = (
+      await db.execute<{ id: string; respondedAt: Date | null; revokedAt: Date | null }>(
+        sql`select id, responded_at as "respondedAt", revoked_at as "revokedAt"
+          from service_visit_signature_requests
+          where org_id = ${actor.orgId} and visit_id = ${visit.id}
+          order by created_at desc, id desc limit 1 for update`,
+        "objects",
+      )
+    )[0];
+    if (!request) return { voided: false, requestId: null, status: null };
+    if (request.respondedAt) {
+      return { voided: false, requestId: request.id, status: "responded" };
+    }
+    if (request.revokedAt) {
+      return { voided: false, requestId: request.id, status: "voided" };
+    }
+    requireOne(
+      await db.execute(
+        sql`update service_visit_signature_requests set revoked_at = now()
+          where org_id = ${actor.orgId} and id = ${request.id}
+            and responded_at is null and revoked_at is null returning id`,
+        "objects",
+      ),
+      "The visit signature link",
+    );
+    await auditService({
+      orgId: actor.orgId,
+      table: "service_visit_signature_requests",
+      rowId: request.id,
+      action: "update",
+      actorId: actor.actorId,
+      before: { revokedAt: null },
+      after: { revokedAt: "now" },
+    });
+    return { voided: true, requestId: request.id, status: "voided" };
+  }).catch((error: unknown) => {
+    throw serviceDatabaseRefusal(error);
+  });
+}
+
+/** Read the latest customer-signature link state for a visit. */
+export async function getVisitSignatureStatus(actor: ServiceActor & { visitId: string }): Promise<{
+  visitId: string;
+  request: {
+    requestId: string;
+    status: "sent" | "expired" | "voided" | "responded";
+    recipient: string | null;
+    expiresAt: string;
+  } | null;
+}> {
+  return withOrgTransaction(actor.orgId, async () => {
+    const visit = await lockVisit(actor.orgId, actor.visitId);
+    await visitFieldAuthority(actor, visit);
+    const row = (
+      await db.execute<{
+        requestId: string;
+        recipient: string | null;
+        expiresAt: string;
+        respondedAt: Date | null;
+        revokedAt: Date | null;
+      }>(
+        sql`select id as "requestId", recipient,
+            (expires_at at time zone 'UTC')::text as "expiresAt", responded_at as "respondedAt",
+            revoked_at as "revokedAt"
+          from service_visit_signature_requests
+          where org_id = ${actor.orgId} and visit_id = ${visit.id}
+          order by created_at desc, id desc limit 1`,
+        "objects",
+      )
+    )[0];
+    if (!row) return { visitId: visit.id, request: null };
+    const status = row.respondedAt
+      ? "responded"
+      : row.revokedAt
+        ? "voided"
+        : Date.parse(row.expiresAt) <= Date.now()
+          ? "expired"
+          : "sent";
+    return {
+      visitId: visit.id,
+      request: {
+        requestId: row.requestId,
+        status,
+        recipient: row.recipient,
+        expiresAt: row.expiresAt,
+      },
+    };
+  }).catch((error: unknown) => {
+    throw serviceDatabaseRefusal(error);
+  });
+}
+
 /** Email an issued signing link to its recipient through native email delivery. */
 export async function emailVisitSignatureLink(
   actor: ServiceActor & { requestId: string; link: string },

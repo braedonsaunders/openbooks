@@ -209,7 +209,7 @@ export async function saveServiceQuoteTerms(
   return withOrgTransaction(actor.orgId, async () => {
     await lockDependentFeature(actor.orgId, "orders", "Orders");
     const quote = await lockQuoteDocument(actor.orgId, actor.quoteDocumentId);
-    const allowed = await serviceAuthority(actor, "service.manage", quote.subsidiaryId);
+    await serviceAuthority(actor, "service.manage", quote.subsidiaryId);
     await lockActorCommandAuthority(
       db,
       actor.orgId,
@@ -460,6 +460,117 @@ export async function sendServiceQuote(
           : null,
       signerName,
       signerEmail,
+    };
+  }).catch((error: unknown) => {
+    throw serviceDatabaseRefusal(error);
+  });
+}
+
+/** Withdraw the current open customer-acceptance request for a service quote. */
+export async function voidServiceQuoteSignatureRequest(
+  actor: ServiceActor & { quoteDocumentId: string },
+): Promise<{ voided: boolean; requestId: string | null; status: string | null }> {
+  return withOrgTransaction(actor.orgId, async () => {
+    await lockDependentFeature(actor.orgId, "orders", "Orders");
+    const quote = await lockQuoteDocument(actor.orgId, actor.quoteDocumentId);
+    await serviceAuthority(actor, "service.manage", quote.subsidiaryId);
+    await lockActorCommandAuthority(
+      db,
+      actor.orgId,
+      actor.actorId,
+      quote.subsidiaryId,
+      "estimates.create",
+    );
+    const terms = await lockTerms(actor.orgId, quote.id);
+    if (!terms?.signatureRequestId) {
+      return { voided: false, requestId: null, status: terms?.status ?? null };
+    }
+    if (terms.status === "accepted" || terms.status === "declined") {
+      throw new ServiceError("The customer already answered this quote.", {
+        status: 409,
+        code: "service_invalid_transition",
+        remedy: "Issue a revised estimate if the accepted terms need to change.",
+      });
+    }
+    const request = (
+      await db.execute<{ id: string; status: string }>(
+        sql`select id, status from signature_requests
+          where org_id = ${actor.orgId} and id = ${terms.signatureRequestId}
+          and subject_table = ${SUBJECT_TABLE} and subject_id = ${quote.id} for update`,
+        "objects",
+      )
+    )[0];
+    if (!request) {
+      throw new ServiceError("The quote's signature request is missing.", {
+        status: 409,
+        code: "service_stale",
+        remedy: "Reload the estimate before changing its signature state.",
+      });
+    }
+    if (request.status !== "sent" && request.status !== "viewed") {
+      return { voided: false, requestId: request.id, status: request.status };
+    }
+    requireOne(
+      await db.execute(
+        sql`update signature_requests set status = 'voided', voided_at = now(), updated_at = now(), updated_by = ${actor.actorId}
+          where org_id = ${actor.orgId} and id = ${request.id} and status in ('sent','viewed') returning id`,
+        "objects",
+      ),
+      "The service quote signature request",
+    );
+    const after = requireOne(
+      await db.execute<ServiceQuoteTerms>(
+        sql`update service_quotes set status = 'draft', sent_at = null, signature_request_id = null,
+          revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+          where org_id = ${actor.orgId} and quote_document_id = ${quote.id} and revision = ${terms.revision}
+          returning ${TERMS_COLUMNS}`,
+        "objects",
+      ),
+      "The service quote terms",
+    );
+    await auditService({
+      orgId: actor.orgId,
+      table: "signature_requests",
+      rowId: request.id,
+      action: "update",
+      actorId: actor.actorId,
+      before: { status: request.status },
+      after: { status: "voided", quoteStatus: after.status },
+    });
+    return { voided: true, requestId: request.id, status: "voided" };
+  }).catch((error: unknown) => {
+    throw serviceDatabaseRefusal(error);
+  });
+}
+
+/** Read the current service-quote terms and the signature request they reference. */
+export async function getServiceQuoteSignatureStatus(
+  actor: ServiceActor & { quoteDocumentId: string },
+): Promise<Record<string, unknown>> {
+  return withOrgTransaction(actor.orgId, async () => {
+    await lockDependentFeature(actor.orgId, "orders", "Orders");
+    const quote = await lockQuoteDocument(actor.orgId, actor.quoteDocumentId);
+    await serviceAuthority(actor, "service.read", quote.subsidiaryId);
+    const terms = await lockTerms(actor.orgId, quote.id);
+    if (!terms) {
+      return { quoteDocumentId: quote.id, quoteStatus: null, signatureRequest: null };
+    }
+    const signatureRequest = terms.signatureRequestId
+      ? ((
+          await db.execute(
+            sql`select id as "requestId", status, signer_name as "signerName", signer_email as "signerEmail",
+              (expires_at at time zone 'UTC')::text as "expiresAt"
+              from signature_requests where org_id = ${actor.orgId} and id = ${terms.signatureRequestId}
+                and subject_table = ${SUBJECT_TABLE} and subject_id = ${quote.id}`,
+            "objects",
+          )
+        )[0] ?? null)
+      : null;
+    return {
+      quoteDocumentId: quote.id,
+      quoteStatus: terms.status,
+      signatureRequest,
+      revision: terms.revision,
     };
   }).catch((error: unknown) => {
     throw serviceDatabaseRefusal(error);

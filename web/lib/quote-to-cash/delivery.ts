@@ -6,6 +6,7 @@ import {
   emailDeliveryBlockedMessage,
 } from "@openbooks/emails";
 import { db } from "@openbooks/engine/platform/database";
+import { QuoteToCashError } from "@openbooks/engine/billing/quote-to-cash";
 import {
   insertEmailLog,
   markEmailFailed,
@@ -30,9 +31,15 @@ export interface QuoteSignatureDelivery {
   emailSkippedReason: string | null;
 }
 
-function baseUrl(req: Request): string {
+function baseUrl(req?: Request): string {
   const env = process.env.OPENBOOKS_APP_URL?.trim().replace(/\/+$/, "");
   if (env) return env;
+  if (!req) {
+    throw new QuoteToCashError(
+      "The public application URL is not configured for quote signature delivery.",
+      422,
+    );
+  }
   const url = new URL(req.url);
   return `${url.protocol}//${url.host}`;
 }
@@ -53,7 +60,7 @@ async function orgName(orgId: string): Promise<string> {
 export async function deliverQuoteSignature(args: {
   orgId: string;
   actorId: string;
-  req: Request;
+  req?: Request;
   quoteNumber: string;
   currency: string;
   totalContractValue: string;

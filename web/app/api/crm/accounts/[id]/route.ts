@@ -26,6 +26,7 @@ import { canonicalDecimal, compareDecimal } from "@/lib/exact-decimal";
 import { documentRevisionSql, isDocumentRevisionToken } from "@openbooks/engine/records/revision";
 import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
 import { notFound } from "@/lib/api/responses";
+import { startCrmAccountTracking } from "@/lib/crm/actions";
 
 const nullableUuid = z.preprocess(
   (value) => (value === "" ? null : value),
@@ -178,58 +179,10 @@ export const POST = defineRoute({
   permission: "crm.accounts.manage",
   feature: "crm",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
-    const params = Promise.resolve(routeParams);
-    const { user } = gate;
-    const { id } = await params;
-    if (!isUuid(id)) return notFound("record");
-    const created = await db.transaction(async (tx) => {
-      const party = await tx.execute<{ id: string }>(
-        sql`
-        select id from parties where id = ${id} and org_id = ${user.orgId}${crmSharedScope(sql`subsidiary_id`, gate.allowedSubsidiaryIds)} for update`,
-        "objects",
-      );
-      if (!party.length) return "missing" as const;
-      const existing = await tx.execute<{ id: string }>(
-        sql`
-        select id from crm_account_profiles where org_id = ${user.orgId} and party_id = ${id}`,
-        "objects",
-      );
-      if (existing.length) return "exists" as const;
-      const isCustomer =
-        (
-          await tx.execute(
-            sql`
-        select 1 from customer_roles where org_id = ${user.orgId} and party_id = ${id} and is_active`,
-            "objects",
-          )
-        ).length > 0;
-      const stage: Stage = isCustomer ? "customer" : "lead";
-      const status = await tx.execute<{ id: string }>(
-        sql`
-        select id from crm_account_statuses
-         where org_id = ${user.orgId} and lifecycle_stage = ${stage} and is_default and is_active
-         order by sequence limit 1`,
-        "objects",
-      );
-      const profile = await tx.execute<{ id: string }>(
-        sql`
-        insert into crm_account_profiles
-          (org_id, party_id, lifecycle_stage, status_id, owner_user_id, converted_at, is_active, created_by, updated_by)
-        values (${user.orgId}, ${id}, ${stage}, ${status[0]?.id ?? null}, ${user.id},
-                ${stage === "customer" ? sql`now()` : null}, true, ${user.id}, ${user.id})
-        returning id`,
-        "objects",
-      );
-      await tx.execute(sql`
-        insert into crm_account_stage_events
-          (org_id, account_profile_id, to_stage, source_kind, reason, created_by, updated_by)
-        values (${user.orgId}, ${profile[0]!.id}, ${stage}, 'manual', 'Relationship tracking started', ${user.id}, ${user.id})`);
-      return "created" as const;
-    });
-    if (created === "missing") return notFound("record");
-    const account = await loadCrmAccount(id, user.orgId, gate.allowedSubsidiaryIds);
-    return NextResponse.json({ account });
+  handler: async ({ authz, params }) => {
+    const result = await startCrmAccountTracking(authz, params.id);
+    if ("response" in result) return result.response;
+    return NextResponse.json(result.body, { status: result.status });
   },
 });
 

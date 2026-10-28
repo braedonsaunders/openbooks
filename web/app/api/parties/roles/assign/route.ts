@@ -1,8 +1,7 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { defineRoute } from "@/lib/api/route";
-import { assignPartyRoleAudited, roleLessPartiesInSlice } from "../../../../../lib/party-roles";
-import { BULK_ACTION_MAX_IDS } from "../../../../../lib/api/bulk-ids";
+import { assignPartyRolesInSlice } from "@/lib/party-role-actions";
 
 export const runtime = "nodejs";
 
@@ -38,33 +37,7 @@ export const POST = defineRoute({
   body: assignBody,
   invalidBodyStatus: 422,
   handler: async ({ body, authz }) => {
-    const orgId = authz.user.orgId;
-    const role = body.role;
-    const q = body.q?.trim() ? `%${body.q.trim()}%` : null;
-
-    const candidates = await roleLessPartiesInSlice({
-      orgId,
-      q,
-      includeInactive: body.includeInactive === true,
-      limit: BULK_ACTION_MAX_IDS + 1,
-      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-    });
-
-    if (candidates.length > BULK_ACTION_MAX_IDS) {
-      return NextResponse.json(
-        {
-          error: `More than ${BULK_ACTION_MAX_IDS} role-less parties match — narrow the directory search and assign in batches of ${BULK_ACTION_MAX_IDS}.`,
-        },
-        { status: 422 },
-      );
-    }
-
-    let assigned = 0;
-    for (const party of candidates) {
-      await assignPartyRoleAudited({ orgId, actorId: authz.user.id, partyId: party.id, role });
-      assigned++;
-    }
-
-    return NextResponse.json({ assigned, total: candidates.length });
+    const result = await assignPartyRolesInSlice(authz, body);
+    return result instanceof NextResponse ? result : NextResponse.json(result);
   },
 });

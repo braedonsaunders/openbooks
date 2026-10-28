@@ -14,6 +14,13 @@ import { isUuid } from "@/lib/list-params";
 import { canonicalDecimal, compareDecimal } from "@/lib/exact-decimal";
 import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
 import { notFound } from "@/lib/api/responses";
+import {
+  crmAccountStatusBody,
+  crmLeadSourceBody,
+  crmOpportunityStatusBody,
+  loadCrmSetup,
+  saveCrmPipelineSetup,
+} from "@/lib/crm/setup-actions";
 
 const baseSaveFields = {
   id: uuidString().optional(),
@@ -134,30 +141,9 @@ const quotaSchema = z
     }
   });
 const requestBodySchema = z.discriminatedUnion("action", [
-  z.object({
-    ...baseSaveFields,
-    action: z.literal("save-account-status"),
-    lifecycleStage: z.enum(["lead", "prospect", "customer"]),
-    sequence: z.union([z.number(), z.string()]).optional(),
-    isQualified: z.boolean().optional(),
-    isClosed: z.boolean().optional(),
-    isDefault: z.boolean().optional(),
-  }),
-  z.object({
-    ...baseSaveFields,
-    action: z.literal("save-opportunity-status"),
-    probability: z.union([z.number(), z.string()]),
-    defaultForecastCategory: z.enum(["omitted", "worst_case", "most_likely", "upside"]),
-    sequence: z.union([z.number(), z.string()]).optional(),
-    isClosed: z.boolean().optional(),
-    isWon: z.boolean().optional(),
-    isDefault: z.boolean().optional(),
-    requiresLines: z.boolean().optional(),
-    requiresPrimaryContact: z.boolean().optional(),
-    requiresPositiveAmount: z.boolean().optional(),
-    requiresWinLossReason: z.boolean().optional(),
-  }),
-  z.object({ ...baseSaveFields, action: z.literal("save-lead-source") }),
+  crmAccountStatusBody,
+  crmOpportunityStatusBody,
+  crmLeadSourceBody,
   z.object({
     ...baseSaveFields,
     action: z.literal("save-territory"),
@@ -197,74 +183,16 @@ export const GET = defineRoute({
     // which hides quotas with a notice instead of an empty-looking list. The
     // rest of setup stays readable; only the quota slice needs full scope.
     const quotasRestricted = gate.allowedSubsidiaryIds !== null;
-    const [
-      accountStatuses,
-      opportunityStatuses,
-      territories,
-      sources,
-      teams,
-      members,
-      quotas,
-      users,
-    ] = await Promise.all([
-      db.execute(
-        sql`select * from crm_account_statuses where org_id = ${gate.user.orgId} order by lifecycle_stage, sequence, name`,
-        "objects",
-      ),
-      db.execute(
-        sql`select * from crm_opportunity_statuses where org_id = ${gate.user.orgId} order by sequence, name`,
-        "objects",
-      ),
-      db.execute(
-        sql`select t.*, mu.name as manager_name, ou.name as owner_name from crm_sales_territories t left join users mu on mu.id=t.manager_user_id left join users ou on ou.id=t.default_owner_user_id where t.org_id=${gate.user.orgId} order by t.priority,t.name`,
-        "objects",
-      ),
-      db.execute(
-        sql`select * from crm_lead_sources where org_id=${gate.user.orgId} order by name`,
-        "objects",
-      ),
-      db.execute(
-        sql`select t.*, u.name as manager_name from crm_sales_teams t left join users u on u.id=t.manager_user_id where t.org_id=${gate.user.orgId} order by t.name`,
-        "objects",
-      ),
-      db.execute(
-        sql`select m.*,u.name as user_name from crm_sales_team_members m join users u on u.id=m.user_id where m.org_id=${gate.user.orgId} order by u.name`,
-        "objects",
-      ),
-      quotasRestricted
-        ? Promise.resolve([])
-        : db.execute(
-            sql`select q.*,u.name as owner_name,t.name as team_name from crm_sales_quotas q left join users u on u.id=q.owner_user_id left join crm_sales_teams t on t.id=q.sales_team_id where q.org_id=${gate.user.orgId} order by q.period_start desc`,
-            "objects",
-          ),
-      db.execute(
-        sql`select id,name,email from users where org_id=${gate.user.orgId} and is_active order by name`,
-        "objects",
-      ),
-    ]);
     const t = await getTranslations("crm");
-    return NextResponse.json({
-      accountStatuses,
-      opportunityStatuses,
-      territories,
-      sources,
-      teams,
-      members,
-      quotas,
-      users,
-      quotasNotice: quotasRestricted ? t("forecasts.quotasRestrictedNotice") : null,
-    });
+    return NextResponse.json(
+      await loadCrmSetup(
+        gate.user.orgId,
+        quotasRestricted,
+        quotasRestricted ? t("forecasts.quotasRestrictedNotice") : null,
+      ),
+    );
   },
 });
-
-/** CRM ordering integer: junk and out-of-int32 figures fail closed with 422
- * instead of reaching the sequence column as NaN/overflow (HTTP 500). */
-function sequenceInt(value: unknown): number | null {
-  if (value === undefined || value === null || value === "") return 0;
-  const n = typeof value === "number" ? value : Number(String(value).trim());
-  if (!Number.isInteger(n) || n < -2147483648 || n > 2147483647) return null;
-  return n;
-}
 
 export const POST = defineRoute({
   permission: "crm.setup.manage",
@@ -274,6 +202,14 @@ export const POST = defineRoute({
   handler: async ({ authz: gate, body }) => {
     const { user } = gate;
     const action = body.action;
+    if (
+      body.action === "save-account-status" ||
+      body.action === "save-opportunity-status" ||
+      body.action === "save-lead-source"
+    ) {
+      const result = await saveCrmPipelineSetup(gate, body);
+      return result instanceof NextResponse ? result : NextResponse.json(result);
+    }
     if (["save-team", "save-territory", "save-quota"].includes(action))
       return NextResponse.json(
         {
@@ -290,63 +226,7 @@ export const POST = defineRoute({
       // (including any defaults created on this request) can commit alone.
       await ensureCrmDefaults(user.orgId, user.id);
       let row: unknown;
-      if (action === "save-account-status") {
-        const name = String(body.name ?? "").trim();
-        if (
-          !name ||
-          typeof body.lifecycleStage !== "string" ||
-          !["lead", "prospect", "customer"].includes(body.lifecycleStage)
-        )
-          return NextResponse.json(
-            { error: "name and lifecycle stage are required" },
-            { status: 422 },
-          );
-        const sequence = sequenceInt(body.sequence);
-        if (sequence === null)
-          return NextResponse.json({ error: "sequence must be a whole number" }, { status: 422 });
-        row = recordId
-          ? await db.execute(
-              sql`update crm_account_statuses set name=${name},description=${body.description ?? null},lifecycle_stage=${body.lifecycleStage},sequence=${sequence},is_qualified=${body.isQualified === true},is_closed=${body.isClosed === true},is_default=${body.isDefault === true},is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
-            )
-          : await db.execute(
-              sql`insert into crm_account_statuses (org_id,key,name,description,lifecycle_stage,sequence,is_qualified,is_closed,is_default,is_active,created_by,updated_by) values (${user.orgId},${slug(typeof body.key === "string" ? body.key || name : name)},${name},${body.description ?? null},${body.lifecycleStage},${sequence},${body.isQualified === true},${body.isClosed === true},${body.isDefault === true},${body.isActive !== false},${user.id},${user.id}) returning *`,
-            );
-      } else if (action === "save-opportunity-status") {
-        const name = String(body.name ?? "").trim();
-        const probability = Number(body.probability);
-        if (!name || !Number.isInteger(probability) || probability < 0 || probability > 100)
-          return NextResponse.json(
-            { error: "name and probability from 0 to 100 are required" },
-            { status: 422 },
-          );
-        const sequence = sequenceInt(body.sequence);
-        if (sequence === null)
-          return NextResponse.json({ error: "sequence must be a whole number" }, { status: 422 });
-        if (
-          typeof body.defaultForecastCategory !== "string" ||
-          !["omitted", "worst_case", "most_likely", "upside"].includes(body.defaultForecastCategory)
-        )
-          return NextResponse.json({ error: "invalid forecast category" }, { status: 422 });
-        if (body.isWon === true && body.isClosed !== true)
-          return NextResponse.json({ error: "a won stage must be closed" }, { status: 422 });
-        row = recordId
-          ? await db.execute(
-              sql`update crm_opportunity_statuses set name=${name},description=${body.description ?? null},sequence=${sequence},probability=${probability},default_forecast_category=${body.defaultForecastCategory},is_closed=${body.isClosed === true},is_won=${body.isWon === true},is_default=${body.isDefault === true},is_active=${body.isActive !== false},requires_lines=${body.requiresLines === true},requires_primary_contact=${body.requiresPrimaryContact === true},requires_positive_amount=${body.requiresPositiveAmount === true},requires_win_loss_reason=${body.requiresWinLossReason === true},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
-            )
-          : await db.execute(
-              sql`insert into crm_opportunity_statuses (org_id,key,name,description,sequence,probability,default_forecast_category,is_closed,is_won,is_default,is_active,requires_lines,requires_primary_contact,requires_positive_amount,requires_win_loss_reason,created_by,updated_by) values (${user.orgId},${slug(typeof body.key === "string" ? body.key || name : name)},${name},${body.description ?? null},${sequence},${probability},${body.defaultForecastCategory},${body.isClosed === true},${body.isWon === true},${body.isDefault === true},${body.isActive !== false},${body.requiresLines === true},${body.requiresPrimaryContact === true},${body.requiresPositiveAmount === true},${body.requiresWinLossReason === true},${user.id},${user.id}) returning *`,
-            );
-      } else if (action === "save-lead-source") {
-        const name = String(body.name ?? "").trim();
-        if (!name) return NextResponse.json({ error: "name is required" }, { status: 422 });
-        row = recordId
-          ? await db.execute(
-              sql`update crm_lead_sources set name=${name},description=${body.description ?? null},is_active=${body.isActive !== false},updated_at=now(),updated_by=${user.id} where id=${recordId} and org_id=${user.orgId} returning *`,
-            )
-          : await db.execute(
-              sql`insert into crm_lead_sources (org_id,key,name,description,is_active,created_by,updated_by) values (${user.orgId},${slug(typeof body.key === "string" ? body.key || name : name)},${name},${body.description ?? null},${body.isActive !== false},${user.id},${user.id}) returning *`,
-            );
-      } else if (action === "save-territory") {
+      if (action === "save-territory") {
         const name = String(body.name ?? "").trim();
         const matchMode =
           typeof body.matchMode === "string" ? body.matchMode : body.matchMode == null ? "all" : "";

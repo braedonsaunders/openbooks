@@ -22,7 +22,13 @@ import {
   visibleCustomFieldDefs,
 } from "@/lib/custom-fields";
 import { isUuid } from "@/lib/list-params";
-import { normalizeCountryCode } from "@/lib/countries";
+import {
+  partyRelationshipsInput,
+  PartyRelationshipsError,
+  replacePartyRelationships,
+  type PartyAddressInput,
+  type PartyContactInput,
+} from "@/lib/party-relationships";
 import { isIsoCalendarDate } from "@/lib/crm-dates";
 import { loadParty } from "../_lib";
 import { denyLockedOutsidePartyScope } from "./bank-accounts/party-scope";
@@ -129,42 +135,9 @@ const partyPatchBody = z
       })
       .strict()
       .optional(),
-    addresses: z
-      .array(
-        z
-          .object({
-            label: z.string().nullable().optional(),
-            line1: z.string().nullable().optional(),
-            line2: z.string().nullable().optional(),
-            city: z.string().nullable().optional(),
-            region: z.string().nullable().optional(),
-            postalCode: z.string().nullable().optional(),
-            country: z.string().nullable().optional(),
-            isDefaultBilling: z.boolean().optional(),
-            isDefaultShipping: z.boolean().optional(),
-          })
-          .strict(),
-      )
-      .optional(),
-    contacts: z
-      .array(
-        z
-          .object({
-            firstName: z.string().nullable().optional(),
-            lastName: z.string().nullable().optional(),
-            name: z.string().nullable().optional(),
-            title: z.string().nullable().optional(),
-            role: z.string().nullable().optional(),
-            email: z.string().nullable().optional(),
-            phone: z.string().nullable().optional(),
-            mobilePhone: z.string().nullable().optional(),
-            isPrimary: z.boolean().optional(),
-            isActive: z.boolean().optional(),
-          })
-          .strict(),
-      )
-      .optional(),
-    expectedUpdatedAt: z.string().min(1),
+    addresses: partyRelationshipsInput.shape.addresses,
+    contacts: partyRelationshipsInput.shape.contacts,
+    expectedUpdatedAt: partyRelationshipsInput.shape.expectedUpdatedAt,
     changeReason: z.string().optional(),
   })
   .strict();
@@ -272,30 +245,6 @@ interface EmployeeRoleInput {
   workerCompGroupId?: string | null;
   hiredOn?: string | null;
 }
-interface AddressInput {
-  label?: string | null;
-  line1?: string | null;
-  line2?: string | null;
-  city?: string | null;
-  region?: string | null;
-  postalCode?: string | null;
-  country?: string | null;
-  isDefaultBilling?: boolean;
-  isDefaultShipping?: boolean;
-}
-interface ContactInput {
-  firstName?: string | null;
-  lastName?: string | null;
-  name?: string | null;
-  title?: string | null;
-  role?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  mobilePhone?: string | null;
-  isPrimary?: boolean;
-  isActive?: boolean;
-}
-
 interface PatchBody {
   kind?: string;
   displayName?: string;
@@ -311,8 +260,8 @@ interface PatchBody {
     vendor?: VendorRoleInput;
     employee?: EmployeeRoleInput;
   };
-  addresses?: AddressInput[];
-  contacts?: ContactInput[];
+  addresses?: PartyAddressInput[];
+  contacts?: PartyContactInput[];
   isActive?: boolean;
   /** Primary subsidiary (null = org root). Only sent by multi-subsidiary orgs. */
   subsidiaryId?: string | null;
@@ -1059,99 +1008,13 @@ export const PATCH = defineRoute({
           }
         }
 
-        // -- addresses: full replacement ----------------------------------------
-        if (body.addresses) {
-          const invalidCountry = body.addresses.some((address) => {
-            const country = strOrNull(address.country);
-            return country !== null && normalizeCountryCode(country) === null;
-          });
-          if (invalidCountry) throwBad("Country must be a valid ISO country code");
-          const rows = body.addresses
-            .map((a) => ({
-              label: strOrNull(a.label),
-              line1: strOrNull(a.line1),
-              line2: strOrNull(a.line2),
-              city: strOrNull(a.city),
-              region: strOrNull(a.region),
-              postalCode: strOrNull(a.postalCode),
-              country: normalizeCountryCode(a.country),
-              isDefaultBilling: a.isDefaultBilling === true,
-              isDefaultShipping: a.isDefaultShipping === true,
-            }))
-            .filter(
-              (a) =>
-                a.label || a.line1 || a.line2 || a.city || a.region || a.postalCode || a.country,
-            );
-          // one default of each kind, at most
-          let billingSeen = false;
-          let shippingSeen = false;
-          for (const a of rows) {
-            if (a.isDefaultBilling) {
-              if (billingSeen) a.isDefaultBilling = false;
-              billingSeen = true;
-            }
-            if (a.isDefaultShipping) {
-              if (shippingSeen) a.isDefaultShipping = false;
-              shippingSeen = true;
-            }
-          }
-          await tx.execute(
-            sql`delete from addresses where party_id = ${id} and org_id = ${user.orgId}`,
-          );
-          for (const a of rows) {
-            await tx.execute(sql`
-            insert into addresses (org_id, party_id, label, line1, line2, city, region, postal_code,
-                                   country, is_default_billing, is_default_shipping, created_by, updated_by)
-            values (${user.orgId}, ${id}, ${a.label}, ${a.line1}, ${a.line2}, ${a.city}, ${a.region},
-                    ${a.postalCode}, ${a.country}, ${a.isDefaultBilling}, ${a.isDefaultShipping},
-                    ${user.id}, ${user.id})
-          `);
-          }
-        }
-
-        // -- contacts: full replacement ----------------------------------------
-        if (body.contacts) {
-          const rows = body.contacts
-            .map((contact) => {
-              const firstName = strOrNull(contact.firstName);
-              const lastName = strOrNull(contact.lastName);
-              const explicitName = strOrNull(contact.name);
-              return {
-                firstName,
-                lastName,
-                name: explicitName ?? [firstName, lastName].filter(Boolean).join(" "),
-                title: strOrNull(contact.title),
-                role: strOrNull(contact.role),
-                email: strOrNull(contact.email),
-                phone: strOrNull(contact.phone),
-                mobilePhone: strOrNull(contact.mobilePhone),
-                isPrimary: contact.isPrimary === true,
-                isActive: contact.isActive !== false,
-              };
-            })
-            .filter(
-              (contact) => contact.name || contact.email || contact.phone || contact.mobilePhone,
-            );
-          let primarySeen = false;
-          for (const contact of rows) {
-            if (contact.isPrimary) {
-              if (primarySeen) contact.isPrimary = false;
-              primarySeen = true;
-            }
-          }
-          await tx.execute(
-            sql`delete from contacts where party_id = ${id} and org_id = ${user.orgId}`,
-          );
-          for (const contact of rows) {
-            await tx.execute(sql`
-            insert into contacts (org_id, party_id, first_name, last_name, name, title, role,
-                                  email, phone, mobile_phone, is_primary, is_active, created_by, updated_by)
-            values (${user.orgId}, ${id}, ${contact.firstName}, ${contact.lastName}, ${contact.name},
-                    ${contact.title}, ${contact.role}, ${contact.email}, ${contact.phone},
-                    ${contact.mobilePhone}, ${contact.isPrimary}, ${contact.isActive}, ${user.id}, ${user.id})
-          `);
-          }
-        }
+        await replacePartyRelationships(tx, {
+          partyId: id,
+          orgId: user.orgId,
+          actorId: user.id,
+          addresses: body.addresses,
+          contacts: body.contacts,
+        });
 
         await tx.execute(sql`
         insert into audit_log
@@ -1200,6 +1063,7 @@ export const PATCH = defineRoute({
       if (lockedOutcome instanceof NextResponse) return lockedOutcome;
     } catch (e: unknown) {
       if (e instanceof PartyPatchValidationError) return e.response;
+      if (e instanceof PartyRelationshipsError) return bad(e.message);
       if (e instanceof PartyLifecycleError) return bad(e.message);
       if (e instanceof PartyPatchConflictError) {
         return NextResponse.json(
