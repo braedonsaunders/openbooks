@@ -831,6 +831,9 @@ test(
           for each row
           execute function "${fault}"()`),
         );
+        // A bulk-loading clone suspends ordinary triggers; an ALWAYS trigger
+        // still fires, so the forced failure reaches either copy path.
+        await db.execute(sql.raw(`alter table accounts enable always trigger "${fault}_trg"`));
 
         await assert.rejects(refreshSandbox(sandboxId, { keepCustomizations: false }), (error) => {
           assert.equal(

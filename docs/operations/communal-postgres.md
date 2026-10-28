@@ -106,6 +106,17 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 GRANT EXECUTE ON FUNCTION pg_catalog.set_config(text, text, boolean) TO tenant_books_bypass;
 ```
 
+Sandbox copies bulk-load when the cross-tenant login may set
+`session_replication_role` (PostgreSQL 15 or later). The copy suspends row and
+foreign-key triggers for its own transaction only, then proves every foreign key
+and every copied journal entry before it commits. Without this grant, copies
+admit every row through its write guards, which is correct but far slower for a
+large organization:
+
+```sql
+GRANT SET ON PARAMETER session_replication_role TO tenant_books_bypass;
+```
+
 Retirement recovery receipts live in the separately owned `tenant_retirement`
 schema. A complete release snapshot must include that schema. The configured
 bypass login needs **SELECT only** on all of its tables and sequences; sequence

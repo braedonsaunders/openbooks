@@ -11,6 +11,14 @@ import { loadMaskingPolicies, maskExpr, type MaskTransform } from "./masking.ts"
 import { rebaseClonedJsonReferences } from "./json-references.ts";
 import { createClonePacer, readClonePacing } from "./clone-pacing.ts";
 import {
+  canSuspendTriggers,
+  readCloneBulkLoadSetting,
+  resumeTriggersForTransaction,
+  suspendTriggersForTransaction,
+  verifyBulkLoadedClone,
+  writeTriggerMaintainedRows,
+} from "./clone-bulk-load.ts";
+import {
   copyS3Blob,
   deleteS3Blobs,
   fileCabinetObjectKey,
@@ -1074,6 +1082,7 @@ function walPositionReader(allowed: boolean): () => Promise<bigint | null> {
 export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   validateSandboxTier(opts.tier);
   const pacing = readClonePacing();
+  const bulkLoadPermitted = readCloneBulkLoadSetting();
   const cat = await loadCatalog();
   const { tables, rebaseSet } = cat;
   const retainedTenantTables = new Set(
@@ -1202,18 +1211,26 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       // so the clone declares it transaction-locally beside the flags above.
       await db.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
       const pacer = await createClonePacer(pacing, walPositionReader(await canReadWalPosition()));
-      // Clone admissions prove each copied row equals its rebased source row.
-      // The rebase is one-way, so they look the source up through this
-      // transaction-local record of which source row each copied row came
-      // from; without it they rehash every source row for each copied row.
-      // A temporary table writes no write-ahead log.
-      await db.execute(sql`
-        create temporary table if not exists openbooks_clone_source_map (
-          relation regclass not null,
-          target_id uuid not null,
-          source_id uuid not null,
-          primary key (relation, target_id)
-        ) on commit drop`);
+      // A bulk load copies with row and foreign-key triggers suspended for this
+      // transaction and proves the result set-wise before it can commit (see
+      // clone-bulk-load.ts). Otherwise every row is admitted through its guards.
+      const bulkLoad = bulkLoadPermitted && (await canSuspendTriggers());
+      if (bulkLoad) {
+        await suspendTriggersForTransaction();
+      } else {
+        // Clone admissions prove each copied row equals its rebased source row.
+        // The rebase is one-way, so they look the source up through this
+        // transaction-local record of which source row each copied row came
+        // from; without it they rehash every source row for each copied row.
+        // A temporary table writes no write-ahead log.
+        await db.execute(sql`
+          create temporary table if not exists openbooks_clone_source_map (
+            relation regclass not null,
+            target_id uuid not null,
+            source_id uuid not null,
+            primary key (relation, target_id)
+          ) on commit drop`);
+      }
       for (const t of selected) {
         const stmt = generateCopySql(t, opts, rebaseSet, retainedTenantTables, masking, cutoff);
         if (!stmt) continue;
@@ -1228,7 +1245,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
           }
           await validateVendorRetainageSourcesForClone(opts);
         }
-        if (t.hasOrgId && t.columns.some((c) => c.name === "id" && c.isUuid)) {
+        if (!bulkLoad && t.hasOrgId && t.columns.some((c) => c.name === "id" && c.isUuid)) {
           await db.execute(sql`
             insert into pg_temp.openbooks_clone_source_map (relation, target_id, source_id)
             select ${`public.${t.name}`}::regclass, ob_rebase(id, ${opts.seed}::uuid), id
@@ -1268,6 +1285,19 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
         copiedTables: new Set(perTable.map((row) => row.table)),
       });
       await pacer.afterStatement();
+      if (bulkLoad) {
+        await writeTriggerMaintainedRows(opts.sandboxOrgId);
+        await resumeTriggersForTransaction();
+        const copied = new Set(perTable.map((row) => row.table));
+        await verifyBulkLoadedClone({
+          sandboxOrgId: opts.sandboxOrgId,
+          tables: [
+            ...selected.filter((t) => copied.has(t.name)),
+            { name: "hrm_benefit_catalog", hasOrgId: true },
+          ].map((t) => ({ name: t.name, hasOrgId: t.hasOrgId })),
+          parentFilter: PARENT_FILTER,
+        });
+      }
       // These rollups are intentionally excluded from the clone catalog because
       // they are maintained projections, not source evidence. Rebuild them after
       // every copy: application rows can be inserted before their journal-line

@@ -15,14 +15,18 @@ test(
   "every sliced clone table with a statement-level insert check slices by its group key",
   { skip: !DB },
   async () => {
+    // Search-index maintenance indexes each inserted row on its own and is
+    // rebuilt after every copy, so it imposes no group invariant on a slice.
     const statementChecked = await db.execute<{ table: string }>(
       sql`
       select distinct c.relname as table
         from pg_trigger tg
         join pg_class c on c.oid = tg.tgrelid
         join pg_namespace n on n.oid = c.relnamespace
+        join pg_proc p on p.oid = tg.tgfoid
        where n.nspname = 'public' and not tg.tgisinternal
          and (tg.tgtype & 1) = 0 and (tg.tgtype & 4) <> 0
+         and p.proname not like 'openbooks\_search\_index\_%'
        order by c.relname`,
       "objects",
     );

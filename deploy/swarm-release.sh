@@ -45,6 +45,9 @@
 #      CREATE ROLE openbooks_bypass LOGIN NOSUPERUSER BYPASSRLS
 #        NOCREATEDB NOCREATEROLE NOREPLICATION PASSWORD '<24+ chars>';
 #      GRANT CONNECT, TEMPORARY ON DATABASE <db> TO openbooks_bypass;
+#      GRANT SET ON PARAMETER session_replication_role TO openbooks_bypass;
+#    The last grant lets sandbox copies bulk-load; without it they still
+#    work, admitting each row through its write guards.
 #    Details: docs/operations/communal-postgres.md.
 # 2. In the Dokploy stack env, set OPENBOOKS_DB_URL to the RUNTIME login URL
 #    (this is what web/worker serve with), OPENBOOKS_BYPASS_DB_URL to the
