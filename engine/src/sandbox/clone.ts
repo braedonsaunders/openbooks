@@ -1079,10 +1079,26 @@ function walPositionReader(allowed: boolean): () => Promise<bigint | null> {
   };
 }
 
+/** Elapsed time per clone phase, for the operator log. */
+function clonePhaseTimer() {
+  const started = Date.now();
+  let last = started;
+  const marks: string[] = [];
+  return {
+    mark(phase: string) {
+      const now = Date.now();
+      marks.push(`${phase} ${((now - last) / 1000).toFixed(1)}s`);
+      last = now;
+    },
+    summary: () => `${marks.join(", ")}; total ${((Date.now() - started) / 1000).toFixed(1)}s`,
+  };
+}
+
 export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   validateSandboxTier(opts.tier);
   const pacing = readClonePacing();
   const bulkLoadPermitted = readCloneBulkLoadSetting();
+  const phases = clonePhaseTimer();
   const cat = await loadCatalog();
   const { tables, rebaseSet } = cat;
   const retainedTenantTables = new Set(
@@ -1280,12 +1296,26 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       ) {
         await db.execute(sql.raw(segmentDefaultsRestoreSql(opts)));
       }
+      phases.mark("copy");
+      // The copied rows are invisible to the planner's statistics until the
+      // transaction commits and the tables are analyzed, so it estimates a
+      // single row for the new organization and chooses nested loops that
+      // rescan the whole copy for every outer row. The set-wide rewrites and
+      // rebuilds below run as hash joins instead; this setting ends with the
+      // transaction.
+      const preferSetJoins = (on: boolean) =>
+        db.execute(sql`select set_config('enable_nestloop', ${on ? "off" : "on"}, true)`);
+      await preferSetJoins(true);
       await rebaseClonedJsonReferences({
         ...opts,
         copiedTables: new Set(perTable.map((row) => row.table)),
       });
       await pacer.afterStatement();
+      phases.mark("references");
       if (bulkLoad) {
+        // Foreign-key verification probes indexes row by row, which a nested
+        // loop does best; it runs with the planner's default joins.
+        await preferSetJoins(false);
         await writeTriggerMaintainedRows(opts.sandboxOrgId);
         await resumeTriggersForTransaction();
         const copied = new Set(perTable.map((row) => row.table));
@@ -1297,6 +1327,8 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
           ].map((t) => ({ name: t.name, hasOrgId: t.hasOrgId })),
           parentFilter: PARENT_FILTER,
         });
+        phases.mark("verification");
+        await preferSetJoins(true);
       }
       // These rollups are intentionally excluded from the clone catalog because
       // they are maintained projections, not source evidence. Rebuild them after
@@ -1312,6 +1344,8 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       await pacer.afterStatement();
       await db.execute(sql`select openbooks_search_index_rebuild(${opts.sandboxOrgId})`);
       await pacer.afterStatement();
+      await preferSetJoins(false);
+      phases.mark("rebuilds");
       // Evidence for the clone authority asserted above (OM-13): one audit row
       // in the target org recording the provenance and scope of this copy, so
       // closed-period history carried under openbooks.clone is attributable.
@@ -1330,6 +1364,11 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
           scope:
             "INSERT of posted/reversed history into closed periods only; UPDATE and DELETE of posted history stay blocked",
         })}::jsonb, null)`);
+      console.info(
+        `[sandbox] clone of ${opts.productionOrgId} into ${opts.sandboxOrgId}: ${rowsCopied} rows, ${
+          bulkLoad ? "bulk load" : "row by row"
+        }; ${phases.summary()}`,
+      );
       return { cutoff, sourceSettings };
     },
     joinsOuterSnapshot ? {} : { isolationLevel: "REPEATABLE READ" },
