@@ -372,6 +372,37 @@ export async function listRecordTypes(context: ApplicationContext): Promise<ApiR
   return visible.flatMap((schema) => (schema ? [schema] : []));
 }
 
+/** Recheck the exact record permission and tenant scope before replaying a write. */
+export async function authorizeApplicationRecordMutation(
+  context: ApplicationContext,
+  input: {
+    typeKey: string;
+    operation: "create" | "update" | "delete";
+    id?: string;
+    body?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const scope = await scopeFor(context, input.typeKey, input.operation);
+  if (input.operation === "create") {
+    const requested = requestedSubsidiary(input.body ?? {});
+    const orderType = input.typeKey in ORDER_TYPE_KIND;
+    const documentWriter = scope.resolved.writer.kind === "document";
+    if (requested !== undefined || (!scope.resolved.dynamic && !documentWriter)) {
+      assertSubsidiaryAccess(context, requested);
+    }
+    if (orderType && requested === undefined) {
+      const allowed = context.authz.allowedSubsidiaryIds;
+      assertSubsidiaryAccess(
+        context,
+        allowed !== null && allowed.size === 1 ? [...allowed][0] : undefined,
+      );
+    }
+    return;
+  }
+  if (!input.id) throw invalidInput("id is required to authorize this record mutation");
+  await assertExistingRecordAccess(context, scope, input.id);
+}
+
 export async function listRecords(
   context: ApplicationContext,
   input: RecordListInput,

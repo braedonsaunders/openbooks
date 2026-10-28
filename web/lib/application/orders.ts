@@ -893,3 +893,68 @@ export async function issueApplicationOrder(
     throw error;
   }
 }
+
+/** Submit a draft quote or purchase order through the order editor lifecycle. */
+export async function submitApplicationOrder(
+  context: ApplicationContext,
+  input: {
+    documentId: string;
+    expectedUpdatedAt: string;
+    expectedKind: "quote" | "purchase_order";
+  },
+): Promise<{ status: number; result: Record<string, unknown> }> {
+  const typeKey: OrderTypeKey = input.expectedKind === "quote" ? "quotes" : "purchase-orders";
+  const permissions =
+    input.expectedKind === "quote"
+      ? ["estimates.create", "estimates.issue"]
+      : ["purchase_orders.create"];
+  for (const permission of permissions) assertApplicationPermission(context, permission);
+
+  const orgId = context.authz.user.orgId;
+  if (!(await isFeatureEnabled(orgId, "orders"))) throw notFound("order");
+  if (!isDocumentRevisionToken(input.expectedUpdatedAt)) {
+    throw invalidInput("expectedUpdatedAt is required; copy it from get_record");
+  }
+  const source = (
+    await db.execute<{ subsidiary_id: string | null }>(
+      sql`select subsidiary_id from documents where id = ${input.documentId} and org_id = ${orgId} and kind = ${input.expectedKind}`,
+      "objects",
+    )
+  )[0];
+  if (!source) throw notFound("order");
+  assertSubsidiaryAccess(context, source.subsidiary_id);
+
+  const response = await applyOrderEdit(
+    {
+      orgId,
+      userId: context.authz.user.id,
+      user: context.authz.user,
+      allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+      permissions: context.authz.permissions,
+      services: orderEditServices,
+    },
+    ORDER_EDIT_CONFIG[typeKey],
+    input.documentId,
+    { expectedUpdatedAt: input.expectedUpdatedAt, status: "approved" },
+  );
+  const body = (await response.json()) as Record<string, unknown>;
+  if (response.status === 404) throw notFound("order");
+  if (response.status === 403) {
+    throw new ApplicationError(
+      "forbidden",
+      typeof body.error === "string" ? body.error : "forbidden",
+      response.status,
+    );
+  }
+  if (response.status === 409) {
+    throw conflict(typeof body.error === "string" ? body.error : "order revision conflict");
+  }
+  if (response.status !== 200 && response.status !== 202) {
+    const message = typeof body.error === "string" ? body.error : "order submission refused";
+    if (response.status >= 500) {
+      throw new ApplicationError("internal_error", message, response.status);
+    }
+    throw new ApplicationError("invalid_input", message, response.status);
+  }
+  return { status: response.status, result: body };
+}

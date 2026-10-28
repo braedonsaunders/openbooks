@@ -58,6 +58,7 @@ import { createPayment, postPayment, updatePayment } from "./payments";
 import { assertCabinetUploadAccess, uploadCabinetFile } from "./files";
 import { withContentDigest } from "./idempotency-core";
 import {
+  authorizeApplicationRecordMutation,
   createApplicationRecord,
   deleteApplicationRecord,
   getRecord,
@@ -107,7 +108,7 @@ import { PAYROLL_APPLICATION_TOOLS } from "./payroll-tools";
 import { CRM_APPLICATION_TOOLS } from "./crm-tools";
 import { ADMIN_APPLICATION_TOOLS } from "./admin-tools";
 import { WORKSPACE_APPLICATION_TOOLS } from "./workspace-tools";
-import { convertApplicationOrder, issueApplicationOrder } from "./orders";
+import { convertApplicationOrder, issueApplicationOrder, submitApplicationOrder } from "./orders";
 import {
   createCustomRecordType,
   deleteCustomRecordType,
@@ -397,6 +398,24 @@ const setupActor = (context: ApplicationContext) => ({
 });
 
 const visible = (): boolean => true;
+const RECORD_READ_PERMISSIONS = [
+  ...new Set([
+    "records.read",
+    ...Array.from(RECORD_TYPE_BY_KEY.values(), (recordType) => recordType.readPermission),
+  ]),
+];
+const RECORD_WRITE_PERMISSIONS = [
+  ...new Set([
+    "records.create",
+    ...Array.from(RECORD_TYPE_BY_KEY.values(), (recordType) => recordType.writePermission).filter(
+      (permission): permission is string => permission !== null,
+    ),
+  ]),
+];
+const recordReader = (authz: Authz): boolean =>
+  RECORD_READ_PERMISSIONS.some((permission) => can(authz, permission));
+const recordWriter = (authz: Authz): boolean =>
+  RECORD_WRITE_PERMISSIONS.some((permission) => can(authz, permission));
 const documentActor = anyPermission(
   "gl.post",
   "ap.create",
@@ -436,7 +455,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: recordReader,
     execute: async (context) => ({ ok: true, recordTypes: await listRecordTypes(context) }),
   }),
   definition({
@@ -694,7 +713,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: recordReader,
     execute: async (context, input) => ({ ok: true, ...(await listRecords(context, input)) }),
   }),
   definition({
@@ -707,7 +726,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: recordReader,
     execute: async (context, input) => ({ ok: true, record: await getRecord(context, input) }),
   }),
   definition({
@@ -719,7 +738,13 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: visible,
+    visibleTo: recordWriter,
+    authorizeReplay: async (context, input) =>
+      authorizeApplicationRecordMutation(context, {
+        typeKey: input.typeKey,
+        operation: "create",
+        body: input.body as Record<string, unknown>,
+      }),
     execute: async (context, input) => {
       const outcome = await createApplicationRecord(context, input);
       const href = applicationRecordHref(input.typeKey, outcome.result);
@@ -740,7 +765,13 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: visible,
+    visibleTo: recordWriter,
+    authorizeReplay: async (context, input) =>
+      authorizeApplicationRecordMutation(context, {
+        typeKey: input.typeKey,
+        operation: "update",
+        id: input.id,
+      }),
     execute: async (context, input) => {
       const outcome = await updateApplicationRecord(context, input);
       const href = applicationRecordHref(input.typeKey, outcome.result, input.id);
@@ -761,7 +792,13 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: true,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: visible,
+    visibleTo: recordWriter,
+    authorizeReplay: async (context, input) =>
+      authorizeApplicationRecordMutation(context, {
+        typeKey: input.typeKey,
+        operation: "delete",
+        id: input.id,
+      }),
     execute: async (context, input) => ({
       ok: true,
       ...(await deleteApplicationRecord(context, input)),
@@ -1776,6 +1813,68 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
         ok: true,
         ...outcome,
         href: applicationDocumentHref("sales_order", outcome.result.id),
+      };
+    },
+  }),
+  definition({
+    name: "issue_purchase_order",
+    title: "Issue Purchase Order",
+    description:
+      "Submit a complete purchase order draft for approval or release. Find the order id and exact expectedUpdatedAt token with get_record.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Draft purchase-order id from get_record."),
+      expectedUpdatedAt: DOCUMENT_REVISION,
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    featureKey: "orders",
+    visibleTo: hasPermission("purchase_orders.create"),
+    authorizeReplay: async (context) =>
+      assertApplicationPermission(context, "purchase_orders.create"),
+    execute: async (context, input) => {
+      const outcome = await submitApplicationOrder(context, {
+        ...input,
+        expectedKind: "purchase_order",
+      });
+      return {
+        ok: true,
+        ...outcome,
+        href: applicationDocumentHref("purchase_order", input.documentId),
+      };
+    },
+  }),
+  definition({
+    name: "issue_quote",
+    title: "Issue Quote",
+    description:
+      "Submit a complete quote draft for approval or release before conversion. Find the quote id and exact expectedUpdatedAt token with get_record.",
+    inputSchema: z.object({
+      documentId: UUID.describe("Draft quote id from get_record."),
+      expectedUpdatedAt: DOCUMENT_REVISION,
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    featureKey: "orders",
+    visibleTo: (authz) => can(authz, "estimates.create") && can(authz, "estimates.issue"),
+    authorizeReplay: async (context) => {
+      assertApplicationPermission(context, "estimates.create");
+      assertApplicationPermission(context, "estimates.issue");
+    },
+    execute: async (context, input) => {
+      const outcome = await submitApplicationOrder(context, {
+        ...input,
+        expectedKind: "quote",
+      });
+      return {
+        ok: true,
+        ...outcome,
+        href: applicationDocumentHref("quote", input.documentId),
       };
     },
   }),

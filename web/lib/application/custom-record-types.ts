@@ -198,6 +198,7 @@ export async function createCustomRecordType(
         values (${requestId}, ${user.orgId}, ${key}, ${name}, ${pluralName}, ${iconKey}, ${description},
                 ${JSON.stringify(lint.sections)}::jsonb, 'draft', ${showInNav},
                 ${allowedRoles ? JSON.stringify(allowedRoles) : null}::jsonb, ${sortOrder}, ${user.id}, ${user.id})
+        -- The duplicate key is accepted only after the matching request payload is verified below.
         on conflict (id) do nothing returning id
       `,
       "objects",
