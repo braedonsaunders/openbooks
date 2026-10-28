@@ -398,6 +398,11 @@ const setupActor = (context: ApplicationContext) => ({
 });
 
 const visible = (): boolean => true;
+/** Page layouts are org-wide presentation, governed by the customization authority. */
+const layoutCustomizer = (authz: Authz): boolean => can(authz, "admin.customization.manage");
+/** App authoring needs both the apps and the customization authority, as its commands enforce. */
+const appAuthor = (authz: Authz): boolean =>
+  can(authz, "apps.manage") && can(authz, "admin.customization.manage");
 const RECORD_READ_PERMISSIONS = [
   ...new Set([
     "records.read",
@@ -826,7 +831,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: layoutCustomizer,
     execute: async (context, input) => ({
       ok: true,
       ...(await describeLayoutVocabulary(context, input as never)),
@@ -854,7 +859,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: layoutCustomizer,
     execute: async (context, input) => ({
       ok: true,
       ...(await describePageLayout(context, input as never)),
@@ -870,7 +875,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: layoutCustomizer,
     execute: async (context) => ({ ok: true, ...(await listLayouts(context)) }),
   }),
   definition({
@@ -892,7 +897,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: layoutCustomizer,
     execute: async (context, input) => ({
       ok: true,
       ...(await validateLayout(context, input as never)),
@@ -920,7 +925,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: layoutCustomizer,
     execute: async (context, input) => ({
       ok: true,
       ...(await previewLayout(context, input as never)),
@@ -953,7 +958,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: visible,
+    visibleTo: layoutCustomizer,
     execute: async (context, input) => ({ ok: true, ...(await setLayout(context, input)) }),
   }),
   definition({
@@ -974,7 +979,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: layoutCustomizer,
     execute: async (context, input) => ({
       ok: true,
       ...(await listLayoutHistory(context, input as never)),
@@ -1000,7 +1005,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: visible,
+    visibleTo: layoutCustomizer,
     execute: async (context, input) => ({
       ok: true,
       ...(await restoreLayout(context, input as never)),
@@ -1023,7 +1028,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: true,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: visible,
+    visibleTo: layoutCustomizer,
     execute: async (context, input) => ({ ok: true, ...(await clearLayout(context, input)) }),
   }),
   definition({
@@ -1037,7 +1042,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: appAuthor,
     execute: async (context) => ({ ok: true, ...(await listExtensions(context)) }),
   }),
   definition({
@@ -1051,7 +1056,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: appAuthor,
     execute: async (context) => ({ ok: true, ...(await describeExtensionVocabulary(context)) }),
   }),
   definition({
@@ -1076,7 +1081,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: appAuthor,
     execute: async (context, input) => ({
       ok: true,
       ...(await draftExtension(context, input as never)),
@@ -1093,7 +1098,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: appAuthor,
     execute: async (context, input) => ({
       ok: true,
       draft: await getExtensionDraft(context, input.draftId as string),
@@ -1110,7 +1115,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: appAuthor,
     execute: async (context, input) => ({
       ok: true,
       ...(await getExtensionPackage(context, input as never)),
@@ -1136,7 +1141,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: appAuthor,
     execute: async (context, input) => ({
       ok: true,
       ...(await discardExtensionDraft(context, input as never)),
@@ -1162,7 +1167,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "always",
-    visibleTo: visible,
+    visibleTo: appAuthor,
     execute: async (context, input) => ({
       ok: true,
       ...(await activateExtensionDraft(context, input as never)),
@@ -1193,7 +1198,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: appAuthor,
     execute: async (context, input) => ({
       ok: true,
       ...(await rehearseExtensionEndpoint(context, input as never)),
@@ -1222,7 +1227,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     destructive: false,
     openWorld: false,
     assistantConfirmation: "never",
-    visibleTo: visible,
+    visibleTo: appAuthor,
     execute: async (context, input) => ({
       ok: true,
       ...(await listExtensionRuns(context, input as never)),

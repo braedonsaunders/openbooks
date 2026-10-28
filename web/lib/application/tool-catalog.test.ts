@@ -195,3 +195,23 @@ test("execution refuses a feature-gated tool while its module is off, even for a
   );
   assert.equal(handlerRan, false, "the handler must not run behind a disabled feature");
 });
+
+// Commands an actor without any permission may still see, each because its
+// execution authorizes per item or touches only the caller's own state.
+const OPEN_DISCOVERY = new Map([
+  ["get_vitals", "each section is read only when the caller holds that section's permission"],
+  ["list_inbox_items", "lists only the caller's own inbox"],
+  ["act_on_inbox_item", "checks the permission mapped to each item's kind before acting"],
+  ["mark_notifications_read", "changes only the caller's own notification state"],
+]);
+
+test("no command is available to an actor holding no permissions", () => {
+  for (const tool of APPLICATION_TOOLS) {
+    if (OPEN_DISCOVERY.has(tool.name)) continue;
+    assert.equal(
+      tool.visibleTo(EMPTY_AUTHZ),
+      false,
+      `${tool.name} is visible without any permission; an API key's narrower scope reaches the command only through its permission gate`,
+    );
+  }
+});
