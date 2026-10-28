@@ -49,18 +49,24 @@ function ctxFor(orgId: string, userId: string, permissions: string[]): Applicati
 }
 
 async function setFeature(orgId: string, feature: string, enabled: boolean): Promise<void> {
-  await withBypassContext(() =>
-    db.execute(sql`
-      update orgs
-         set settings = jsonb_set(
-           settings,
-           '{features}',
-           coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ [feature]: enabled })}::jsonb,
-           true
-         )
-       where id = ${orgId}
-    `),
+  const featureJson = JSON.stringify({ [feature]: enabled });
+  const updated = await withBypassContext(() =>
+    db.execute(
+      sql`
+        update orgs
+           set settings = jsonb_set(
+             settings,
+             '{features}',
+             coalesce(settings->'features', '{}'::jsonb) || ${featureJson}::jsonb,
+             true
+           )
+         where id = ${orgId}
+         returning id
+      `,
+      "objects",
+    ),
   );
+  assert.equal(updated.length, 1, "the feature update must match the leased organization");
 }
 
 test(
@@ -375,7 +381,12 @@ test(
           currency: "USD",
           idempotencyKey: `payment-format-feature-${randomUUID()}`,
         }),
-        /not found/,
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /not found/);
+          assert.equal((error as Error & { status?: number }).status, 404);
+          return true;
+        },
       );
       await setFeature(org.orgId, "multiCurrency", true);
 

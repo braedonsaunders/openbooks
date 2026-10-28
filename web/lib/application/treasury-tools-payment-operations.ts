@@ -118,7 +118,7 @@ function inputWithoutIdempotencyKey(input: object): PaymentOperationInput {
 
 function settlePaymentOperationError(error: unknown): never {
   if (error instanceof PaymentOperationManagementError) {
-    if (error.status === 404) throw new ApplicationError("not_found", error.message, 404);
+    if (error.status === 404) throw notFound("payment operation configuration");
     if (error.status === 409) throw conflict(error.message);
     throw new ApplicationError("invalid_input", error.message, error.status);
   }
