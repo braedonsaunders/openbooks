@@ -1,4 +1,6 @@
 import { apiErrorResponse } from "@/lib/api/error-response";
+import { notFound } from "@/lib/api/responses";
+import { ApplicationError } from "@/lib/application/errors";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -41,6 +43,19 @@ export const POST = defineRoute({
     try {
       exportData = await readDataExport(authz, resourceKey, body.columns);
     } catch (error) {
+      // The route keeps its established refusal bodies: an unknown resource is
+      // {"error":"not_found"}, a missing read grant {"error":"forbidden"}, and a
+      // column choice it cannot honour names the problem; the over-cap refusal
+      // and anything unexpected keep their sanitized mapping.
+      if (error instanceof ApplicationError) {
+        if (error.code === "not_found") return notFound("record");
+        if (error.code === "forbidden") {
+          return NextResponse.json({ error: "forbidden" }, { status: 403 });
+        }
+        if (error.code === "invalid_input" && error.status === 422) {
+          return NextResponse.json({ error: error.message }, { status: 400 });
+        }
+      }
       return apiErrorResponse(error, { request: req });
     }
     const cols = exportData.columns;
