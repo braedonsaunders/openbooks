@@ -188,8 +188,9 @@ jobs:
     # ceiling moved again rather than reshuffling every partition just before
     # a release. 35 held until every module gained its application-command
     # integration files and sandbox clones gained bulk-load proofs; six
-    # partitions then reached the 30-minute inner bound while still passing.
-    timeout-minutes: 50
+    # partitions then reached the 30-minute inner bound while still passing,
+    # and the heaviest one then reached 45 minutes still passing.
+    timeout-minutes: 65
     strategy:
       fail-fast: false
       matrix:
@@ -314,7 +315,7 @@ jobs:
           # A stuck asynchronous test must fail by name and release the serial
           # partition to later files. The outer bound leaves time to upload
           # incomplete receipts when the process itself cannot finish.
-          timeout --signal=TERM --kill-after=10s 45m npm run test:integration -- "${coverage[@]}" \
+          timeout --signal=TERM --kill-after=10s 60m npm run test:integration -- "${coverage[@]}" \
             --test-timeout=180000 --test-reporter=spec --test-reporter-destination=stdout 2>&1 | tee coverage.txt
       - name: Skips are declared, not silent
         # This partition HAS a database, so every `{ skip: !DB }` guard must
