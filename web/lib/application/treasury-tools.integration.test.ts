@@ -18,6 +18,7 @@ const { loadFilings } = await import("../compliance");
 const { listDunningPolicies: readDunningPolicies } = await import("../dunning-policy-management");
 const { createProgram, loadStoredValueTenderAccount } =
   await import("@openbooks/engine/stored-value/accounts");
+const { readAuthorityConnectionStatus } = await import("@openbooks/engine/tax");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 
@@ -61,6 +62,53 @@ async function setFeature(orgId: string, feature: string, enabled: boolean): Pro
     `),
   );
 }
+
+test(
+  "tax authority credential commands seal values, replay safely, and preserve organization isolation",
+  { skip: !DB },
+  async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const other = await withBypassContext(() => createScratchOrg());
+    try {
+      const actors = await withBypassContext(() => seedFlowActors(org.orgId));
+      const context = ctxFor(org.orgId, actors.adminId, ["admin.setup.manage"]);
+      const input = {
+        authority: "hmrc",
+        credentials: {
+          clientId: "treasury-integration-client",
+          clientSecret: "treasury-integration-secret",
+          scope: "read:vat",
+        },
+        idempotencyKey: `tax-authority-save-${randomUUID()}`,
+      };
+      const first = (await withOrgContext(org.orgId, () =>
+        executeApplicationTool(applicationTool("save_tax_authority_credentials")!, context, input),
+      )) as { replayed: boolean; connection: { status: string; hasCredentials: boolean } };
+      assert.equal(first.replayed, false);
+      assert.equal(first.connection.status, "ready");
+      assert.equal(first.connection.hasCredentials, true);
+
+      const replay = (await withOrgContext(org.orgId, () =>
+        executeApplicationTool(applicationTool("save_tax_authority_credentials")!, context, input),
+      )) as { replayed: boolean; connection: { status: string } };
+      assert.equal(replay.replayed, true);
+
+      const native = await withOrgContext(org.orgId, () =>
+        readAuthorityConnectionStatus(db, org.orgId, "hmrc"),
+      );
+      assert.equal(native.status, "ready");
+      assert.equal(native.hasCredentials, true);
+      const isolated = await withOrgContext(other.orgId, () =>
+        readAuthorityConnectionStatus(db, other.orgId, "hmrc"),
+      );
+      assert.equal(isolated.status, "missing");
+      assert.equal(isolated.hasCredentials, false);
+    } finally {
+      await dropScratchOrg(org.orgId);
+      await dropScratchOrg(other.orgId);
+    }
+  },
+);
 
 test(
   "information return commands prepare and void through native reads with safe replay",

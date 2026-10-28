@@ -269,6 +269,46 @@ export const TREASURY_PAYMENT_TOOLS: ApplicationToolDefinition[] = [
     },
   }),
   definition({
+    name: "reprocess_payment_run_file",
+    title: "Reprocess Payment Run File",
+    description:
+      "Generate a replacement artifact for a failed or otherwise unusable payment-run file while preserving its prior delivery history. Use get_payment_run to find the run and file ids before retrying.",
+    inputSchema: z.object({
+      runId: UUID.describe("Payment run id from get_payment_run."),
+      fileId: UUID.describe("Existing failed or unusable file id from get_payment_run."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: actorCanPay,
+    execute: async (context, input) => {
+      await paymentRunForActor(context, input.runId);
+      try {
+        const file = await generatePaymentFileArtifact(
+          input.runId,
+          context.authz.user.orgId,
+          context.authz.user.id,
+          {
+            reprocessFileId: input.fileId,
+            allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+          },
+        );
+        return {
+          ok: true,
+          runId: input.runId,
+          fileId: file.id,
+          filename: file.filename,
+          status: await paymentFileStatus(context.authz.user.orgId, file.id),
+          href: paymentHref(input.runId),
+        };
+      } catch (error) {
+        settlePaymentError(error);
+      }
+    },
+  }),
+  definition({
     name: "deliver_payment_run_file",
     title: "Deliver Payment Run File",
     description:
@@ -730,7 +770,6 @@ export const TREASURY_PAYMENT_TOOLS: ApplicationToolDefinition[] = [
         return {
           ok: true,
           linkId: link.id,
-          status: link.status,
           ...link,
           href: `/invoices/${input.documentId}`,
         };

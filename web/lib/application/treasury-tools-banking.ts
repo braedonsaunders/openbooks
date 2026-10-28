@@ -21,6 +21,8 @@ import {
   correctStatementLine,
   createGlClearingGroup,
   deleteStatementImport,
+  adjustReconciliation,
+  discardReconciliation,
   excludePossibleDuplicates,
   excludeStatementLine,
   clearPossibleDuplicateFlag,
@@ -46,6 +48,7 @@ import {
   DATE,
   IDEMPOTENCY_KEY,
   MONEY,
+  runOutsideTenantTransaction,
   settleDomainRefusal,
   UUID,
 } from "./treasury-tools-common";
@@ -103,6 +106,17 @@ const statementLineInput = z.object({
 const expectedOpen = z
   .record(z.string(), MONEY)
   .describe("Expected exact open balance for each selected document line.");
+
+type PreviewBankMatchRulesInput = {
+  accountId: string;
+  criteria?: { version: 2; match: unknown; accountScope?: string[] };
+  outcome?: unknown;
+  ruleId?: string;
+  priority?: number;
+  windowDays?: number;
+  onlyUnmatched?: boolean;
+  limit?: number;
+};
 
 export const TREASURY_BANKING_TOOLS: ApplicationToolDefinition[] = [
   definition({
@@ -451,8 +465,9 @@ export const TREASURY_BANKING_TOOLS: ApplicationToolDefinition[] = [
     assistantConfirmation: "never",
     visibleTo: (authz) => can(authz, "banking.reconcile"),
     featureKey: "banking",
-    execute: async (context, input) => {
+    execute: async (context, rawInput) => {
       await assertTreasuryGate(context, "banking.reconcile", "banking");
+      const input = rawInput as PreviewBankMatchRulesInput;
       let draftRule: NonNullable<Parameters<typeof previewRules>[2]>["draftRule"];
       if (input.criteria !== undefined || input.outcome !== undefined) {
         const criteria = validateCriteria(input.criteria);
@@ -467,13 +482,13 @@ export const TREASURY_BANKING_TOOLS: ApplicationToolDefinition[] = [
         };
       }
       try {
-        return await previewRules(context.authz.user.orgId, input.accountId, {
+        return (await previewRules(context.authz.user.orgId, input.accountId, {
           draftRule,
           windowDays: input.windowDays ?? 90,
           onlyUnmatched: input.onlyUnmatched ?? false,
           limit: input.limit ?? 25,
           allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
-        });
+        })) as unknown as Record<string, unknown>;
       } catch (error) {
         settleBankingError(error);
       }
@@ -704,7 +719,10 @@ export const TREASURY_BANKING_TOOLS: ApplicationToolDefinition[] = [
           {
             accountId: input.accountId,
             source: input.source,
-            lines: input.lines,
+            lines: input.lines.map((line) => ({
+              ...line,
+              description: line.description ?? null,
+            })),
             statementDate: input.statementDate ?? null,
             openingBalance: input.openingBalance ?? null,
             closingBalance: input.closingBalance ?? null,
@@ -901,6 +919,87 @@ export const TREASURY_BANKING_TOOLS: ApplicationToolDefinition[] = [
           ok: true,
           ...result,
           status: "matched",
+          href: `/banking/reconciliations?session=${encodeURIComponent(input.reconciliationId)}`,
+        };
+      } catch (error) {
+        settleBankingError(error);
+      }
+    },
+  }),
+  definition({
+    name: "adjust_reconciliation",
+    title: "Adjust Reconciliation",
+    description:
+      "Change the cutoff date or statement balance of an unsigned reconciliation session. Use get_reconciliation to review the session and ensure matched lines remain inside the new cutoff.",
+    inputSchema: z
+      .object({
+        reconciliationId: UUID.describe(
+          "Unsigned reconciliation session id from get_reconciliation.",
+        ),
+        throughDate: DATE.optional().describe("New statement cutoff date in YYYY-MM-DD format."),
+        statementBalance: MONEY.optional().describe(
+          "New exact statement balance as a decimal string.",
+        ),
+        idempotencyKey: IDEMPOTENCY_KEY,
+      })
+      .refine((input) => input.throughDate !== undefined || input.statementBalance !== undefined, {
+        message: "throughDate or statementBalance is required",
+      }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => can(authz, "banking.reconcile"),
+    featureKey: "banking",
+    execute: async (context, input) => {
+      await assertTreasuryGate(context, "banking.reconcile", "banking");
+      try {
+        const totals = await adjustReconciliation(
+          input.reconciliationId,
+          {
+            throughDate: input.throughDate,
+            statementBalance: input.statementBalance,
+          },
+          bankingContext(context),
+        );
+        if (totals === null) throw notFound("record");
+        return {
+          ok: true,
+          reconciliationId: input.reconciliationId,
+          totals,
+          status: "adjusted",
+          href: `/banking/reconciliations?session=${encodeURIComponent(input.reconciliationId)}`,
+        };
+      } catch (error) {
+        settleBankingError(error);
+      }
+    },
+  }),
+  definition({
+    name: "discard_reconciliation",
+    title: "Discard Reconciliation",
+    description:
+      "Discard an unsigned reconciliation and release its matched statement lines. Use get_reconciliation to verify the session; signed-off reconciliations cannot be discarded.",
+    inputSchema: z.object({
+      reconciliationId: UUID.describe(
+        "Unsigned reconciliation session id from get_reconciliation.",
+      ),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: true,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => can(authz, "banking.reconcile"),
+    featureKey: "banking",
+    execute: async (context, input) => {
+      await assertTreasuryGate(context, "banking.reconcile", "banking");
+      try {
+        await discardReconciliation(input.reconciliationId, bankingContext(context));
+        return {
+          ok: true,
+          reconciliationId: input.reconciliationId,
+          status: "discarded",
           href: `/banking/reconciliations?session=${encodeURIComponent(input.reconciliationId)}`,
         };
       } catch (error) {

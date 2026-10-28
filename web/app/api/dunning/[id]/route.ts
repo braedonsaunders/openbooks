@@ -267,7 +267,7 @@ export const PATCH = defineRoute({
       actorId: authz.user.id,
       policyId: id,
       input: {
-        ...(body.expectedUpdatedAt !== undefined
+        ...(typeof body.expectedUpdatedAt === "string"
           ? { expectedUpdatedAt: body.expectedUpdatedAt }
           : {}),
         ...(body.appliesToKind !== undefined

@@ -575,9 +575,9 @@ export const TREASURY_AUTOPAY_TOOLS: ApplicationToolDefinition[] = [
       try {
         const sentOn =
           input.sentOn ??
-          (await import("@openbooks/engine/platform/business-date/module")).businessToday(
-            context.authz.user.orgId,
-          );
+          (await (
+            await import("@openbooks/engine/platform/business-date/module")
+          ).businessToday(context.authz.user.orgId));
         await markExpiryOutreachSent(
           context.authz.user.orgId,
           [input.methodId],

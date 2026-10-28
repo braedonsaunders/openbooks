@@ -143,10 +143,11 @@ export const TREASURY_COLLECTION_TOOLS: ApplicationToolDefinition[] = [
     openWorld: false,
     assistantConfirmation: "never",
     visibleTo: (authz) => can(authz, "ar.read") && can(authz, "reports.read"),
-    execute: async (context, input) => {
+    execute: async (context, rawInput) => {
+      const input = rawInput as z.infer<typeof previewSchema>;
       statementRead(context);
       try {
-        return await buildPreview(context, input);
+        return (await buildPreview(context, input)) as unknown as Record<string, unknown>;
       } catch (error) {
         if (error instanceof ReportCurrencyBasisError) settleDomainRefusal(error, 422);
         throw error;

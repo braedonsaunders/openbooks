@@ -133,6 +133,7 @@ export async function createDunningPolicyRecord(args: {
                 ${input.insufficientFundsOffsetsDays ? retryOffsetsSql(input.insufficientFundsOffsetsDays) : sql`'{3,7,14}'::integer[]`},
                 ${input.expiryNoticeDays ?? 30}, ${input.finalAction ?? "none"},
                 ${args.actorId}, ${args.actorId})
+        -- A duplicate UUID returns no row and is reported as a create conflict below.
         on conflict (id) do nothing returning *
       `,
       "objects",

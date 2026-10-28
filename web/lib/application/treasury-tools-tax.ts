@@ -4,6 +4,21 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { computeTaxReturn } from "@openbooks/engine/tax-returns/return";
 import {
+  computeProvisionRun,
+  IncomeTaxProvisionError,
+  listProvisionRuns,
+  orgTaxFramework,
+  postProvisionRun,
+  type ComputeProvisionOptions,
+  type DifferenceInput,
+  type PermanentDifference,
+} from "@openbooks/engine/tax-returns/income-tax-provision";
+import {
+  incomeTaxProvisionRunExists,
+  listIncomeTaxProvisionFiscalYears,
+  listIncomeTaxProvisionRates,
+} from "@openbooks/engine/tax-returns/income-tax-provision-queries";
+import {
   aggregateTaxReturnAdjustments,
   markTaxFilingFiled,
   normalizeTaxReturnAdjustments,
@@ -31,6 +46,10 @@ import {
   savePartyTaxId,
   validateStoredTaxId,
   listPartyTaxIds,
+  readAuthorityConnectionStatus,
+  saveAuthorityCredentials,
+  verifyAuthorityConnection,
+  refreshHmrcToken,
 } from "@openbooks/engine/tax";
 import { VatValidationError } from "@openbooks/engine/connectors";
 import {
@@ -70,6 +89,7 @@ function settleTax(error: unknown): never {
       code: "code" in error ? error.code : undefined,
       remedy: "remedy" in error ? error.remedy : undefined,
     });
+  if (error instanceof IncomeTaxProvisionError) settleDomainRefusal(error, 422);
   if (error instanceof ApplicationError) throw error;
   settleDomainRefusal(error);
 }
@@ -140,6 +160,103 @@ const filingInput = z.object({
     .optional()
     .describe("Optional consolidated return translation policy."),
 });
+const hmrcCredentialsInput = z.object({
+  clientId: z.string().min(1).max(5000).describe("HMRC developer application client id."),
+  clientSecret: z.string().min(1).max(5000).describe("HMRC developer application client secret."),
+  scope: z.string().min(1).max(5000).describe("OAuth scope granted to the HMRC application."),
+});
+const abnCredentialsInput = z.object({
+  guid: z.string().min(1).max(5000).describe("ABN Lookup web services GUID."),
+});
+const saveAuthorityInput = z.object({
+  authority: z.enum(["hmrc", "abn"]).describe("Tax authority to configure."),
+  credentials: z
+    .union([hmrcCredentialsInput, abnCredentialsInput])
+    .describe("Credentials for the selected authority, sealed by the tax authority service."),
+  idempotencyKey: IDEMPOTENCY_KEY,
+});
+const provisionDifferenceCategory = z
+  .enum(["fixed_assets", "revenue_recognition", "provisions", "loss_carryforward", "other"])
+  .describe("Temporary difference category.");
+const provisionAmount = (field: string) =>
+  z
+    .string()
+    .regex(
+      /^-?0*[0-9]{1,15}(?:\.[0-9]{1,4})?$/,
+      `${field} must be an exact decimal with at most 15 significant integer digits and 4 decimal places.`,
+    );
+const provisionPermanentDifference = z.object({
+  description: z
+    .string()
+    .trim()
+    .min(1)
+    .max(2000)
+    .describe("Description of the permanent difference."),
+  amount: provisionAmount("amount").describe(
+    "Exact permanent difference amount as a decimal string.",
+  ),
+});
+const provisionTemporaryDifference = z.object({
+  category: provisionDifferenceCategory,
+  description: z
+    .string()
+    .trim()
+    .min(1)
+    .max(2000)
+    .describe("Description of the temporary difference."),
+  difference: provisionAmount("difference").describe(
+    "Exact temporary difference amount as a decimal string.",
+  ),
+});
+const provisionEntityInput = z.object({
+  permanentDifferences: z
+    .array(provisionPermanentDifference)
+    .max(1000)
+    .optional()
+    .describe("Entity-specific permanent differences."),
+  additionalDifferences: z
+    .array(provisionTemporaryDifference)
+    .max(1000)
+    .optional()
+    .describe("Entity-specific temporary differences."),
+  lossCarryforwardUsed: provisionAmount("lossCarryforwardUsed")
+    .optional()
+    .describe("Entity-specific loss carryforward used."),
+  valuationAllowance: provisionAmount("valuationAllowance")
+    .optional()
+    .describe("Entity-specific valuation allowance."),
+});
+const incomeTaxProvisionInput = z.object({
+  fiscalYear: z
+    .union([z.number().int(), z.string().regex(/^\d{4}$/)])
+    .refine((year) => Number(year) >= 1900 && Number(year) <= 2200, "fiscalYear is required")
+    .describe("Fiscal year to measure."),
+  permanentDifferences: z
+    .array(provisionPermanentDifference)
+    .max(1000)
+    .optional()
+    .describe("Root-entity permanent differences."),
+  additionalDifferences: z
+    .array(provisionTemporaryDifference)
+    .max(1000)
+    .optional()
+    .describe("Root-entity temporary differences."),
+  lossCarryforwardUsed: provisionAmount("lossCarryforwardUsed")
+    .optional()
+    .describe("Root-entity loss carryforward used."),
+  valuationAllowance: provisionAmount("valuationAllowance")
+    .optional()
+    .describe("Root-entity valuation allowance."),
+  entities: z
+    .record(UUID, provisionEntityInput)
+    .optional()
+    .describe("Optional entity-specific inputs keyed by subsidiary id."),
+  presentationCurrency: z
+    .string()
+    .regex(/^[A-Z]{3}$/)
+    .optional()
+    .describe("Currency for the consolidated view; entity journals remain in functional currency."),
+});
 
 async function assertPartyVisible(context: ApplicationContext, partyId: string): Promise<void> {
   if (context.authz.allowedSubsidiaryIds === null) return;
@@ -159,6 +276,255 @@ async function assertPartyVisible(context: ApplicationContext, partyId: string):
 const taxHref = (id: string) => `/tax?filing=${encodeURIComponent(id)}`;
 
 export const TREASURY_TAX_TOOLS: ApplicationToolDefinition[] = [
+  definition({
+    name: "list_income_tax_provision_runs",
+    title: "List Income Tax Provision Runs",
+    description:
+      "List provision runs, available fiscal years, enacted rates, and the organization tax framework. Use a returned draft run id to post the provision after reviewing its calculation and source snapshot.",
+    inputSchema: z.object({}),
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "never",
+    visibleTo: (authz) => can(authz, "reports.read"),
+    execute: async (context) => {
+      await assertTreasuryGate(context, "reports.read");
+      const orgId = context.authz.user.orgId;
+      const [runs, years, rates, framework] = await Promise.all([
+        listProvisionRuns(orgId, context.authz.allowedSubsidiaryIds),
+        listIncomeTaxProvisionFiscalYears(orgId),
+        listIncomeTaxProvisionRates(orgId, context.authz.allowedSubsidiaryIds),
+        orgTaxFramework(orgId),
+      ]);
+      return {
+        runs,
+        fiscalYears: years.map((row) => row.fiscal_year),
+        rates,
+        framework,
+        href: "/tax/provisions",
+      };
+    },
+  }),
+  definition({
+    name: "compute_income_tax_provision",
+    title: "Compute Income Tax Provision",
+    description:
+      "Measure or recompute a draft ASC 740 or IAS 12 provision for a fiscal year using configured rates and exact decimal differences. Use list_income_tax_provision_runs to review source data and existing drafts; posting later requires the source snapshot to remain unchanged.",
+    inputSchema: incomeTaxProvisionInput.extend({ idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => can(authz, "reports.create") && authz.allowedSubsidiaryIds === null,
+    execute: async (context, input) => {
+      await assertTreasuryGate(context, "reports.create");
+      assertUnrestricted(context);
+      const source = (
+        differences: z.infer<typeof provisionTemporaryDifference>[] | undefined,
+      ): DifferenceInput[] => (differences ?? []).map((row) => ({ ...row, source: "manual" }));
+      const options: ComputeProvisionOptions = {
+        permanentDifferences: input.permanentDifferences as PermanentDifference[] | undefined,
+        additionalDifferences: source(input.additionalDifferences),
+        lossCarryforwardUsed: input.lossCarryforwardUsed ?? "0",
+        valuationAllowance: input.valuationAllowance ?? "0",
+        ...(input.entities
+          ? {
+              entities: Object.fromEntries(
+                Object.entries(input.entities).map(([id, entity]) => [
+                  id,
+                  {
+                    permanentDifferences: entity.permanentDifferences as
+                      PermanentDifference[] | undefined,
+                    additionalDifferences: source(entity.additionalDifferences),
+                    lossCarryforwardUsed: entity.lossCarryforwardUsed,
+                    valuationAllowance: entity.valuationAllowance,
+                  },
+                ]),
+              ),
+            }
+          : {}),
+        presentationCurrency: input.presentationCurrency,
+      };
+      try {
+        const runId = await computeProvisionRun(
+          context.authz.user.orgId,
+          Number(input.fiscalYear),
+          options,
+          context.authz.user.id,
+          context.authz.allowedSubsidiaryIds,
+        );
+        return { ok: true, runId, status: "draft", href: `/tax/provisions?run=${runId}` };
+      } catch (error) {
+        settleTax(error);
+      }
+    },
+  }),
+  definition({
+    name: "post_income_tax_provision",
+    title: "Post Income Tax Provision",
+    description:
+      "Post a draft income-tax provision after confirming its source snapshot is still current. Use list_income_tax_provision_runs to find the run id; the service posts balanced journals for the complete organization-wide entity set.",
+    inputSchema: z.object({
+      runId: UUID.describe("Draft provision run id from list_income_tax_provision_runs."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => can(authz, "gl.post") && authz.allowedSubsidiaryIds === null,
+    execute: async (context, input) => {
+      await assertTreasuryGate(context, "gl.post");
+      assertUnrestricted(context);
+      if (!(await incomeTaxProvisionRunExists(context.authz.user.orgId, input.runId))) {
+        throw notFound("record");
+      }
+      try {
+        const result = await postProvisionRun(
+          context.authz.user.orgId,
+          input.runId,
+          context.authz.user.id,
+        );
+        return {
+          ok: true,
+          runId: input.runId,
+          ...result,
+          status: "posted",
+          href: `/tax/provisions?run=${input.runId}`,
+        };
+      } catch (error) {
+        settleTax(error);
+      }
+    },
+  }),
+  definition({
+    name: "list_tax_authority_connections",
+    title: "List Tax Authority Connections",
+    description:
+      "Read HMRC and ABN connection readiness, verification time, token expiry, and safe error status. Use this before saving or verifying credentials; secret material is never returned.",
+    inputSchema: z.object({}),
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "never",
+    visibleTo: (authz) => can(authz, "admin.setup.manage"),
+    execute: async (context) => {
+      await assertTreasuryGate(context, "admin.setup.manage");
+      const orgId = context.authz.user.orgId;
+      const [hmrc, abn] = await Promise.all([
+        readAuthorityConnectionStatus(db, orgId, "hmrc"),
+        readAuthorityConnectionStatus(db, orgId, "abn"),
+      ]);
+      return { connections: [hmrc, abn], href: "/admin/setup?tab=tax" };
+    },
+  }),
+  definition({
+    name: "save_tax_authority_credentials",
+    title: "Save Tax Authority Credentials",
+    description:
+      "Save or rotate HMRC VAT API or ABN Lookup credentials sealed at rest. Use list_tax_authority_connections to inspect current readiness; credentials are never returned after saving.",
+    inputSchema: saveAuthorityInput,
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => can(authz, "admin.setup.manage"),
+    execute: async (context, input) => {
+      await assertTreasuryGate(context, "admin.setup.manage");
+      try {
+        const credentials =
+          input.authority === "hmrc"
+            ? hmrcCredentialsInput.safeParse(input.credentials)
+            : abnCredentialsInput.safeParse(input.credentials);
+        if (!credentials.success) {
+          throw invalidInput(
+            input.authority === "hmrc"
+              ? "HMRC credentials need clientId, clientSecret and scope from the HMRC developer hub"
+              : "ABN credentials need the GUID from ABN Lookup web services",
+          );
+        }
+        const connection = await saveAuthorityCredentials(
+          db,
+          context.authz.user.orgId,
+          context.authz.user.id,
+          input.authority,
+          credentials.data,
+        );
+        return {
+          ok: true,
+          connection,
+          status: connection.status,
+          href: "/admin/setup?tab=tax",
+        };
+      } catch (error) {
+        settleTax(error);
+      }
+    },
+  }),
+  definition({
+    name: "verify_tax_authority_connection",
+    title: "Verify Tax Authority Connection",
+    description:
+      "Perform a live HMRC or ABN connection check and persist the resulting connection status. Use list_tax_authority_connections to confirm credentials are configured and review the updated verification state.",
+    inputSchema: z.object({
+      authority: z.enum(["hmrc", "abn"]).describe("Configured tax authority to verify."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: true,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => can(authz, "admin.setup.manage"),
+    execute: async (context, input) => {
+      await assertTreasuryGate(context, "admin.setup.manage");
+      try {
+        const connection = await runOutsideTenantTransaction(context, () =>
+          verifyAuthorityConnection(
+            db,
+            context.authz.user.orgId,
+            context.authz.user.id,
+            input.authority,
+          ),
+        );
+        return {
+          ok: true,
+          connection,
+          status: connection.status,
+          href: "/admin/setup?tab=tax",
+        };
+      } catch (error) {
+        settleTax(error);
+      }
+    },
+  }),
+  definition({
+    name: "refresh_hmrc_tax_token",
+    title: "Refresh HMRC Tax Token",
+    description:
+      "Exchange the configured HMRC client credentials for a fresh access token and persist its expiry. Use list_tax_authority_connections to review HMRC readiness before and after the request.",
+    inputSchema: z.object({ idempotencyKey: IDEMPOTENCY_KEY }),
+    readOnly: false,
+    destructive: false,
+    openWorld: true,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => can(authz, "admin.setup.manage"),
+    execute: async (context) => {
+      await assertTreasuryGate(context, "admin.setup.manage");
+      try {
+        const connection = await runOutsideTenantTransaction(context, () =>
+          refreshHmrcToken(db, context.authz.user.orgId, context.authz.user.id),
+        );
+        return {
+          ok: true,
+          connection,
+          status: connection.status,
+          href: "/admin/setup?tab=tax",
+        };
+      } catch (error) {
+        settleTax(error);
+      }
+    },
+  }),
   definition({
     name: "get_tax_rate_provider_config",
     title: "Get Tax Rate Provider Configuration",
