@@ -21,7 +21,7 @@ import {
   type PageSpec,
 } from "@braedonsaunders/appkit-viewspec";
 import { insightVisibilitySql } from "@/lib/insight-access";
-import { listInsightDashboardsForAuthz } from "../../api/insights/_lib";
+import { listInsightDashboardsForAuthz } from "../../../api/insights/_lib";
 import { can, requirePermission } from "../../../../lib/authz";
 import { parseListParams, pickString } from "../../../../lib/list-params";
 
