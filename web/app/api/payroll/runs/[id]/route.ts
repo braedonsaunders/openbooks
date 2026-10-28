@@ -1,10 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { apiErrorResponse } from "@/lib/api/error-response";
-import {
-  lockAndCheckPayrollRunPopulation,
-  type PayrollSubsidiaryScope,
-} from "@openbooks/engine/payroll/scope";
+import { lockAndCheckPayrollRunPopulation } from "@openbooks/engine/payroll/scope";
 import { guardFeaturePermission } from "@/lib/feature-gates";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -29,10 +26,9 @@ import {
   payRunApprovalState,
   recalculateStaleApprovedPayRun,
 } from "@openbooks/engine/payroll/approval";
-import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
 import { rendererStatusResponse } from "../../../../../lib/api/pdf-renderer";
 import { emailRunStubs } from "../../../../../lib/payroll-outputs";
-import { assemblePayRunEvidence } from "../../../../../lib/payroll-evidence";
+import { submitPayRunForApproval } from "../../../../../lib/payroll/run-approval";
 import {
   canonicalAdjustmentHours,
   mutatePayRunAdjustment,
@@ -418,35 +414,6 @@ export const GET = defineRoute({
     });
   },
 });
-
-/**
- * Assemble the evidence package and route the run into its approval Flow. The
- * submit-approval and recalculate-approved actions share it, so a resubmitted
- * run meets the same population and freshness checks as a first submission.
- */
-async function submitPayRunForApproval(
-  orgId: string,
-  userId: string,
-  documentId: string,
-  allowedSubsidiaryIds: PayrollSubsidiaryScope,
-): Promise<{ ok: true; evidence: unknown; gated: boolean } | { ok: false; error: string }> {
-  // Population opacity precedes freshness: the staleness gate answers
-  // from the caller's visible inputs, so an opaque run would leak its
-  // activity as a stale-calculation refusal instead of the opaque
-  // 'pay run not found'. Assemble enforces the same check; this probe
-  // only orders it first (no-op for unrestricted callers).
-  await lockAndCheckPayrollRunPopulation(db, orgId, documentId, allowedSubsidiaryIds);
-  // A tab left open across an edit must not route superseded figures to
-  // approvers: re-check calculation freshness here, immediately before
-  // evidence assembly, exactly as the commit branch does. A stale run is
-  // refused with the named stale-calculation error instead of parking
-  // evidence the commit gate would later reject.
-  await assertPayRunNotStale(orgId, documentId, db, allowedSubsidiaryIds);
-  const evidence = await assemblePayRunEvidence(orgId, userId, documentId, allowedSubsidiaryIds);
-  const submission = await submitAndReleaseIfUngated("pay_run", documentId, userId);
-  if (submission.flowError) return { ok: false, error: submission.flowError };
-  return { ok: true, evidence, gated: submission.gated };
-}
 
 const authorizedRunRequests = new WeakSet<Request>();
 
@@ -1281,12 +1248,12 @@ export const POST = defineRoute({
       // register + GL preview) onto the run, then route it through Flows. A
       // tenant with no pay_run flow gets `gated: false` and releases immediately.
       if (body.action === "submit-approval") {
-        const submitted = await submitPayRunForApproval(
-          gate.user.orgId,
-          gate.user.id,
-          id,
-          gate.allowedSubsidiaryIds,
-        );
+        const submitted = await submitPayRunForApproval({
+          orgId: gate.user.orgId,
+          userId: gate.user.id,
+          documentId: id,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        });
         if (!submitted.ok) return NextResponse.json({ error: submitted.error }, { status: 422 });
         return NextResponse.json({
           ok: true,
@@ -1321,12 +1288,12 @@ export const POST = defineRoute({
           return NextResponse.json({ ...base, resubmitted: false, gated: false });
         // The recalculation has already committed. A refused resubmission leaves the
         // run in draft with its fresh figures, and the refusal names that state.
-        const resubmitted = await submitPayRunForApproval(
-          gate.user.orgId,
-          gate.user.id,
-          id,
-          gate.allowedSubsidiaryIds,
-        ).catch((error: unknown) => {
+        const resubmitted = await submitPayRunForApproval({
+          orgId: gate.user.orgId,
+          userId: gate.user.id,
+          documentId: id,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        }).catch((error: unknown) => {
           if (error instanceof PayrollError) return { ok: false as const, error: error.message };
           throw error;
         });

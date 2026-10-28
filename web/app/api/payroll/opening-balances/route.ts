@@ -2,6 +2,7 @@ import { uuidId } from "@/lib/api/json-schema";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
+import type { Authz } from "@/lib/authz";
 import { NextResponse } from "next/server";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { normalizeMoney } from "@openbooks/engine/money/money";
@@ -51,7 +52,7 @@ const openingBalanceRowSchema = z.strictObject({
     .optional(),
   updatedAt: z.unknown().optional(),
 });
-const requestBodySchema = z
+export const requestBodySchema = z
   .strictObject({
     taxYear: z.union([
       z.number().int(),
@@ -197,188 +198,195 @@ function componentAmounts(raw: unknown): Record<string, unknown> | undefined {
   return raw as Record<string, unknown>;
 }
 
+export async function savePayrollOpeningBalances(input: {
+  authz: Authz;
+  body: z.infer<typeof requestBodySchema>;
+}): Promise<Response> {
+  const gate = input.authz;
+  const body = input.body;
+  const rows: OpeningBalanceWrite[] = [];
+  const saldoRows: {
+    employeePartyId: string;
+    regionaleSaldo: unknown;
+    comunaleSaldo: unknown;
+  }[] = [];
+  for (const row of body.rows) {
+    if (
+      row.components !== undefined &&
+      row.components !== null &&
+      (typeof row.components !== "object" || Array.isArray(row.components))
+    ) {
+      return NextResponse.json(
+        { error: "components must be an object of component amounts" },
+        { status: 422 },
+      );
+    }
+    // The row's loader-served version for the lost-update guard. Absent
+    // means the caller does not speak versions (the file importer) and the
+    // row saves unguarded, as before — never a silent default.
+    let updatedAt: string | null | undefined;
+    if (row.updatedAt === undefined || row.updatedAt === null) updatedAt = row.updatedAt;
+    else if (typeof row.updatedAt === "string") updatedAt = row.updatedAt;
+    else {
+      return NextResponse.json(
+        { error: "updatedAt must be the row version string or null" },
+        { status: 422 },
+      );
+    }
+    const amounts = persistMoneyMap((row.amounts ?? {}) as Record<string, unknown>);
+    if (!amounts.ok) {
+      return NextResponse.json(
+        { error: moneyRefusal(`Opening-balance amount for "${amounts.key}"`, amounts.value) },
+        { status: 422 },
+      );
+    }
+    const rawComponents = componentAmounts(row.components);
+    let components: Record<string, unknown> | undefined;
+    if (rawComponents !== undefined) {
+      const persisted = persistMoneyMap(rawComponents);
+      if (!persisted.ok) {
+        return NextResponse.json(
+          { error: moneyRefusal(`Component amount for "${persisted.key}"`, persisted.value) },
+          { status: 422 },
+        );
+      }
+      components = persisted.map;
+    }
+    let programs: Record<string, unknown> | undefined;
+    if (row.programs !== undefined) {
+      const persisted = persistMoneyMap(row.programs as Record<string, unknown>);
+      if (!persisted.ok) {
+        return NextResponse.json(
+          { error: moneyRefusal(`Program carry-in for "${persisted.key}"`, persisted.value) },
+          { status: 422 },
+        );
+      }
+      programs = persisted.map;
+    }
+    const saldoRaw = {
+      regionaleSaldo: amounts.map[IT_SALDO_KEYS[0]] ?? null,
+      comunaleSaldo: amounts.map[IT_SALDO_KEYS[1]] ?? null,
+    };
+    delete amounts.map[IT_SALDO_KEYS[0]];
+    delete amounts.map[IT_SALDO_KEYS[1]];
+    // All-blank saldo is an untouched row, not a clearing: keep what is
+    // stored (a conjured zero would silence the installment refusal).
+    if (
+      (saldoRaw.regionaleSaldo != null && String(saldoRaw.regionaleSaldo) !== "") ||
+      (saldoRaw.comunaleSaldo != null && String(saldoRaw.comunaleSaldo) !== "")
+    ) {
+      saldoRows.push({
+        employeePartyId: row.employeePartyId,
+        regionaleSaldo: saldoRaw.regionaleSaldo,
+        comunaleSaldo: saldoRaw.comunaleSaldo,
+      });
+    }
+    let suiStates: Record<string, unknown> | undefined;
+    if (row.suiStates !== undefined) {
+      const persisted = persistMoneyMap(row.suiStates as Record<string, unknown>);
+      if (!persisted.ok) {
+        return NextResponse.json(
+          { error: moneyRefusal(`SUI carry-in for "${persisted.key}"`, persisted.value) },
+          { status: 422 },
+        );
+      }
+      suiStates = persisted.map;
+    }
+    let accountBases: Record<string, unknown>[] | undefined;
+    if (row.accountBases !== undefined) {
+      accountBases = [];
+      for (const rawBase of row.accountBases) {
+        const base = rawBase;
+        const amount = persistMoney(base.insurableYtd);
+        if (amount === "invalid") {
+          return NextResponse.json(
+            {
+              error: moneyRefusal(
+                `Account wage-base opening for "${base.programKey}"`,
+                base.insurableYtd,
+                "an amount",
+                4,
+              ),
+            },
+            { status: 422 },
+          );
+        }
+        if (amount === "") continue;
+        accountBases.push({
+          programKey: base.programKey,
+          filingAccountId: base.filingAccountId,
+          region: base.region,
+          insurableYtd: amount,
+        });
+      }
+    }
+    rows.push({
+      employeePartyId: row.employeePartyId,
+      amounts: amounts.map,
+      // Absent means "this client does not speak components", which the service
+      // treats as "keep what is stored". Sending {} is how the grid clears them.
+      components,
+      // Same contract for program carry-ins: absent keeps what is stored,
+      // {} clears them.
+      programs,
+      // Same contract for state SUI carry-ins: absent keeps what is stored,
+      // {} clears them.
+      suiStates,
+      accountBases,
+      updatedAt,
+    });
+  }
+
+  try {
+    if (saldoRows.length > 0) {
+      await saveItSurtaxSaldoCarryIns({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        taxYear: assertTaxYear(body.taxYear),
+        rows: saldoRows,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      });
+    }
+    const result = await saveOpeningBalances({
+      auditReason: body.auditReason,
+      sourceReference: body.sourceReference,
+      orgId: gate.user.orgId,
+      actorId: gate.user.id,
+      taxYear: assertTaxYear(body.taxYear),
+      rows,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    });
+    return NextResponse.json(result);
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) return notFound("record");
+    // A refusal is data the operator has to see per row, not a bare 4xx: a
+    // whole-workforce load rejected for one transposed column must say which
+    // employee, and nothing was written.
+    if (error instanceof OpeningBalanceSaveError) {
+      return apiErrorResponse(error, {
+        safeStatus: 409,
+        details: { errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
+      });
+    }
+    if (error instanceof SurtaxSaldoSaveError) {
+      return apiErrorResponse(error, {
+        safeStatus: 409,
+        details: { errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
+      });
+    }
+    if (error instanceof PayrollError) {
+      return apiErrorResponse(error, { safeStatus: 422 });
+    }
+    throw error;
+  }
+}
+
 export const POST = defineRoute({
   permission: "payroll.manage",
   feature: "payroll",
   body: requestBodySchema,
   invalidBodyStatus: 422,
-  handler: async ({ authz: gate, body }) => {
-    const rows: OpeningBalanceWrite[] = [];
-    const saldoRows: {
-      employeePartyId: string;
-      regionaleSaldo: unknown;
-      comunaleSaldo: unknown;
-    }[] = [];
-    for (const row of body.rows) {
-      if (
-        row.components !== undefined &&
-        row.components !== null &&
-        (typeof row.components !== "object" || Array.isArray(row.components))
-      ) {
-        return NextResponse.json(
-          { error: "components must be an object of component amounts" },
-          { status: 422 },
-        );
-      }
-      // The row's loader-served version for the lost-update guard. Absent
-      // means the caller does not speak versions (the file importer) and the
-      // row saves unguarded, as before — never a silent default.
-      let updatedAt: string | null | undefined;
-      if (row.updatedAt === undefined || row.updatedAt === null) updatedAt = row.updatedAt;
-      else if (typeof row.updatedAt === "string") updatedAt = row.updatedAt;
-      else {
-        return NextResponse.json(
-          { error: "updatedAt must be the row version string or null" },
-          { status: 422 },
-        );
-      }
-      const amounts = persistMoneyMap((row.amounts ?? {}) as Record<string, unknown>);
-      if (!amounts.ok) {
-        return NextResponse.json(
-          { error: moneyRefusal(`Opening-balance amount for "${amounts.key}"`, amounts.value) },
-          { status: 422 },
-        );
-      }
-      const rawComponents = componentAmounts(row.components);
-      let components: Record<string, unknown> | undefined;
-      if (rawComponents !== undefined) {
-        const persisted = persistMoneyMap(rawComponents);
-        if (!persisted.ok) {
-          return NextResponse.json(
-            { error: moneyRefusal(`Component amount for "${persisted.key}"`, persisted.value) },
-            { status: 422 },
-          );
-        }
-        components = persisted.map;
-      }
-      let programs: Record<string, unknown> | undefined;
-      if (row.programs !== undefined) {
-        const persisted = persistMoneyMap(row.programs as Record<string, unknown>);
-        if (!persisted.ok) {
-          return NextResponse.json(
-            { error: moneyRefusal(`Program carry-in for "${persisted.key}"`, persisted.value) },
-            { status: 422 },
-          );
-        }
-        programs = persisted.map;
-      }
-      const saldoRaw = {
-        regionaleSaldo: amounts.map[IT_SALDO_KEYS[0]] ?? null,
-        comunaleSaldo: amounts.map[IT_SALDO_KEYS[1]] ?? null,
-      };
-      delete amounts.map[IT_SALDO_KEYS[0]];
-      delete amounts.map[IT_SALDO_KEYS[1]];
-      // All-blank saldo is an untouched row, not a clearing: keep what is
-      // stored (a conjured zero would silence the installment refusal).
-      if (
-        (saldoRaw.regionaleSaldo != null && String(saldoRaw.regionaleSaldo) !== "") ||
-        (saldoRaw.comunaleSaldo != null && String(saldoRaw.comunaleSaldo) !== "")
-      ) {
-        saldoRows.push({
-          employeePartyId: row.employeePartyId,
-          regionaleSaldo: saldoRaw.regionaleSaldo,
-          comunaleSaldo: saldoRaw.comunaleSaldo,
-        });
-      }
-      let suiStates: Record<string, unknown> | undefined;
-      if (row.suiStates !== undefined) {
-        const persisted = persistMoneyMap(row.suiStates as Record<string, unknown>);
-        if (!persisted.ok) {
-          return NextResponse.json(
-            { error: moneyRefusal(`SUI carry-in for "${persisted.key}"`, persisted.value) },
-            { status: 422 },
-          );
-        }
-        suiStates = persisted.map;
-      }
-      let accountBases: Record<string, unknown>[] | undefined;
-      if (row.accountBases !== undefined) {
-        accountBases = [];
-        for (const rawBase of row.accountBases) {
-          const base = rawBase;
-          const amount = persistMoney(base.insurableYtd);
-          if (amount === "invalid") {
-            return NextResponse.json(
-              {
-                error: moneyRefusal(
-                  `Account wage-base opening for "${base.programKey}"`,
-                  base.insurableYtd,
-                  "an amount",
-                  4,
-                ),
-              },
-              { status: 422 },
-            );
-          }
-          if (amount === "") continue;
-          accountBases.push({
-            programKey: base.programKey,
-            filingAccountId: base.filingAccountId,
-            region: base.region,
-            insurableYtd: amount,
-          });
-        }
-      }
-      rows.push({
-        employeePartyId: row.employeePartyId,
-        amounts: amounts.map,
-        // Absent means "this client does not speak components", which the service
-        // treats as "keep what is stored". Sending {} is how the grid clears them.
-        components,
-        // Same contract for program carry-ins: absent keeps what is stored,
-        // {} clears them.
-        programs,
-        // Same contract for state SUI carry-ins: absent keeps what is stored,
-        // {} clears them.
-        suiStates,
-        accountBases,
-        updatedAt,
-      });
-    }
-
-    try {
-      if (saldoRows.length > 0) {
-        await saveItSurtaxSaldoCarryIns({
-          orgId: gate.user.orgId,
-          actorId: gate.user.id,
-          taxYear: assertTaxYear(body.taxYear),
-          rows: saldoRows,
-          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        });
-      }
-      const result = await saveOpeningBalances({
-        auditReason: body.auditReason,
-        sourceReference: body.sourceReference,
-        orgId: gate.user.orgId,
-        actorId: gate.user.id,
-        taxYear: assertTaxYear(body.taxYear),
-        rows,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      });
-      return NextResponse.json(result);
-    } catch (error) {
-      if (error instanceof ScopeNotFoundError) return notFound("record");
-      // A refusal is data the operator has to see per row, not a bare 4xx: a
-      // whole-workforce load rejected for one transposed column must say which
-      // employee, and nothing was written.
-      if (error instanceof OpeningBalanceSaveError) {
-        return apiErrorResponse(error, {
-          safeStatus: 409,
-          details: { errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
-        });
-      }
-      if (error instanceof SurtaxSaldoSaveError) {
-        return apiErrorResponse(error, {
-          safeStatus: 409,
-          details: { errors: error.result.errors, created: 0, updated: 0, deleted: 0, skipped: [] },
-        });
-      }
-      if (error instanceof PayrollError) {
-        return apiErrorResponse(error, { safeStatus: 422 });
-      }
-      throw error;
-    }
-  },
+  handler: savePayrollOpeningBalances,
 });
 
 function message(error: unknown): string {

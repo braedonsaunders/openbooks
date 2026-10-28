@@ -2,6 +2,7 @@ import { uuidId } from "@/lib/api/json-schema";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
+import type { Authz } from "@/lib/authz";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
@@ -36,7 +37,7 @@ import {
 } from "../../../../../lib/payroll-decimal-refusal";
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.strictObject({
+export const requestBodySchema = z.strictObject({
   country: z.string().trim().min(2).max(3),
   rateKey: z.string().trim().min(1).max(120),
   region: z.string().trim().max(80).nullable().optional(),
@@ -285,104 +286,118 @@ export const GET = defineRoute({
   },
 });
 
-export const PUT = defineRoute({
-  permission: "payroll.manage",
-  feature: "payroll",
-  scope: "root",
-  body: requestBodySchema,
-  handler: async ({ authz: gate, body }) => {
-    const parsed = parseBody(body);
-    if (typeof parsed === "string") return NextResponse.json({ error: parsed }, { status: 422 });
+export async function savePayrollStatutoryRate(input: {
+  authz: Authz;
+  body: z.infer<typeof requestBodySchema>;
+}): Promise<Response> {
+  const gate = input.authz;
+  const body = input.body;
+  const parsed = parseBody(body);
+  if (typeof parsed === "string") return NextResponse.json({ error: parsed }, { status: 422 });
 
-    const account = parsed.filingAccountId
-      ? ((await listFilingAccounts(gate.user.orgId)).find((a) => a.id === parsed.filingAccountId) ??
-        null)
-      : null;
-    // The pack declaration is the only validator — scope, region, program type and
-    // every field's scale and range come from it, exactly as filing-account
-    // program types are validated against the pack's filing declaration.
-    // Inside the refusal path: `country` is any non-empty string off the request,
-    // so an unknown one throws PayrollJurisdictionError here. Outside a catch that
-    // was a 500; the thrown message already names the implemented countries.
-    let pack;
-    try {
-      pack = payrollPack(parsed.country);
-    } catch (error) {
-      if (error instanceof PayrollError) {
-        return apiErrorResponse(error, { safeStatus: 422 });
-      }
-      throw error;
+  const account = parsed.filingAccountId
+    ? ((await listFilingAccounts(gate.user.orgId)).find((a) => a.id === parsed.filingAccountId) ??
+      null)
+    : null;
+  // The pack declaration is the only validator — scope, region, program type and
+  // every field's scale and range come from it, exactly as filing-account
+  // program types are validated against the pack's filing declaration.
+  // Inside the refusal path: `country` is any non-empty string off the request,
+  // so an unknown one throws PayrollJurisdictionError here. Outside a catch that
+  // was a 500; the thrown message already names the implemented countries.
+  let pack;
+  try {
+    pack = payrollPack(parsed.country);
+  } catch (error) {
+    if (error instanceof PayrollError) {
+      return apiErrorResponse(error, { safeStatus: 422 });
     }
-    const problem = statutoryRateProblem({
+    throw error;
+  }
+  const problem = statutoryRateProblem({
+    rates: pack.statutoryRates,
+    regions: pack.regions,
+    rateKey: parsed.rateKey,
+    region: parsed.region,
+    subRegion: parsed.subRegion,
+    filingAccountId: parsed.filingAccountId,
+    taxYear: parsed.taxYear,
+    account: account
+      ? {
+          country: account.country,
+          programType: account.programType,
+          stateCode: account.stateCode,
+        }
+      : null,
+  });
+  if (problem) return NextResponse.json({ error: problem }, { status: 422 });
+
+  const values = persistStatutoryRateValues(parsed.country, parsed.rateKey, parsed.values);
+  if (typeof values === "string") return NextResponse.json({ error: values }, { status: 422 });
+
+  try {
+    const saved = await upsertStatutoryRate({
+      orgId: gate.user.orgId,
+      actorId: gate.user.id,
       rates: pack.statutoryRates,
-      regions: pack.regions,
       rateKey: parsed.rateKey,
       region: parsed.region,
       subRegion: parsed.subRegion,
       filingAccountId: parsed.filingAccountId,
       taxYear: parsed.taxYear,
-      account: account
-        ? {
-            country: account.country,
-            programType: account.programType,
-            stateCode: account.stateCode,
-          }
-        : null,
+      values,
+      sourceCitation: parsed.sourceCitation,
+      reason: parsed.reason,
     });
-    if (problem) return NextResponse.json({ error: problem }, { status: 422 });
-
-    const values = persistStatutoryRateValues(parsed.country, parsed.rateKey, parsed.values);
-    if (typeof values === "string") return NextResponse.json({ error: values }, { status: 422 });
-
-    try {
-      const saved = await upsertStatutoryRate({
-        orgId: gate.user.orgId,
-        actorId: gate.user.id,
-        rates: pack.statutoryRates,
-        rateKey: parsed.rateKey,
-        region: parsed.region,
-        subRegion: parsed.subRegion,
-        filingAccountId: parsed.filingAccountId,
-        taxYear: parsed.taxYear,
-        values,
-        sourceCitation: parsed.sourceCitation,
-        reason: parsed.reason,
-      });
-      return NextResponse.json({ ok: true, ...saved });
-    } catch (error) {
-      if (error instanceof PayrollPackError) {
-        return apiErrorResponse(error, { safeStatus: 422 });
-      }
-      throw error;
+    return NextResponse.json({ ok: true, ...saved });
+  } catch (error) {
+    if (error instanceof PayrollPackError) {
+      return apiErrorResponse(error, { safeStatus: 422 });
     }
-  },
+    throw error;
+  }
+}
+
+export const PUT = defineRoute({
+  permission: "payroll.manage",
+  feature: "payroll",
+  scope: "root",
+  body: requestBodySchema,
+  handler: savePayrollStatutoryRate,
 });
+
+export async function retirePayrollStatutoryRate(input: {
+  authz: Authz;
+  id: string;
+}): Promise<Response> {
+  const gate = input.authz;
+  const id = input.id;
+  const scopeDenied = await guardRootSubsidiaryScope(gate);
+  if (scopeDenied) return scopeDenied;
+  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 422 });
+  try {
+    const removed = await deleteStatutoryRate(gate.user.orgId, gate.user.id, id);
+    if (!removed) return notFound("record");
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    // `deleteStatutoryRate` RETIRES the open row (stamps superseded_on, writes
+    // no successor) rather than deleting it: statutory rows are
+    // effective-dated payroll inputs, so prior periods keep resolving while
+    // the current setup reads unconfigured. A refusal here is a genuine
+    // failure, and like every other payroll refusal it must reach the
+    // operator as a 422 — uncaught it became a 500, and the UI's `res.json()`
+    // then failed on the non-JSON error body, so the toast showed a parse
+    // error instead of the message.
+    if (error instanceof PayrollError) {
+      return apiErrorResponse(error, { safeStatus: 422 });
+    }
+    throw error;
+  }
+}
 
 export const DELETE = defineRoute({
   permission: "payroll.manage",
   feature: "payroll",
-  handler: async ({ request: req, authz: gate }) => {
-    const scopeDenied = await guardRootSubsidiaryScope(gate);
-    if (scopeDenied) return scopeDenied;
-    const id = new URL(req.url).searchParams.get("id") ?? "";
-    if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 422 });
-    try {
-      const removed = await deleteStatutoryRate(gate.user.orgId, gate.user.id, id);
-      if (!removed) return notFound("record");
-      return NextResponse.json({ ok: true });
-    } catch (error) {
-      // `deleteStatutoryRate` RETIRES the open row (stamps superseded_on, writes
-      // no successor) rather than deleting it: statutory rows are
-      // effective-dated payroll inputs, so prior periods keep resolving while
-      // the current setup reads unconfigured. A refusal here is a genuine
-      // failure, and like every other payroll refusal it must reach the
-      // operator as a 422 — uncaught it became a 500, and the UI's `res.json()`
-      // then failed on the non-JSON error body, so the toast showed a parse
-      // error instead of the message.
-      if (error instanceof PayrollError) {
-        return apiErrorResponse(error, { safeStatus: 422 });
-      }
-      throw error;
-    }
-  },
+  handler: async ({ request, authz }) =>
+    retirePayrollStatutoryRate({ authz, id: new URL(request.url).searchParams.get("id") ?? "" }),
 });

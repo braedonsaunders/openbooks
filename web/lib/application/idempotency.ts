@@ -121,6 +121,8 @@ export async function executeIdempotent<T>(args: {
   execute: () => Promise<T>;
   /** Persist a replay-safe response when a fresh result contains a one-time secret. */
   cacheResponse?: (value: T) => unknown;
+  /** Isolation required by the domain service for its atomic command unit. */
+  isolationLevel?: "REPEATABLE READ" | "SERIALIZABLE";
   /** Maps a freshly executed command's value onto the transport status to record. */
   successStatus?: (value: T) => number;
   /** Recheck resource authorization before returning a stored response. */
@@ -182,20 +184,22 @@ export async function executeIdempotent<T>(args: {
   // visible row). Key-space collisions merely cause a spurious poll-and-retry,
   // so correctness rests on the unique index, not on the hash.
   const claimAndExecute = (): Promise<{ replayed: boolean; value: T } | undefined> =>
-    withOrgTransaction(context.authz.user.orgId, async () => {
-      const gate = await db.execute<{ acquired: boolean }>(
-        sql`
+    withOrgTransaction(
+      context.authz.user.orgId,
+      async () => {
+        const gate = await db.execute<{ acquired: boolean }>(
+          sql`
         select pg_try_advisory_xact_lock(
                  hashtext(${context.authz.user.orgId}),
                  hashtext(${`${context.source}|${args.operation}|${args.idempotencyKey}`})
                ) as acquired
       `,
-        "objects",
-      );
-      if (!gate[0]?.acquired) return undefined;
+          "objects",
+        );
+        if (!gate[0]?.acquired) return undefined;
 
-      const inserted = await db.execute<{ id: string }>(
-        sql`
+        const inserted = await db.execute<{ id: string }>(
+          sql`
         insert into application_idempotency_keys
           (org_id, actor_id, source, operation, idempotency_key, request_hash,
            expires_at)
@@ -208,50 +212,52 @@ export async function executeIdempotent<T>(args: {
         do nothing
         returning id
       `,
-        "objects",
-      );
-      if (inserted.length === 0) return undefined;
+          "objects",
+        );
+        if (inserted.length === 0) return undefined;
 
-      const value = await args.execute();
-      let serializable;
-      try {
-        serializable = toJsonValue(args.cacheResponse ? args.cacheResponse(value) : value);
-      } catch (error) {
-        if (error instanceof NonJsonValueError) {
-          throw new Error("application operation returned a non-JSON value");
+        const value = await args.execute();
+        let serializable;
+        try {
+          serializable = toJsonValue(args.cacheResponse ? args.cacheResponse(value) : value);
+        } catch (error) {
+          if (error instanceof NonJsonValueError) {
+            throw new Error("application operation returned a non-JSON value");
+          }
+          throw error;
         }
-        throw error;
-      }
-      await db.execute(sql`
+        await db.execute(sql`
         update application_idempotency_keys
            set response = ${JSON.stringify(serializable)}::jsonb,
                completed_at = now()
          where id = ${inserted[0]!.id} and org_id = ${context.authz.user.orgId}
       `);
 
-      // The command's durable evidence, committed atomically with it. A forced
-      // audit failure throws here and rolls the entire claim back — the
-      // transport then surfaces a plain internal error and no effect persists.
-      const trail = context.requestAudit;
-      if (context.apiKeyId && trail) {
-        await insertApiKeyEvent({
-          orgId: context.authz.user.orgId,
-          keyId: context.apiKeyId,
-          method: trail.method,
-          path: trail.path,
-          statusCode: args.successStatus ? args.successStatus(value) : 200,
-          durationMs: Date.now() - trail.startedAt,
-          ipAddress: trail.ipAddress,
-          userAgent: trail.userAgent,
-        });
-        // Only a successfully written event claims the marker: the claim
-        // transaction is about to commit (nothing after this statement fails
-        // the transaction), so the transport will not write a second row.
-        markClaimedCommandEvidence(trail);
-      }
+        // The command's durable evidence, committed atomically with it. A forced
+        // audit failure throws here and rolls the entire claim back — the
+        // transport then surfaces a plain internal error and no effect persists.
+        const trail = context.requestAudit;
+        if (context.apiKeyId && trail) {
+          await insertApiKeyEvent({
+            orgId: context.authz.user.orgId,
+            keyId: context.apiKeyId,
+            method: trail.method,
+            path: trail.path,
+            statusCode: args.successStatus ? args.successStatus(value) : 200,
+            durationMs: Date.now() - trail.startedAt,
+            ipAddress: trail.ipAddress,
+            userAgent: trail.userAgent,
+          });
+          // Only a successfully written event claims the marker: the claim
+          // transaction is about to commit (nothing after this statement fails
+          // the transaction), so the transport will not write a second row.
+          markClaimedCommandEvidence(trail);
+        }
 
-      return { replayed: false, value };
-    });
+        return { replayed: false, value };
+      },
+      args.isolationLevel ? { isolationLevel: args.isolationLevel } : undefined,
+    );
 
   const claimed = await claimAndExecute();
   if (claimed) return claimed;

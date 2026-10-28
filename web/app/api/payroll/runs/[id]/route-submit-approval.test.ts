@@ -56,6 +56,9 @@ const mockSources = new Map<string, string>([
         execute(_query, mode) { const inMode = (result) => (mode === 'objects' ? result.rows : result); return Promise.resolve({ rows: state.ownedSubsidiaryId ? [{ subsidiaryId: state.ownedSubsidiaryId }] : [] }).then(inMode) },
       }
       export async function withOrgTransaction(_orgId, fn) { return fn() }
+      export async function inDbTransaction(_fn) { return _fn() }
+      export async function withOrgContext(_orgId, fn) { return fn() }
+      export const pool = {}
       export async function withBypass(work) { return work() }
       export async function withBypassContext(_opts, work) { return work() }
       export function registerRequestOrgResolver() {}
@@ -143,7 +146,12 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ["mock:payroll-scope", `export async function lockAndCheckPayrollRunPopulation() {}`],
+  [
+    "mock:payroll-scope",
+    `export async function lockAndCheckPayrollRunPopulation() {}
+    export function payrollRunPopulationScopeFilter() { return undefined }
+    export async function payrollSubsidiaryInScope() { return true }`,
+  ],
   [
     "mock:payroll-run-adjustments",
     `
@@ -199,7 +207,7 @@ const hooks = registerHooks({
       return { url: "mock:payroll-scope", shortCircuit: true };
     if (specifier.endsWith("/lib/payroll-outputs"))
       return { url: "mock:payroll-outputs", shortCircuit: true };
-    if (specifier.endsWith("/lib/payroll-evidence"))
+    if (specifier.endsWith("/payroll-evidence"))
       return { url: "mock:payroll-evidence", shortCircuit: true };
     if (specifier.endsWith("/lib/feature-gates"))
       return { url: "mock:feature-gates", shortCircuit: true };

@@ -1,5 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
+import type { Authz } from "@/lib/authz";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
@@ -76,7 +77,7 @@ const profileUuid = (field: string) =>
 // The domain's decimalNullRefusal names the precise cause and remedy for
 // malformed money; preserve the raw value until that checked boundary.
 const optionalProfileMoney = z.unknown().nullable().optional();
-const profileBodySchema = z.strictObject({
+export const profileBodySchema = z.strictObject({
   auditReason: z.string().trim().min(1).max(2000).optional(),
   employeePartyId: z
     .string({
@@ -784,603 +785,598 @@ class IdentifierRefusal extends Error {
   readonly status = 422;
 }
 
-export const POST = defineRoute({
-  permission: "payroll.manage",
-  feature: "payroll",
-  body: profileBodySchema,
-  handler: async ({ request: req, authz: gate, body }) => {
-    const orgId = gate.user.orgId;
-    const userId = gate.user.id;
+export async function saveEmployeePayrollProfile(input: {
+  request: Request;
+  authz: Authz;
+  body: z.infer<typeof profileBodySchema>;
+}): Promise<Response> {
+  const req = input.request;
+  const gate = input.authz;
+  const body = input.body;
+  const orgId = gate.user.orgId;
+  const userId = gate.user.id;
 
-    if (!isUuid(body.employeePartyId))
-      return NextResponse.json({ error: "employeePartyId required" }, { status: 422 });
-    if (!isUuid(body.payScheduleId))
-      return NextResponse.json({ error: "payScheduleId required" }, { status: 422 });
-    // The pack registry is the only country validator. The old
-    // `body.country === 'US' ? 'US' : 'CA'` cast turned every unrecognised
-    // value — '' from a blank default included — into a Canadian profile.
-    const country = String(body.country ?? "");
-    if (!(country in PAYROLL_COUNTRY_PACKS)) {
-      return NextResponse.json({ error: "unknown payroll country pack" }, { status: 422 });
-    }
-    // The pack declares its own KNOWN regions (ZZ included for CA). A known but
-    // unimplemented region is saveable — the run refuses it with the pack's own
-    // reason — but a region that does not exist is a typo, refused here. The
-    // refusal names the pack's own label, the received value (or its absence),
-    // the valid codes, and a valid example: a bare "invalid state" names none
-    // of those, so a missing region and a mistyped one refuse separately.
-    const { label: regionLabel, known: knownRegions } = payrollPack(country).regions;
-    const province = String(body.province ?? "");
-    if (!knownRegions.includes(province)) {
-      const choices = knownRegions.join(", ");
-      const example = knownRegions[0]!;
-      return NextResponse.json(
-        {
-          error:
-            province.trim() === ""
-              ? `No ${regionLabel} on this ${country} payroll profile — choose one of ${choices} (e.g. ${example})`
-              : `Unknown ${regionLabel} "${province}" on this ${country} payroll profile — choose one of ${choices} (e.g. ${example})`,
-        },
-        { status: 422 },
-      );
-    }
-    // The labour jurisdiction whose EMPLOYMENT STANDARDS govern the employment,
-    // when it is not the one the work region implies. Empty = derive it from the
-    // region, which is the answer for almost every employment. The pack's
-    // declarations are the only validator — an undeclared key is refused BY NAME
-    // here rather than accepted and then silently replaced by the region's
-    // calendar deep inside a pay run.
-    const labourJurisdiction =
-      body.labourJurisdiction == null || body.labourJurisdiction === ""
-        ? null
-        : String(body.labourJurisdiction).trim().toUpperCase();
-    const labourProblem = labourJurisdictionProblem(country, labourJurisdiction);
-    if (labourProblem) {
-      return NextResponse.json({ error: labourProblem }, { status: 422 });
-    }
-    // The closed occupation vocabulary comes from the pack's own holiday rule
-    // declarations (see `occupationCapValues`) — never a hardcoded list here.
-    // An answer for an occupation no rule prices is refused rather than stored
-    // where no engine reads it.
-    const statutoryOccupationClass =
-      body.statutoryOccupationClass == null || body.statutoryOccupationClass === ""
-        ? null
-        : String(body.statutoryOccupationClass).trim();
-    if (statutoryOccupationClass !== null) {
-      const allowedOccupations = occupationCapValues(country);
-      if (allowedOccupations.length === 0) {
-        return NextResponse.json(
-          {
-            error: `Statutory occupation class is not declared by the ${country} payroll pack — it cannot be recorded where no rule reads it`,
-          },
-          { status: 422 },
-        );
-      }
-      if (!allowedOccupations.includes(statutoryOccupationClass)) {
-        return NextResponse.json(
-          { error: `Statutory occupation class must be one of ${allowedOccupations.join(", ")}` },
-          { status: 422 },
-        );
-      }
-    }
-
-    // Withholding answers are validated against the pack's declared certificate
-    // fields — the W-4's choice set, its 0–99 allowance band — never a hardcoded
-    // copy of one pack's form. An answer for a column the pack does not declare
-    // is refused rather than stored where no engine reads it.
-    const filingStatus =
-      body.filingStatus == null || body.filingStatus === "" ? null : String(body.filingStatus);
-    const filingChoices = profileColumnChoices(country, "filing_status");
-    if (filingStatus !== null && (!filingChoices || !filingChoices.includes(filingStatus))) {
-      return NextResponse.json({ error: "invalid filingStatus" }, { status: 422 });
-    }
-    let w4Allowances: number | null = null;
-    if (body.w4Allowances !== null && body.w4Allowances !== undefined && body.w4Allowances !== "") {
-      const allowanceBounds = profileColumnCountBounds(country, "w4_allowances");
-      const n = Number(body.w4Allowances);
-      if (
-        !allowanceBounds ||
-        !Number.isInteger(n) ||
-        n < allowanceBounds.min ||
-        n > allowanceBounds.max
-      ) {
-        return NextResponse.json({ error: "invalid w4Allowances" }, { status: 422 });
-      }
-      w4Allowances = n;
-    }
-    const payBasis = body.payBasis === "salary" ? "salary" : "hourly";
-    // Filing identity + stub delivery. A null filing account means "the country
-    // pack's default account", which is how single-account employers stay.
-    const filingAccountId =
-      body.filingAccountId == null || body.filingAccountId === ""
-        ? null
-        : String(body.filingAccountId);
-    if (filingAccountId !== null && !isUuid(filingAccountId)) {
-      return NextResponse.json({ error: "invalid filingAccountId" }, { status: 422 });
-    }
-    const stubDelivery = body.stubDelivery ?? "email";
-    const paymentMethod = body.paymentMethod ?? null;
-    // Workers-compensation exclusion (0662): an exemption without a reason
-    // is an uncovered employee the run cannot tell from an excluded one, so
-    // the save refuses by name exactly like the table CHECK does.
-    const wcbExempt = body.wcbExempt === true;
-    const wcbExemptReason =
-      typeof body.wcbExemptReason === "string" && body.wcbExemptReason.trim() !== ""
-        ? body.wcbExemptReason.trim()
-        : null;
-    if (wcbExempt && wcbExemptReason === null) {
-      return NextResponse.json(
-        {
-          error:
-            "a workers-compensation exemption needs a reason — record why this employment is not covered (for example an owner or director the employer account does not cover)",
-        },
-        { status: 422 },
-      );
-    }
-    // Workers-compensation rate class: null clears back to undecided (the run
-    // then refuses until a class or an exemption is recorded). UUID-shaped or
-    // refused — a typo'd id must never become a silent no-match.
-    const workerCompGroupId =
-      body.workerCompGroupId === undefined || body.workerCompGroupId === ""
-        ? undefined
-        : body.workerCompGroupId;
-    if (
-      workerCompGroupId !== undefined &&
-      workerCompGroupId !== null &&
-      !isUuid(workerCompGroupId)
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "worker-compensation group must be an id from Company Settings → Worker compensation groups",
-        },
-        { status: 422 },
-      );
-    }
-    const expectedWorkerCompGroupId =
-      body.expectedWorkerCompGroupId === undefined || body.expectedWorkerCompGroupId === ""
-        ? undefined
-        : body.expectedWorkerCompGroupId;
-    if (
-      expectedWorkerCompGroupId !== undefined &&
-      expectedWorkerCompGroupId !== null &&
-      !isUuid(expectedWorkerCompGroupId)
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            "worker-compensation group must be an id from Company Settings → Worker compensation groups",
-        },
-        { status: 422 },
-      );
-    }
-
-    const federalClaimBounds = profileColumnCountBounds(country, "federal_claim_code");
-    const provincialClaimBounds = profileColumnCountBounds(country, "provincial_claim_code");
-    const federalClaimCode = claimCode(body.federalClaimCode, federalClaimBounds);
-    const provincialClaimCode = claimCode(body.provincialClaimCode, provincialClaimBounds);
-    // A jurisdiction that identifies its claim by an AMOUNT (the pack's
-    // claimIdentity declaration on its regional certificate) has no claim code,
-    // so a code on such a profile is a data-entry error the engine would have to
-    // guess at. Read the rule off the pack — never a country/region literal
-    // here; the next amount-based jurisdiction declares it and this branch
-    // covers it without an edit.
-    const provincialClaimCertificate = regionWithholdingCertificate(country, province);
-    if (
-      provincialClaimCertificate?.claimIdentity === "amount" &&
-      body.provincialClaimCode !== null &&
-      body.provincialClaimCode !== undefined &&
-      body.provincialClaimCode !== ""
-    ) {
-      return NextResponse.json(
-        {
-          error: `${provincialClaimCertificate.form} identifies the claim by an amount, not a claim code — enter the amount and leave the provincial claim code empty`,
-        },
-        { status: 422 },
-      );
-    }
-    if (federalClaimCode === "invalid" || provincialClaimCode === "invalid") {
-      // Name the band the pack actually declares: a hardcoded 0–10 here would
-      // be a third copy of the TD1's shape.
-      const band = federalClaimCode === "invalid" ? federalClaimBounds : provincialClaimBounds;
-      return NextResponse.json(
-        {
-          error: band
-            ? `claim code must be ${band.min}–${band.max}`
-            : "claim code is not declared by this pack",
-        },
-        { status: 422 },
-      );
-    }
-    // Pack-declared employee facts (0191): one answer per profile column, each
-    // validated against the band or closed set the pack's own certificate
-    // declaration states — never a hardcoded copy here — and refused with the
-    // fact's operator-facing label, never the engine key. An answer for a
-    // column the pack does not declare is refused rather than stored where no
-    // engine reads it; a blank answer saves as null (unknown), and readiness
-    // names the gap before calculation rather than the save refusing it —
-    // except a blank that would clear a required answer already on file,
-    // which is refused below once the stored row is read.
-    const factValues: Record<string, number | string | null> = {};
-    for (const column of PACK_FACT_COUNT_COLUMNS) {
-      const parsed = packFactCount(
-        country,
-        column,
-        (body as Record<string, unknown>)[packFactBodyKey(column)],
-      );
-      if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 422 });
-      factValues[column] = parsed.value;
-    }
-    const situacionParsed = packFactChoice(
-      country,
-      "es_situacion_laboral",
-      body.esSituacionLaboral,
+  if (!isUuid(body.employeePartyId))
+    return NextResponse.json({ error: "employeePartyId required" }, { status: 422 });
+  if (!isUuid(body.payScheduleId))
+    return NextResponse.json({ error: "payScheduleId required" }, { status: 422 });
+  // The pack registry is the only country validator. The old
+  // `body.country === 'US' ? 'US' : 'CA'` cast turned every unrecognised
+  // value — '' from a blank default included — into a Canadian profile.
+  const country = String(body.country ?? "");
+  if (!(country in PAYROLL_COUNTRY_PACKS)) {
+    return NextResponse.json({ error: "unknown payroll country pack" }, { status: 422 });
+  }
+  // The pack declares its own KNOWN regions (ZZ included for CA). A known but
+  // unimplemented region is saveable — the run refuses it with the pack's own
+  // reason — but a region that does not exist is a typo, refused here. The
+  // refusal names the pack's own label, the received value (or its absence),
+  // the valid codes, and a valid example: a bare "invalid state" names none
+  // of those, so a missing region and a mistyped one refuse separately.
+  const { label: regionLabel, known: knownRegions } = payrollPack(country).regions;
+  const province = String(body.province ?? "");
+  if (!knownRegions.includes(province)) {
+    const choices = knownRegions.join(", ");
+    const example = knownRegions[0]!;
+    return NextResponse.json(
+      {
+        error:
+          province.trim() === ""
+            ? `No ${regionLabel} on this ${country} payroll profile — choose one of ${choices} (e.g. ${example})`
+            : `Unknown ${regionLabel} "${province}" on this ${country} payroll profile — choose one of ${choices} (e.g. ${example})`,
+      },
+      { status: 422 },
     );
-    if (!situacionParsed.ok)
-      return NextResponse.json({ error: situacionParsed.error }, { status: 422 });
-    factValues["es_situacion_laboral"] = situacionParsed.value;
-    const contratoParsed = packFactFlag(country, "es_contrato_temporal", body.esContratoTemporal);
-    if (!contratoParsed.ok)
-      return NextResponse.json({ error: contratoParsed.error }, { status: 422 });
-    factValues["es_contrato_temporal"] = contratoParsed.value;
-    const kaigoParsed = packFactFlag(country, "jp_kaigo_dainigou", body.jpKaigoDainigou);
-    if (!kaigoParsed.ok) return NextResponse.json({ error: kaigoParsed.error }, { status: 422 });
-    factValues["jp_kaigo_dainigou"] = kaigoParsed.value;
-    if (
-      body.brPensaoMensal !== null &&
-      body.brPensaoMensal !== undefined &&
-      body.brPensaoMensal !== ""
-    ) {
-      // The BR pensão amount follows the profile money shape (numeric(19,4))
-      // but refuses with the fact's operator-facing label, not the body key.
-      const pensaoLabel = packFactLabel(country, "br_pensao_mensal");
-      const pensaoRaw = canonicalDecimal(body.brPensaoMensal, 4);
-      if (pensaoRaw === null) {
-        return NextResponse.json(
-          { error: decimalNullRefusal(pensaoLabel, "an amount", body.brPensaoMensal, 4) },
-          { status: 422 },
-        );
-      }
-      if (compareDecimal(pensaoRaw, "0") < 0) {
-        return NextResponse.json(
-          { error: `${pensaoLabel} cannot be negative — got ${pensaoRaw}` },
-          { status: 422 },
-        );
-      }
-      if (wholeDigits(pensaoRaw) > 15) {
-        return NextResponse.json(
-          {
-            error: `${pensaoLabel} is limited to 15 digits before the decimal point — got ${wholeDigits(pensaoRaw)}`,
-          },
-          { status: 422 },
-        );
-      }
-      factValues["br_pensao_mensal"] = normalizeMoney(pensaoRaw);
-    } else {
-      factValues["br_pensao_mensal"] = null;
+  }
+  // The labour jurisdiction whose EMPLOYMENT STANDARDS govern the employment,
+  // when it is not the one the work region implies. Empty = derive it from the
+  // region, which is the answer for almost every employment. The pack's
+  // declarations are the only validator — an undeclared key is refused BY NAME
+  // here rather than accepted and then silently replaced by the region's
+  // calendar deep inside a pay run.
+  const labourJurisdiction =
+    body.labourJurisdiction == null || body.labourJurisdiction === ""
+      ? null
+      : String(body.labourJurisdiction).trim().toUpperCase();
+  const labourProblem = labourJurisdictionProblem(country, labourJurisdiction);
+  if (labourProblem) {
+    return NextResponse.json({ error: labourProblem }, { status: 422 });
+  }
+  // The closed occupation vocabulary comes from the pack's own holiday rule
+  // declarations (see `occupationCapValues`) — never a hardcoded list here.
+  // An answer for an occupation no rule prices is refused rather than stored
+  // where no engine reads it.
+  const statutoryOccupationClass =
+    body.statutoryOccupationClass == null || body.statutoryOccupationClass === ""
+      ? null
+      : String(body.statutoryOccupationClass).trim();
+  if (statutoryOccupationClass !== null) {
+    const allowedOccupations = occupationCapValues(country);
+    if (allowedOccupations.length === 0) {
+      return NextResponse.json(
+        {
+          error: `Statutory occupation class is not declared by the ${country} payroll pack — it cannot be recorded where no rule reads it`,
+        },
+        { status: 422 },
+      );
     }
+    if (!allowedOccupations.includes(statutoryOccupationClass)) {
+      return NextResponse.json(
+        { error: `Statutory occupation class must be one of ${allowedOccupations.join(", ")}` },
+        { status: 422 },
+      );
+    }
+  }
 
-    const money: Record<(typeof MONEY_KEYS)[number], string | null> = {
-      federalClaimAmount: null,
-      provincialClaimAmount: null,
-      additionalTaxPerPeriod: null,
-      prescribedZoneDeduction: null,
-      authorizedAnnualDeductions: null,
-      authorizedFederalCredits: null,
-      authorizedProvincialCredits: null,
-      dependentCredits: null,
-      otherIncomeAnnual: null,
-      deductionsAnnual: null,
-    };
-    for (const key of MONEY_KEYS) {
-      const raw = body[key];
-      if (raw === null || raw === undefined || raw === "") continue;
-      // The profile money columns are numeric(19,4), so four decimals are
-      // accepted exactly as the column stores them — the old 2 was narrower
-      // than the schema for no stated reason and refused storable values.
-      const value = canonicalDecimal(raw, 4);
-      // The profile money columns are numeric(19,4): fifteen whole digits. The
-      // shape check admits any magnitude, so a pasted 20-digit figure died in
-      // the upsert with a storage error. Fail closed with the existing refusal.
-      // Three distinct causes; name which one and what the operator supplied.
-      // One message covering all three is what made the twenty-digit paste
-      // undiagnosable in the first place. The unreadable-value branch below is
-      // itself split five ways, for the same reason one level down.
-      if (value === null) {
-        return NextResponse.json(
-          { error: decimalNullRefusal(key, "an amount", body[key], 4) },
-          { status: 422 },
-        );
-      }
-      if (compareDecimal(value, "0") < 0) {
-        return NextResponse.json(
-          { error: `${key} cannot be negative — got ${value}` },
-          { status: 422 },
-        );
-      }
-      if (wholeDigits(value) > 15) {
-        return NextResponse.json(
-          {
-            error: `${key} is limited to 15 digits before the decimal point — got ${wholeDigits(value)}`,
-          },
-          { status: 422 },
-        );
-      }
-      money[key] = normalizeMoney(value);
+  // Withholding answers are validated against the pack's declared certificate
+  // fields — the W-4's choice set, its 0–99 allowance band — never a hardcoded
+  // copy of one pack's form. An answer for a column the pack does not declare
+  // is refused rather than stored where no engine reads it.
+  const filingStatus =
+    body.filingStatus == null || body.filingStatus === "" ? null : String(body.filingStatus);
+  const filingChoices = profileColumnChoices(country, "filing_status");
+  if (filingStatus !== null && (!filingChoices || !filingChoices.includes(filingStatus))) {
+    return NextResponse.json({ error: "invalid filingStatus" }, { status: 422 });
+  }
+  let w4Allowances: number | null = null;
+  if (body.w4Allowances !== null && body.w4Allowances !== undefined && body.w4Allowances !== "") {
+    const allowanceBounds = profileColumnCountBounds(country, "w4_allowances");
+    const n = Number(body.w4Allowances);
+    if (
+      !allowanceBounds ||
+      !Number.isInteger(n) ||
+      n < allowanceBounds.min ||
+      n > allowanceBounds.max
+    ) {
+      return NextResponse.json({ error: "invalid w4Allowances" }, { status: 422 });
     }
-    return withOrgTransaction(orgId, async () => {
-      // A dated former employee still needs tax configuration for historical
-      // payroll. Saving these facts leaves party activation and employment
-      // dates intact; the run's termination-date population filter still applies.
-      const refs = await Promise.all([
-        db.execute(
-          sql`
+    w4Allowances = n;
+  }
+  const payBasis = body.payBasis === "salary" ? "salary" : "hourly";
+  // Filing identity + stub delivery. A null filing account means "the country
+  // pack's default account", which is how single-account employers stay.
+  const filingAccountId =
+    body.filingAccountId == null || body.filingAccountId === ""
+      ? null
+      : String(body.filingAccountId);
+  if (filingAccountId !== null && !isUuid(filingAccountId)) {
+    return NextResponse.json({ error: "invalid filingAccountId" }, { status: 422 });
+  }
+  const stubDelivery = body.stubDelivery ?? "email";
+  const paymentMethod = body.paymentMethod ?? null;
+  // Workers-compensation exclusion (0662): an exemption without a reason
+  // is an uncovered employee the run cannot tell from an excluded one, so
+  // the save refuses by name exactly like the table CHECK does.
+  const wcbExempt = body.wcbExempt === true;
+  const wcbExemptReason =
+    typeof body.wcbExemptReason === "string" && body.wcbExemptReason.trim() !== ""
+      ? body.wcbExemptReason.trim()
+      : null;
+  if (wcbExempt && wcbExemptReason === null) {
+    return NextResponse.json(
+      {
+        error:
+          "a workers-compensation exemption needs a reason — record why this employment is not covered (for example an owner or director the employer account does not cover)",
+      },
+      { status: 422 },
+    );
+  }
+  // Workers-compensation rate class: null clears back to undecided (the run
+  // then refuses until a class or an exemption is recorded). UUID-shaped or
+  // refused — a typo'd id must never become a silent no-match.
+  const workerCompGroupId =
+    body.workerCompGroupId === undefined || body.workerCompGroupId === ""
+      ? undefined
+      : body.workerCompGroupId;
+  if (workerCompGroupId !== undefined && workerCompGroupId !== null && !isUuid(workerCompGroupId)) {
+    return NextResponse.json(
+      {
+        error:
+          "worker-compensation group must be an id from Company Settings → Worker compensation groups",
+      },
+      { status: 422 },
+    );
+  }
+  const expectedWorkerCompGroupId =
+    body.expectedWorkerCompGroupId === undefined || body.expectedWorkerCompGroupId === ""
+      ? undefined
+      : body.expectedWorkerCompGroupId;
+  if (
+    expectedWorkerCompGroupId !== undefined &&
+    expectedWorkerCompGroupId !== null &&
+    !isUuid(expectedWorkerCompGroupId)
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "worker-compensation group must be an id from Company Settings → Worker compensation groups",
+      },
+      { status: 422 },
+    );
+  }
+
+  const federalClaimBounds = profileColumnCountBounds(country, "federal_claim_code");
+  const provincialClaimBounds = profileColumnCountBounds(country, "provincial_claim_code");
+  const federalClaimCode = claimCode(body.federalClaimCode, federalClaimBounds);
+  const provincialClaimCode = claimCode(body.provincialClaimCode, provincialClaimBounds);
+  // A jurisdiction that identifies its claim by an AMOUNT (the pack's
+  // claimIdentity declaration on its regional certificate) has no claim code,
+  // so a code on such a profile is a data-entry error the engine would have to
+  // guess at. Read the rule off the pack — never a country/region literal
+  // here; the next amount-based jurisdiction declares it and this branch
+  // covers it without an edit.
+  const provincialClaimCertificate = regionWithholdingCertificate(country, province);
+  if (
+    provincialClaimCertificate?.claimIdentity === "amount" &&
+    body.provincialClaimCode !== null &&
+    body.provincialClaimCode !== undefined &&
+    body.provincialClaimCode !== ""
+  ) {
+    return NextResponse.json(
+      {
+        error: `${provincialClaimCertificate.form} identifies the claim by an amount, not a claim code — enter the amount and leave the provincial claim code empty`,
+      },
+      { status: 422 },
+    );
+  }
+  if (federalClaimCode === "invalid" || provincialClaimCode === "invalid") {
+    // Name the band the pack actually declares: a hardcoded 0–10 here would
+    // be a third copy of the TD1's shape.
+    const band = federalClaimCode === "invalid" ? federalClaimBounds : provincialClaimBounds;
+    return NextResponse.json(
+      {
+        error: band
+          ? `claim code must be ${band.min}–${band.max}`
+          : "claim code is not declared by this pack",
+      },
+      { status: 422 },
+    );
+  }
+  // Pack-declared employee facts (0191): one answer per profile column, each
+  // validated against the band or closed set the pack's own certificate
+  // declaration states — never a hardcoded copy here — and refused with the
+  // fact's operator-facing label, never the engine key. An answer for a
+  // column the pack does not declare is refused rather than stored where no
+  // engine reads it; a blank answer saves as null (unknown), and readiness
+  // names the gap before calculation rather than the save refusing it —
+  // except a blank that would clear a required answer already on file,
+  // which is refused below once the stored row is read.
+  const factValues: Record<string, number | string | null> = {};
+  for (const column of PACK_FACT_COUNT_COLUMNS) {
+    const parsed = packFactCount(
+      country,
+      column,
+      (body as Record<string, unknown>)[packFactBodyKey(column)],
+    );
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 422 });
+    factValues[column] = parsed.value;
+  }
+  const situacionParsed = packFactChoice(country, "es_situacion_laboral", body.esSituacionLaboral);
+  if (!situacionParsed.ok)
+    return NextResponse.json({ error: situacionParsed.error }, { status: 422 });
+  factValues["es_situacion_laboral"] = situacionParsed.value;
+  const contratoParsed = packFactFlag(country, "es_contrato_temporal", body.esContratoTemporal);
+  if (!contratoParsed.ok)
+    return NextResponse.json({ error: contratoParsed.error }, { status: 422 });
+  factValues["es_contrato_temporal"] = contratoParsed.value;
+  const kaigoParsed = packFactFlag(country, "jp_kaigo_dainigou", body.jpKaigoDainigou);
+  if (!kaigoParsed.ok) return NextResponse.json({ error: kaigoParsed.error }, { status: 422 });
+  factValues["jp_kaigo_dainigou"] = kaigoParsed.value;
+  if (
+    body.brPensaoMensal !== null &&
+    body.brPensaoMensal !== undefined &&
+    body.brPensaoMensal !== ""
+  ) {
+    // The BR pensão amount follows the profile money shape (numeric(19,4))
+    // but refuses with the fact's operator-facing label, not the body key.
+    const pensaoLabel = packFactLabel(country, "br_pensao_mensal");
+    const pensaoRaw = canonicalDecimal(body.brPensaoMensal, 4);
+    if (pensaoRaw === null) {
+      return NextResponse.json(
+        { error: decimalNullRefusal(pensaoLabel, "an amount", body.brPensaoMensal, 4) },
+        { status: 422 },
+      );
+    }
+    if (compareDecimal(pensaoRaw, "0") < 0) {
+      return NextResponse.json(
+        { error: `${pensaoLabel} cannot be negative — got ${pensaoRaw}` },
+        { status: 422 },
+      );
+    }
+    if (wholeDigits(pensaoRaw) > 15) {
+      return NextResponse.json(
+        {
+          error: `${pensaoLabel} is limited to 15 digits before the decimal point — got ${wholeDigits(pensaoRaw)}`,
+        },
+        { status: 422 },
+      );
+    }
+    factValues["br_pensao_mensal"] = normalizeMoney(pensaoRaw);
+  } else {
+    factValues["br_pensao_mensal"] = null;
+  }
+
+  const money: Record<(typeof MONEY_KEYS)[number], string | null> = {
+    federalClaimAmount: null,
+    provincialClaimAmount: null,
+    additionalTaxPerPeriod: null,
+    prescribedZoneDeduction: null,
+    authorizedAnnualDeductions: null,
+    authorizedFederalCredits: null,
+    authorizedProvincialCredits: null,
+    dependentCredits: null,
+    otherIncomeAnnual: null,
+    deductionsAnnual: null,
+  };
+  for (const key of MONEY_KEYS) {
+    const raw = body[key];
+    if (raw === null || raw === undefined || raw === "") continue;
+    // The profile money columns are numeric(19,4), so four decimals are
+    // accepted exactly as the column stores them — the old 2 was narrower
+    // than the schema for no stated reason and refused storable values.
+    const value = canonicalDecimal(raw, 4);
+    // The profile money columns are numeric(19,4): fifteen whole digits. The
+    // shape check admits any magnitude, so a pasted 20-digit figure died in
+    // the upsert with a storage error. Fail closed with the existing refusal.
+    // Three distinct causes; name which one and what the operator supplied.
+    // One message covering all three is what made the twenty-digit paste
+    // undiagnosable in the first place. The unreadable-value branch below is
+    // itself split five ways, for the same reason one level down.
+    if (value === null) {
+      return NextResponse.json(
+        { error: decimalNullRefusal(key, "an amount", body[key], 4) },
+        { status: 422 },
+      );
+    }
+    if (compareDecimal(value, "0") < 0) {
+      return NextResponse.json(
+        { error: `${key} cannot be negative — got ${value}` },
+        { status: 422 },
+      );
+    }
+    if (wholeDigits(value) > 15) {
+      return NextResponse.json(
+        {
+          error: `${key} is limited to 15 digits before the decimal point — got ${wholeDigits(value)}`,
+        },
+        { status: 422 },
+      );
+    }
+    money[key] = normalizeMoney(value);
+  }
+  return withOrgTransaction(orgId, async () => {
+    // A dated former employee still needs tax configuration for historical
+    // payroll. Saving these facts leaves party activation and employment
+    // dates intact; the run's termination-date population filter still applies.
+    const refs = await Promise.all([
+      db.execute(
+        sql`
           select p.subsidiary_id as "subsidiaryId" from parties p
            join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
              and (er.is_active or er.terminated_on is not null)
            where p.org_id = ${orgId} and p.id = ${body.employeePartyId}
              and (p.is_active or er.terminated_on is not null)
            for no key update of p for share of er`,
-          "objects",
-        ),
-        db.execute(
-          sql`
+        "objects",
+      ),
+      db.execute(
+        sql`
           select subsidiary_id as "subsidiaryId"
             from pay_schedules where org_id = ${orgId} and id = ${body.payScheduleId} and is_active
             for share`,
-          "objects",
-        ),
-      ]);
-      // The two locking reads above stay exactly as they are: one round trip on
-      // the success path. A zero-row inner join is a single outcome for three
-      // employee-side causes (no such party, inactive party without a dated
-      // termination, no eligible employee role),
-      // so the refusal below re-reads with a left join to resolve WHICH
-      // predicate failed — but only on this failure path, never on success.
-      if (refs[0].length !== 1 || refs[1].length !== 1) {
-        if (refs[0].length !== 1) {
-          const employee = (
-            await db.execute<{ partyActive: boolean | null; roleActive: boolean | null }>(
-              sql`
+        "objects",
+      ),
+    ]);
+    // The two locking reads above stay exactly as they are: one round trip on
+    // the success path. A zero-row inner join is a single outcome for three
+    // employee-side causes (no such party, inactive party without a dated
+    // termination, no eligible employee role),
+    // so the refusal below re-reads with a left join to resolve WHICH
+    // predicate failed — but only on this failure path, never on success.
+    if (refs[0].length !== 1 || refs[1].length !== 1) {
+      if (refs[0].length !== 1) {
+        const employee = (
+          await db.execute<{ partyActive: boolean | null; roleActive: boolean | null }>(
+            sql`
             select p.is_active as "partyActive", er.is_active as "roleActive"
               from parties p left join employee_roles er
                 on er.party_id = p.id and er.org_id = p.org_id
              where p.org_id = ${orgId} and p.id = ${body.employeePartyId}`,
-              "objects",
-            )
-          )[0];
-          if (!employee)
-            return NextResponse.json({ error: "employee is not available" }, { status: 422 });
-          // An unsaved new employee never reaches this route (the drawer
-          // creates the record on Save), so an inactive party is a deactivated
-          // employee, typically a former one.
-          if (!employee.partyActive) {
-            return NextResponse.json(
-              {
-                error:
-                  "this employee is inactive — reactivate them from Employees (turn on Show inactive, open the record, then Actions → Activate) before setting up payroll",
-              },
-              { status: 422 },
-            );
-          }
+            "objects",
+          )
+        )[0];
+        if (!employee)
+          return NextResponse.json({ error: "employee is not available" }, { status: 422 });
+        // An unsaved new employee never reaches this route (the drawer
+        // creates the record on Save), so an inactive party is a deactivated
+        // employee, typically a former one.
+        if (!employee.partyActive) {
           return NextResponse.json(
             {
               error:
-                employee.roleActive === false
-                  ? "this person's employee role has ended — open them from Employees (turn on Show inactive), choose Edit, then Save to restore the employee role before setting up payroll"
-                  : "this person is not an employee — add them from Employees → New employee, or open their record from Employees and Save to give them the employee role",
+                "this employee is inactive — reactivate them from Employees (turn on Show inactive, open the record, then Actions → Activate) before setting up payroll",
             },
             { status: 422 },
           );
         }
-        return NextResponse.json({ error: "pay schedule is not available" }, { status: 422 });
-      }
-      // The employee and schedule are both payroll records. Resolve their legal
-      // entities before the upsert so a restricted operator cannot re-home a
-      // profile or edit another subsidiary by guessing an employee id.
-      const employeeSubsidiaryId = (refs[0][0] as { subsidiaryId: string | null }).subsidiaryId;
-      const scheduleSubsidiaryId = (refs[1][0] as { subsidiaryId: string | null }).subsidiaryId;
-      const employeeDenied = guardSubsidiaryScope(gate, employeeSubsidiaryId);
-      if (employeeDenied) return employeeDenied;
-      const scheduleDenied = guardSubsidiaryScope(gate, scheduleSubsidiaryId);
-      if (scheduleDenied) return scheduleDenied;
-      // A scoped schedule pins the run's legal entity, currency, and employee
-      // population. An org-wide NULL schedule deliberately remains a wildcard;
-      // a non-NULL schedule may only be assigned to an employee of that entity.
-      if (scheduleSubsidiaryId !== null && employeeSubsidiaryId !== scheduleSubsidiaryId) {
-        return NextResponse.json(
-          { error: "employee and pay schedule must belong to the same subsidiary" },
-          { status: 422 },
-        );
-      }
-      const filingDenied = await guardPayrollFilingAccounts(gate, [filingAccountId]);
-      if (filingDenied) return filingDenied;
-      if (filingAccountId !== null) {
-        // The account must exist, be active, and file under the same country pack
-        // as the employee — a CA employee can never be filed on a US EIN.
-        const account = await db.execute(
-          sql`
-          select 1 from payroll_filing_accounts
-           where org_id = ${orgId} and id = ${filingAccountId} and is_active and country = ${country}`,
-          "objects",
-        );
-        if (account.length !== 1) {
-          return NextResponse.json(
-            { error: "filing account is not available for this country" },
-            { status: 422 },
-          );
-        }
-      }
-
-      // Standing commission-pay status: send true/false to answer, null to
-      // un-answer, omit to keep. A full-profile save that is silent on the
-      // fact must never reset it — null is "nobody has answered" and the
-      // engine fails closed on it, so only an explicit key in the body moves
-      // the column either way.
-      const answersCommission = "paidOnCommission" in body;
-      const paidOnCommission = body.paidOnCommission ?? null;
-
-      // Sealed national identifier: write-only from the client (send `sin` to
-      // set/replace; omit to keep). Never echoed back — GET exposes sin_last3
-      // only. The value is judged AS GIVEN against the country pack's own
-      // `employeeIdentifier` declaration — never stripped, never counted to
-      // nine, never named by country here. A pack whose identifier is not
-      // required for payroll clears on empty.
-      let sinEncrypted: string | null | undefined;
-      let sinLast3: string | null | undefined;
-      // The identifier as saved by THIS request — undefined when the body is
-      // silent on it, in which case the stored value (if any) still answers.
-      let suppliedIdentifier: string | null | undefined;
-      if ("sin" in body) {
-        const verdict = validatePackEmployeeIdentifier(country, body.sin);
-        if (!verdict.valid) {
-          return apiErrorResponse(new IdentifierRefusal(verdict.message ?? "invalid identifier"));
-        }
-        suppliedIdentifier = verdict.saved;
-        if (verdict.saved === null) {
-          sinEncrypted = null;
-          sinLast3 = null;
-        } else {
-          sinEncrypted = sealSecret(verdict.saved, { orgId, purpose: "payroll.employee.sin" });
-          sinLast3 = verdict.saved.slice(-3);
-        }
-      }
-
-      // Workers-compensation rate class, only when the editor sends it: the
-      // audited classification writer owns the employee_roles write, its
-      // optimistic check, and its parties.manage gate — this route never
-      // writes the column directly. Untouched when the body is silent, so a
-      // save that only edits withholding never re-asserts the class. Joins
-      // the ambient transaction (no executor), so a refused assignment rolls
-      // the profile save back with it instead of half-saving.
-      if (workerCompGroupId !== undefined) {
-        await assignEmployeeWorkerCompGroup({
-          orgId,
-          actorId: userId,
-          employeePartyId: body.employeePartyId,
-          groupId: workerCompGroupId,
-          expectedGroupId: expectedWorkerCompGroupId ?? null,
-          reason: "employee payroll tab",
-          dryRun: false,
-          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        });
-      }
-      // The employee lock also serializes first creation, when no profile row
-      // exists yet. Capture the committed predecessor before changing any field.
-      const before = (
-        await db.execute<Record<string, unknown>>(
-          sql`
-        select ${PROFILE_AUDIT_COLUMNS} from employee_payroll_profiles
-         where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
-         for update
-      `,
-          "objects",
-        )
-      )[0];
-      const employmentId = await payrollProfileEmployment(
-        db,
-        orgId,
-        body.employeePartyId,
-        employeeSubsidiaryId,
-        typeof before?.employment_id === "string" ? before.employment_id : null,
-      );
-      // Pack-derived employee facts (0191): the pack reads its own
-      // `deriveEmployeeFacts` hook generically — today only PL derives
-      // anything (birth year off the PESEL). The effective identifier is what
-      // THIS save leaves behind: the newly supplied one, or the stored one
-      // unsealed when the body is silent (unsealed here, inside the request
-      // that needs it — the plaintext never leaves the server, only the
-      // derived fact does). A supplied value that contradicts the derivation
-      // refuses naming both values and both sources; a blank field takes the
-      // derived value (prefill at write); with no derivation the declared
-      // field stands alone.
-      const deriveHook = PAYROLL_COUNTRY_PACKS[country]?.deriveEmployeeFacts;
-      if (deriveHook) {
-        let effectiveIdentifier: string | null = null;
-        if (suppliedIdentifier !== undefined) {
-          effectiveIdentifier = suppliedIdentifier;
-        } else {
-          const stored = (
-            await db.execute<{ sealed: string | null }>(
-              sql`
-            select sin_encrypted as sealed from employee_payroll_profiles
-             where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
-          `,
-              "objects",
-            )
-          )[0]?.sealed;
-          // A tampered identifier degrades to unconfigured, exactly as before
-          // seals failed closed: the derivation below runs on null and the
-          // save refuses or prefills by its existing rules, never a 500.
-          try {
-            effectiveIdentifier =
-              stored == null
-                ? null
-                : unsealSecret(stored, { orgId, purpose: "payroll.employee.sin" });
-          } catch (error) {
-            if (!(error instanceof SecretIntegrityError)) throw error;
-            effectiveIdentifier = null;
-          }
-        }
-        const identifierLabel =
-          PAYROLL_COUNTRY_PACKS[country]?.employeeIdentifier.label ?? "identifier";
-        for (const derived of deriveHook({ identifier: effectiveIdentifier }) ?? []) {
-          const label = packFactLabel(country, derived.column);
-          const supplied = factValues[derived.column];
-          const storedRaw = before?.[derived.column];
-          const storedText =
-            storedRaw === null || storedRaw === undefined || storedRaw === ""
-              ? null
-              : String(storedRaw);
-          const effective =
-            supplied === null || supplied === undefined || supplied === ""
-              ? storedText
-              : String(supplied);
-          if (effective !== null && effective !== derived.value) {
-            return NextResponse.json(
-              {
-                error:
-                  `${label} ${effective} does not match the ${identifierLabel} on file, ` +
-                  `which gives ${derived.value} — correct the ${label} or the ${identifierLabel}; ` +
-                  "the two must agree",
-              },
-              { status: 422 },
-            );
-          }
-          if (supplied === null || supplied === undefined || supplied === "") {
-            // Prefill the blank field from the derivation, in the column's
-            // own shape: counts store numbers (the certificate field kind
-            // decides, never a hardcoded column list here).
-            factValues[derived.column] =
-              profileColumnField(country, derived.column)?.kind === "count"
-                ? Number(derived.value)
-                : derived.value;
-          }
-        }
-      }
-      // A required whole-number fact that is answered on file is never
-      // cleared by a save: a blank arriving for it is either an operator
-      // deleting the answer the engine prices from, or an unreadable entry
-      // the client lost on the way (JSON carries NaN as null). Either way the
-      // stored answer stands and the save refuses by name. A profile that has
-      // never answered it still saves; readiness names that gap. Runs after
-      // the pack's derivation, which fills a blank from the identifier.
-      for (const column of PACK_FACT_COUNT_COLUMNS) {
-        const stored = before?.[column];
-        if (factValues[column] !== null || stored === null || stored === undefined) continue;
-        if (before?.country !== country || !profileColumnField(country, column)?.required) continue;
         return NextResponse.json(
           {
             error:
-              `${packFactLabel(country, column)} is required and is on file as ${String(stored)}; ` +
-              "this save would clear it. Enter the whole-number value to keep or change it.",
+              employee.roleActive === false
+                ? "this person's employee role has ended — open them from Employees (turn on Show inactive), choose Edit, then Save to restore the employee role before setting up payroll"
+                : "this person is not an employee — add them from Employees → New employee, or open their record from Employees and Save to give them the employee role",
           },
           { status: 422 },
         );
       }
-      const after = (
-        await db.execute<Record<string, unknown>>(
-          sql`
+      return NextResponse.json({ error: "pay schedule is not available" }, { status: 422 });
+    }
+    // The employee and schedule are both payroll records. Resolve their legal
+    // entities before the upsert so a restricted operator cannot re-home a
+    // profile or edit another subsidiary by guessing an employee id.
+    const employeeSubsidiaryId = (refs[0][0] as { subsidiaryId: string | null }).subsidiaryId;
+    const scheduleSubsidiaryId = (refs[1][0] as { subsidiaryId: string | null }).subsidiaryId;
+    const employeeDenied = guardSubsidiaryScope(gate, employeeSubsidiaryId);
+    if (employeeDenied) return employeeDenied;
+    const scheduleDenied = guardSubsidiaryScope(gate, scheduleSubsidiaryId);
+    if (scheduleDenied) return scheduleDenied;
+    // A scoped schedule pins the run's legal entity, currency, and employee
+    // population. An org-wide NULL schedule deliberately remains a wildcard;
+    // a non-NULL schedule may only be assigned to an employee of that entity.
+    if (scheduleSubsidiaryId !== null && employeeSubsidiaryId !== scheduleSubsidiaryId) {
+      return NextResponse.json(
+        { error: "employee and pay schedule must belong to the same subsidiary" },
+        { status: 422 },
+      );
+    }
+    const filingDenied = await guardPayrollFilingAccounts(gate, [filingAccountId]);
+    if (filingDenied) return filingDenied;
+    if (filingAccountId !== null) {
+      // The account must exist, be active, and file under the same country pack
+      // as the employee — a CA employee can never be filed on a US EIN.
+      const account = await db.execute(
+        sql`
+          select 1 from payroll_filing_accounts
+           where org_id = ${orgId} and id = ${filingAccountId} and is_active and country = ${country}`,
+        "objects",
+      );
+      if (account.length !== 1) {
+        return NextResponse.json(
+          { error: "filing account is not available for this country" },
+          { status: 422 },
+        );
+      }
+    }
+
+    // Standing commission-pay status: send true/false to answer, null to
+    // un-answer, omit to keep. A full-profile save that is silent on the
+    // fact must never reset it — null is "nobody has answered" and the
+    // engine fails closed on it, so only an explicit key in the body moves
+    // the column either way.
+    const answersCommission = "paidOnCommission" in body;
+    const paidOnCommission = body.paidOnCommission ?? null;
+
+    // Sealed national identifier: write-only from the client (send `sin` to
+    // set/replace; omit to keep). Never echoed back — GET exposes sin_last3
+    // only. The value is judged AS GIVEN against the country pack's own
+    // `employeeIdentifier` declaration — never stripped, never counted to
+    // nine, never named by country here. A pack whose identifier is not
+    // required for payroll clears on empty.
+    let sinEncrypted: string | null | undefined;
+    let sinLast3: string | null | undefined;
+    // The identifier as saved by THIS request — undefined when the body is
+    // silent on it, in which case the stored value (if any) still answers.
+    let suppliedIdentifier: string | null | undefined;
+    if ("sin" in body) {
+      const verdict = validatePackEmployeeIdentifier(country, body.sin);
+      if (!verdict.valid) {
+        return apiErrorResponse(new IdentifierRefusal(verdict.message ?? "invalid identifier"));
+      }
+      suppliedIdentifier = verdict.saved;
+      if (verdict.saved === null) {
+        sinEncrypted = null;
+        sinLast3 = null;
+      } else {
+        sinEncrypted = sealSecret(verdict.saved, { orgId, purpose: "payroll.employee.sin" });
+        sinLast3 = verdict.saved.slice(-3);
+      }
+    }
+
+    // Workers-compensation rate class, only when the editor sends it: the
+    // audited classification writer owns the employee_roles write, its
+    // optimistic check, and its parties.manage gate — this route never
+    // writes the column directly. Untouched when the body is silent, so a
+    // save that only edits withholding never re-asserts the class. Joins
+    // the ambient transaction (no executor), so a refused assignment rolls
+    // the profile save back with it instead of half-saving.
+    if (workerCompGroupId !== undefined) {
+      await assignEmployeeWorkerCompGroup({
+        orgId,
+        actorId: userId,
+        employeePartyId: body.employeePartyId,
+        groupId: workerCompGroupId,
+        expectedGroupId: expectedWorkerCompGroupId ?? null,
+        reason: "employee payroll tab",
+        dryRun: false,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      });
+    }
+    // The employee lock also serializes first creation, when no profile row
+    // exists yet. Capture the committed predecessor before changing any field.
+    const before = (
+      await db.execute<Record<string, unknown>>(
+        sql`
+        select ${PROFILE_AUDIT_COLUMNS} from employee_payroll_profiles
+         where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
+         for update
+      `,
+        "objects",
+      )
+    )[0];
+    const employmentId = await payrollProfileEmployment(
+      db,
+      orgId,
+      body.employeePartyId,
+      employeeSubsidiaryId,
+      typeof before?.employment_id === "string" ? before.employment_id : null,
+    );
+    // Pack-derived employee facts (0191): the pack reads its own
+    // `deriveEmployeeFacts` hook generically — today only PL derives
+    // anything (birth year off the PESEL). The effective identifier is what
+    // THIS save leaves behind: the newly supplied one, or the stored one
+    // unsealed when the body is silent (unsealed here, inside the request
+    // that needs it — the plaintext never leaves the server, only the
+    // derived fact does). A supplied value that contradicts the derivation
+    // refuses naming both values and both sources; a blank field takes the
+    // derived value (prefill at write); with no derivation the declared
+    // field stands alone.
+    const deriveHook = PAYROLL_COUNTRY_PACKS[country]?.deriveEmployeeFacts;
+    if (deriveHook) {
+      let effectiveIdentifier: string | null = null;
+      if (suppliedIdentifier !== undefined) {
+        effectiveIdentifier = suppliedIdentifier;
+      } else {
+        const stored = (
+          await db.execute<{ sealed: string | null }>(
+            sql`
+            select sin_encrypted as sealed from employee_payroll_profiles
+             where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
+          `,
+            "objects",
+          )
+        )[0]?.sealed;
+        // A tampered identifier degrades to unconfigured, exactly as before
+        // seals failed closed: the derivation below runs on null and the
+        // save refuses or prefills by its existing rules, never a 500.
+        try {
+          effectiveIdentifier =
+            stored == null
+              ? null
+              : unsealSecret(stored, { orgId, purpose: "payroll.employee.sin" });
+        } catch (error) {
+          if (!(error instanceof SecretIntegrityError)) throw error;
+          effectiveIdentifier = null;
+        }
+      }
+      const identifierLabel =
+        PAYROLL_COUNTRY_PACKS[country]?.employeeIdentifier.label ?? "identifier";
+      for (const derived of deriveHook({ identifier: effectiveIdentifier }) ?? []) {
+        const label = packFactLabel(country, derived.column);
+        const supplied = factValues[derived.column];
+        const storedRaw = before?.[derived.column];
+        const storedText =
+          storedRaw === null || storedRaw === undefined || storedRaw === ""
+            ? null
+            : String(storedRaw);
+        const effective =
+          supplied === null || supplied === undefined || supplied === ""
+            ? storedText
+            : String(supplied);
+        if (effective !== null && effective !== derived.value) {
+          return NextResponse.json(
+            {
+              error:
+                `${label} ${effective} does not match the ${identifierLabel} on file, ` +
+                `which gives ${derived.value} — correct the ${label} or the ${identifierLabel}; ` +
+                "the two must agree",
+            },
+            { status: 422 },
+          );
+        }
+        if (supplied === null || supplied === undefined || supplied === "") {
+          // Prefill the blank field from the derivation, in the column's
+          // own shape: counts store numbers (the certificate field kind
+          // decides, never a hardcoded column list here).
+          factValues[derived.column] =
+            profileColumnField(country, derived.column)?.kind === "count"
+              ? Number(derived.value)
+              : derived.value;
+        }
+      }
+    }
+    // A required whole-number fact that is answered on file is never
+    // cleared by a save: a blank arriving for it is either an operator
+    // deleting the answer the engine prices from, or an unreadable entry
+    // the client lost on the way (JSON carries NaN as null). Either way the
+    // stored answer stands and the save refuses by name. A profile that has
+    // never answered it still saves; readiness names that gap. Runs after
+    // the pack's derivation, which fills a blank from the identifier.
+    for (const column of PACK_FACT_COUNT_COLUMNS) {
+      const stored = before?.[column];
+      if (factValues[column] !== null || stored === null || stored === undefined) continue;
+      if (before?.country !== country || !profileColumnField(country, column)?.required) continue;
+      return NextResponse.json(
+        {
+          error:
+            `${packFactLabel(country, column)} is required and is on file as ${String(stored)}; ` +
+            "this save would clear it. Enter the whole-number value to keep or change it.",
+        },
+        { status: 422 },
+      );
+    }
+    const after = (
+      await db.execute<Record<string, unknown>>(
+        sql`
         insert into employee_payroll_profiles
           (org_id, employee_party_id, employment_id, pay_schedule_id, country, province, labour_jurisdiction, statutory_occupation_class, pay_basis,
            federal_claim_code, federal_claim_amount, provincial_claim_code, provincial_claim_amount,
@@ -1466,20 +1462,26 @@ export const POST = defineRoute({
                       updated_at = greatest(clock_timestamp(), employee_payroll_profiles.updated_at + interval '1 microsecond'), updated_by = ${userId}
         where employee_payroll_profiles.org_id = ${orgId}
         returning ${PROFILE_AUDIT_COLUMNS}`,
-          "objects",
-        )
-      )[0];
-      if (!after) throw new Error("payroll profile save returned no row");
-      const audited = await db.execute(
-        sql`
+        "objects",
+      )
+    )[0];
+    if (!after) throw new Error("payroll profile save returned no row");
+    const audited = await db.execute(
+      sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id, at)
         values (${orgId}, 'employee_payroll_profiles', ${after.id}, ${before ? "update" : "insert"},
           ${JSON.stringify({ ...(before ? { before } : {}), after, ...(body.auditReason === undefined ? {} : { reason: body.auditReason }) })}::jsonb,
           ${userId}, ${req.headers.get("X-Request-Id")}, clock_timestamp()) returning id`,
-        "objects",
-      );
-      if (audited.length !== 1) throw new Error("payroll profile audit returned no row");
-      return NextResponse.json({ ok: true });
-    });
-  },
+      "objects",
+    );
+    if (audited.length !== 1) throw new Error("payroll profile audit returned no row");
+    return NextResponse.json({ ok: true });
+  });
+}
+
+export const POST = defineRoute({
+  permission: "payroll.manage",
+  feature: "payroll",
+  body: profileBodySchema,
+  handler: saveEmployeePayrollProfile,
 });

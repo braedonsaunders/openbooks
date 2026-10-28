@@ -8,10 +8,7 @@ import { entitlementBalances } from "@openbooks/engine/payroll/entitlements/oper
 import { isFeatureEnabled } from "../features";
 import { subsidiaryScopeAllows } from "../authz";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
-import {
-  guardPayrollEmployees,
-  payrollVisiblePartyFilter,
-} from "../../app/api/payroll/subsidiary-scope";
+import { guardPayrollEmployees, payrollVisiblePartyFilter } from "../payroll/subsidiary-scope";
 import { scopedRemittanceSummary, scopedYearEndFilings } from "../payroll-scoped-views";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { dateInput, uuidInput, numberValue, capList, orgToday, decimalText } from "./tools-shared";

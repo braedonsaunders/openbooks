@@ -22,6 +22,8 @@ export interface ApplicationToolDefinition {
   visibleTo: (authz: Authz) => boolean;
   /** Optional-feature key; adapters hide the tool while the org has it off. */
   featureKey?: string;
+  /** Isolation requested by the native service for the atomic command unit. */
+  transactionIsolationLevel?: "REPEATABLE READ" | "SERIALIZABLE";
   /** Chat-payload tier; absent means "module" (only sent when activated). MCP ignores tiers. */
   tier?: ToolTier;
   execute: (
@@ -57,6 +59,7 @@ export function definition<T extends ZodTypeAny>(
         operation: `mcp.${metadata.name}`,
         idempotencyKey,
         request: parsed,
+        isolationLevel: metadata.transactionIsolationLevel,
         authorizeReplay: authorizeReplay ? () => authorizeReplay(context, parsed) : undefined,
         cacheResponse,
         // The outer catalog claim owns API-key execution evidence. Nested

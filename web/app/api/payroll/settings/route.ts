@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
+import type { Authz } from "@/lib/authz";
 import { uuidId } from "@/lib/api/json-schema";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -127,7 +128,7 @@ const installableCountry = z
     (country) => installableCountries().includes(country),
     "country must name an installable payroll pack",
   );
-const packActionSchema = z.discriminatedUnion("action", [
+export const packActionSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("seed-components"), country: installableCountry }),
   z.strictObject({ action: z.literal("install-pack"), country: installableCountry }),
   z.strictObject({
@@ -656,13 +657,134 @@ function payrollSettingsShapeRefusal(body: Record<string, unknown>): string | nu
   return null;
 }
 
-const payrollSettingsSchema = z
+export const payrollSettingsSchema = z
   .record(z.string(), z.unknown())
   .superRefine((body, ctx) => {
     const message = payrollSettingsShapeRefusal(body);
     if (message) ctx.addIssue({ code: "custom", message });
   })
   .pipe(typedPayrollSettingsSchema);
+
+export async function savePayrollSettings(input: {
+  authz: Authz;
+  body: z.infer<typeof payrollSettingsSchema>;
+}): Promise<Response> {
+  const gate = input.authz;
+  const body = input.body;
+  const orgId = gate.user.orgId;
+  return withOrgTransaction(orgId, async () => {
+    const settings: Record<string, unknown> = await currentPayrollBlob(orgId, true);
+    const before = JSON.parse(JSON.stringify(settings)) as Record<string, unknown>;
+    const validated = await validatePayrollAccounts(orgId, body);
+    if (validated instanceof NextResponse) return validated;
+    for (const key of ACCOUNT_KEYS) {
+      if (key in body) settings[key] = body[key] ?? null;
+    }
+    const vendorError = await validateRemittanceVendors(orgId, body);
+    if (vendorError) return vendorError;
+    for (const vendorKey of declaredRemittanceVendorSettingsKeys()) {
+      if (vendorKey in body) settings[vendorKey] = body[vendorKey] ?? null;
+    }
+    for (const frequencyKey of declaredRemittanceFrequencySettingsKeys()) {
+      if (frequencyKey in body) settings[frequencyKey] = body[frequencyKey] ?? null;
+    }
+    // The cheque safety net. On by default: a payroll that refuses to run
+    // because one employee's void cheque has not been keyed yet fails everybody
+    // else on the run. Turning it OFF is the deliberate strict posture — an
+    // employee configured for EFT with no bank details blocks the run instead of
+    // being paid on paper.
+    if ("eftFallbackToCheque" in body) settings.eftFallbackToCheque = body.eftFallbackToCheque;
+    if ("supplementalTaxMethod" in body)
+      settings.supplementalTaxMethod = body.supplementalTaxMethod;
+    if ("wagesTo" in body) settings.wagesTo = body.wagesTo;
+    if ("t4Transmitter" in body) {
+      const clean: Record<string, string> = {};
+      for (const [key, value] of Object.entries(body.t4Transmitter!)) {
+        if (typeof value === "string" && value.trim()) clean[key] = value.trim();
+      }
+      settings.t4Transmitter = clean;
+    }
+    // Emailed pay stubs carry wage data, so the org may require the PDF to be
+    // encrypted. The password RULE is configuration (employers publish their own
+    // to staff); it is validated here so a bad expression is refused at save
+    // time rather than at stub-email time. No password is ever stored.
+    if ("stubPassword" in body) {
+      const rawPolicy = body.stubPassword;
+      const policy = rawPolicy as Record<string, unknown>;
+      const expression = typeof policy.expression === "string" ? policy.expression.trim() : "";
+      const enabled = policy.enabled === true;
+      if (enabled) {
+        try {
+          assertValidPasswordExpression(expression, STUB_PASSWORD_TOKENS);
+        } catch (e) {
+          return apiErrorResponse(e, { safeStatus: 422 });
+        }
+        if (!(await pdfEncryptionAvailable())) {
+          return NextResponse.json(
+            { error: "PDF encryption is unavailable on this server (qpdf is not installed)" },
+            { status: 422 },
+          );
+        }
+      }
+      settings.stubPassword = { enabled, expression };
+    }
+    if ("countries" in body) settings.countries = [...new Set(body.countries!)];
+    // Statutory holiday pay (engine/src/payroll/run.ts phase 2). Org-level
+    // gate; default OFF for tenants that predate the feature because it changes
+    // gross pay.
+    if ("statutoryHolidayPay" in body) settings.statutoryHolidayPay = body.statutoryHolidayPay;
+    // A re-pointed net-pay payable is re-checked against the stored designations too.
+    if (
+      "netPaySettlementClearing" in body ||
+      ("netPayAccountId" in body && before[NET_PAY_CLEARING_SETTINGS_KEY] != null)
+    ) {
+      try {
+        settings[NET_PAY_CLEARING_SETTINGS_KEY] = await validateNetPayClearingChange(db, {
+          orgId,
+          actorId: gate.user.id,
+          before: before[NET_PAY_CLEARING_SETTINGS_KEY],
+          after:
+            "netPaySettlementClearing" in body
+              ? body.netPaySettlementClearing
+              : before[NET_PAY_CLEARING_SETTINGS_KEY],
+          netPayAccountId:
+            typeof settings.netPayAccountId === "string" ? settings.netPayAccountId : null,
+        });
+      } catch (error) {
+        if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 });
+        throw error;
+      }
+    }
+    // NOTE: the pre-scoping `us` / `ca` rate blobs are not accepted here. A SUI
+    // rate is experience-rated per filing account, FUTA is scoped per state and
+    // year, and each province levies its own employer health tax. The upgrade
+    // moves existing values into payroll_statutory_rates at each declared scope.
+
+    // Pack-declared statutory slots: { [country]: { [slotKey]: accountId|null } }.
+    // Writes land on the mapped components' liability accounts, never in the blob.
+    if ("slotAccounts" in body) {
+      const slotAccounts = body.slotAccounts!;
+      const slotAccountsBefore = await currentSlotAccounts(
+        orgId,
+        slotAccounts as Record<string, Record<string, string | null>>,
+      );
+      for (const [country, slots] of Object.entries(
+        slotAccounts as Record<string, Record<string, string | null>>,
+      )) {
+        for (const [slotKey, accountId] of Object.entries(slots)) {
+          await setPackSlotAccount(orgId, gate.user.id, country, slotKey, accountId);
+        }
+      }
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'pay_components', ${orgId}, 'update',
+                ${JSON.stringify({ before: { payrollSlotAccounts: slotAccountsBefore }, after: { payrollSlotAccounts: body.slotAccounts } })}, ${gate.user.id})`);
+    }
+
+    await writePayrollBlob(orgId, gate.user.id, before, settings);
+    return NextResponse.json({ ok: true });
+  });
+}
 
 export const PUT = defineRoute({
   permission: "payroll.manage",
@@ -673,207 +795,100 @@ export const PUT = defineRoute({
     body: "The existing settings validator checks dynamic pack-declared values and fields.",
   },
   invalidBodyStatus: 422,
-  handler: async ({ authz: gate, body }) => {
-    const orgId = gate.user.orgId;
-    return withOrgTransaction(orgId, async () => {
-      const settings: Record<string, unknown> = await currentPayrollBlob(orgId, true);
-      const before = JSON.parse(JSON.stringify(settings)) as Record<string, unknown>;
-      const validated = await validatePayrollAccounts(orgId, body);
-      if (validated instanceof NextResponse) return validated;
-      for (const key of ACCOUNT_KEYS) {
-        if (key in body) settings[key] = body[key] ?? null;
-      }
-      const vendorError = await validateRemittanceVendors(orgId, body);
-      if (vendorError) return vendorError;
-      for (const vendorKey of declaredRemittanceVendorSettingsKeys()) {
-        if (vendorKey in body) settings[vendorKey] = body[vendorKey] ?? null;
-      }
-      for (const frequencyKey of declaredRemittanceFrequencySettingsKeys()) {
-        if (frequencyKey in body) settings[frequencyKey] = body[frequencyKey] ?? null;
-      }
-      // The cheque safety net. On by default: a payroll that refuses to run
-      // because one employee's void cheque has not been keyed yet fails everybody
-      // else on the run. Turning it OFF is the deliberate strict posture — an
-      // employee configured for EFT with no bank details blocks the run instead of
-      // being paid on paper.
-      if ("eftFallbackToCheque" in body) settings.eftFallbackToCheque = body.eftFallbackToCheque;
-      if ("supplementalTaxMethod" in body)
-        settings.supplementalTaxMethod = body.supplementalTaxMethod;
-      if ("wagesTo" in body) settings.wagesTo = body.wagesTo;
-      if ("t4Transmitter" in body) {
-        const clean: Record<string, string> = {};
-        for (const [key, value] of Object.entries(body.t4Transmitter!)) {
-          if (typeof value === "string" && value.trim()) clean[key] = value.trim();
-        }
-        settings.t4Transmitter = clean;
-      }
-      // Emailed pay stubs carry wage data, so the org may require the PDF to be
-      // encrypted. The password RULE is configuration (employers publish their own
-      // to staff); it is validated here so a bad expression is refused at save
-      // time rather than at stub-email time. No password is ever stored.
-      if ("stubPassword" in body) {
-        const rawPolicy = body.stubPassword;
-        const policy = rawPolicy as Record<string, unknown>;
-        const expression = typeof policy.expression === "string" ? policy.expression.trim() : "";
-        const enabled = policy.enabled === true;
-        if (enabled) {
-          try {
-            assertValidPasswordExpression(expression, STUB_PASSWORD_TOKENS);
-          } catch (e) {
-            return apiErrorResponse(e, { safeStatus: 422 });
-          }
-          if (!(await pdfEncryptionAvailable())) {
-            return NextResponse.json(
-              { error: "PDF encryption is unavailable on this server (qpdf is not installed)" },
-              { status: 422 },
-            );
-          }
-        }
-        settings.stubPassword = { enabled, expression };
-      }
-      if ("countries" in body) settings.countries = [...new Set(body.countries!)];
-      // Statutory holiday pay (engine/src/payroll/run.ts phase 2). Org-level
-      // gate; default OFF for tenants that predate the feature because it changes
-      // gross pay.
-      if ("statutoryHolidayPay" in body) settings.statutoryHolidayPay = body.statutoryHolidayPay;
-      // A re-pointed net-pay payable is re-checked against the stored designations too.
-      if (
-        "netPaySettlementClearing" in body ||
-        ("netPayAccountId" in body && before[NET_PAY_CLEARING_SETTINGS_KEY] != null)
-      ) {
-        try {
-          settings[NET_PAY_CLEARING_SETTINGS_KEY] = await validateNetPayClearingChange(db, {
-            orgId,
-            actorId: gate.user.id,
-            before: before[NET_PAY_CLEARING_SETTINGS_KEY],
-            after:
-              "netPaySettlementClearing" in body
-                ? body.netPaySettlementClearing
-                : before[NET_PAY_CLEARING_SETTINGS_KEY],
-            netPayAccountId:
-              typeof settings.netPayAccountId === "string" ? settings.netPayAccountId : null,
-          });
-        } catch (error) {
-          if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 });
-          throw error;
-        }
-      }
-      // NOTE: the pre-scoping `us` / `ca` rate blobs are not accepted here. A SUI
-      // rate is experience-rated per filing account, FUTA is scoped per state and
-      // year, and each province levies its own employer health tax. The upgrade
-      // moves existing values into payroll_statutory_rates at each declared scope.
+  handler: savePayrollSettings,
+});
 
-      // Pack-declared statutory slots: { [country]: { [slotKey]: accountId|null } }.
-      // Writes land on the mapped components' liability accounts, never in the blob.
-      if ("slotAccounts" in body) {
-        const slotAccounts = body.slotAccounts!;
-        const slotAccountsBefore = await currentSlotAccounts(
-          orgId,
-          slotAccounts as Record<string, Record<string, string | null>>,
-        );
-        for (const [country, slots] of Object.entries(
-          slotAccounts as Record<string, Record<string, string | null>>,
-        )) {
-          for (const [slotKey, accountId] of Object.entries(slots)) {
-            await setPackSlotAccount(orgId, gate.user.id, country, slotKey, accountId);
-          }
-        }
-        await db.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'pay_components', ${orgId}, 'update',
-                ${JSON.stringify({ before: { payrollSlotAccounts: slotAccountsBefore }, after: { payrollSlotAccounts: body.slotAccounts } })}, ${gate.user.id})`);
-      }
-
-      await writePayrollBlob(orgId, gate.user.id, before, settings);
+export async function performPayrollPackAction(input: {
+  authz: Authz;
+  body: z.infer<typeof packActionSchema>;
+}): Promise<Response> {
+  const gate = input.authz;
+  const body = input.body;
+  if (body.action === "seed-components") {
+    // The pack names its own component set; the registry is the only
+    // validator. The old `body.country === 'US' ? 'US' : 'CA'` cast turned
+    // every unrecognised value — a typo, a pack nobody wrote — into Canada
+    // and seeded CPP/EI for it.
+    const country = String(body.country ?? "");
+    if (!installableCountries().includes(country)) {
+      return NextResponse.json({ error: "unknown country pack" }, { status: 422 });
+    }
+    return withOrgTransaction(gate.user.orgId, async () => {
+      await seedPayrollComponents(
+        gate.user.orgId,
+        gate.user.id,
+        country,
+        gate.allowedSubsidiaryIds,
+      );
+      await db.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${gate.user.orgId}, 'pay_components', ${gate.user.orgId}, 'insert',
+                  ${JSON.stringify({ before: null, after: { payrollPack: country } })}, ${gate.user.id})`);
       return NextResponse.json({ ok: true });
     });
-  },
-});
+  }
+  if (body.action === "install-pack") {
+    const country = String(body.country ?? "");
+    if (!installableCountries().includes(country)) {
+      return NextResponse.json({ error: "unknown country pack" }, { status: 422 });
+    }
+    // A pack = its statutory component set (the engine wiring) plus the pack
+    // marker the setup workspace and wizard read back.
+    return withOrgTransaction(gate.user.orgId, async () => {
+      await seedPayrollComponents(
+        gate.user.orgId,
+        gate.user.id,
+        country,
+        gate.allowedSubsidiaryIds,
+      );
+      await db.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${gate.user.orgId}, 'pay_components', ${gate.user.orgId}, 'insert',
+                  ${JSON.stringify({ before: null, after: { payrollPack: country } })}, ${gate.user.id})`);
+      const settings = await currentPayrollBlob(gate.user.orgId, true);
+      const before = JSON.parse(JSON.stringify(settings)) as Record<string, unknown>;
+      const countries = Array.isArray(settings.countries) ? settings.countries.map(String) : [];
+      // A NEW payroll org (first pack, nothing decided yet) starts with
+      // statutory holiday pay ON; an existing tenant's stubs must not change on
+      // an upgrade or a second-pack install, so an absent key stays absent.
+      if (countries.length === 0 && !("statutoryHolidayPay" in settings)) {
+        settings.statutoryHolidayPay = true;
+      }
+      settings.countries = [...new Set([...countries, country])];
+      await writePayrollBlob(gate.user.orgId, gate.user.id, before, settings);
+      return NextResponse.json({ ok: true });
+    });
+  }
+  if (body.action === "uninstall-pack") {
+    const country = String(body.country ?? "");
+    if (!(country in PAYROLL_COUNTRY_PACKS)) {
+      return NextResponse.json({ error: "unknown country pack" }, { status: 422 });
+    }
+    try {
+      return await withOrgTransaction(gate.user.orgId, async () => {
+        const before = await currentPayrollBlob(gate.user.orgId, true);
+        const result = await uninstallPayrollPack(gate.user.orgId, gate.user.id, country);
+        const after = await currentPayrollBlob(gate.user.orgId);
+        await db.execute(sql`
+            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${gate.user.orgId}, 'orgs', ${gate.user.orgId}, 'update',
+                    ${JSON.stringify({ before: { payroll: before }, after: { payroll: after } })}, ${gate.user.id})`);
+        return NextResponse.json({ ok: true, ...result });
+      });
+    } catch (error) {
+      if (error instanceof PayrollPackError) {
+        return apiErrorResponse(error, { safeStatus: 409 });
+      }
+      throw error;
+    }
+  }
+  return NextResponse.json({ error: "unknown action" }, { status: 400 });
+}
 
 export const POST = defineRoute({
   permission: "payroll.manage",
   feature: "payroll",
   scope: "root",
   body: packActionSchema,
-  handler: async ({ authz: gate, body }) => {
-    if (body.action === "seed-components") {
-      // The pack names its own component set; the registry is the only
-      // validator. The old `body.country === 'US' ? 'US' : 'CA'` cast turned
-      // every unrecognised value — a typo, a pack nobody wrote — into Canada
-      // and seeded CPP/EI for it.
-      const country = String(body.country ?? "");
-      if (!installableCountries().includes(country)) {
-        return NextResponse.json({ error: "unknown country pack" }, { status: 422 });
-      }
-      return withOrgTransaction(gate.user.orgId, async () => {
-        await seedPayrollComponents(
-          gate.user.orgId,
-          gate.user.id,
-          country,
-          gate.allowedSubsidiaryIds,
-        );
-        await db.execute(sql`
-          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${gate.user.orgId}, 'pay_components', ${gate.user.orgId}, 'insert',
-                  ${JSON.stringify({ before: null, after: { payrollPack: country } })}, ${gate.user.id})`);
-        return NextResponse.json({ ok: true });
-      });
-    }
-    if (body.action === "install-pack") {
-      const country = String(body.country ?? "");
-      if (!installableCountries().includes(country)) {
-        return NextResponse.json({ error: "unknown country pack" }, { status: 422 });
-      }
-      // A pack = its statutory component set (the engine wiring) plus the pack
-      // marker the setup workspace and wizard read back.
-      return withOrgTransaction(gate.user.orgId, async () => {
-        await seedPayrollComponents(
-          gate.user.orgId,
-          gate.user.id,
-          country,
-          gate.allowedSubsidiaryIds,
-        );
-        await db.execute(sql`
-          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${gate.user.orgId}, 'pay_components', ${gate.user.orgId}, 'insert',
-                  ${JSON.stringify({ before: null, after: { payrollPack: country } })}, ${gate.user.id})`);
-        const settings = await currentPayrollBlob(gate.user.orgId, true);
-        const before = JSON.parse(JSON.stringify(settings)) as Record<string, unknown>;
-        const countries = Array.isArray(settings.countries) ? settings.countries.map(String) : [];
-        // A NEW payroll org (first pack, nothing decided yet) starts with
-        // statutory holiday pay ON; an existing tenant's stubs must not change on
-        // an upgrade or a second-pack install, so an absent key stays absent.
-        if (countries.length === 0 && !("statutoryHolidayPay" in settings)) {
-          settings.statutoryHolidayPay = true;
-        }
-        settings.countries = [...new Set([...countries, country])];
-        await writePayrollBlob(gate.user.orgId, gate.user.id, before, settings);
-        return NextResponse.json({ ok: true });
-      });
-    }
-    if (body.action === "uninstall-pack") {
-      const country = String(body.country ?? "");
-      if (!(country in PAYROLL_COUNTRY_PACKS)) {
-        return NextResponse.json({ error: "unknown country pack" }, { status: 422 });
-      }
-      try {
-        return await withOrgTransaction(gate.user.orgId, async () => {
-          const before = await currentPayrollBlob(gate.user.orgId, true);
-          const result = await uninstallPayrollPack(gate.user.orgId, gate.user.id, country);
-          const after = await currentPayrollBlob(gate.user.orgId);
-          await db.execute(sql`
-            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-            values (${gate.user.orgId}, 'orgs', ${gate.user.orgId}, 'update',
-                    ${JSON.stringify({ before: { payroll: before }, after: { payroll: after } })}, ${gate.user.id})`);
-          return NextResponse.json({ ok: true, ...result });
-        });
-      } catch (error) {
-        if (error instanceof PayrollPackError) {
-          return apiErrorResponse(error, { safeStatus: 409 });
-        }
-        throw error;
-      }
-    }
-    return NextResponse.json({ error: "unknown action" }, { status: 400 });
-  },
+  handler: performPayrollPackAction,
 });

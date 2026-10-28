@@ -311,6 +311,7 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   // Talent commands.
 
   // Payroll commands.
+  resolve_payroll_anomaly: "payroll",
 
   // CRM and service commands.
   assign_party_roles: "crm",

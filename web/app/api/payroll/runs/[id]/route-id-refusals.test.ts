@@ -57,6 +57,9 @@ const mockSources = new Map<string, string>([
         },
       }
       export async function withOrgTransaction(_orgId, fn) { return fn() }
+      export async function inDbTransaction(_fn) { return _fn() }
+      export async function withOrgContext(_orgId, fn) { return fn() }
+      export const pool = {}
       export function ambientTenantOrgId() { return null }
       export function currentRequestOrgResolver() { return null }
       export function registerRequestOrgResolver() {}
@@ -121,7 +124,9 @@ const mockSources = new Map<string, string>([
   ],
   [
     "mock:payroll-scope",
-    `export async function lockAndCheckPayrollRunPopulation() { throw new Error('not under test') }`,
+    `export async function lockAndCheckPayrollRunPopulation() { throw new Error('not under test') }
+      export function payrollRunPopulationScopeFilter() { return undefined }
+      export async function payrollSubsidiaryInScope() { return true }`,
   ],
   [
     "mock:payroll-run-adjustments",

@@ -19,7 +19,7 @@ import {
   guardRemittancePeriod,
   payrollVisibleScheduleFilter,
   visiblePayrollEmployeeIds,
-} from "../app/api/payroll/subsidiary-scope";
+} from "./payroll/subsidiary-scope";
 import type { Authz } from "./authz";
 
 /**

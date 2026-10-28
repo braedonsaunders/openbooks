@@ -88,6 +88,8 @@ const mockSources = new Map<string, string>([
           data: { rowKey: 'rowId', columns: [], rows: ids.map((rowId) => ({ rowId })) },
         }]
       }
+      export const periodicReturnAccountResolver = () => null
+      export const roeSourceScope = () => null
     `,
   ],
   [
@@ -168,6 +170,8 @@ const mockUrls = new Map<string, string>([
   ["../../../../../lib/feature-gates", "mock:feature-gates"],
   ["@/lib/feature-gates", "mock:feature-gates"],
   ["../../subsidiary-scope", "mock:subsidiary-scope"],
+  ["../../app/api/payroll/subsidiary-scope", "mock:subsidiary-scope"],
+  ["./subsidiary-scope", "mock:subsidiary-scope"],
   ["@openbooks/engine/platform/db", "mock:db"],
   ["drizzle-orm", "mock:drizzle"],
   ["@openbooks/engine/payroll/packs", "mock:packs"],

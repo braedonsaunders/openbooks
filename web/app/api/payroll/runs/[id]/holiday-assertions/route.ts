@@ -24,46 +24,89 @@ import { guardSubsidiaryScope } from "../../../../../../lib/authz";
 import { isUuid } from "../../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import type { Authz } from "../../../../../../lib/authz";
 
 const assertionTarget = {
-  employeePartyId: uuidId,
-  holidayKey: z.string().trim().min(1).optional(),
+  employeePartyId: uuidId.describe("Employee party id shown on the pay run."),
+  holidayKey: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .optional()
+    .describe("Pack-declared holiday key from the run's assertion read."),
   holidayDate: z
     .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
     .refine(isIsoCalendarDate, "holidayDate must be a real calendar date (YYYY-MM-DD)")
-    .optional(),
+    .optional()
+    .describe("Holiday date shown on the pay run."),
 };
 const entitlementAssertion = z.strictObject({
   ...assertionTarget,
-  holidayKey: z.string().trim().min(1),
+  holidayKey: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .describe("Pack-declared holiday key from the run's assertion read."),
   holidayDate: z
     .string()
-    .refine(isIsoCalendarDate, "holidayDate must be a real calendar date (YYYY-MM-DD)"),
-  entitlementEvidenceComplete: z.literal(true),
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .refine(isIsoCalendarDate, "holidayDate must be a real calendar date (YYYY-MM-DD)")
+    .describe("Holiday date shown on the pay run."),
+  entitlementEvidenceComplete: z
+    .literal(true)
+    .describe("Confirm the entitlement-day assessment is complete."),
 });
-const requestBodySchema = z
-  .union(
-    [
-      z.strictObject({ ...assertionTarget, paidOnCommission: z.boolean() }),
-      z.strictObject({ ...assertionTarget, occupationClass: z.string().trim().min(1) }),
-      z.strictObject({ ...assertionTarget, absentWithoutConsent: z.boolean() }),
-      entitlementAssertion,
-    ],
-    {
-      error:
-        "File exactly one holiday assertion: commission-pay status, occupation class, absence without consent, or complete entitlement-day evidence. Use the employee and holiday shown on this pay run.",
-    },
-  )
-  .transform((body) => ({
-    employeePartyId: body.employeePartyId,
-    holidayKey: body.holidayKey,
-    holidayDate: body.holidayDate,
-    paidOnCommission: "paidOnCommission" in body ? body.paidOnCommission : undefined,
-    occupationClass: "occupationClass" in body ? body.occupationClass : undefined,
-    absentWithoutConsent: "absentWithoutConsent" in body ? body.absentWithoutConsent : undefined,
-    entitlementEvidenceComplete:
-      "entitlementEvidenceComplete" in body ? body.entitlementEvidenceComplete : undefined,
-  }));
+export const requestBodyInputSchema = z.union(
+  [
+    z.strictObject({
+      ...assertionTarget,
+      paidOnCommission: z
+        .boolean()
+        .describe("Whether the employee is paid on commission for the asserted holiday."),
+    }),
+    z.strictObject({
+      ...assertionTarget,
+      occupationClass: z
+        .string()
+        .trim()
+        .min(1)
+        .max(120)
+        .describe("Occupation class from the employee's pack-declared holiday classes."),
+    }),
+    z.strictObject({
+      ...assertionTarget,
+      absentWithoutConsent: z
+        .boolean()
+        .describe("Whether the employee was absent without consent for the asserted holiday."),
+    }),
+    entitlementAssertion,
+  ],
+  {
+    error:
+      "File exactly one holiday assertion: commission-pay status, occupation class, absence without consent, or complete entitlement-day evidence. Use the employee and holiday shown on this pay run.",
+  },
+);
+export const requestBodySchema = requestBodyInputSchema.transform((body) => ({
+  employeePartyId: body.employeePartyId,
+  holidayKey: body.holidayKey,
+  holidayDate: body.holidayDate,
+  paidOnCommission: "paidOnCommission" in body ? body.paidOnCommission : undefined,
+  occupationClass: "occupationClass" in body ? body.occupationClass : undefined,
+  absentWithoutConsent: "absentWithoutConsent" in body ? body.absentWithoutConsent : undefined,
+  entitlementEvidenceComplete:
+    "entitlementEvidenceComplete" in body ? body.entitlementEvidenceComplete : undefined,
+}));
+
+type HolidayHandlerContext<T> = { request: Request; authz: Authz; params: { id: string }; body: T };
+export const holidayAssertionRouteHandlers: {
+  get?: (context: HolidayHandlerContext<undefined>) => Promise<Response> | Response;
+  post?: (
+    context: HolidayHandlerContext<z.output<typeof requestBodySchema>>,
+  ) => Promise<Response> | Response;
+} = {};
 
 export const dynamic = "force-dynamic";
 
@@ -146,11 +189,35 @@ async function loadRoster(orgId: string, payScheduleId: string): Promise<RosterE
   }));
 }
 
+export async function prepareHolidayAssertionRun(
+  gate: Authz,
+  id: string,
+  request: Request,
+): Promise<NextResponse | null> {
+  if (!isUuid(id)) return notFound("record");
+  const run = await loadRun(gate.user.orgId, id);
+  if (!run) return notFound("record");
+  const denied = guardSubsidiaryScope(gate, run.subsidiaryId);
+  if (denied) return denied;
+  if (run.runStatus !== "draft" && run.runStatus !== "calculated") {
+    return NextResponse.json(
+      { error: "assertions can only be filed on an uncommitted run" },
+      { status: 422 },
+    );
+  }
+  authorizedRunByRequest.set(request, run);
+  return null;
+}
+
 export const GET = defineRoute({
   permission: "payroll.read",
   feature: "payroll",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+  handler: (holidayAssertionRouteHandlers.get = async ({
+    request: _req,
+    authz: gate,
+    params: routeParams,
+  }) => {
     const params = Promise.resolve(routeParams);
     const { id } = await params;
     if (!isUuid(id)) return notFound("record");
@@ -249,7 +316,7 @@ export const GET = defineRoute({
       if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 });
       throw error;
     }
-  },
+  }),
 });
 
 export const POST = defineRoute({
@@ -257,18 +324,9 @@ export const POST = defineRoute({
     const gate = await guardFeaturePermission("payroll.run", "payroll");
     if (gate instanceof NextResponse) return gate;
     const id = (params as { id?: unknown } | undefined)?.id;
-    if (typeof id !== "string" || !isUuid(id)) return notFound("record");
-    const run = await loadRun(gate.user.orgId, id);
-    if (!run) return notFound("record");
-    const denied = guardSubsidiaryScope(gate, run.subsidiaryId);
-    if (denied) return denied;
-    if (run.runStatus !== "draft" && run.runStatus !== "calculated") {
-      return NextResponse.json(
-        { error: "assertions can only be filed on an uncommitted run" },
-        { status: 422 },
-      );
-    }
-    authorizedRunByRequest.set(request, run);
+    if (typeof id !== "string") return notFound("record");
+    const refusal = await prepareHolidayAssertionRun(gate, id, request);
+    if (refusal) return refusal;
     return gate;
   },
   feature: "payroll",
@@ -276,7 +334,12 @@ export const POST = defineRoute({
   invalidBodyStatus: 422,
   params: z.object({ id: z.string() }),
   invalidParamsNotFound: "record",
-  handler: async ({ request: req, authz: gate, params: routeParams, body }) => {
+  handler: (holidayAssertionRouteHandlers.post = async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body,
+  }) => {
     const { id } = routeParams;
     const run = authorizedRunByRequest.get(req);
     if (!run) return notFound("record");
@@ -457,5 +520,5 @@ export const POST = defineRoute({
       if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 });
       throw error;
     }
-  },
+  }),
 });

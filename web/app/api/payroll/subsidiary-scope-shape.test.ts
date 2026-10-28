@@ -45,8 +45,17 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/platform/db", "mock:db"],
   ["@openbooks/engine/payroll/yearend", "mock:yearend"],
+  ["../authz", "mock:authz"],
+  ["../subsidiaries", "mock:subsidiaries"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/subsidiaries", "mock:subsidiaries"],
+  [
+    "@/lib/api/responses",
+    "data:text/javascript," +
+      encodeURIComponent(
+        "export function notFound(){return Response.json({error:'not found'},{status:404})}",
+      ),
+  ],
 ]);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {

@@ -1,4 +1,3 @@
-import { yearEndFiling } from "@openbooks/engine/payroll/filing-registry";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
@@ -8,13 +7,13 @@ import { db } from "@openbooks/engine/platform/db";
 import { PayrollPackError } from "@openbooks/engine/payroll/packs";
 import { PayrollError } from "@openbooks/engine/payroll/error";
 import { orgYearEndFilings } from "@openbooks/engine/payroll/yearend";
-import { filingLifecycle, recordFilingIssue } from "@openbooks/engine/payroll/yearend-amendments";
+import { filingLifecycle } from "@openbooks/engine/payroll/yearend-amendments";
 import { payrollYearRefusal } from "../../../../../lib/payroll-year";
+import { guardPayrollFilingData, guardPayrollFilingRowIds } from "../../subsidiary-scope";
 import {
   FilingScopeDenied,
-  guardPayrollFilingData,
-  guardPayrollFilingRowIds,
-} from "../../subsidiary-scope";
+  recordPayrollFilingIssue,
+} from "../../../../../lib/payroll/filing-issue";
 
 const filingIssueInput = z.object({
   country: z.string().regex(/^[A-Z]{2}$/),
@@ -184,68 +183,14 @@ export const POST = defineRoute({
     const year = body.year;
     const revision = body.revision;
     const { country, filing } = body;
-    // Ordinary originals authorize their complete population. A pack-owned exact
-    // source selection authorizes those selected event rows here and again inside
-    // the native issue transaction; caller rowIds cannot narrow either path.
-    if (revision === "original") {
-      let declared: ReturnType<typeof yearEndFiling>;
-      try {
-        declared = yearEndFiling(country, filing);
-      } catch (error) {
-        return apiErrorResponse(error, {
-          ...(error instanceof PayrollPackError ? { safeStatus: 404 } : {}),
-        });
-      }
-      if (declared.originalIssueRowIds) {
-        try {
-          const selected = await declared.originalIssueRowIds(body.params ?? {}, gate.user.orgId);
-          const denied = await guardPayrollFilingRowIds(gate, country, filing, [...selected], year);
-          if (denied) return denied;
-        } catch (error) {
-          return apiErrorResponse(error, {
-            ...(error instanceof PayrollError ? { safeStatus: 422 } : {}),
-          });
-        }
-      } else {
-        const section = (await orgYearEndFilings(gate.user.orgId, year)).find(
-          (candidate) => candidate.country === country && candidate.key === filing,
-        );
-        if (section) {
-          const denied = await guardPayrollFilingData(gate, country, filing, section.data, year);
-          if (denied) return denied;
-        }
-      }
-    } else {
-      const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds, year);
-      if (denied) return denied;
-    }
-    // The in-service authorization: the issue authorizes the ids it actually
-    // persists, inside its own transaction — a row committed after the
-    // pre-guard above is denied here, before the file, the slips, or the
-    // submission exist. The denial carries the guard's own response.
-    const authorizeRowIds = async (rowIds: readonly string[]): Promise<void> => {
-      const denied = await guardPayrollFilingRowIds(gate, country, filing, [...rowIds], year);
-      if (denied) throw new FilingScopeDenied(denied);
-    };
     try {
-      const issueInput = {
-        orgId: gate.user.orgId,
-        actorId: gate.user.id,
+      const result = await recordPayrollFilingIssue(gate, {
+        ...body,
         country,
-        filingKey: filing,
-        taxYear: year,
+        filing,
+        year,
         revision,
-        ...(body.revision === "original" ? { params: body.params } : {}),
-        rowIds: body.revision === "original" ? body.rowIds : body.rowIds,
-        scope: gate.allowedSubsidiaryIds ?? undefined,
-        authorizeRowIds,
-        // A cancellation's explanation is its audit evidence. Keep it in the
-        // existing filing note column so history readers show the same reason
-        // that was confirmed at the destructive boundary.
-        note: revision === "cancelled" ? body.reason : body.note?.trim() || null,
-        ...(revision === "cancelled" ? { reason: body.reason } : {}),
-      };
-      const result = await recordFilingIssue(issueInput);
+      });
       return NextResponse.json({
         submission: {
           id: result.submission.id,

@@ -16,6 +16,7 @@ import {
 import { guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
+import type { Authz } from "../../../../lib/authz";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +37,7 @@ export const dynamic = "force-dynamic";
  * columns. Only `certificate_rows` certificates are listed and accepted.
  */
 
-const certificateBodySchema = z.strictObject({
+export const certificateBodySchema = z.strictObject({
   employeePartyId: uuidId,
   country: z.string().min(1),
   certificateKey: z.string().trim().min(1),
@@ -53,7 +54,7 @@ const certificateBodySchema = z.strictObject({
     .optional(),
 });
 
-const correctionSchema = z.strictObject({
+export const correctionSchema = z.strictObject({
   id: uuidId,
   effectiveFrom: z
     .string()
@@ -64,10 +65,31 @@ const correctionSchema = z.strictObject({
   reason: z.string().trim().min(1).max(2000),
 });
 
-const voidSchema = z.strictObject({
+export const voidSchema = z.strictObject({
   id: uuidId,
   reason: z.string().trim().min(1).max(2000),
 });
+
+type CertificateRouteContext<T> = {
+  request: Request;
+  authz: Authz;
+  params: unknown;
+  body: T;
+};
+
+/** Native route handlers shared with the payroll command surface. */
+export const certificateRouteHandlers: {
+  get?: (context: CertificateRouteContext<undefined>) => Promise<Response> | Response;
+  post?: (
+    context: CertificateRouteContext<z.infer<typeof certificateBodySchema>>,
+  ) => Promise<Response> | Response;
+  patch?: (
+    context: CertificateRouteContext<z.infer<typeof correctionSchema>>,
+  ) => Promise<Response> | Response;
+  delete?: (
+    context: CertificateRouteContext<z.infer<typeof voidSchema>>,
+  ) => Promise<Response> | Response;
+} = {};
 
 type FiledRow = {
   id: string;
@@ -136,7 +158,7 @@ async function employeeSubsidiaryId(orgId: string, employee: string) {
 export const GET = defineRoute({
   permission: "payroll.manage",
   feature: "payroll",
-  handler: async ({ request: req, authz: gate }) => {
+  handler: (certificateRouteHandlers.get = async ({ request: req, authz: gate }) => {
     const employee = new URL(req.url).searchParams.get("employee");
     if (!employee || !isUuid(employee))
       return NextResponse.json({ error: "invalid employee" }, { status: 422 });
@@ -192,7 +214,7 @@ export const GET = defineRoute({
       employmentStart,
       today: await businessToday(gate.user.orgId),
     });
-  },
+  }),
 });
 
 export const POST = defineRoute({
@@ -200,7 +222,7 @@ export const POST = defineRoute({
   feature: "payroll",
   body: certificateBodySchema,
   invalidBodyStatus: 422,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: (certificateRouteHandlers.post = async ({ request: req, authz: gate, body }) => {
     const orgId = gate.user.orgId;
     const userId = gate.user.id;
 
@@ -495,7 +517,7 @@ export const POST = defineRoute({
         effectiveTo,
       });
     });
-  },
+  }),
 });
 
 /**
@@ -510,7 +532,7 @@ export const PATCH = defineRoute({
   feature: "payroll",
   body: correctionSchema,
   invalidBodyStatus: 422,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: (certificateRouteHandlers.patch = async ({ request: req, authz: gate, body }) => {
     const orgId = gate.user.orgId;
     const userId = gate.user.id;
 
@@ -672,7 +694,7 @@ export const PATCH = defineRoute({
         effectiveTo: end,
       });
     });
-  },
+  }),
 });
 
 /**
@@ -686,7 +708,7 @@ export const DELETE = defineRoute({
   feature: "payroll",
   body: voidSchema,
   invalidBodyStatus: 422,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: (certificateRouteHandlers.delete = async ({ request: req, authz: gate, body }) => {
     const orgId = gate.user.orgId;
     const userId = gate.user.id;
 
@@ -740,5 +762,5 @@ export const DELETE = defineRoute({
           ${userId}, ${req.headers.get("X-Request-Id")}, clock_timestamp())`);
       return NextResponse.json({ ok: true, id: row.id, supersededOn: closedOn });
     });
-  },
+  }),
 });

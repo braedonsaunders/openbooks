@@ -3,14 +3,14 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
 import { isIsoCalendarDate } from "@openbooks/engine/platform/iso-date";
 import { PayrollError } from "@openbooks/engine/payroll/error";
 import { createRetroPayRun, proposeRetroPay } from "@openbooks/engine/payroll/retro-store";
-import { guardSubsidiaryScope } from "../../../../lib/authz";
-import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
-import { guardPayrollEmployees } from "../subsidiary-scope";
+import {
+  assertRetroExcludedSourcesInScope,
+  RetroScopeNotFound,
+  scopedRetroEmployees,
+} from "../../../../lib/payroll/retro-scope";
 import { notFound } from "@/lib/api/responses";
 
 const retroInput = z.object({
@@ -47,110 +47,6 @@ export const runtime = "nodejs";
  * translates HTTP, so no second caller can reach a different answer.
  */
 
-/**
- * Retro detection is employee-driven, so an omitted employee list must be
- * narrowed before it reaches the engine. Otherwise the engine quite correctly
- * detects every employee in the schedule, which would let a restricted caller
- * create or inspect another subsidiary's retro settlements.
- */
-async function scopedRetroEmployees(
-  gate: Parameters<typeof guardPayrollEmployees>[0],
-  payScheduleId: string,
-  requested: string[] | undefined,
-): Promise<string[] | NextResponse> {
-  if (gate.allowedSubsidiaryIds === null) return requested ?? [];
-
-  const root =
-    (
-      await db.execute<{ id: string }>(
-        sql`
-    select id from subsidiaries
-     where org_id = ${gate.user.orgId} and parent_id is null and is_active
-     order by created_at limit 1`,
-        "objects",
-      )
-    )[0]?.id ?? null;
-  const schedule = (
-    await db.execute<{ subsidiaryId: string | null }>(
-      sql`
-    select coalesce(s.subsidiary_id, ${root}) as "subsidiaryId"
-      from pay_schedules s
-     where s.org_id = ${gate.user.orgId} and s.id = ${payScheduleId} and s.is_active`,
-      "objects",
-    )
-  )[0];
-  const deniedSchedule = guardSubsidiaryScope(gate, schedule?.subsidiaryId);
-  if (deniedSchedule) return deniedSchedule;
-
-  // The detector walks every committed source run for this schedule. Prove
-  // that population is inside scope before invoking it; otherwise a malformed
-  // run whose document was re-homed could leak its source period through a
-  // candidate even when the employee itself is visible.
-  const sourceRuns = await db.execute<{ subsidiaryId: string | null }>(
-    sql`
-    select coalesce(d.subsidiary_id, ${root}) as "subsidiaryId"
-      from pay_runs r
-      join documents d on d.id = r.document_id and d.org_id = r.org_id
-     where r.org_id = ${gate.user.orgId}
-       and r.pay_schedule_id = ${payScheduleId}
-       and r.run_status = 'committed'
-       and r.run_type <> 'retro'`,
-    "objects",
-  );
-  for (const sourceRun of sourceRuns) {
-    const denied = guardSubsidiaryScope(gate, sourceRun.subsidiaryId);
-    if (denied) return denied;
-  }
-
-  if (requested) {
-    const deniedEmployees = await guardPayrollEmployees(gate, requested);
-    if (deniedEmployees) return deniedEmployees as NextResponse;
-    return requested;
-  }
-
-  const rows = await db.execute<{ id: string }>(
-    sql`
-    select distinct s.employee_party_id as id
-      from pay_stubs s
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-      join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
-     where s.org_id = ${gate.user.orgId}
-       and r.pay_schedule_id = ${payScheduleId}
-       and r.run_status = 'committed'
-       and r.run_type <> 'retro'
-       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`,
-    "objects",
-  );
-  const ids = rows.map((row) => row.id);
-  // An empty scoped population must never be represented as `undefined`: the
-  // engine treats undefined/empty as "all employees". There is no retro data
-  // to expose when no allowed employee has a committed source run.
-  return ids.length > 0 ? ids : notFound("record");
-}
-
-async function guardExcludedSourceRuns(
-  gate: Parameters<typeof guardPayrollEmployees>[0],
-  payScheduleId: string,
-  sourceIds: string[] | undefined,
-): Promise<NextResponse | null> {
-  if (gate.allowedSubsidiaryIds === null || !sourceIds || sourceIds.length === 0) return null;
-  const rows = await db.execute<{ id: string }>(
-    sql`
-    select r.document_id as id
-      from pay_runs r
-      join documents d on d.id = r.document_id and d.org_id = r.org_id
-     where r.org_id = ${gate.user.orgId}
-       and r.pay_schedule_id = ${payScheduleId}
-       and r.document_id in (${sql.join(
-         sourceIds.map((id) => sql`${id}`),
-         sql`, `,
-       )})
-       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`,
-    "objects",
-  );
-  return rows.length === new Set(sourceIds).size ? null : notFound("record");
-}
-
 export const POST = defineRoute({
   permission: "payroll.run",
   feature: "payroll",
@@ -163,22 +59,27 @@ export const POST = defineRoute({
     // must not mistake that fold for a malformed value, or every UI propose
     // that excludes nothing is refused with 422.
     const requestedEmployees = body.employeePartyIds?.length ? body.employeePartyIds : undefined;
-    const employeePartyIds = await scopedRetroEmployees(
-      gate,
-      body.payScheduleId,
-      requestedEmployees,
-    );
-    if (employeePartyIds instanceof NextResponse) return employeePartyIds;
+    let employeePartyIds: string[];
+    try {
+      employeePartyIds = await scopedRetroEmployees(gate, body.payScheduleId, requestedEmployees);
+    } catch (error) {
+      if (error instanceof RetroScopeNotFound) return notFound("record");
+      throw error;
+    }
 
     const excludedSourcePayRunDocumentIds = body.excludeSourcePayRunDocumentIds?.length
       ? body.excludeSourcePayRunDocumentIds
       : undefined;
-    const deniedExcluded = await guardExcludedSourceRuns(
-      gate,
-      body.payScheduleId,
-      excludedSourcePayRunDocumentIds,
-    );
-    if (deniedExcluded) return deniedExcluded;
+    try {
+      await assertRetroExcludedSourcesInScope(
+        gate,
+        body.payScheduleId,
+        excludedSourcePayRunDocumentIds,
+      );
+    } catch (error) {
+      if (error instanceof RetroScopeNotFound) return notFound("record");
+      throw error;
+    }
 
     const input = {
       orgId: gate.user.orgId,

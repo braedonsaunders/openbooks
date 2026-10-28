@@ -53,6 +53,24 @@ stubModules({
       export async function guardPayrollFilingRowIds() { return null }
       export async function guardPayrollFilingData() { return null }
     `,
+    "../../app/api/payroll/subsidiary-scope": `
+      export class FilingScopeDenied {
+        constructor(response) {
+          this.response = response
+        }
+      }
+      export async function guardPayrollFilingRowIds() { return null }
+      export async function guardPayrollFilingData() { return null }
+    `,
+    "./subsidiary-scope": `
+      export class FilingScopeDenied {
+        constructor(response) {
+          this.response = response
+        }
+      }
+      export async function guardPayrollFilingRowIds() { return null }
+      export async function guardPayrollFilingData() { return null }
+    `,
     "@openbooks/engine/platform/db": `
       export * from ${JSON.stringify(import.meta.resolve("@openbooks/engine/platform/db"))}
       export const db = { execute: async (_query, mode) => Promise.resolve({ rows: [] }).then((result) => (mode === 'objects' ? result.rows : result)) }
@@ -69,6 +87,8 @@ stubModules({
     `,
     "@openbooks/engine/payroll/yearend": `
       export async function orgYearEndFilings() { return [] }
+      export async function periodicReturnAccountResolver() { return null }
+      export async function roeSourceScope() { return null }
     `,
     "@openbooks/engine/payroll/yearend-amendments": `
       const state = globalThis[Symbol.for('openbooks.payroll-amendments-permission-test')]
