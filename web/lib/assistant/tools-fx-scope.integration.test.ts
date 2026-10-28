@@ -402,7 +402,7 @@ test(
               idempotencyKey: "a05-reval-off-1",
             },
           ),
-          /revaluation not found/,
+          /needs the multiCurrency feature/,
         );
       });
       // Another org's period reads as missing; its rates never leak.

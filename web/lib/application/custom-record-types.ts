@@ -78,9 +78,9 @@ export async function getCustomRecordTypeDefinition(
   id: string,
 ): Promise<RecordTypeActionResult> {
   assertApplicationPermission(context, "records.manage_types");
-  if (!isUuid(id)) return response(404, { error: "record not found" });
+  if (!isUuid(id)) return response(404, { error: "not_found" });
   const type = await loadRecordTypeById(context.authz.user.orgId, id);
-  return type ? response(200, { type }) : response(404, { error: "record not found" });
+  return type ? response(200, { type }) : response(404, { error: "not_found" });
 }
 
 export async function createCustomRecordType(
@@ -236,9 +236,9 @@ export async function updateCustomRecordType(
 ): Promise<RecordTypeActionResult> {
   assertApplicationPermission(context, "records.manage_types");
   const { user } = context.authz;
-  if (!isUuid(id)) return response(404, { error: "record not found" });
+  if (!isUuid(id)) return response(404, { error: "not_found" });
   const type = await loadRecordTypeById(user.orgId, id);
-  if (!type) return response(404, { error: "record not found" });
+  if (!type) return response(404, { error: "not_found" });
   if (
     body.name !== undefined &&
     (typeof body.name !== "string" || !body.name.trim() || body.name.length > 200)
@@ -379,7 +379,7 @@ export async function updateCustomRecordType(
     );
     return "ok" as const;
   });
-  if (outcome === "not_found") return response(404, { error: "record not found" });
+  if (outcome === "not_found") return response(404, { error: "not_found" });
   if (outcome === "conflict") return response(409, { ...TYPE_REVISION_CONFLICT });
   if (outcome === "subsidiary_field_required")
     return response(422, {
@@ -389,7 +389,7 @@ export async function updateCustomRecordType(
   const updated = await loadRecordTypeById(user.orgId, id);
   return updated
     ? response(200, { type: updated, issues })
-    : response(404, { error: "record not found" });
+    : response(404, { error: "not_found" });
 }
 
 export async function deleteCustomRecordType(
@@ -398,7 +398,7 @@ export async function deleteCustomRecordType(
 ): Promise<RecordTypeActionResult> {
   assertApplicationPermission(context, "records.manage_types");
   const { user } = context.authz;
-  if (!isUuid(id)) return response(404, { error: "record not found" });
+  if (!isUuid(id)) return response(404, { error: "not_found" });
   const outcome = await withOrgTransaction(user.orgId, async () => {
     const locked = (
       await db.execute<{ status: string; snapshot: Record<string, unknown> }>(
@@ -431,7 +431,7 @@ export async function deleteCustomRecordType(
     );
     return "ok" as const;
   });
-  if (outcome === "not_found") return response(404, { error: "record not found" });
+  if (outcome === "not_found") return response(404, { error: "not_found" });
   if (outcome === "not_draft")
     return response(422, {
       error: "Only draft types can be deleted — archive published types instead",
@@ -449,7 +449,7 @@ export async function transitionCustomRecordType(
 ): Promise<RecordTypeActionResult> {
   assertApplicationPermission(context, "records.manage_types");
   const { user } = context.authz;
-  if (!isUuid(id)) return response(404, { error: "record not found" });
+  if (!isUuid(id)) return response(404, { error: "not_found" });
   if (!reason.trim() || reason.trim().length > 2000) {
     return response(422, {
       error:
@@ -524,7 +524,7 @@ export async function transitionCustomRecordType(
     );
     return "published" as const;
   });
-  if (outcome === "not_found") return response(404, { error: "record not found" });
+  if (outcome === "not_found") return response(404, { error: "not_found" });
   if (outcome === "not_published")
     return response(422, { error: "Only published types can be archived" });
   if (outcome === "already_published") return response(422, { error: "Already published" });

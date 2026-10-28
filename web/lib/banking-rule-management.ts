@@ -87,7 +87,7 @@ export async function updateBankMatchRule(
         "objects",
       )
     )[0];
-    if (!before) throw new BankMatchRuleManagementError("record not found", 404);
+    if (!before) throw new BankMatchRuleManagementError("not_found", 404);
     const after = (
       await tx.execute<Record<string, unknown>>(
         sql`
@@ -120,7 +120,7 @@ export async function deleteBankMatchRule(
         "objects",
       )
     )[0];
-    if (!before) throw new BankMatchRuleManagementError("record not found", 404);
+    if (!before) throw new BankMatchRuleManagementError("not_found", 404);
     const removed = (
       await tx.execute<{ id: string }>(
         sql`delete from bank_match_rules where id=${id} and org_id=${orgId} returning id`,

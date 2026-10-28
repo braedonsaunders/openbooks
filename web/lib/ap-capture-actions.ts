@@ -318,7 +318,7 @@ export async function reviewApCapture(
     `,
     "objects",
   );
-  if (!current[0]) return NextResponse.json({ error: "record not found" }, { status: 404 });
+  if (!current[0]) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (["materialized", "rejected", "extracting", "queued"].includes(current[0].status)) {
     return NextResponse.json({ error: "not_editable" }, { status: 409 });
   }
@@ -335,7 +335,7 @@ export async function reviewApCapture(
         "objects",
       );
       if (item[0] && INVENTORY_ITEM_KINDS.has(item[0].kind))
-        return NextResponse.json({ error: "record not found" }, { status: 404 });
+        return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
   }
   if (!(await isFeatureEnabled(gate.user.orgId, "equipment"))) {
@@ -351,7 +351,7 @@ export async function reviewApCapture(
         "objects",
       );
       if (item[0]?.kind === "equipment_charge")
-        return NextResponse.json({ error: "record not found" }, { status: 404 });
+        return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
   }
   if (
@@ -359,7 +359,7 @@ export async function reviewApCapture(
     nextPurchaseOrderId !== current[0].purchase_order_id &&
     !(await isDocKindEnabled(gate.user.orgId, "purchase_order"))
   ) {
-    return NextResponse.json({ error: "record not found" }, { status: 404 });
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
   const settings = await getDocumentCaptureSettings(gate.user.orgId);
   let saved: {
@@ -505,7 +505,7 @@ export async function reviewApCapture(
     if (error instanceof Error && error.message === "invalid_document_kind")
       return NextResponse.json({ error: error.message }, { status: 422 });
     if (error instanceof Error && error.message === "capture_not_found")
-      return NextResponse.json({ error: "record not found" }, { status: 404 });
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
     if (error instanceof Error && error.message === "capture_not_editable")
       return NextResponse.json({ error: "not_editable" }, { status: 409 });
     if (error instanceof Error && error.message === "capture_revision_conflict")

@@ -121,7 +121,7 @@ export async function testConnectionAction(
     if (storageIdentityError(error)) return null;
     throw error;
   });
-  if (!row) return { status: 404, body: { error: "record not found" } };
+  if (!row) return { status: 404, body: { error: "not_found" } };
   const urlError = await connectionConfigUrlRefusal(row.config);
   if (urlError)
     return { status: 422, body: { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" } };

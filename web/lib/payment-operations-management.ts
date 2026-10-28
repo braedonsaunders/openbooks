@@ -81,7 +81,7 @@ async function requireCurrencyFeature(
     input.currency !== undefined &&
     !(await isFeatureEnabled(actor(context).orgId, "multiCurrency"))
   ) {
-    throw new PaymentOperationManagementError("record not found", 404);
+    throw new PaymentOperationManagementError("not_found", 404);
   }
 }
 
@@ -354,7 +354,7 @@ export async function createPaymentMandateRecord(
     );
     return { kind: "created" as const, row: created };
   });
-  if (creation.kind === "not-found") invalid("record not found", 404);
+  if (creation.kind === "not-found") invalid("not_found", 404);
   if (creation.kind === "invalid-bank") invalid("approved counterparty bank account is invalid");
   return { id: creation.row.id };
 }
@@ -446,7 +446,7 @@ export async function updatePaymentScheduleRecord(
     sql`select cron, timezone from payment_schedules where id = ${id} and org_id = ${user.orgId}`,
     "objects",
   );
-  if (!current[0]) invalid("record not found", 404);
+  if (!current[0]) invalid("not_found", 404);
   const next =
     input.cron || input.timezone
       ? computeNextRunAt(
@@ -502,7 +502,7 @@ export async function updatePaymentScheduleRecord(
     );
     return "updated" as const;
   });
-  if (result === "missing") invalid("record not found", 404);
+  if (result === "missing") invalid("not_found", 404);
   return { ok: true };
 }
 
@@ -572,7 +572,7 @@ export async function updatePaymentMandateRecord(
     );
     return "updated" as const;
   });
-  if (result === "missing") invalid("record not found", 404);
+  if (result === "missing") invalid("not_found", 404);
   return { ok: true };
 }
 
@@ -583,7 +583,7 @@ export function settlePaymentOperationRouteError(error: unknown): {
   if (error instanceof PaymentOperationManagementError) {
     return { status: error.status, message: error.message };
   }
-  if (error instanceof ScopeNotFoundError) return { status: 404, message: "record not found" };
+  if (error instanceof ScopeNotFoundError) return { status: 404, message: "not_found" };
   return {
     status: 422,
     message: error instanceof Error ? error.message : "request failed",

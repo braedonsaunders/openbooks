@@ -62,7 +62,7 @@ const hooks = registerHooks({
             const inMode = (result) => (mode === 'objects' ? result.rows : result);
             const text = query?.queryChunks?.map((chunk) => Array.isArray(chunk?.value) ? chunk.value.join('') : '').join('') ?? '';
             state.queries.push(text);
-            if (text.includes('from projects')) return inMode({ rows: [{ id: ${JSON.stringify(PROJECT_B)}, subsidiary_id: ${JSON.stringify(SUB_B)}, customer_name: 'B Customer' })] };
+            if (text.includes('from projects')) return inMode({ rows: [{ id: ${JSON.stringify(PROJECT_B)}, subsidiary_id: ${JSON.stringify(SUB_B)}, customer_name: 'B Customer' }] });
             return { rows: [{ id: 'task-b', code: 'B-1', name: 'B Task', status: 'active', estimatedHours: '8', default_rate: '125.00', default_cost: null, unit: 'hour', kind: 'service' }] };
           },
         };

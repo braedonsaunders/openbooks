@@ -230,7 +230,7 @@ export async function saveCrmPipelineSetup(authz: Authz, body: CrmPipelineSetupI
     }
     const result = row as { rows?: unknown[] };
     const first = result.rows ? result.rows[0] : row;
-    if (!first) return NextResponse.json({ error: "record not found" }, { status: 404 });
+    if (!first) return NextResponse.json({ error: "not_found" }, { status: 404 });
     const firstId = typeof first === "object" && first !== null && "id" in first ? first.id : null;
     await db.execute(
       sql`insert into audit_log (org_id,table_name,row_id,action,changes,actor_id) values (${user.orgId},'crm_setup',${firstId ?? null},${recordId ? "update" : "insert"},${JSON.stringify({ action: body.action, body })}::jsonb,${user.id})`,

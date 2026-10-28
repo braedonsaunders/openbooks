@@ -103,7 +103,7 @@ export async function createCrmForecastSnapshot(
   messages = DEFAULT_MESSAGES,
 ): Promise<NextResponse | { ids: string[] }> {
   if (authz.allowedSubsidiaryIds !== null)
-    return NextResponse.json({ error: "record not found" }, { status: 404 });
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
   const nativeBody =
     rawBody && typeof rawBody === "object" && !Array.isArray(rawBody)
       ? Object.fromEntries(Object.entries(rawBody).filter(([key]) => key !== "idempotencyKey"))

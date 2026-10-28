@@ -12,23 +12,30 @@ import { BudgetMutationError } from "./budget-mutations";
 
 export const budgetScenarioCreateFields = z.object({
   bookId: z
-    .string()
-    .regex(UUID_RE)
+    .string({ error: "invalid_book_id" })
+    .regex(UUID_RE, { error: "invalid_book_id" })
     .optional()
     .describe("Active accounting book id; omitted selects the native default book."),
-  description: z.string().max(2000).optional().describe("Optional scenario description."),
+  description: z
+    .string({ error: "invalid_description" })
+    .max(2000, { error: "invalid_description" })
+    .optional()
+    .describe("Optional scenario description."),
   fiscalYear: z
-    .number()
-    .int()
-    .min(1900)
-    .max(9999)
+    .number({ error: "invalid_fiscal_year" })
+    .int({ error: "invalid_fiscal_year" })
+    .min(1900, { error: "invalid_fiscal_year" })
+    .max(9999, { error: "invalid_fiscal_year" })
     .optional()
     .describe("Fiscal year; omitted selects the year containing the organization business date."),
-  kind: z.enum(["forecast", "budget"]).optional().describe("Scenario kind; defaults to budget."),
+  kind: z
+    .enum(["forecast", "budget"], { error: "invalid_kind" })
+    .optional()
+    .describe("Scenario kind; defaults to budget."),
   name: z.string().max(200).optional().describe("Optional scenario name."),
   sourceScenarioId: z
-    .string()
-    .regex(UUID_RE)
+    .string({ error: "invalid_source_scenario_id" })
+    .regex(UUID_RE, { error: "invalid_source_scenario_id" })
     .optional()
     .describe("Optional scenario whose visible lines should be copied into this draft."),
 });

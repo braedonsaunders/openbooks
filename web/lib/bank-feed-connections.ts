@@ -114,7 +114,7 @@ export async function updateBankFeedConnection(
   if (!sets.length) throw new BankFeedConnectionError("nothing to update");
   await db.transaction(async (tx) => {
     const before = await lockScopedBankFeedConnection(tx, authz, id);
-    if (!before) throw new BankFeedConnectionError("record not found", 404);
+    if (!before) throw new BankFeedConnectionError("not_found", 404);
     const after = (
       await tx.execute<Record<string, unknown>>(
         sql`
@@ -147,14 +147,14 @@ export async function deleteBankFeedConnection(
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const before = await lockScopedBankFeedConnection(tx, authz, id);
-    if (!before) throw new BankFeedConnectionError("record not found", 404);
+    if (!before) throw new BankFeedConnectionError("not_found", 404);
     const removed = (
       await tx.execute<{ id: string }>(
         sql`delete from bank_feed_connections where id=${id} and org_id=${authz.user.orgId} returning id`,
         "objects",
       )
     )[0];
-    if (!removed) throw new BankFeedConnectionError("record not found", 404);
+    if (!removed) throw new BankFeedConnectionError("not_found", 404);
     await auditFeedChange(
       tx,
       authz,
@@ -173,7 +173,7 @@ export async function testBankFeedConnectionForActor(
 ): Promise<{ ok: boolean; detail?: string }> {
   return db.transaction(async (tx) => {
     const existing = await lockScopedBankFeedConnection(tx, authz, id, false);
-    if (!existing) throw new BankFeedConnectionError("record not found", 404);
+    if (!existing) throw new BankFeedConnectionError("not_found", 404);
     const credentialRevision = existing.credentials as string | null;
     const result = await testBankFeedConnection(
       id,

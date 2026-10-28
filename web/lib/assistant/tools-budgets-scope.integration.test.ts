@@ -355,7 +355,7 @@ test(
               idempotencyKey: "a05-budget-off-1",
             }),
           ),
-          /budget not found/,
+          /needs the budgets feature/,
         );
         const reader = {
           user: userFor(org.orgId, actors.adminId),
