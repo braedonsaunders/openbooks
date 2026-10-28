@@ -22,7 +22,7 @@ import {
 import { posCountSchema, posQuoteBody, posRefundBody, posSaleBody } from "../api/pos-schemas";
 import { emailPosReceipt, posAuthority, posPricing } from "../pos";
 import { assertApplicationPermission } from "./context";
-import { ApplicationError, conflict, invalidInput, notFound } from "./errors";
+import { conflict, invalidInput, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 import { listRecordDrawerHref } from "../cross-module-drawer-links";
 import { domainUuidIdempotencyKey } from "./domain-idempotency-key";
@@ -50,7 +50,6 @@ function settlePos(error: unknown): never {
       : { code: error.code };
     if (error.status === 404) throw notFound(error.message);
     if (error.status === 409) throw conflict(error.message, details);
-    if (error.status === 403) throw new ApplicationError("forbidden", error.message, 403, details);
     throw invalidInput(error.message, details);
   }
   throw error;

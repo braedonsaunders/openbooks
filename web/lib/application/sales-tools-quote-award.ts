@@ -12,7 +12,7 @@ import { ProjectCreateError } from "@openbooks/engine/projects/project-create";
 import { BudgetBaselineError } from "@openbooks/engine/projects/budget-baselines";
 import { isFeatureEnabled } from "../features";
 import { assertApplicationPermission } from "./context";
-import { ApplicationError, invalidInput, notFound } from "./errors";
+import { invalidInput, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 import { listRecordDrawerHref } from "../cross-module-drawer-links";
 
@@ -58,7 +58,6 @@ function settleAward(error: unknown): never {
     throw invalidInput(error.message, error.field ? { field: error.field } : undefined);
   }
   if (error instanceof QuoteAwardError) {
-    if (error.status === 403) throw new ApplicationError("forbidden", error.message, 403);
     throw invalidInput(error.message);
   }
   throw error;

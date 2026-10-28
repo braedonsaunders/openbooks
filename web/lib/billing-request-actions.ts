@@ -40,7 +40,7 @@ export async function generateBillingRequestBackup(
   orgId: string,
   actorId: string,
   requestId: string,
-  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
   const request = await readBillingRequestInvoice(db, orgId, requestId, allowedSubsidiaryIds);
   if (!request) return null;

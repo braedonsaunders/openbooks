@@ -408,6 +408,7 @@ export type BillableFieldTicketRow = {
 export async function listBillableFieldTickets(
   orgId: string,
   projectId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<BillableFieldTicketRow[]> {
   const rows = await db.execute<BillableFieldTicketRow>(
     sql`
@@ -436,8 +437,12 @@ export async function listBillableFieldTickets(
       join field_tickets field_ticket
         on field_ticket.document_id = ticket.id
        and field_ticket.org_id = ticket.org_id
+      join projects p
+        on p.id = ticket.project_id
+       and p.org_id = ticket.org_id
      where ticket.org_id = ${orgId}
        and ticket.project_id = ${projectId}
+       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
        and ticket.kind = 'field_ticket'
        and ticket.status = 'approved'
        and (

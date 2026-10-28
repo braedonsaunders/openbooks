@@ -16,6 +16,17 @@ export type RelationshipInput = {
   consolidationGroupId?: string | null;
 };
 
+type NormalizedRelationshipValues = {
+  childPartyId: string;
+  billToPartyId: string;
+  payerPartyId: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  consolidationGroupId: string | null;
+};
+
+type NormalizedRelationshipInput = { errorCode: string } | { values: NormalizedRelationshipValues };
+
 function dateValue(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === "") return null;
@@ -135,7 +146,7 @@ async function normalizedInput(
   allowed: ReadonlySet<string> | null,
   rowId: string | undefined,
   tx: SqlExecutor,
-) {
+): Promise<NormalizedRelationshipInput> {
   const unrestricted = allowed === null;
   // Overlapping windows for one child are refused, never resolved
   // arbitrarily — serialize the check and the write on the child so two

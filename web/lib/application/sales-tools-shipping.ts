@@ -24,8 +24,9 @@ import {
   previewBulkShipmentLabels,
 } from "../shipping/bulk";
 import { assertApplicationPermission } from "./context";
-import { ApplicationError, conflict, forbidden, invalidInput, notFound } from "./errors";
+import { conflict, forbidden, invalidInput, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
+import { listRecordDrawerHref } from "../cross-module-drawer-links";
 
 const UUID = z
   .string()
@@ -48,7 +49,6 @@ function settleShipping(error: unknown): never {
     if (error.remedy) details.remedy = error.remedy;
     if (error.status === 404) throw notFound(error.message);
     if (error.status === 409) throw conflict(error.message, details);
-    if (error.status === 403) throw new ApplicationError("forbidden", error.message, 403, details);
     throw invalidInput(error.message, details);
   }
   throw error;

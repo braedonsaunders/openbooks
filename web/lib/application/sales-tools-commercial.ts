@@ -107,7 +107,6 @@ function settlePromotion(error: unknown): never {
     const details = { code: error.code, ...(error.remedy ? { remedy: error.remedy } : {}) };
     if (error.status === 404) throw notFound(error.message);
     if (error.status === 409) throw conflict(error.message, details);
-    if (error.status === 403) throw new ApplicationError("forbidden", error.message, 403, details);
     throw invalidInput(error.message, details);
   }
   throw error;
@@ -269,7 +268,11 @@ export const SALES_COMMERCIAL_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
       assertApplicationPermission(context, "documents.read");
       try {
         const { idempotencyKey: _key, ...body } = input;
-        const result = await runRebateAction(context.authz.user.orgId, context.authz.user.id, body);
+        const result = (await runRebateAction(
+          context.authz.user.orgId,
+          context.authz.user.id,
+          body,
+        )) as { id: string };
         return { ok: true, ...result, href: `/rebates?view=claims&record=${result.id}` };
       } catch (error) {
         settleRebate(error);
@@ -338,7 +341,11 @@ export const SALES_COMMERCIAL_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
       assertApplicationPermission(context, "documents.read");
       try {
         const { idempotencyKey: _key, ...body } = input;
-        const result = await runRebateAction(context.authz.user.orgId, context.authz.user.id, body);
+        const result = (await runRebateAction(
+          context.authz.user.orgId,
+          context.authz.user.id,
+          body,
+        )) as { kind: string; documentId: string };
         return { ok: true, ...result, href: documentHref(result.kind, result.documentId) };
       } catch (error) {
         settleRebate(error);
