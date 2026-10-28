@@ -32,14 +32,35 @@ import {
 // Connector config fields are versioned by the source manifest at runtime.
 export const connectionPatchBody = z
   .object({
-    displayName: z.string().optional(),
-    config: z.record(z.string(), z.json()).optional(),
-    secrets: z.record(z.string(), z.string()).optional(),
-    mirrorEnabled: z.boolean().optional(),
-    mirrorSchedule: z.string().optional(),
-    postedChangePolicy: z.enum(["review_required", "append_only_automatic"]).optional(),
-    outOfPeriodDatePolicy: z.enum(["refuse", "period_boundary"]).optional(),
-    status: z.enum(["active", "paused"]).optional(),
+    displayName: z.string().max(200).optional().describe("New connection name."),
+    config: z
+      .record(z.string(), z.json())
+      .optional()
+      .describe("Manifest-declared connector configuration changes."),
+    secrets: z
+      .record(
+        z.string(),
+        z
+          .string()
+          .max(4000)
+          .describe("New credential value; secrets are merged and sealed at rest."),
+      )
+      .optional()
+      .describe("Credential fields to add or replace."),
+    mirrorEnabled: z.boolean().optional().describe("Whether the scheduled mirror is enabled."),
+    mirrorSchedule: z.string().max(100).optional().describe("Native mirror schedule key."),
+    postedChangePolicy: z
+      .enum(["review_required", "append_only_automatic"])
+      .optional()
+      .describe("Policy for source changes to posted records."),
+    outOfPeriodDatePolicy: z
+      .enum(["refuse", "period_boundary"])
+      .optional()
+      .describe("Handling for source dates outside an open period."),
+    status: z
+      .enum(["active", "paused"])
+      .optional()
+      .describe("Whether new connector runs are allowed."),
   })
   .strict();
 export type ConnectionPatch = z.infer<typeof connectionPatchBody>;

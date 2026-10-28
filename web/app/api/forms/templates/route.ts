@@ -10,7 +10,7 @@ import { pgErrorCode } from "../../../../lib/setup/coerce";
 export const runtime = "nodejs";
 
 const KEY_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
-const postBodySchema0 = z.strictObject({
+export const postBodySchema0 = z.strictObject({
   key: z
     .string()
     .trim()
@@ -23,16 +23,11 @@ const postBodySchema0 = z.strictObject({
 });
 
 /** List templates with latest-version + response rollups. */
-export const GET = defineRoute({
-  permission: "admin.customization.manage",
-  feature: {
-    none: "This admin surface is governed by its permission and has no separate organization feature switch.",
-  },
-  handler: async ({ authz: gate }) => {
-    const { user } = gate;
+export async function listFormTemplatesAction(gate: import("@/lib/authz").Authz) {
+  const { user } = gate;
 
-    const r = await db.execute(
-      sql`
+  const r = await db.execute(
+    sql`
     select t.id, t.key, t.name, t.category, t.description, t.status, t.kind,
            t.allowed_roles, t.updated_at,
            v.max_version, v.version_count, v.published_version,
@@ -51,89 +46,104 @@ export const GET = defineRoute({
      where t.org_id = ${user.orgId}
      order by t.status = 'archived', t.name
   `,
-      "objects",
-    );
+    "objects",
+  );
 
-    return NextResponse.json({ templates: r });
+  return NextResponse.json({ templates: r });
+}
+
+export const GET = defineRoute({
+  permission: "admin.customization.manage",
+  feature: {
+    none: "This admin surface is governed by its permission and has no separate organization feature switch.",
   },
+  handler: async ({ authz: gate }) => listFormTemplatesAction(gate),
 });
 
 /** Create a template + its version-1 draft schema. */
+export async function createFormTemplateAction({
+  authz: gate,
+  body: routeBody,
+}: {
+  authz: import("@/lib/authz").Authz;
+  body: z.infer<typeof postBodySchema0>;
+}) {
+  const { user } = gate;
+
+  const body = routeBody;
+  const name = body.name;
+  const key = body.key;
+  const kind = body.kind ?? "form";
+  const category = body.category;
+  const description = body.description;
+
+  // Parent + version 1 commit atomically: separate autocommitted statements
+  // strand an unusable template (key burned, no draft) when the version
+  // write fails, and concurrent creators can both pass the dupe check.
+  try {
+    const outcome = await db.transaction(async (tx) => {
+      const dupe = await tx.execute(
+        sql`
+        select 1 from form_templates where org_id = ${user.orgId} and key = ${key}
+      `,
+        "objects",
+      );
+      if (dupe.length > 0) return { kind: "dupe" as const };
+
+      const inserted = await tx.execute<{ id: string }>(
+        sql`
+        insert into form_templates (org_id, key, name, category, description, status, kind, created_by, updated_by)
+        values (${user.orgId}, ${key}, ${name}, ${category?.trim() || null},
+                ${description?.trim() || null}, 'draft', ${kind}, ${user.id}, ${user.id})
+        returning id
+      `,
+        "objects",
+      );
+      const templateId = inserted[0]!.id;
+
+      await tx.execute(sql`
+        insert into form_template_versions (org_id, template_id, version, schema, created_by, updated_by)
+        values (${user.orgId}, ${templateId}, 1,
+                ${JSON.stringify(emptyFormSchema(name))}::jsonb, ${user.id}, ${user.id})
+      `);
+      await auditSetupChange(
+        {
+          orgId: user.orgId,
+          table: "form_templates",
+          rowId: templateId,
+          action: "insert",
+          changes: { after: { key, name, kind } },
+          actorId: user.id,
+        },
+        tx,
+      );
+      return { kind: "created" as const, templateId };
+    });
+    if (outcome.kind === "dupe") {
+      return NextResponse.json(
+        { error: `an app with key "${key}" already exists` },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ id: outcome.templateId, key }, { status: 201 });
+  } catch (e) {
+    // The in-transaction dupe check loses to a concurrent creator; the
+    // unique index is the arbiter and its violation is the same 409.
+    if (pgErrorCode(e) === "23505") {
+      return NextResponse.json(
+        { error: `an app with key "${key}" already exists` },
+        { status: 409 },
+      );
+    }
+    throw e;
+  }
+}
+
 export const POST = defineRoute({
   permission: "admin.customization.manage",
   feature: {
     none: "This admin surface is governed by its permission and has no separate organization feature switch.",
   },
   body: postBodySchema0,
-  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
-    const { user } = gate;
-
-    const body = routeBody;
-    const name = body.name;
-    const key = body.key;
-    const kind = body.kind ?? "form";
-    const category = body.category;
-    const description = body.description;
-
-    // Parent + version 1 commit atomically: separate autocommitted statements
-    // strand an unusable template (key burned, no draft) when the version
-    // write fails, and concurrent creators can both pass the dupe check.
-    try {
-      const outcome = await db.transaction(async (tx) => {
-        const dupe = await tx.execute(
-          sql`
-        select 1 from form_templates where org_id = ${user.orgId} and key = ${key}
-      `,
-          "objects",
-        );
-        if (dupe.length > 0) return { kind: "dupe" as const };
-
-        const inserted = await tx.execute<{ id: string }>(
-          sql`
-        insert into form_templates (org_id, key, name, category, description, status, kind, created_by, updated_by)
-        values (${user.orgId}, ${key}, ${name}, ${category?.trim() || null},
-                ${description?.trim() || null}, 'draft', ${kind}, ${user.id}, ${user.id})
-        returning id
-      `,
-          "objects",
-        );
-        const templateId = inserted[0]!.id;
-
-        await tx.execute(sql`
-        insert into form_template_versions (org_id, template_id, version, schema, created_by, updated_by)
-        values (${user.orgId}, ${templateId}, 1,
-                ${JSON.stringify(emptyFormSchema(name))}::jsonb, ${user.id}, ${user.id})
-      `);
-        await auditSetupChange(
-          {
-            orgId: user.orgId,
-            table: "form_templates",
-            rowId: templateId,
-            action: "insert",
-            changes: { after: { key, name, kind } },
-            actorId: user.id,
-          },
-          tx,
-        );
-        return { kind: "created" as const, templateId };
-      });
-      if (outcome.kind === "dupe") {
-        return NextResponse.json(
-          { error: `an app with key "${key}" already exists` },
-          { status: 409 },
-        );
-      }
-      return NextResponse.json({ id: outcome.templateId, key }, { status: 201 });
-    } catch (e) {
-      // The in-transaction dupe check loses to a concurrent creator; the
-      // unique index is the arbiter and its violation is the same 409.
-      if (pgErrorCode(e) === "23505") {
-        return NextResponse.json(
-          { error: `an app with key "${key}" already exists` },
-          { status: 409 },
-        );
-      }
-      throw e;
-    }
-  },
+  handler: createFormTemplateAction,
 });

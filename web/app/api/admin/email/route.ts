@@ -1,38 +1,14 @@
-import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from "@/lib/api/error-response";
 
 import { NextResponse } from "next/server";
 import type { Authz } from "@/lib/authz";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import {
-  OrgEmailConfigConflictError,
-  readOrgEmailConfigView,
-  saveOrgEmailConfig,
-} from "@openbooks/engine/delivery/email-config/module";
-import { isDocumentRevisionToken } from "@openbooks/engine/records/revision";
-import { isEmailProvider } from "@openbooks/emails";
-
-const requestBodySchema = z
-  .object({
-    enabled: z.boolean().optional(),
-    // Keep semantic revision refusals at the conflict boundary below.
-    expectedUpdatedAt: z.union([z.string(), z.null()]).optional(),
-    fromEmail: z.string().nullable().optional(),
-    fromName: z.string().nullable().optional(),
-    mailgunDomain: z.string().nullable().optional(),
-    mailgunRegion: z.enum(["eu", "us"]).nullable().optional(),
-    provider: z.enum(["resend", "sendgrid", "mailgun", "postmark", "smtp"]).nullable().optional(),
-    replyTo: z.string().nullable().optional(),
-    secret: z.string().nullable().optional(),
-    smtpHost: z.string().nullable().optional(),
-    smtpPort: z.union([z.number().int(), z.string().regex(/^\d+$/), z.null()]).optional(),
-    smtpSecure: z.boolean().optional(),
-    smtpUsername: z.string().nullable().optional(),
-  })
-  .refine(
-    (body) => Object.keys(body).length > 0,
-    "Provide an email setting to update or reload the page before saving",
-  );
+  emailSettingsBodySchema,
+  readEmailSettingsAction,
+  saveEmailSettingsAction,
+} from "@/lib/delivery/email-admin-actions";
+import { OrgEmailConfigConflictError } from "@openbooks/engine/delivery/email-config/module";
 
 export const runtime = "nodejs";
 
@@ -42,7 +18,7 @@ export const runtime = "nodejs";
 
 /** GET — the org's email config view (never the sealed secret, only hasSecret). */
 async function legacyGET(gate: Authz) {
-  return NextResponse.json(await readOrgEmailConfigView(gate.user.orgId));
+  return NextResponse.json(await readEmailSettingsAction(gate.user.orgId));
 }
 
 /** PUT — persist the org's email provider config (secret sealed on the way in). */
@@ -61,85 +37,13 @@ export const PUT = defineRoute({
     none: "Organization email transport serves workflows across modules and has no module-specific feature gate.",
   },
   scope: "unrestricted",
-  body: requestBodySchema,
+  body: emailSettingsBodySchema,
   invalidBodyStatus: 422,
   handler: async ({ body, authz: routeAuthz }) => {
     const gate = routeAuthz;
 
-    if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
-      return NextResponse.json(
-        { error: "Reload the email settings and supply their exact revision before saving" },
-        { status: 409 },
-      );
-    }
-    // Omitted settings mean keep; explicit blank strings mean clear.
-    const clearableStr = (v: unknown) =>
-      v === undefined
-        ? undefined
-        : v === null
-          ? null
-          : typeof v === "string"
-            ? v.trim() || null
-            : undefined;
-    const provider = body.provider;
-    if (provider !== undefined && provider !== null && !isEmailProvider(provider)) {
-      return NextResponse.json({ error: "invalid provider" }, { status: 422 });
-    }
-    const enabled = body.enabled;
-    if (enabled !== undefined && typeof enabled !== "boolean") {
-      return NextResponse.json({ error: "enabled must be a boolean" }, { status: 422 });
-    }
-    const smtpSecure = body.smtpSecure;
-    if (smtpSecure !== undefined && typeof smtpSecure !== "boolean") {
-      return NextResponse.json({ error: "smtpSecure must be a boolean" }, { status: 422 });
-    }
-    const mailgunRegion = body.mailgunRegion;
-    if (
-      mailgunRegion !== undefined &&
-      mailgunRegion !== null &&
-      mailgunRegion !== "eu" &&
-      mailgunRegion !== "us"
-    ) {
-      return NextResponse.json({ error: "mailgunRegion must be us, eu, or null" }, { status: 422 });
-    }
-
     try {
-      const saved = await saveOrgEmailConfig(
-        gate.user.orgId,
-        {
-          enabled: enabled === undefined ? undefined : enabled === true,
-          provider:
-            provider === undefined ? undefined : isEmailProvider(provider) ? provider : null,
-          fromName: clearableStr(body.fromName),
-          fromEmail: clearableStr(body.fromEmail),
-          replyTo: clearableStr(body.replyTo),
-          mailgunDomain: clearableStr(body.mailgunDomain),
-          mailgunRegion,
-          smtpHost: clearableStr(body.smtpHost),
-          smtpPort:
-            body.smtpPort === undefined
-              ? undefined
-              : typeof body.smtpPort === "number"
-                ? body.smtpPort
-                : body.smtpPort
-                  ? Number(body.smtpPort)
-                  : null,
-          // Omission keeps the saved value (validated boolean above when
-          // present); coercing to === true here would silently turn TLS off on
-          // a partial update.
-          smtpSecure: smtpSecure === undefined ? undefined : smtpSecure === true,
-          smtpUsername: clearableStr(body.smtpUsername),
-          // secret: non-empty string ⇒ seal; null ⇒ clear; blank/omitted ⇒ keep.
-          secret:
-            body.secret === null
-              ? null
-              : typeof body.secret === "string" && body.secret.trim()
-                ? body.secret.trim()
-                : undefined,
-        },
-        { kind: "user", userId: gate.user.id },
-        { expectedUpdatedAt: body.expectedUpdatedAt },
-      );
+      const saved = await saveEmailSettingsAction(gate.user.orgId, gate.user.id, body);
       return NextResponse.json(saved);
     } catch (err) {
       if (err instanceof OrgEmailConfigConflictError)

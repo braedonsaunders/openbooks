@@ -38,7 +38,7 @@ import { deriveInviteDisplayName, UNUSABLE_PASSWORD_HASH } from "./invite";
 import { isUuid } from "@/lib/list-params";
 import { countOtherActiveUserAdministrators } from "@/lib/sole-administrator";
 
-const requestBodySchema = z.discriminatedUnion("action", [
+export const requestBodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("assign"), userId: uuidString(), roleId: uuidString() }),
   z.object({ action: z.literal("unassign"), userId: uuidString(), roleId: uuidString() }),
   z.object({ action: z.literal("set-active"), userId: uuidString(), isActive: z.boolean() }),
@@ -384,262 +384,259 @@ async function legacyGET(req: Request, gate: Authz) {
   return NextResponse.json({ options, selected });
 }
 
-export const POST = defineRoute({
-  permission: "admin.users.manage",
-  feature: {
-    none: "User administration has no organization feature switch and is limited by user management permissions.",
-  },
-  body: requestBodySchema,
-  handler: async ({ request, body, authz: routeAuthz }) => {
-    const gate = routeAuthz;
+export async function mutateAdminUser({
+  request,
+  body,
+  authz: routeAuthz,
+}: {
+  request: Request;
+  body: z.infer<typeof requestBodySchema>;
+  authz: Authz;
+}): Promise<NextResponse> {
+  const gate = routeAuthz;
 
-    const actor = gate.user;
+  const actor = gate.user;
 
-    if (body.action !== "invite") {
-      if (typeof body.userId !== "string" || !isUuid(body.userId)) {
-        return NextResponse.json({ error: "userId required" }, { status: 400 });
-      }
+  if (body.action !== "invite") {
+    if (typeof body.userId !== "string" || !isUuid(body.userId)) {
+      return NextResponse.json({ error: "userId required" }, { status: 400 });
     }
-    const userId =
-      "userId" in body && typeof body.userId === "string" ? body.userId.toLowerCase() : "";
+  }
+  const userId =
+    "userId" in body && typeof body.userId === "string" ? body.userId.toLowerCase() : "";
 
-    // All assignment and activation decisions serialize on the same user row.
-    // Grants lock their role first, matching role deletion's role → user order.
-    const lockTargetUser = async () => {
-      const target = await db.execute(
-        sql`
+  // All assignment and activation decisions serialize on the same user row.
+  // Grants lock their role first, matching role deletion's role → user order.
+  const lockTargetUser = async () => {
+    const target = await db.execute(
+      sql`
         select id from users where id = ${userId} and org_id = ${actor.orgId} for update`,
-        "objects",
-      );
-      return target.length > 0;
-    };
+      "objects",
+    );
+    return target.length > 0;
+  };
 
-    switch (body.action) {
-      case "assign": {
-        if (typeof body.roleId !== "string" || !isUuid(body.roleId)) {
-          return NextResponse.json({ error: "roleId required" }, { status: 400 });
-        }
-        const roleId = body.roleId.toLowerCase();
-        return withOrgTransaction(actor.orgId, () =>
-          withTransactionSavepoint(db, async () => {
-            const role = await db.execute<{
-              id: string;
-              key: string;
-              permissions: unknown;
-              subsidiary_restriction: unknown;
-            }>(
-              sql`
+  switch (body.action) {
+    case "assign": {
+      if (typeof body.roleId !== "string" || !isUuid(body.roleId)) {
+        return NextResponse.json({ error: "roleId required" }, { status: 400 });
+      }
+      const roleId = body.roleId.toLowerCase();
+      return withOrgTransaction(actor.orgId, () =>
+        withTransactionSavepoint(db, async () => {
+          const role = await db.execute<{
+            id: string;
+            key: string;
+            permissions: unknown;
+            subsidiary_restriction: unknown;
+          }>(
+            sql`
             select id, key, permissions, subsidiary_restriction from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`,
-              "objects",
-            );
-            if (!role[0]) return NextResponse.json({ error: "role not found" }, { status: 404 });
-            if (!actor.isSuperAdmin) {
-              if (userId === actor.id.toLowerCase()) {
-                return NextResponse.json(
-                  { error: "you cannot grant a role to yourself" },
-                  { status: 403 },
-                );
-              }
-              const rolePermissions = Array.isArray(role[0].permissions)
-                ? role[0].permissions.filter((p): p is string => typeof p === "string")
-                : [];
-              const missing = permissionsOutsideCeiling(gate.permissions, rolePermissions);
-              if (missing.length > 0) {
-                return NextResponse.json(
-                  {
-                    error: `cannot grant permissions you do not hold: ${missing.join(", ")}`,
-                    missing,
-                  },
-                  { status: 403 },
-                );
-              }
-              // The target's roles price their access, so a granted role the
-              // actor's portfolio does not cover broadens them even when it
-              // carries no new permission.
-              const widening = coverageRefusal(
-                gate,
-                await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id),
-                storedRestriction(role[0].subsidiary_restriction),
+            "objects",
+          );
+          if (!role[0]) return NextResponse.json({ error: "role not found" }, { status: 404 });
+          if (!actor.isSuperAdmin) {
+            if (userId === actor.id.toLowerCase()) {
+              return NextResponse.json(
+                { error: "you cannot grant a role to yourself" },
+                { status: 403 },
               );
-              if (widening) return widening;
             }
-            if (!(await lockTargetUser()))
-              return NextResponse.json({ error: "user not found" }, { status: 404 });
-            const inserted = await db.execute<{ id: string }>(
-              sql`
+            const rolePermissions = Array.isArray(role[0].permissions)
+              ? role[0].permissions.filter((p): p is string => typeof p === "string")
+              : [];
+            const missing = permissionsOutsideCeiling(gate.permissions, rolePermissions);
+            if (missing.length > 0) {
+              return NextResponse.json(
+                {
+                  error: `cannot grant permissions you do not hold: ${missing.join(", ")}`,
+                  missing,
+                },
+                { status: 403 },
+              );
+            }
+            // The target's roles price their access, so a granted role the
+            // actor's portfolio does not cover broadens them even when it
+            // carries no new permission.
+            const widening = coverageRefusal(
+              gate,
+              await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id),
+              storedRestriction(role[0].subsidiary_restriction),
+            );
+            if (widening) return widening;
+          }
+          if (!(await lockTargetUser()))
+            return NextResponse.json({ error: "user not found" }, { status: 404 });
+          const inserted = await db.execute<{ id: string }>(
+            sql`
             insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
             values (${actor.orgId}, ${userId}, ${roleId}, ${actor.id}, ${actor.id})
             -- An existing identical role assignment already grants the requested role.
             on conflict (org_id, user_id, role_id) do nothing
             returning id`,
-              "objects",
-            );
-            if (inserted[0]) {
-              await audit(db, {
-                orgId: actor.orgId,
-                tableName: "role_assignments",
-                rowId: inserted[0].id,
-                action: "insert",
-                changes: {
-                  userId: [null, userId],
-                  roleId: [null, roleId],
-                },
-                actorId: actor.id,
-              });
-            }
-            return NextResponse.json({ ok: true });
-          }),
-        );
+            "objects",
+          );
+          if (inserted[0]) {
+            await audit(db, {
+              orgId: actor.orgId,
+              tableName: "role_assignments",
+              rowId: inserted[0].id,
+              action: "insert",
+              changes: {
+                userId: [null, userId],
+                roleId: [null, roleId],
+              },
+              actorId: actor.id,
+            });
+          }
+          return NextResponse.json({ ok: true });
+        }),
+      );
+    }
+    case "unassign": {
+      if (typeof body.roleId !== "string" || !isUuid(body.roleId)) {
+        return NextResponse.json({ error: "roleId required" }, { status: 400 });
       }
-      case "unassign": {
-        if (typeof body.roleId !== "string" || !isUuid(body.roleId)) {
-          return NextResponse.json({ error: "roleId required" }, { status: 400 });
-        }
-        const roleId = body.roleId.toLowerCase();
-        return withOrgTransaction(actor.orgId, () =>
-          withTransactionSavepoint(db, async () => {
-            if (!(await lockTargetUser()))
-              return NextResponse.json({ error: "user not found" }, { status: 404 });
-            await db.execute(sql`
+      const roleId = body.roleId.toLowerCase();
+      return withOrgTransaction(actor.orgId, () =>
+        withTransactionSavepoint(db, async () => {
+          if (!(await lockTargetUser()))
+            return NextResponse.json({ error: "user not found" }, { status: 404 });
+          await db.execute(sql`
             select pg_advisory_xact_lock(hashtextextended(${`openbooks:user-roles:${actor.orgId}:${userId}`}, 0))
           `);
-            const assignments = await db.execute<{
-              id: string;
-              role_id: string;
-            }>(
-              sql`
+          const assignments = await db.execute<{
+            id: string;
+            role_id: string;
+          }>(
+            sql`
             select id, role_id from role_assignments
              where org_id = ${actor.orgId} and user_id = ${userId}
              order by id for update
           `,
-              "objects",
+            "objects",
+          );
+          if (!assignments.some((row) => row.role_id === roleId)) {
+            return NextResponse.json({ ok: true });
+          }
+          if (assignments.length === 1) {
+            return NextResponse.json(
+              { error: "an active user must retain at least one role" },
+              { status: 409 },
             );
-            if (!assignments.some((row) => row.role_id === roleId)) {
-              return NextResponse.json({ ok: true });
-            }
-            if (assignments.length === 1) {
-              return NextResponse.json(
-                { error: "an active user must retain at least one role" },
-                { status: 409 },
-              );
-            }
-            const deleted = await db.execute<{ id: string }>(
-              sql`
+          }
+          const deleted = await db.execute<{ id: string }>(
+            sql`
             delete from role_assignments
              where org_id = ${actor.orgId} and user_id = ${userId} and role_id = ${roleId}
             returning id
           `,
-              "objects",
-            );
-            if (deleted[0]) {
-              await audit(db, {
-                orgId: actor.orgId,
-                tableName: "role_assignments",
-                rowId: deleted[0].id,
-                action: "delete",
-                changes: {
-                  userId: [userId, null],
-                  roleId: [roleId, null],
-                },
-                actorId: actor.id,
-              });
-            }
-            return NextResponse.json({ ok: true });
-          }),
+            "objects",
+          );
+          if (deleted[0]) {
+            await audit(db, {
+              orgId: actor.orgId,
+              tableName: "role_assignments",
+              rowId: deleted[0].id,
+              action: "delete",
+              changes: {
+                userId: [userId, null],
+                roleId: [roleId, null],
+              },
+              actorId: actor.id,
+            });
+          }
+          return NextResponse.json({ ok: true });
+        }),
+      );
+    }
+    case "set-active": {
+      if (typeof body.isActive !== "boolean") {
+        return NextResponse.json({ error: "isActive required" }, { status: 400 });
+      }
+      if (userId === actor.id.toLowerCase() && !body.isActive) {
+        return NextResponse.json(
+          { error: "you cannot deactivate your own account" },
+          { status: 400 },
         );
       }
-      case "set-active": {
-        if (typeof body.isActive !== "boolean") {
-          return NextResponse.json({ error: "isActive required" }, { status: 400 });
-        }
-        if (userId === actor.id.toLowerCase() && !body.isActive) {
-          return NextResponse.json(
-            { error: "you cannot deactivate your own account" },
-            { status: 400 },
-          );
-        }
-        return withOrgTransaction(actor.orgId, () =>
-          withTransactionSavepoint(db, async () => {
-            const targetRows = await db.execute<{ id: string; is_active: boolean }>(
-              sql`
+      return withOrgTransaction(actor.orgId, () =>
+        withTransactionSavepoint(db, async () => {
+          const targetRows = await db.execute<{ id: string; is_active: boolean }>(
+            sql`
             select id, is_active from users where id = ${userId} and org_id = ${actor.orgId} for update`,
-              "objects",
-            );
-            const target = targetRows[0];
-            if (!target) return NextResponse.json({ error: "user not found" }, { status: 404 });
-            if (body.isActive) {
-              // No row cap: the grant union is semantic coverage, and a bound
-              // here would silently ignore a high-privilege role past the cut.
-              const assigned = await db.execute<{ role_id: string }>(
-                sql`
+            "objects",
+          );
+          const target = targetRows[0];
+          if (!target) return NextResponse.json({ error: "user not found" }, { status: 404 });
+          if (body.isActive) {
+            // No row cap: the grant union is semantic coverage, and a bound
+            // here would silently ignore a high-privilege role past the cut.
+            const assigned = await db.execute<{ role_id: string }>(
+              sql`
               select role_id
                 from role_assignments
                where org_id = ${actor.orgId} and user_id = ${userId}
                for key share
             `,
-                "objects",
+              "objects",
+            );
+            if (assigned.length === 0) {
+              return NextResponse.json(
+                { error: "assign at least one role before activating this user" },
+                { status: 409 },
               );
-              if (assigned.length === 0) {
-                return NextResponse.json(
-                  { error: "assign at least one role before activating this user" },
-                  { status: 409 },
-                );
-              }
-              // Only an inactive → active transition restores the target's
-              // stored roles, so only it is judged like a grant. Re-affirming
-              // an already-active user is an idempotent no-op and needs no
-              // authority. Deactivation only removes access and is never judged.
-              if (!target.is_active && !actor.isSuperAdmin) {
-                const policies = await resolveRoleGrantPolicies(
-                  db,
-                  actor.orgId,
-                  assigned.map((row) => row.role_id),
-                );
-                // Reactivation restores overrides as well as roles: resolve the
-                // target's stored effective permissions canonically. Grant
-                // overrides above the actor's ceiling refuse; deny overrides
-                // only shrink the set, so they can never cause a false refusal.
-                const overrides = await db.execute<{
-                  permission: string;
-                  effect: "grant" | "deny";
-                }>(
-                  sql`
+            }
+            // Only an inactive → active transition restores the target's
+            // stored roles, so only it is judged like a grant. Re-affirming
+            // an already-active user is an idempotent no-op and needs no
+            // authority. Deactivation only removes access and is never judged.
+            if (!target.is_active && !actor.isSuperAdmin) {
+              const policies = await resolveRoleGrantPolicies(
+                db,
+                actor.orgId,
+                assigned.map((row) => row.role_id),
+              );
+              // Reactivation restores overrides as well as roles: resolve the
+              // target's stored effective permissions canonically. Grant
+              // overrides above the actor's ceiling refuse; deny overrides
+              // only shrink the set, so they can never cause a false refusal.
+              const overrides = await db.execute<{
+                permission: string;
+                effect: "grant" | "deny";
+              }>(
+                sql`
                 select permission, effect
                   from user_permission_overrides
                  where user_id = ${userId} and org_id = ${actor.orgId}
               `,
-                  "objects",
+                "objects",
+              );
+              const effective = resolveEffectivePermissions({
+                rolePermissionSets: policies.map((policy) => policy.permissions),
+                overrides,
+              });
+              const missing = permissionsOutsideCeiling(gate.permissions, effective);
+              if (missing.length > 0) {
+                return NextResponse.json(
+                  {
+                    error: `cannot reactivate permissions you do not hold: ${missing.join(", ")}`,
+                    missing,
+                  },
+                  { status: 403 },
                 );
-                const effective = resolveEffectivePermissions({
-                  rolePermissionSets: policies.map((policy) => policy.permissions),
-                  overrides,
-                });
-                const missing = permissionsOutsideCeiling(gate.permissions, effective);
-                if (missing.length > 0) {
-                  return NextResponse.json(
-                    {
-                      error: `cannot reactivate permissions you do not hold: ${missing.join(", ")}`,
-                      missing,
-                    },
-                    { status: 403 },
-                  );
-                }
-                // Reactivation restores every stored role, so each stored role
-                // policy must sit in the actor's portfolio.
-                const coverage = await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id);
-                for (const policy of policies) {
-                  const widening = coverageRefusal(
-                    gate,
-                    coverage,
-                    policy.restriction,
-                    "reactivate",
-                  );
-                  if (widening) return widening;
-                }
+              }
+              // Reactivation restores every stored role, so each stored role
+              // policy must sit in the actor's portfolio.
+              const coverage = await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id);
+              for (const policy of policies) {
+                const widening = coverageRefusal(gate, coverage, policy.restriction, "reactivate");
+                if (widening) return widening;
               }
             }
-            const updated = await db.execute(
-              sql`
+          }
+          const updated = await db.execute(
+            sql`
             with changed_identity as (
               update users set is_active = ${body.isActive}, updated_at = now(), updated_by = ${actor.id}
                where id = ${userId} and org_id = ${actor.orgId} and is_active <> ${body.isActive}
@@ -654,172 +651,171 @@ export const POST = defineRoute({
             )
             select id from changed_identity
           `,
-              "objects",
-            );
-            if (updated[0]) {
-              // Session revocation is in the same SQL statement as deactivation, so
-              // a later reactivation cannot revive pre-disable browser sessions.
-              await audit(db, {
-                orgId: actor.orgId,
-                tableName: "users",
-                rowId: userId,
-                action: "update",
-                changes: { isActive: [!body.isActive, body.isActive] },
-                actorId: actor.id,
-              });
-            }
-            return NextResponse.json({ ok: true });
-          }),
+            "objects",
+          );
+          if (updated[0]) {
+            // Session revocation is in the same SQL statement as deactivation, so
+            // a later reactivation cannot revive pre-disable browser sessions.
+            await audit(db, {
+              orgId: actor.orgId,
+              tableName: "users",
+              rowId: userId,
+              action: "update",
+              changes: { isActive: [!body.isActive, body.isActive] },
+              actorId: actor.id,
+            });
+          }
+          return NextResponse.json({ ok: true });
+        }),
+      );
+    }
+    case "set-party": {
+      // Audited native link between a login user and a person party.
+      // Separation of duties: your own link is performed by another
+      // administrator. The single exception is an organization whose only
+      // active user administrator is the actor: nobody else could perform
+      // it, so the actor may link themself with the same reason and
+      // attestation, recorded as a self-link in the audit log. The count
+      // is re-checked inside the write transaction; once a second active
+      // administrator exists the refusal applies again, unlink included.
+      const selfLink = userId === actor.id.toLowerCase();
+      const selfLinkRefusal = () =>
+        NextResponse.json(
+          {
+            error:
+              "you cannot change your own linked person while another active administrator exists — ask them to perform it",
+          },
+          { status: 403 },
+        );
+      if (selfLink && (await countOtherActiveUserAdministrators(db, actor.orgId, actor.id)) > 0) {
+        return selfLinkRefusal();
+      }
+      if (!("partyId" in body)) {
+        return NextResponse.json({ error: "partyId required" }, { status: 400 });
+      }
+      let partyId: string | null;
+      if (body.partyId === null) {
+        partyId = null;
+      } else if (typeof body.partyId === "string" && isUuid(body.partyId)) {
+        partyId = body.partyId.toLowerCase();
+      } else {
+        return NextResponse.json({ error: "partyId must be a uuid or null" }, { status: 400 });
+      }
+      // expectedPartyId is the optimistic-concurrency token, null included:
+      // the caller must name the link it saw, including "saw unlinked".
+      if (!("expectedPartyId" in body)) {
+        return NextResponse.json({ error: "expectedPartyId required" }, { status: 400 });
+      }
+      let expected: string | null;
+      if (body.expectedPartyId === null) {
+        expected = null;
+      } else if (typeof body.expectedPartyId === "string" && isUuid(body.expectedPartyId)) {
+        expected = body.expectedPartyId.toLowerCase();
+      } else {
+        return NextResponse.json(
+          { error: "expectedPartyId must be a uuid or null" },
+          { status: 400 },
         );
       }
-      case "set-party": {
-        // Audited native link between a login user and a person party.
-        // Separation of duties: your own link is performed by another
-        // administrator. The single exception is an organization whose only
-        // active user administrator is the actor: nobody else could perform
-        // it, so the actor may link themself with the same reason and
-        // attestation, recorded as a self-link in the audit log. The count
-        // is re-checked inside the write transaction; once a second active
-        // administrator exists the refusal applies again, unlink included.
-        const selfLink = userId === actor.id.toLowerCase();
-        const selfLinkRefusal = () =>
-          NextResponse.json(
-            {
-              error:
-                "you cannot change your own linked person while another active administrator exists — ask them to perform it",
-            },
-            { status: 403 },
-          );
-        if (selfLink && (await countOtherActiveUserAdministrators(db, actor.orgId, actor.id)) > 0) {
-          return selfLinkRefusal();
-        }
-        if (!("partyId" in body)) {
-          return NextResponse.json({ error: "partyId required" }, { status: 400 });
-        }
-        let partyId: string | null;
-        if (body.partyId === null) {
-          partyId = null;
-        } else if (typeof body.partyId === "string" && isUuid(body.partyId)) {
-          partyId = body.partyId.toLowerCase();
-        } else {
-          return NextResponse.json({ error: "partyId must be a uuid or null" }, { status: 400 });
-        }
-        // expectedPartyId is the optimistic-concurrency token, null included:
-        // the caller must name the link it saw, including "saw unlinked".
-        if (!("expectedPartyId" in body)) {
-          return NextResponse.json({ error: "expectedPartyId required" }, { status: 400 });
-        }
-        let expected: string | null;
-        if (body.expectedPartyId === null) {
-          expected = null;
-        } else if (typeof body.expectedPartyId === "string" && isUuid(body.expectedPartyId)) {
-          expected = body.expectedPartyId.toLowerCase();
-        } else {
-          return NextResponse.json(
-            { error: "expectedPartyId must be a uuid or null" },
-            { status: 400 },
-          );
-        }
-        const reason = typeof body.reason === "string" ? body.reason.trim() : "";
-        if (!reason) {
-          return NextResponse.json({ error: "reason required" }, { status: 422 });
-        }
-        if (reason.length > 500) {
-          return NextResponse.json({ error: "reason too long" }, { status: 422 });
-        }
-        // Explicit administrator attestation that the selected native party is
-        // the correct human identity for this login user. parties.kind is not
-        // proof (drafts are kind=company even with an employee role), and the
-        // service never infers employment, hire, or status from kind or flags.
-        if (body.attestation !== true) {
-          return NextResponse.json({ error: "attestation required" }, { status: 422 });
-        }
-        return withOrgTransaction(actor.orgId, () =>
-          withTransactionSavepoint(db, async () => {
-            // Lock the party before reading its subsidiary. The share lock blocks
-            // a concurrent rehome until the user link has committed.
-            if (partyId !== null) {
-              await db.execute(sql`
+      const reason = typeof body.reason === "string" ? body.reason.trim() : "";
+      if (!reason) {
+        return NextResponse.json({ error: "reason required" }, { status: 422 });
+      }
+      if (reason.length > 500) {
+        return NextResponse.json({ error: "reason too long" }, { status: 422 });
+      }
+      // Explicit administrator attestation that the selected native party is
+      // the correct human identity for this login user. parties.kind is not
+      // proof (drafts are kind=company even with an employee role), and the
+      // service never infers employment, hire, or status from kind or flags.
+      if (body.attestation !== true) {
+        return NextResponse.json({ error: "attestation required" }, { status: 422 });
+      }
+      return withOrgTransaction(actor.orgId, () =>
+        withTransactionSavepoint(db, async () => {
+          // Lock the party before reading its subsidiary. The share lock blocks
+          // a concurrent rehome until the user link has committed.
+          if (partyId !== null) {
+            await db.execute(sql`
               select id from parties where id = ${partyId} and org_id = ${actor.orgId} for share`);
-            }
-            // Serialize link decisions on the target user row. Self-service
-            // statement readers take FOR SHARE on this row before locking their
-            // employment, so unlink waits for in-flight reads and later readers
-            // observe the committed link state.
-            const currentRows = await db.execute<{ id: string; party_id: string | null }>(
-              sql`
+          }
+          // Serialize link decisions on the target user row. Self-service
+          // statement readers take FOR SHARE on this row before locking their
+          // employment, so unlink waits for in-flight reads and later readers
+          // observe the committed link state.
+          const currentRows = await db.execute<{ id: string; party_id: string | null }>(
+            sql`
             select id, party_id from users where id = ${userId} and org_id = ${actor.orgId} for update`,
-              "objects",
+            "objects",
+          );
+          const currentRow = currentRows[0];
+          if (
+            selfLink &&
+            (await countOtherActiveUserAdministrators(db, actor.orgId, actor.id)) > 0
+          ) {
+            return selfLinkRefusal();
+          }
+          // Wrong-org and missing users share one message so callers cannot
+          // probe which orgs hold which user ids.
+          if (!currentRow) return NextResponse.json({ error: "user not found" }, { status: 404 });
+          const current: string | null = currentRow.party_id
+            ? String(currentRow.party_id).toLowerCase()
+            : null;
+          if (current !== expected) {
+            return NextResponse.json(
+              { error: "stale link: the user's linked person changed — refresh and try again" },
+              { status: 409 },
             );
-            const currentRow = currentRows[0];
-            if (
-              selfLink &&
-              (await countOtherActiveUserAdministrators(db, actor.orgId, actor.id)) > 0
-            ) {
-              return selfLinkRefusal();
-            }
-            // Wrong-org and missing users share one message so callers cannot
-            // probe which orgs hold which user ids.
-            if (!currentRow) return NextResponse.json({ error: "user not found" }, { status: 404 });
-            const current: string | null = currentRow.party_id
-              ? String(currentRow.party_id).toLowerCase()
-              : null;
-            if (current !== expected) {
-              return NextResponse.json(
-                { error: "stale link: the user's linked person changed — refresh and try again" },
-                { status: 409 },
-              );
-            }
-            // Idempotent retry: already at the requested link, no audit.
-            if (current === partyId)
-              return NextResponse.json({ ok: true, userId, partyId: current });
-            let partySignals: {
+          }
+          // Idempotent retry: already at the requested link, no audit.
+          if (current === partyId) return NextResponse.json({ ok: true, userId, partyId: current });
+          let partySignals: {
+            id: string;
+            kind: string;
+            displayName: string;
+            roles: string[];
+          } | null = null;
+          if (partyId !== null) {
+            // Native party only: same-org, active, non-merged. No kind/role
+            // inference, no automatic employee creation, no hire/status
+            // changes. Wrong-org and missing parties share one message so
+            // callers cannot probe which orgs hold which party ids. Inactive
+            // parties (including inactive drafts/duplicates) fail as 422: the
+            // row exists in this org but is not linkable. There is no separate
+            // merged column on main — inactive covers drafts and merged-away
+            // duplicates.
+            const party = await db.execute<{
               id: string;
               kind: string;
-              displayName: string;
-              roles: string[];
-            } | null = null;
-            if (partyId !== null) {
-              // Native party only: same-org, active, non-merged. No kind/role
-              // inference, no automatic employee creation, no hire/status
-              // changes. Wrong-org and missing parties share one message so
-              // callers cannot probe which orgs hold which party ids. Inactive
-              // parties (including inactive drafts/duplicates) fail as 422: the
-              // row exists in this org but is not linkable. There is no separate
-              // merged column on main — inactive covers drafts and merged-away
-              // duplicates.
-              const party = await db.execute<{
-                id: string;
-                kind: string;
-                display_name: string;
-                is_active: boolean;
-                subsidiary_id: string | null;
-              }>(
-                sql`
+              display_name: string;
+              is_active: boolean;
+              subsidiary_id: string | null;
+            }>(
+              sql`
               select id, kind, display_name, is_active, subsidiary_id from parties
                where id = ${partyId} and org_id = ${actor.orgId}`,
-                "objects",
-              );
-              const found = party[0];
-              if (!found) return NextResponse.json({ error: "party not found" }, { status: 404 });
-              // A subsidiary-restricted admin cannot link a login to an employee
-              // outside their scope: out-of-scope answers exactly like missing,
-              // so the link writer cannot probe other subsidiaries' people.
-              if (
-                !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, found.subsidiary_id, {
-                  orgWideNull: true,
-                })
-              ) {
-                return NextResponse.json({ error: "party not found" }, { status: 404 });
-              }
-              if (!found.is_active) {
-                return NextResponse.json({ error: "party is not active" }, { status: 422 });
-              }
-              // Kind/role signals for audit evidence only — never proof of human
-              // identity. Role membership comes exclusively from the canonical
-              // role tables, matching the forms parties picker.
-              const rolesR = await db.execute<{ role: string }>(
-                sql`
+              "objects",
+            );
+            const found = party[0];
+            if (!found) return NextResponse.json({ error: "party not found" }, { status: 404 });
+            // A subsidiary-restricted admin cannot link a login to an employee
+            // outside their scope: out-of-scope answers exactly like missing,
+            // so the link writer cannot probe other subsidiaries' people.
+            if (
+              !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, found.subsidiary_id, {
+                orgWideNull: true,
+              })
+            ) {
+              return NextResponse.json({ error: "party not found" }, { status: 404 });
+            }
+            if (!found.is_active) {
+              return NextResponse.json({ error: "party is not active" }, { status: 422 });
+            }
+            // Kind/role signals for audit evidence only — never proof of human
+            // identity. Role membership comes exclusively from the canonical
+            // role tables, matching the forms parties picker.
+            const rolesR = await db.execute<{ role: string }>(
+              sql`
               select 'vendor' as role from vendor_roles
                where org_id = ${actor.orgId} and party_id = ${partyId} and is_active
               union all
@@ -828,321 +824,183 @@ export const POST = defineRoute({
               union all
               select 'employee' as role from employee_roles
                where org_id = ${actor.orgId} and party_id = ${partyId} and is_active`,
-                "objects",
-              );
-              partySignals = {
-                id: partyId,
-                kind: found.kind,
-                displayName: found.display_name,
-                roles: rolesR.map((r) => r.role).sort(),
-              };
-            }
-            // Precise affected-row count with the concurrency predicate: under a
-            // race only one writer's predicate still holds, the loser sees zero
-            // rows and reports 409 instead of silently winning.
-            const updated =
-              expected === null
-                ? await db.execute<{ id: string }>(
-                    sql`
+              "objects",
+            );
+            partySignals = {
+              id: partyId,
+              kind: found.kind,
+              displayName: found.display_name,
+              roles: rolesR.map((r) => r.role).sort(),
+            };
+          }
+          // Precise affected-row count with the concurrency predicate: under a
+          // race only one writer's predicate still holds, the loser sees zero
+          // rows and reports 409 instead of silently winning.
+          const updated =
+            expected === null
+              ? await db.execute<{ id: string }>(
+                  sql`
                 update users set party_id = ${partyId}, updated_at = now(), updated_by = ${actor.id}
                  where id = ${userId} and org_id = ${actor.orgId} and party_id is null
                 returning id`,
-                    "objects",
-                  )
-                : await db.execute<{ id: string }>(
-                    sql`
+                  "objects",
+                )
+              : await db.execute<{ id: string }>(
+                  sql`
                 update users set party_id = ${partyId}, updated_at = now(), updated_by = ${actor.id}
                  where id = ${userId} and org_id = ${actor.orgId} and party_id = ${expected}
                 returning id`,
-                    "objects",
-                  );
-            if (!updated[0]) {
-              return NextResponse.json(
-                { error: "stale link: the user's linked person changed — refresh and try again" },
-                { status: 409 },
-              );
-            }
-            const event =
-              partyId === null
-                ? "user-party-unlinked"
-                : current === null
-                  ? "user-party-linked"
-                  : "user-party-changed";
-            await audit(db, {
-              orgId: actor.orgId,
-              tableName: "users",
-              rowId: userId,
-              action: "update",
-              changes: {
-                event,
-                actor: { kind: "user", userId: actor.id },
-                actedAt: new Date().toISOString(),
-                before: { party_id: current },
-                after: { party_id: partyId },
-                reason,
-                attestation: true,
-                party: partySignals,
-                ...(selfLink ? { selfLink: { soleActiveAdministrator: true } } : {}),
-              },
-              actorId: actor.id,
-            });
-            return NextResponse.json({ ok: true, userId, partyId });
-          }),
-        );
-      }
-      case "invite": {
-        if (typeof body.email !== "string") {
-          return NextResponse.json({ error: "email required" }, { status: 400 });
-        }
-        const email = normalizeLoginEmail(body.email);
-        if (!email) {
-          return NextResponse.json({ error: "valid email required" }, { status: 400 });
-        }
-        if (typeof body.roleId !== "string" || !isUuid(body.roleId)) {
-          return NextResponse.json({ error: "roleId required" }, { status: 400 });
-        }
-        const roleId = body.roleId.toLowerCase();
-        const name = deriveInviteDisplayName(email);
-        // The user row, its first role, and both audit rows commit atomically.
-        // ON CONFLICT DO NOTHING keeps a concurrent double-invite to a single
-        // user: the loser sees no row and resumes the winner's pending row
-        // below (re-issuing) instead of failing.
-        const created = await withOrgTransaction(actor.orgId, () =>
-          withTransactionSavepoint(db, async () => {
-            const role = await db.execute<{
-              id: string;
-              key: string;
-              permissions: unknown;
-              subsidiary_restriction: unknown;
-            }>(
-              sql`
-            select id, key, permissions, subsidiary_restriction from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`,
-              "objects",
-            );
-            if (!role[0]) return NextResponse.json({ error: "role not found" }, { status: 404 });
-            if (!actor.isSuperAdmin) {
-              const rolePermissions = Array.isArray(role[0].permissions)
-                ? role[0].permissions.filter((p): p is string => typeof p === "string")
-                : [];
-              const missing = permissionsOutsideCeiling(gate.permissions, rolePermissions);
-              if (missing.length > 0) {
-                return NextResponse.json(
-                  {
-                    error: `cannot grant permissions you do not hold: ${missing.join(", ")}`,
-                    missing,
-                  },
-                  { status: 403 },
+                  "objects",
                 );
-              }
-              const widening = coverageRefusal(
-                gate,
-                await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id),
-                storedRestriction(role[0].subsidiary_restriction),
-                "invite with",
-              );
-              if (widening) return widening;
-            }
-            // One active home identity per login address across organizations:
-            // a second would refuse its owner's sign-in and password reset.
-            await lockLoginEmail(db, email);
-            if (await loginEmailSignsInElsewhere(email, actor.orgId)) {
+          if (!updated[0]) {
+            return NextResponse.json(
+              { error: "stale link: the user's linked person changed — refresh and try again" },
+              { status: 409 },
+            );
+          }
+          const event =
+            partyId === null
+              ? "user-party-unlinked"
+              : current === null
+                ? "user-party-linked"
+                : "user-party-changed";
+          await audit(db, {
+            orgId: actor.orgId,
+            tableName: "users",
+            rowId: userId,
+            action: "update",
+            changes: {
+              event,
+              actor: { kind: "user", userId: actor.id },
+              actedAt: new Date().toISOString(),
+              before: { party_id: current },
+              after: { party_id: partyId },
+              reason,
+              attestation: true,
+              party: partySignals,
+              ...(selfLink ? { selfLink: { soleActiveAdministrator: true } } : {}),
+            },
+            actorId: actor.id,
+          });
+          return NextResponse.json({ ok: true, userId, partyId });
+        }),
+      );
+    }
+    case "invite": {
+      if (typeof body.email !== "string") {
+        return NextResponse.json({ error: "email required" }, { status: 400 });
+      }
+      const email = normalizeLoginEmail(body.email);
+      if (!email) {
+        return NextResponse.json({ error: "valid email required" }, { status: 400 });
+      }
+      if (typeof body.roleId !== "string" || !isUuid(body.roleId)) {
+        return NextResponse.json({ error: "roleId required" }, { status: 400 });
+      }
+      const roleId = body.roleId.toLowerCase();
+      const name = deriveInviteDisplayName(email);
+      // The user row, its first role, and both audit rows commit atomically.
+      // ON CONFLICT DO NOTHING keeps a concurrent double-invite to a single
+      // user: the loser sees no row and resumes the winner's pending row
+      // below (re-issuing) instead of failing.
+      const created = await withOrgTransaction(actor.orgId, () =>
+        withTransactionSavepoint(db, async () => {
+          const role = await db.execute<{
+            id: string;
+            key: string;
+            permissions: unknown;
+            subsidiary_restriction: unknown;
+          }>(
+            sql`
+            select id, key, permissions, subsidiary_restriction from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`,
+            "objects",
+          );
+          if (!role[0]) return NextResponse.json({ error: "role not found" }, { status: 404 });
+          if (!actor.isSuperAdmin) {
+            const rolePermissions = Array.isArray(role[0].permissions)
+              ? role[0].permissions.filter((p): p is string => typeof p === "string")
+              : [];
+            const missing = permissionsOutsideCeiling(gate.permissions, rolePermissions);
+            if (missing.length > 0) {
               return NextResponse.json(
                 {
-                  error: `${email} already signs in to another organization. Invite a different address, or ask a platform administrator to grant this person access to your organization from Platform → Access.`,
+                  error: `cannot grant permissions you do not hold: ${missing.join(", ")}`,
+                  missing,
                 },
-                { status: 409 },
+                { status: 403 },
               );
             }
-            const inserted = await db.execute<{ id: string }>(
-              sql`
+            const widening = coverageRefusal(
+              gate,
+              await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id),
+              storedRestriction(role[0].subsidiary_restriction),
+              "invite with",
+            );
+            if (widening) return widening;
+          }
+          // One active home identity per login address across organizations:
+          // a second would refuse its owner's sign-in and password reset.
+          await lockLoginEmail(db, email);
+          if (await loginEmailSignsInElsewhere(email, actor.orgId)) {
+            return NextResponse.json(
+              {
+                error: `${email} already signs in to another organization. Invite a different address, or ask a platform administrator to grant this person access to your organization from Platform → Access.`,
+              },
+              { status: 409 },
+            );
+          }
+          const inserted = await db.execute<{ id: string }>(
+            sql`
             insert into users (org_id, email, name, password_hash, is_active, created_by, updated_by)
             values (${actor.orgId}, ${email}, ${name}, ${UNUSABLE_PASSWORD_HASH}, true, ${actor.id}, ${actor.id})
             -- An existing email is re-read under lock below and is either a resumable invitation or a refusal.
             on conflict do nothing
             returning id`,
-              "objects",
-            );
-            const newUserId = inserted[0]?.id;
-            if (newUserId) {
-              const assignment = await db.execute<{ id: string }>(
-                sql`
+            "objects",
+          );
+          const newUserId = inserted[0]?.id;
+          if (newUserId) {
+            const assignment = await db.execute<{ id: string }>(
+              sql`
               insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
               values (${actor.orgId}, ${newUserId}, ${roleId}, ${actor.id}, ${actor.id})
               returning id`,
-                "objects",
-              );
-              await audit(db, {
-                orgId: actor.orgId,
-                tableName: "users",
-                rowId: newUserId,
-                action: "insert",
-                changes: {
-                  email: [null, email],
-                  name: [null, name],
-                },
-                actorId: actor.id,
-              });
-              if (assignment[0]) {
-                await audit(db, {
-                  orgId: actor.orgId,
-                  tableName: "role_assignments",
-                  rowId: assignment[0].id,
-                  action: "insert",
-                  changes: {
-                    userId: [null, newUserId],
-                    roleId: [null, roleId],
-                  },
-                  actorId: actor.id,
-                });
-              }
-              return { userId: newUserId, email, name, resumed: false };
-            }
-            // Resumable retry: the address already exists. A still-pending
-            // invite (never activated, never set a password) re-issues its
-            // link instead of dead-ending in 409 — so a retry after a lost
-            // link or a rate-cap refusal can still complete. A real account
-            // (active with a password, or deactivated) keeps the 409: the
-            // address is taken.
-            const existing = (
-              await db.execute<{
-                id: string;
-                email: string;
-                name: string | null;
-                is_active: boolean;
-                password_hash: string;
-              }>(
-                sql`
-            select id, email, name, is_active, password_hash from users
-             where org_id = ${actor.orgId} and lower(email) = ${email}
-             for update`,
-                "objects",
-              )
-            )[0];
-            if (
-              !existing ||
-              !existing.is_active ||
-              existing.password_hash !== UNUSABLE_PASSWORD_HASH
-            ) {
-              return NextResponse.json(
-                { error: "a user with this email already exists" },
-                { status: 409 },
-              );
-            }
-            // The requested role passed this caller's ceiling above; ensure it
-            // idempotently, then re-issue. The mint step re-verifies the
-            // target's FULL stored set under lock before any link exists.
-            const reassign = await db.execute<{ id: string }>(
-              sql`
-            insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
-            values (${actor.orgId}, ${existing.id}, ${roleId}, ${actor.id}, ${actor.id})
-            -- A resumed invitation preserves an already granted role rather than creating a duplicate assignment.
-            on conflict (org_id, user_id, role_id) do nothing
-            returning id`,
               "objects",
             );
-            if (reassign[0]) {
+            await audit(db, {
+              orgId: actor.orgId,
+              tableName: "users",
+              rowId: newUserId,
+              action: "insert",
+              changes: {
+                email: [null, email],
+                name: [null, name],
+              },
+              actorId: actor.id,
+            });
+            if (assignment[0]) {
               await audit(db, {
                 orgId: actor.orgId,
                 tableName: "role_assignments",
-                rowId: reassign[0].id,
+                rowId: assignment[0].id,
                 action: "insert",
                 changes: {
-                  userId: [null, existing.id],
+                  userId: [null, newUserId],
                   roleId: [null, roleId],
                 },
                 actorId: actor.id,
               });
             }
-            return {
-              userId: existing.id,
-              email: existing.email,
-              name: existing.name,
-              resumed: true,
-            };
-          }),
-        );
-        if (created instanceof NextResponse) return created;
-        // The set-password link travels the password-reset mail path as an
-        // invitation email with a multi-day expiry, so delivery and logging
-        // behave like a self-service reset. Mail trouble must not roll the
-        // user back: the invite stays pending and an administrator can resend
-        // it, or the mailbox owner can request a fresh link. When
-        // no email transport exists the raw link is handed to the admin
-        // one-time in this response instead — still pending, still single-use.
-        // The authorize hook re-verifies the caller's ceiling against the
-        // target's CURRENT stored access inside the mint transaction, so a
-        // grant landing after the checks above can never leak a takeover link.
-        let issuance: InviteLinkIssuance | null = null;
-        try {
-          issuance = await issueInviteSetPasswordLink({
-            user: {
-              id: created.userId,
-              org_id: actor.orgId,
-              name: created.name,
-              email: created.email,
-            },
-            context: authRequestContext(request),
-            inviter: { userId: actor.id, name: actor.name },
-            authorize: () =>
-              authorizeInviteIssuance({
-                orgId: actor.orgId,
-                targetUserId: created.userId,
-                gate,
-              }),
-          });
-        } catch (error) {
-          // Truthful mapping: a refusal passes through with its own status,
-          // an infrastructure failure is a 500 with a resumable remedy — the
-          // per-user hourly cap alone (`null` issuance below) is a 429, and a
-          // retry for this pending user re-issues instead of conflicting.
-          return issuanceFailureResponse(error, "user is saved");
-        }
-        if (!issuance) {
-          return NextResponse.json(
-            { error: "too many invites — try again later" },
-            { status: 429 },
-          );
-        }
-        if (created.resumed) {
-          await withOrgTransaction(actor.orgId, () =>
-            withTransactionSavepoint(db, async () => {
-              await audit(db, {
-                orgId: actor.orgId,
-                tableName: "users",
-                rowId: created.userId,
-                action: "update",
-                changes: { inviteReissued: [null, true] },
-                actorId: actor.id,
-              });
-            }),
-          );
-        }
-        return NextResponse.json({
-          ok: true,
-          userId: created.userId,
-          emailQueued: issuance.emailQueued,
-          // One-time admin copy: present only when the mailbox could not carry
-          // it. Never persisted, never logged — the stored SHA-256 cannot
-          // reproduce it.
-          ...(issuance.emailQueued
-            ? {}
-            : {
-                setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }),
-                ...(issuance.emailFailed ? { emailFailed: true } : {}),
-              }),
-        });
-      }
-      case "resend-invite": {
-        // Re-issue the set-password link for a still-pending invite. Grants no
-        // role, so the ceiling check runs against the target's CURRENT roles:
-        // a resend must not become a takeover path for accounts another admin
-        // privileged above this actor's ceiling. The pending-state checks run
-        // here (fail fast); the ceiling itself is re-verified inside the mint
-        // transaction by the authorize hook, so a grant landing between this
-        // transaction and the mint can never leak a takeover link.
-        const target = await withOrgTransaction(actor.orgId, () =>
-          withTransactionSavepoint(db, async () => {
-            const rows = await db.execute<{
+            return { userId: newUserId, email, name, resumed: false };
+          }
+          // Resumable retry: the address already exists. A still-pending
+          // invite (never activated, never set a password) re-issues its
+          // link instead of dead-ending in 409 — so a retry after a lost
+          // link or a rate-cap refusal can still complete. A real account
+          // (active with a password, or deactivated) keeps the 409: the
+          // address is taken.
+          const existing = (
+            await db.execute<{
               id: string;
               email: string;
               name: string | null;
@@ -1151,80 +1009,217 @@ export const POST = defineRoute({
             }>(
               sql`
             select id, email, name, is_active, password_hash from users
-             where id = ${userId} and org_id = ${actor.orgId} for update`,
+             where org_id = ${actor.orgId} and lower(email) = ${email}
+             for update`,
               "objects",
+            )
+          )[0];
+          if (
+            !existing ||
+            !existing.is_active ||
+            existing.password_hash !== UNUSABLE_PASSWORD_HASH
+          ) {
+            return NextResponse.json(
+              { error: "a user with this email already exists" },
+              { status: 409 },
             );
-            const found = rows[0];
-            if (!found) return NextResponse.json({ error: "user not found" }, { status: 404 });
-            if (!found.is_active) {
-              return NextResponse.json(
-                { error: "cannot resend an invite to a deactivated user" },
-                { status: 409 },
-              );
-            }
-            if (found.password_hash !== UNUSABLE_PASSWORD_HASH) {
-              return NextResponse.json(
-                { error: "user has already set a password" },
-                { status: 409 },
-              );
-            }
-            return { id: found.id, email: found.email, name: found.name };
-          }),
-        );
-        if (target instanceof NextResponse) return target;
-        let issuance: InviteLinkIssuance | null = null;
-        try {
-          issuance = await issueInviteSetPasswordLink({
-            user: { id: target.id, org_id: actor.orgId, name: target.name, email: target.email },
-            context: authRequestContext(request),
-            inviter: { userId: actor.id, name: actor.name },
-            authorize: () =>
-              authorizeInviteIssuance({
-                orgId: actor.orgId,
-                targetUserId: target.id,
-                gate,
-              }),
-          });
-        } catch (error) {
-          // Truthful mapping: a refusal passes through with its own status,
-          // an infrastructure failure is a 500 — the per-user hourly cap alone
-          // (`null` issuance below) is a 429.
-          return issuanceFailureResponse(error, "nothing was changed");
-        }
-        if (!issuance) {
-          return NextResponse.json(
-            { error: "too many invites — try again later" },
-            { status: 429 },
+          }
+          // The requested role passed this caller's ceiling above; ensure it
+          // idempotently, then re-issue. The mint step re-verifies the
+          // target's FULL stored set under lock before any link exists.
+          const reassign = await db.execute<{ id: string }>(
+            sql`
+            insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
+            values (${actor.orgId}, ${existing.id}, ${roleId}, ${actor.id}, ${actor.id})
+            -- A resumed invitation preserves an already granted role rather than creating a duplicate assignment.
+            on conflict (org_id, user_id, role_id) do nothing
+            returning id`,
+            "objects",
           );
-        }
+          if (reassign[0]) {
+            await audit(db, {
+              orgId: actor.orgId,
+              tableName: "role_assignments",
+              rowId: reassign[0].id,
+              action: "insert",
+              changes: {
+                userId: [null, existing.id],
+                roleId: [null, roleId],
+              },
+              actorId: actor.id,
+            });
+          }
+          return {
+            userId: existing.id,
+            email: existing.email,
+            name: existing.name,
+            resumed: true,
+          };
+        }),
+      );
+      if (created instanceof NextResponse) return created;
+      // The set-password link travels the password-reset mail path as an
+      // invitation email with a multi-day expiry, so delivery and logging
+      // behave like a self-service reset. Mail trouble must not roll the
+      // user back: the invite stays pending and an administrator can resend
+      // it, or the mailbox owner can request a fresh link. When
+      // no email transport exists the raw link is handed to the admin
+      // one-time in this response instead — still pending, still single-use.
+      // The authorize hook re-verifies the caller's ceiling against the
+      // target's CURRENT stored access inside the mint transaction, so a
+      // grant landing after the checks above can never leak a takeover link.
+      let issuance: InviteLinkIssuance | null = null;
+      try {
+        issuance = await issueInviteSetPasswordLink({
+          user: {
+            id: created.userId,
+            org_id: actor.orgId,
+            name: created.name,
+            email: created.email,
+          },
+          context: authRequestContext(request),
+          inviter: { userId: actor.id, name: actor.name },
+          authorize: () =>
+            authorizeInviteIssuance({
+              orgId: actor.orgId,
+              targetUserId: created.userId,
+              gate,
+            }),
+        });
+      } catch (error) {
+        // Truthful mapping: a refusal passes through with its own status,
+        // an infrastructure failure is a 500 with a resumable remedy — the
+        // per-user hourly cap alone (`null` issuance below) is a 429, and a
+        // retry for this pending user re-issues instead of conflicting.
+        return issuanceFailureResponse(error, "user is saved");
+      }
+      if (!issuance) {
+        return NextResponse.json({ error: "too many invites — try again later" }, { status: 429 });
+      }
+      if (created.resumed) {
         await withOrgTransaction(actor.orgId, () =>
           withTransactionSavepoint(db, async () => {
             await audit(db, {
               orgId: actor.orgId,
               tableName: "users",
-              rowId: target.id,
+              rowId: created.userId,
               action: "update",
-              changes: { inviteResent: [null, true] },
+              changes: { inviteReissued: [null, true] },
               actorId: actor.id,
             });
           }),
         );
-        return NextResponse.json({
-          ok: true,
-          userId: target.id,
-          emailQueued: issuance.emailQueued,
-          ...(issuance.emailQueued
-            ? {}
-            : {
-                setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }),
-                ...(issuance.emailFailed ? { emailFailed: true } : {}),
-              }),
-        });
       }
-      default:
-        return NextResponse.json({ error: "unknown action" }, { status: 400 });
+      return NextResponse.json({
+        ok: true,
+        userId: created.userId,
+        emailQueued: issuance.emailQueued,
+        // One-time admin copy: present only when the mailbox could not carry
+        // it. Never persisted, never logged — the stored SHA-256 cannot
+        // reproduce it.
+        ...(issuance.emailQueued
+          ? {}
+          : {
+              setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }),
+              ...(issuance.emailFailed ? { emailFailed: true } : {}),
+            }),
+      });
     }
+    case "resend-invite": {
+      // Re-issue the set-password link for a still-pending invite. Grants no
+      // role, so the ceiling check runs against the target's CURRENT roles:
+      // a resend must not become a takeover path for accounts another admin
+      // privileged above this actor's ceiling. The pending-state checks run
+      // here (fail fast); the ceiling itself is re-verified inside the mint
+      // transaction by the authorize hook, so a grant landing between this
+      // transaction and the mint can never leak a takeover link.
+      const target = await withOrgTransaction(actor.orgId, () =>
+        withTransactionSavepoint(db, async () => {
+          const rows = await db.execute<{
+            id: string;
+            email: string;
+            name: string | null;
+            is_active: boolean;
+            password_hash: string;
+          }>(
+            sql`
+            select id, email, name, is_active, password_hash from users
+             where id = ${userId} and org_id = ${actor.orgId} for update`,
+            "objects",
+          );
+          const found = rows[0];
+          if (!found) return NextResponse.json({ error: "user not found" }, { status: 404 });
+          if (!found.is_active) {
+            return NextResponse.json(
+              { error: "cannot resend an invite to a deactivated user" },
+              { status: 409 },
+            );
+          }
+          if (found.password_hash !== UNUSABLE_PASSWORD_HASH) {
+            return NextResponse.json({ error: "user has already set a password" }, { status: 409 });
+          }
+          return { id: found.id, email: found.email, name: found.name };
+        }),
+      );
+      if (target instanceof NextResponse) return target;
+      let issuance: InviteLinkIssuance | null = null;
+      try {
+        issuance = await issueInviteSetPasswordLink({
+          user: { id: target.id, org_id: actor.orgId, name: target.name, email: target.email },
+          context: authRequestContext(request),
+          inviter: { userId: actor.id, name: actor.name },
+          authorize: () =>
+            authorizeInviteIssuance({
+              orgId: actor.orgId,
+              targetUserId: target.id,
+              gate,
+            }),
+        });
+      } catch (error) {
+        // Truthful mapping: a refusal passes through with its own status,
+        // an infrastructure failure is a 500 — the per-user hourly cap alone
+        // (`null` issuance below) is a 429.
+        return issuanceFailureResponse(error, "nothing was changed");
+      }
+      if (!issuance) {
+        return NextResponse.json({ error: "too many invites — try again later" }, { status: 429 });
+      }
+      await withOrgTransaction(actor.orgId, () =>
+        withTransactionSavepoint(db, async () => {
+          await audit(db, {
+            orgId: actor.orgId,
+            tableName: "users",
+            rowId: target.id,
+            action: "update",
+            changes: { inviteResent: [null, true] },
+            actorId: actor.id,
+          });
+        }),
+      );
+      return NextResponse.json({
+        ok: true,
+        userId: target.id,
+        emailQueued: issuance.emailQueued,
+        ...(issuance.emailQueued
+          ? {}
+          : {
+              setPasswordUrl: setPasswordUrl(issuance.raw, { invite: true }),
+              ...(issuance.emailFailed ? { emailFailed: true } : {}),
+            }),
+      });
+    }
+    default:
+      return NextResponse.json({ error: "unknown action" }, { status: 400 });
+  }
+}
+
+export const POST = defineRoute({
+  permission: "admin.users.manage",
+  feature: {
+    none: "User administration has no organization feature switch and is limited by user management permissions.",
   },
+  body: requestBodySchema,
+  handler: mutateAdminUser,
 });
 
 export const GET = defineRoute({

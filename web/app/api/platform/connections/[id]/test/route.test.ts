@@ -59,6 +59,7 @@ stubModules({
         state.updates.push(text)
         return state.updateMatches
       }
+      export async function createConnectionRecord() { throw new Error("unexpected create") }
     `,
     "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for("openbooks.connection-test-route-test")]
@@ -93,6 +94,9 @@ stubModules({
     `,
     "@openbooks/engine/sync/connection": `
       const state = globalThis[Symbol.for("openbooks.connection-test-route-test")]
+      export function sourceType() { return undefined }
+      export function validateSourceConfig() { return "unexpected config validation" }
+      export function validateSourceSecret() { return "unexpected secret validation" }
       export function buildSource() {
         return {
           ping: async () => {

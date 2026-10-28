@@ -16,11 +16,21 @@ import { guardSuperAdmin, lockSuperAdminActor, SuperAdminAuthorityError } from "
 
 export const runtime = "nodejs";
 
-const daemonConfigBody = z
+export const daemonConfigBody = z
   .object({
-    enabled: z.boolean().optional(),
-    port: z.number().int().min(1).max(65535).optional(),
-    advertisedHost: z.string().nullable().optional(),
+    enabled: z.boolean().optional().describe("Whether the platform SFTP listener is enabled."),
+    port: z
+      .number()
+      .int()
+      .min(1)
+      .max(65535)
+      .optional()
+      .describe("TCP port for the platform SFTP listener."),
+    advertisedHost: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Public hostname advertised to SFTP users, or null to clear it."),
   })
   .strict();
 
@@ -48,7 +58,7 @@ function daemonAuditRowId(): string {
  * commits does the listener reconcile — never binding a port the database no
  * longer says we own.
  */
-async function updateDaemonRoute(
+export async function updateDaemonRoute(
   gate: { user: { orgId: string; id: string } },
   body: z.output<typeof daemonConfigBody>,
 ) {

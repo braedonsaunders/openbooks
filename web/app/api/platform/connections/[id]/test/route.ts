@@ -1,14 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import {
-  loadConnectionProbeRow,
-  writeConnectionProbeOutcome,
-} from "@openbooks/engine/sync/connection-admin";
-import { buildSource } from "@openbooks/engine/sync/connection";
-import { storageIdentityError } from "../../_storage-identity";
-import { connectionConfigUrlRefusal } from "../../_connector-guard";
-import { notFound } from "@/lib/api/responses";
+import { testConnectionAction } from "@/lib/sync/connection-admin-actions";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -29,58 +22,7 @@ export const POST = defineRoute({
     // Probing a connection exercises its credentials the way a run does, so
     // it rides the `sync.run` grant beside the run route; reconfiguring the
     // connection itself stays `admin.setup.manage`.
-    const row = await loadConnectionProbeRow(gate.user.orgId, id).catch((e) => {
-      if (storageIdentityError(e)) return null;
-      throw e;
-    });
-    if (!row) return notFound("record");
-    const urlError = await connectionConfigUrlRefusal(row.config);
-    if (urlError) {
-      // A refused connector URL is a validation refusal on a found connection
-      // (fix the connector URL and retry), never a missing connection.
-      return NextResponse.json(
-        { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
-        { status: 422 },
-      );
-    }
-
-    const stale = () =>
-      NextResponse.json(
-        {
-          error: "connection changed during the test; retry against the current configuration",
-          errorCode: "CONNECTION_CHANGED",
-        },
-        { status: 409 },
-      );
-
-    try {
-      const source = buildSource(row);
-      if (source.ping) {
-        const r = await source.ping();
-        const status = r.ok ? "active" : "error";
-        const lastError = r.ok ? null : (r.detail ?? "connection ping failed");
-        const matched = await writeConnectionProbeOutcome(
-          gate.user.orgId,
-          id,
-          row,
-          status,
-          lastError,
-        );
-        if (!matched) return stale();
-        return NextResponse.json({ ok: r.ok, detail: r.detail }, { status: r.ok ? 200 : 422 });
-      }
-      const tb = await source.trialBalance();
-      const matched = await writeConnectionProbeOutcome(gate.user.orgId, id, row, "active", null);
-      if (!matched) return stale();
-      return NextResponse.json({
-        ok: true,
-        detail: `${tb.length} accounts in trial balance`,
-      });
-    } catch (e) {
-      const message = (e as Error).message;
-      const matched = await writeConnectionProbeOutcome(gate.user.orgId, id, row, "error", message);
-      if (!matched) return stale();
-      return NextResponse.json({ ok: false, error: message }, { status: 422 });
-    }
+    const result = await testConnectionAction(gate.user.orgId, id);
+    return NextResponse.json(result.body, { status: result.status });
   },
 });

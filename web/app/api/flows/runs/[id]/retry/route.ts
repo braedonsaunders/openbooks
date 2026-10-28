@@ -10,6 +10,7 @@ import { guardFeaturePermission } from "../../../../../../lib/feature-gates";
 import { guardSubsidiaryScope } from "../../../../../../lib/authz";
 import { isUuid } from "../../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
+import type { Authz } from "@/lib/authz";
 
 export const runtime = "nodejs";
 
@@ -24,8 +25,12 @@ export const runtime = "nodejs";
  * subject's subsidiary and applies the same direct-record gate as
  * record-state / decide / manual before the engine may re-drive the run.
  */
-async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission("flows.manage", "flows");
+export async function retryFlowRunAction(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+  injectedGate?: Authz,
+) {
+  const gate = injectedGate ?? (await guardFeaturePermission("flows.manage", "flows"));
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
   if (!isUuid(id)) return notFound("record");
@@ -78,5 +83,5 @@ export const POST = defineRoute({
   feature: "flows",
   params: z.object({ id: z.string() }),
   handler: async ({ request, params }) =>
-    legacyPOST(request as never, { params: Promise.resolve(params as never) } as never),
+    retryFlowRunAction(request as never, { params: Promise.resolve(params as never) } as never),
 });

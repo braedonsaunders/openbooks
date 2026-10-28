@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  * key; a disabled Continuous Close module 404s like every other hidden-module
  * API surface.
  */
-async function legacyPOST(
+export async function runSetupAgentAction(
   _request: Request,
   { params }: { params: Promise<{ agentKey: string }> },
   gate: Authz,
@@ -59,5 +59,5 @@ export const POST = defineRoute({
   feature: "continuousClose",
   params: z.object({ agentKey: z.string() }),
   handler: async ({ request, params, authz }) =>
-    legacyPOST(request, { params: Promise.resolve(params) }, authz),
+    runSetupAgentAction(request, { params: Promise.resolve(params) }, authz),
 });

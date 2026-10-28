@@ -26,7 +26,7 @@ import {
 import { loadFlowSubjectSubsidiary, requireFlowsRecordReader } from "../_lib";
 import { isUuid } from "../../../../lib/list-params";
 
-const requestBodySchema = z.object({
+export const requestBodySchema = z.object({
   buttonId: z.string().trim().min(1).max(100),
   subjectId: uuidString(),
   subjectKind: z.string().trim().min(1).max(100),
@@ -55,7 +55,7 @@ interface ManualButton {
 }
 
 /** Resolve the manual buttons the caller may use on a record right now. */
-async function availableButtons(
+export async function availableButtons(
   authz: Authz,
   subjectKind: string,
   subjectId: string,
@@ -179,59 +179,67 @@ export const GET = defineRoute({
   handler: async ({ request }) => legacyGET(request as never),
 });
 
+export async function runManualFlowAction({
+  body,
+  authz: routeAuthz,
+}: {
+  body: z.infer<typeof requestBodySchema>;
+  authz: Authz;
+}) {
+  const authz = routeAuthz;
+
+  if (!body.subjectKind || !isUuid(body.subjectId ?? "") || !body.buttonId) {
+    return NextResponse.json(
+      { error: "subjectKind, subjectId, buttonId required" },
+      { status: 400 },
+    );
+  }
+
+  const buttons = await withOrgContext(authz.user.orgId, () =>
+    availableButtons(authz, body.subjectKind!, body.subjectId!),
+  );
+  if (buttons instanceof NextResponse) return buttons;
+  if (!buttons.some((b) => b.buttonId === body.buttonId)) {
+    return NextResponse.json({ error: "this action is not available" }, { status: 404 });
+  }
+
+  // The request's subsidiary scope travels into the dispatch: the
+  // availability check above is a precheck, and the engine re-verifies it
+  // under lock before any effect lands — otherwise a party
+  // rehome between check and effect runs a permitted button on a record
+  // that just left the caller's legal entity.
+  const result = await withOrgContext(authz.user.orgId, () =>
+    runRecordFlows(
+      { kind: "manual", buttonId: body.buttonId! },
+      body.subjectKind!,
+      body.subjectId!,
+      {
+        orgId: authz.user.orgId,
+        userId: authz.user.id,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      },
+    ),
+  );
+  // A dispatch-level failure leaves NO runs behind (the dispatch threw before
+  // any flow ran). Reporting 200 ok:true for that would toast success for
+  // work that never ran — refuse loudly with the dispatch reason instead.
+  if (result.failed && result.runs.length === 0) {
+    return NextResponse.json({ error: result.error ?? "flow dispatch failed" }, { status: 500 });
+  }
+  const failed = result.failed || result.runs.some((r) => r.status === "failed");
+  const reason = failed ? dispatchFailureReason(result) : null;
+  return NextResponse.json({
+    ok: !failed,
+    runs: result.runs,
+    gatesCreated: result.gatesCreated,
+    ...(reason ? { error: reason } : {}),
+  });
+}
+
 export const POST = defineRoute({
   public: "session",
   body: requestBodySchema,
-  handler: async ({ body, authz: routeAuthz }) => {
-    const authz = routeAuthz;
-
-    if (!body.subjectKind || !isUuid(body.subjectId ?? "") || !body.buttonId) {
-      return NextResponse.json(
-        { error: "subjectKind, subjectId, buttonId required" },
-        { status: 400 },
-      );
-    }
-
-    const buttons = await withOrgContext(authz.user.orgId, () =>
-      availableButtons(authz, body.subjectKind!, body.subjectId!),
-    );
-    if (buttons instanceof NextResponse) return buttons;
-    if (!buttons.some((b) => b.buttonId === body.buttonId)) {
-      return NextResponse.json({ error: "this action is not available" }, { status: 404 });
-    }
-
-    // The request's subsidiary scope travels into the dispatch: the
-    // availability check above is a precheck, and the engine re-verifies it
-    // under lock before any effect lands — otherwise a party
-    // rehome between check and effect runs a permitted button on a record
-    // that just left the caller's legal entity.
-    const result = await withOrgContext(authz.user.orgId, () =>
-      runRecordFlows(
-        { kind: "manual", buttonId: body.buttonId! },
-        body.subjectKind!,
-        body.subjectId!,
-        {
-          orgId: authz.user.orgId,
-          userId: authz.user.id,
-          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-        },
-      ),
-    );
-    // A dispatch-level failure leaves NO runs behind (the dispatch threw before
-    // any flow ran). Reporting 200 ok:true for that would toast success for
-    // work that never ran — refuse loudly with the dispatch reason instead.
-    if (result.failed && result.runs.length === 0) {
-      return NextResponse.json({ error: result.error ?? "flow dispatch failed" }, { status: 500 });
-    }
-    const failed = result.failed || result.runs.some((r) => r.status === "failed");
-    const reason = failed ? dispatchFailureReason(result) : null;
-    return NextResponse.json({
-      ok: !failed,
-      runs: result.runs,
-      gatesCreated: result.gatesCreated,
-      ...(reason ? { error: reason } : {}),
-    });
-  },
+  handler: runManualFlowAction,
 
   feature: "flows",
 });

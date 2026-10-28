@@ -1,5 +1,7 @@
 /** Absolute application links carried on emailed setup and approval links. */
 export { appBaseUrl } from "./email-tokens.ts";
+/** Canonical links to approval records exposed by native workflow actions. */
+export { approvalRequestHref } from "./review-links.ts";
 /** The Flows approval subject a payment run approves under, by direction. */
 export { paymentRunSubjectKind } from "./payment-runs-adapter.ts";
 /** Record flows: fire a lifecycle event (on_submit) for a non-document subject. */

@@ -38,7 +38,7 @@ const bodyObjectSchema = z
   .strict();
 
 /** GET /api/pdf-templates?recordType=customer_invoice — list org templates. */
-async function listPdfTemplatesRoute(req: Request, gate: Authz) {
+export async function listPdfTemplatesRoute(req: Request, gate: Authz) {
   const { user } = gate;
   const recordType = new URL(req.url).searchParams.get("recordType") ?? undefined;
   if (recordType && !PDF_RECORD_TYPE_BY_KEY[recordType])
@@ -72,7 +72,7 @@ async function listPdfTemplatesRoute(req: Request, gate: Authz) {
 
 /** POST — create a template. Body: { recordType, name, description?, sourceHtml?, … }.
  *  Omitted sourceHtml seeds the record type's starter design. */
-async function createPdfTemplate(gate: Authz, body: z.output<typeof bodyObjectSchema>) {
+export async function createPdfTemplate(gate: Authz, body: z.output<typeof bodyObjectSchema>) {
   const { user } = gate;
   const meta = body.recordType ? PDF_RECORD_TYPE_BY_KEY[body.recordType] : undefined;
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });

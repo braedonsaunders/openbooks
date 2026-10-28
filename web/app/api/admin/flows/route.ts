@@ -28,12 +28,17 @@ const FLOW_SUBJECT_KINDS = listFlowSubjectProfiles().map((profile) => profile.su
   string,
   ...string[],
 ];
-const requestBodySchema = z
+export const requestBodySchema = z
   .strictObject({
-    name: z.string().trim().min(1).max(200),
-    subjectKind: z.enum(FLOW_SUBJECT_KINDS),
-    boardId: uuidString().optional(),
-    schedulePreset: z.literal("weekday-morning-afternoon").optional(),
+    name: z.string().trim().min(1).max(200).describe("Flow name."),
+    subjectKind: z.enum(FLOW_SUBJECT_KINDS).describe("Subject type this flow governs."),
+    boardId: uuidString()
+      .optional()
+      .describe("Schedule board id when creating a schedule-board delivery flow."),
+    schedulePreset: z
+      .literal("weekday-morning-afternoon")
+      .optional()
+      .describe("Create the standard weekday morning and afternoon delivery schedule."),
   })
   .superRefine((value, ctx) => {
     if (value.schedulePreset && !value.boardId)
@@ -57,7 +62,7 @@ export const runtime = "nodejs";
  * The graph itself is edited through PATCH /api/admin/flows/[id].
  */
 
-async function legacyGET(gate: Authz) {
+export async function readAdminFlowsAction(gate: Authz) {
   if (gate.allowedSubsidiaryIds === null) {
     return NextResponse.json({ flows: await listAdminFlows(gate.user.orgId) });
   }
@@ -96,64 +101,72 @@ async function legacyGET(gate: Authz) {
 export const GET = defineRoute({
   permission: "flows.manage",
   feature: "flows",
-  handler: async ({ authz }) => legacyGET(authz),
+  handler: async ({ authz }) => readAdminFlowsAction(authz),
 });
+
+export async function createAdminFlowAction({
+  request,
+  body,
+  authz: routeAuthz,
+}: {
+  request: Request;
+  body: z.infer<typeof requestBodySchema>;
+  authz: Authz;
+}) {
+  return withOrgTransaction(routeAuthz.user.orgId, async () => {
+    const gate = routeAuthz;
+
+    const user = gate.user;
+    assertUnrestrictedScope(
+      await lockActorCommandAuthority(db, user.orgId, user.id, null, "flows.manage"),
+    );
+
+    const name = String(body.name ?? "").trim();
+    if (!name || name.length > 200) {
+      return NextResponse.json({ error: "name required (max 200 chars)" }, { status: 400 });
+    }
+    const subjectKind = String(body.subjectKind ?? "");
+    if (!listFlowSubjectProfiles().some((p) => p.subjectKind === subjectKind)) {
+      return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 });
+    }
+
+    const board = body.boardId
+      ? await getBoard({ orgId: user.orgId, actorId: user.id }, body.boardId)
+      : null;
+    if (board) await boardAuthority({ orgId: user.orgId, actorId: user.id }, board, "manage");
+    const graph = board
+      ? scheduleBoardTimerGraph(board.id, board.timeZone, !!body.schedulePreset)
+      : emptyAutomationGraph();
+    // A new flow starts enabled exactly when its initial graph validates:
+    // the save path refuses to leave an enabled flow warning-bearing, so
+    // create-time enablement must apply the same lint or a fresh flow could
+    // never be enabled without edits. An empty draft graph stays disabled
+    // (it cannot fire), and the designer banner says so.
+    const profile = await flowSubjectProfileForOrg(user.orgId, subjectKind);
+    const lint = lintFlowGraphForSubject(subjectKind, graph, profile ?? undefined);
+    const id = await createAdminFlow({
+      orgId: user.orgId,
+      actorId: user.id,
+      requestId: request.headers.get("X-Request-Id"),
+      name,
+      subjectKind,
+      enabled: lint.ok,
+      graph,
+    });
+    return NextResponse.json({ id });
+  }).catch((error: unknown) => {
+    // The subject's owning feature is rechecked inside the write: a kind
+    // whose feature is off cannot gain new flows (existing ones stay).
+    const refusal = flowSubjectFeatureRefusal(error);
+    if (refusal) return refusal;
+    throw error;
+  });
+}
 
 export const POST = defineRoute({
   permission: "flows.manage",
   feature: "flows",
   scope: "unrestricted",
   body: requestBodySchema,
-  handler: ({ request, body, authz: routeAuthz }) =>
-    withOrgTransaction(routeAuthz.user.orgId, async () => {
-      const gate = routeAuthz;
-
-      const user = gate.user;
-      assertUnrestrictedScope(
-        await lockActorCommandAuthority(db, user.orgId, user.id, null, "flows.manage"),
-      );
-
-      const name = String(body.name ?? "").trim();
-      if (!name || name.length > 200) {
-        return NextResponse.json({ error: "name required (max 200 chars)" }, { status: 400 });
-      }
-      const subjectKind = String(body.subjectKind ?? "");
-      if (!listFlowSubjectProfiles().some((p) => p.subjectKind === subjectKind)) {
-        return NextResponse.json(
-          { error: `unknown subject kind "${subjectKind}"` },
-          { status: 400 },
-        );
-      }
-
-      const board = body.boardId
-        ? await getBoard({ orgId: user.orgId, actorId: user.id }, body.boardId)
-        : null;
-      if (board) await boardAuthority({ orgId: user.orgId, actorId: user.id }, board, "manage");
-      const graph = board
-        ? scheduleBoardTimerGraph(board.id, board.timeZone, !!body.schedulePreset)
-        : emptyAutomationGraph();
-      // A new flow starts enabled exactly when its initial graph validates:
-      // the save path refuses to leave an enabled flow warning-bearing, so
-      // create-time enablement must apply the same lint or a fresh flow could
-      // never be enabled without edits. An empty draft graph stays disabled
-      // (it cannot fire), and the designer banner says so.
-      const profile = await flowSubjectProfileForOrg(user.orgId, subjectKind);
-      const lint = lintFlowGraphForSubject(subjectKind, graph, profile ?? undefined);
-      const id = await createAdminFlow({
-        orgId: user.orgId,
-        actorId: user.id,
-        requestId: request.headers.get("X-Request-Id"),
-        name,
-        subjectKind,
-        enabled: lint.ok,
-        graph,
-      });
-      return NextResponse.json({ id });
-    }).catch((error: unknown) => {
-      // The subject's owning feature is rechecked inside the write: a kind
-      // whose feature is off cannot gain new flows (existing ones stay).
-      const refusal = flowSubjectFeatureRefusal(error);
-      if (refusal) return refusal;
-      throw error;
-    }),
+  handler: createAdminFlowAction,
 });

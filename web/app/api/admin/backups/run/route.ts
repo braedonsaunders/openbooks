@@ -10,7 +10,7 @@ export const runtime = "nodejs";
  * recorded immediately (status 'queued') so the UI can track it; the worker
  * claims and executes it. Manual runs count toward retention like any other.
  */
-async function legacyPOST(gate: Authz) {
+export async function queueBackupAction(gate: Authz) {
   const actor = gate.user;
   const { orgId } = actor;
 
@@ -40,5 +40,5 @@ export const POST = defineRoute({
     none: "Manual backup runs are governed by backup management permission and organization-wide backup policy.",
   },
   scope: "unrestricted",
-  handler: async ({ authz }) => legacyPOST(authz),
+  handler: async ({ authz }) => queueBackupAction(authz),
 });

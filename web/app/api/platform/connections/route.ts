@@ -1,31 +1,10 @@
-import { canonicalConnectionMappingConfig } from "@openbooks/engine/sync/connection-settings";
-import {
-  ConnectionMappingError,
-  decodeEntityMappings,
-} from "@openbooks/engine/sync/entity-mapping-contract";
-import { apiErrorResponse } from "@/lib/api/error-response";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { sealJson } from "@openbooks/engine/platform/secrets";
-import {
-  listConnections,
-  sourceType,
-  SOURCE_TYPES,
-  validateSourceConfig,
-  validateSourceSecret,
-} from "@openbooks/engine/sync/connection";
-import {
-  createConnectionRecord,
-  loadConnectionDashboardData,
-} from "@openbooks/engine/sync/connection-admin";
-import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { listConnections, SOURCE_TYPES } from "@openbooks/engine/sync/connection";
+import { loadConnectionDashboardData } from "@openbooks/engine/sync/connection-admin";
 import { can, guardPermission, type Authz } from "@/lib/authz";
-import {
-  callerOwnedConfigRefusal,
-  connectionConfigUrlRefusal,
-  declaredSourceConfig,
-} from "./_connector-guard";
+import { createConnectionAction } from "@/lib/sync/connection-admin-actions";
 
 export const runtime = "nodejs";
 
@@ -138,101 +117,11 @@ async function listConnectionRoutes(gate: Authz) {
 
 /** Create a connection. Secrets are sealed at rest and never echoed back. */
 async function createConnectionRoute(gate: Authz, body: z.output<typeof connectionCreateBody>) {
-  const orgId = gate.user.orgId;
-  const actorId = gate.user.id;
-  const manifest = sourceType(String(body.source ?? ""));
-  if (!manifest) return NextResponse.json({ error: "unknown source type" }, { status: 400 });
-
-  const displayName = String(body.displayName ?? "").trim() || manifest.displayName;
-  const suppliedConfig =
-    body.config && typeof body.config === "object" && !Array.isArray(body.config)
-      ? body.config
-      : {};
-  const ownedError = callerOwnedConfigRefusal(suppliedConfig);
-  if (ownedError) {
-    return NextResponse.json(
-      { error: ownedError, errorCode: "OAUTH_IDENTITY_REFUSED" },
-      { status: 400 },
-    );
-  }
-  let config = declaredSourceConfig(manifest, suppliedConfig);
-  try {
-    config = canonicalConnectionMappingConfig(config, manifest.mappingGroups ?? []);
-  } catch (cause) {
-    // Mapping defects are typed 400 at their origin with the offending key;
-    // anything else (a corrupt saved shape) answers the static fallback.
-    if (cause instanceof ConnectionMappingError) return apiErrorResponse(cause);
-    console.error("[platform/connections] mapping config validation failed", cause);
-    return NextResponse.json({ error: "Connection mappings are unavailable" }, { status: 400 });
-  }
-  const urlError = await connectionConfigUrlRefusal(config);
-  if (urlError) {
-    return NextResponse.json(
-      { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
-      { status: 400 },
-    );
-  }
-
-  const configError = validateSourceConfig(manifest, config, { today: await businessToday(orgId) });
-  if (configError) return NextResponse.json({ error: configError }, { status: 400 });
-  if (
-    Object.values(decodeEntityMappings(config.entityMappings).entities).some((rows) => rows.length)
-  )
-    return NextResponse.json(
-      { error: "Save the connection first, then select its source and native mapping fields" },
-      { status: 422 },
-    );
-
-  // Seal any provided secret fields (all-or-nothing per field).
-  const provided: Record<string, string> = {};
-  for (const f of manifest.secretFields) {
-    const v = body.secrets?.[f.key];
-    if (v !== undefined && v !== null && String(v) !== "") {
-      const secretError = validateSourceSecret(manifest.source, f.key, String(v));
-      if (secretError) return NextResponse.json({ error: secretError }, { status: 400 });
-      provided[f.key] = String(v);
-    }
-  }
-  const hasAllSecrets = manifest.secretFields.every((f) => !f.required || provided[f.key]);
-  if (manifest.source === "qbd" && !hasAllSecrets) {
-    return NextResponse.json({ error: "Web Connector password is required" }, { status: 400 });
-  }
-  const sealed =
-    Object.keys(provided).length > 0
-      ? sealJson(provided, { orgId, purpose: "connection.secrets" })
-      : null;
-  // OAuth connections still need the consent flow before they can run, even
-  // once their app credentials are saved — so they start "unconfigured".
-  const status =
-    manifest.authKind === "oauth2"
-      ? "unconfigured"
-      : sealed && hasAllSecrets
-        ? "active"
-        : "unconfigured";
-
-  try {
-    const id = await createConnectionRecord({
-      orgId,
-      actorId,
-      source: manifest.source,
-      displayName,
-      authKind: manifest.authKind,
-      status,
-      config,
-      secrets: sealed,
-    });
-    return NextResponse.json({ id });
-  } catch (e) {
-    const msg = (e as { message?: string })?.message ?? "create failed";
-    // Unique (org, displayName) collision → friendly message.
-    if (/connections_org_name/.test(msg)) {
-      return NextResponse.json(
-        { error: "a connection with that name already exists" },
-        { status: 409 },
-      );
-    }
-    return NextResponse.json({ error: msg }, { status: 500 });
-  }
+  const result = await createConnectionAction(
+    { orgId: gate.user.orgId, userId: gate.user.id },
+    body,
+  );
+  return NextResponse.json(result.body, { status: result.status });
 }
 
 export const GET = defineRoute({

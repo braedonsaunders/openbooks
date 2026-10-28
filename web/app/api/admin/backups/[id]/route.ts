@@ -14,7 +14,7 @@ export const runtime = "nodejs";
  * ledger row is stamped (purged_at, purge_reason='deleted') — the row is kept
  * as evidence. In-progress runs can't be deleted.
  */
-async function legacyDELETE(
+export async function deleteStoredBackupAction(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
   gate: Authz,
@@ -73,5 +73,5 @@ export const DELETE = defineRoute({
   scope: "unrestricted",
   params: z.object({ id: z.string() }),
   handler: async ({ request, params, authz }) =>
-    legacyDELETE(request, { params: Promise.resolve(params) }, authz),
+    deleteStoredBackupAction(request, { params: Promise.resolve(params) }, authz),
 });

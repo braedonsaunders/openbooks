@@ -33,7 +33,9 @@ interface RouteState {
 const routeState: RouteState = { authz: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
+const realAuthzUrl = new URL("../../../../lib/authz.ts", import.meta.url).href;
 const mockAuthz = `
+  export * from ${JSON.stringify(realAuthzUrl)}
   const state = globalThis[Symbol.for('openbooks.admin-roles-route-integration-test')]
   export async function guardPermission(perm) {
     if (!state.authz) return Response.json({ error: 'unauthorized' }, { status: 401 })

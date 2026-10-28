@@ -38,7 +38,21 @@ registerHooks({
         export class OrgEmailConfigConflictError extends Error {}
         export async function readOrgEmailConfigView() { return {} }
         export async function saveOrgEmailConfig(...args) { state.saves.push(args); return { updatedAt: '2' } }
+        export async function insertEmailLog() {}
+        export async function markEmailFailed() {}
+        export async function markEmailSent() {}
+        export async function markEmailUncertain() {}
+        export async function resolveOrgEmailTransportDetailed() { return { ok: false } }
       `;
+      return {
+        format: "module",
+        source,
+        shortCircuit: true,
+        url: `data:text/javascript,${encodeURIComponent(source)}`,
+      };
+    }
+    if (specifier === "@openbooks/engine/records/revision") {
+      const source = `export function isDocumentRevisionToken() { return true }`;
       return {
         format: "module",
         source,

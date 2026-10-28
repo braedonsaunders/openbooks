@@ -42,6 +42,7 @@ const mockSources = new Map<string, string>([
         }
         return undefined
       }
+      export function buildSource() { throw new Error("unexpected connection probe") }
       export function validateSourceConfig() { return null }
       export function validateSourceSecret() { return null }
       export const SOURCE_TYPES = []
@@ -60,6 +61,8 @@ const mockSources = new Map<string, string>([
         state.persisted += 1
         throw new Error("create must not persist a refused connector URL")
       }
+      export async function loadConnectionProbeRow() { return null }
+      export async function writeConnectionProbeOutcome() { return false }
     `,
   ],
   [

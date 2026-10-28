@@ -18,41 +18,45 @@ import { CronExpressionParser } from "cron-parser";
  */
 
 export const scheduleTrigger = z.object({
-  kind: z.literal("schedule"),
-  cron: z.string().min(1),
-  timezone: z.string().min(1).default("UTC"),
+  kind: z.literal("schedule").describe("Fire on a recurring cron schedule."),
+  cron: z.string().min(1).max(200).describe("Five-field cron schedule."),
+  timezone: z.string().min(1).max(100).default("UTC").describe("IANA time zone for the schedule."),
 });
 
 export const dateRelativeTrigger = z.object({
-  kind: z.literal("date_relative"),
-  entity: z.string().min(1),
-  dateField: z.string().min(1),
-  offsetDays: z.number().int().min(0),
-  direction: z.enum(["before", "after"]),
-  atTime: z.string().regex(/^\d{2}:\d{2}$/, "at_time must be HH:MM"),
+  kind: z.literal("date_relative").describe("Fire relative to a record date field."),
+  entity: z.string().min(1).max(100).describe("Entity with the date field."),
+  dateField: z.string().min(1).max(100).describe("Date field used to schedule the trigger."),
+  offsetDays: z.number().int().min(0).max(3650).describe("Days before or after the date field."),
+  direction: z.enum(["before", "after"]).describe("Whether to fire before or after the date."),
+  atTime: z
+    .string()
+    .max(5)
+    .regex(/^\d{2}:\d{2}$/, "at_time must be HH:MM")
+    .describe("Local trigger time in HH:MM format."),
 });
 
 export const fieldChangeTrigger = z.object({
-  kind: z.literal("field_change"),
-  entity: z.string().min(1),
-  field: z.string().min(1),
-  from: z.unknown().optional(),
-  to: z.unknown().optional(),
+  kind: z.literal("field_change").describe("Fire when a field changes."),
+  entity: z.string().min(1).max(100).describe("Entity whose field changes."),
+  field: z.string().min(1).max(100).describe("Field whose value changes."),
+  from: z.json().optional().describe("Optional prior value to match."),
+  to: z.json().optional().describe("Optional new value to match."),
 });
 
 export const eventTrigger = z.object({
-  kind: z.literal("event"),
-  subjectKind: z.string().min(1),
-  eventKind: z.string().min(1),
+  kind: z.literal("event").describe("Fire on a named domain event."),
+  subjectKind: z.string().min(1).max(100).describe("Subject record kind."),
+  eventKind: z.string().min(1).max(100).describe("Domain event kind."),
 });
 
 export const documentTrigger = z.object({
-  kind: z.literal("document"),
-  event: z.enum(["uploaded", "signed", "created_from_template"]),
+  kind: z.literal("document").describe("Fire on a document lifecycle event."),
+  event: z.enum(["uploaded", "signed", "created_from_template"]).describe("Document event."),
 });
 
 export const manualTrigger = z.object({
-  kind: z.literal("manual"),
+  kind: z.literal("manual").describe("Fire only when an operator runs the automation."),
 });
 
 export const automationTrigger = z.discriminatedUnion("kind", [
@@ -70,20 +74,24 @@ export type AutomationTrigger = z.infer<typeof automationTrigger>;
  *  applies_to shape (subsidiary, department, location, worker type,
  *  position) extended with custom-attribute predicates. */
 export const automationRules = z.object({
-  subsidiaryId: uuidString().nullish(),
-  departmentId: uuidString().nullish(),
-  locationId: uuidString().nullish(),
-  workerType: z.string().nullish(),
-  positionId: uuidString().nullish(),
+  subsidiaryId: uuidString().nullish().describe("Optional subsidiary restriction."),
+  departmentId: uuidString().nullish().describe("Optional department restriction."),
+  locationId: uuidString().nullish().describe("Optional location restriction."),
+  workerType: z.string().max(100).nullish().describe("Optional worker type restriction."),
+  positionId: uuidString().nullish().describe("Optional position restriction."),
   attributes: z
     .array(
-      z.object({
-        key: z.string().min(1),
-        op: z.enum(["eq", "neq", "in"]),
-        value: z.unknown(),
-      }),
+      z
+        .object({
+          key: z.string().min(1).max(100).describe("Custom attribute key."),
+          op: z.enum(["eq", "neq", "in"]).describe("Comparison operation."),
+          value: z.json().describe("Value compared with the custom attribute."),
+        })
+        .describe("One custom-attribute condition."),
     )
-    .default([]),
+    .max(100)
+    .default([])
+    .describe("Optional custom-attribute conditions."),
 });
 
 export type AutomationRules = z.infer<typeof automationRules>;
@@ -104,9 +112,9 @@ export const CONDITION_OPS = [
 export type ConditionOp = (typeof CONDITION_OPS)[number];
 
 const conditionLeaf = z.object({
-  field: z.string().min(1),
-  op: z.enum(CONDITION_OPS),
-  value: z.unknown().optional(),
+  field: z.string().min(1).max(100).describe("Field name checked by this condition."),
+  op: z.enum(CONDITION_OPS).describe("Comparison operation."),
+  value: z.json().optional().describe("Value used by the comparison operation."),
 });
 
 export type ConditionLeaf = z.infer<typeof conditionLeaf>;
@@ -114,31 +122,41 @@ export type ConditionLeaf = z.infer<typeof conditionLeaf>;
 export type ConditionNode = { all: ConditionNode[] } | { any: ConditionNode[] } | ConditionLeaf;
 
 const conditionNode: z.ZodType<ConditionNode> = z.lazy(() =>
-  z.union([
-    z.object({ all: z.array(conditionNode).min(1) }),
-    z.object({ any: z.array(conditionNode).min(1) }),
-    conditionLeaf,
-  ]),
+  z
+    .union([
+      z.object({ all: z.array(conditionNode).min(1).max(100).describe("Every child must match.") }),
+      z.object({
+        any: z.array(conditionNode).min(1).max(100).describe("At least one child must match."),
+      }),
+      conditionLeaf,
+    ])
+    .describe("A recursive condition group or comparison."),
 );
 
 export const automationConditions = z.object({
-  root: conditionNode.nullish(),
+  root: conditionNode.nullish().describe("Root condition for this automation."),
 });
 
 export type AutomationConditions = z.infer<typeof automationConditions>;
 
 export const createTaskAction = z.object({
-  kind: z.literal("create_task"),
-  ownerKind: z.enum(["role", "person", "manager", "initiator"]),
-  owner: z.string().nullish(),
-  title: z.string().min(1),
-  dueOffsetDays: z.number().int().min(0).default(0),
+  kind: z.literal("create_task").describe("Create a follow-up task."),
+  ownerKind: z.enum(["role", "person", "manager", "initiator"]).describe("Task owner type."),
+  owner: z.string().max(200).nullish().describe("Optional role or person owner key."),
+  title: z.string().min(1).max(200).describe("Task title."),
+  dueOffsetDays: z
+    .number()
+    .int()
+    .min(0)
+    .max(3650)
+    .default(0)
+    .describe("Days until the task is due."),
 });
 
 export const sendEmailAction = z.object({
-  kind: z.literal("send_email"),
-  templateKey: z.string().min(1),
-  to: z.string().min(1),
+  kind: z.literal("send_email").describe("Send a registered email template."),
+  templateKey: z.string().min(1).max(100).describe("Registered email template key."),
+  to: z.string().min(1).max(320).describe("Email recipient selector."),
 });
 
 /**
@@ -150,40 +168,40 @@ export const sendEmailAction = z.object({
 export const AUTOMATION_EMAIL_TEMPLATE_KEYS = ["automation_notice"] as const;
 
 export const sendNotificationAction = z.object({
-  kind: z.literal("send_notification"),
-  to: z.string().min(1),
-  body: z.string().min(1),
+  kind: z.literal("send_notification").describe("Send an in-app notification."),
+  to: z.string().min(1).max(200).describe("Notification recipient selector."),
+  body: z.string().min(1).max(4000).describe("Notification text."),
 });
 
 export const startProcessAction = z.object({
-  kind: z.literal("start_process"),
-  templateId: uuidString(),
+  kind: z.literal("start_process").describe("Start a process from its template."),
+  templateId: uuidString().describe("Process template id."),
 });
 
 export const startFlowAction = z.object({
-  kind: z.literal("start_flow"),
-  subject: z.string().min(1),
+  kind: z.literal("start_flow").describe("Start a named flow."),
+  subject: z.string().min(1).max(200).describe("Flow subject kind."),
 });
 
 export const updateFieldAction = z.object({
-  kind: z.literal("update_field"),
-  entity: z.string().min(1),
-  field: z.string().min(1),
-  value: z.unknown(),
+  kind: z.literal("update_field").describe("Update one supported record field."),
+  entity: z.string().min(1).max(100).describe("Record entity kind."),
+  field: z.string().min(1).max(100).describe("Field key."),
+  value: z.json().describe("JSON value written to the field."),
 });
 
 export const webhookAction = z.object({
-  kind: z.literal("webhook"),
-  endpointKey: z.string().min(1),
+  kind: z.literal("webhook").describe("Deliver an outbound webhook event."),
+  endpointKey: z.string().min(1).max(100).describe("Enabled webhook endpoint key."),
 });
 
 export const delayAction = z.object({
-  kind: z.literal("delay"),
-  days: z.number().int().min(0),
+  kind: z.literal("delay").describe("Delay later automation actions."),
+  days: z.number().int().min(0).max(3650).describe("Delay in days."),
 });
 
 export const approveStepAction = z.object({
-  kind: z.literal("approve_step"),
+  kind: z.literal("approve_step").describe("Create an approval step."),
 });
 
 export const automationAction = z.discriminatedUnion("kind", [

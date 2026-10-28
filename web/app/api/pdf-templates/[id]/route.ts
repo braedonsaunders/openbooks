@@ -41,7 +41,11 @@ const bodyObjectSchema = z
 type Params = { params: Promise<{ id: string }> };
 
 /** GET /api/pdf-templates/[id] — full template (editor payload). */
-async function legacyGET(_req: Request, { params }: Params, injectedGate?: Authz | null) {
+export async function readPdfTemplateAction(
+  _req: Request,
+  { params }: Params,
+  injectedGate?: Authz | null,
+) {
   const gate = injectedGate as Authz;
 
   const { id } = await params;
@@ -54,7 +58,11 @@ async function legacyGET(_req: Request, { params }: Params, injectedGate?: Authz
 }
 
 /** PATCH — save design/settings. Compiles + sanitizes sourceHtml server-side. */
-async function legacyPATCH(req: Request, { params }: Params, injectedGate?: Authz | null) {
+export async function updatePdfTemplateAction(
+  req: Request,
+  { params }: Params,
+  injectedGate?: Authz | null,
+) {
   const gate = injectedGate as Authz;
 
   const { user } = gate;
@@ -206,7 +214,11 @@ async function legacyPATCH(req: Request, { params }: Params, injectedGate?: Auth
 }
 
 /** DELETE — remove a template (records fall back to the org default/starter). */
-async function legacyDELETE(_req: Request, { params }: Params, injectedGate?: Authz | null) {
+export async function deletePdfTemplateAction(
+  _req: Request,
+  { params }: Params,
+  injectedGate?: Authz | null,
+) {
   const gate = injectedGate as Authz;
 
   const { user } = gate;
@@ -252,7 +264,7 @@ export const GET = defineRoute({
   feature: { none: "This route is governed by its permission and service authorization." },
   params: z.object({ id: z.string() }),
   handler: ({ request, params, authz }) =>
-    legacyGET(request, { params: Promise.resolve(params) }, authz),
+    readPdfTemplateAction(request, { params: Promise.resolve(params) }, authz),
 });
 
 export const PATCH = defineRoute({
@@ -260,7 +272,7 @@ export const PATCH = defineRoute({
   feature: { none: "This route is governed by its permission and service authorization." },
   params: z.object({ id: z.string() }),
   handler: ({ request, params, authz }) =>
-    legacyPATCH(request, { params: Promise.resolve(params) }, authz),
+    updatePdfTemplateAction(request, { params: Promise.resolve(params) }, authz),
 });
 
 export const DELETE = defineRoute({
@@ -268,5 +280,5 @@ export const DELETE = defineRoute({
   feature: { none: "This route is governed by its permission and service authorization." },
   params: z.object({ id: z.string() }),
   handler: ({ request, params, authz }) =>
-    legacyDELETE(request, { params: Promise.resolve(params) }, authz),
+    deletePdfTemplateAction(request, { params: Promise.resolve(params) }, authz),
 });
