@@ -144,7 +144,6 @@ export const MANUFACTURING_SUBCONTRACT_TOOLS: ApplicationToolDefinition[] = [
           input.subcontractId,
           {
             id: nativeIdempotencyKey(input.idempotencyKey),
-            subcontractId: input.subcontractId,
             materialId: input.materialId,
             sourceLocationId: input.sourceLocationId,
             quantity: input.quantity,
@@ -215,7 +214,6 @@ export const MANUFACTURING_SUBCONTRACT_TOOLS: ApplicationToolDefinition[] = [
           input.subcontractId,
           {
             id: nativeIdempotencyKey(input.idempotencyKey),
-            subcontractId: input.subcontractId,
             quantity: input.quantity,
             finish: input.finish,
             finishReason: input.finishReason,
@@ -345,7 +343,6 @@ export const MANUFACTURING_SUBCONTRACT_TOOLS: ApplicationToolDefinition[] = [
           input.subcontractId,
           {
             id: nativeIdempotencyKey(input.idempotencyKey),
-            subcontractId: input.subcontractId,
             shipmentId: input.shipmentId,
             date: input.date,
             reason: input.reason,

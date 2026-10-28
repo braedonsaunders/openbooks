@@ -22,6 +22,7 @@ import {
   IDEMPOTENCY_KEY,
   nativeIdempotencyKey,
   qualityHref,
+  recordHref,
 } from "./manufacturing-tools-shared";
 import { notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
