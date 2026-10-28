@@ -216,7 +216,7 @@ const billNowInput = z.object({
 
 function subscriptionBody<T extends { action: string; idempotencyKey: string }>(input: T) {
   const { idempotencyKey: _key, ...body } = input;
-  return body as z.infer<typeof SubscriptionActionBody>;
+  return body as unknown as z.infer<typeof SubscriptionActionBody>;
 }
 
 export const SUBSCRIPTION_BASE_TOOLS: ApplicationToolDefinition[] = [

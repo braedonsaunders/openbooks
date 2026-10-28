@@ -202,7 +202,12 @@ export const SUBSCRIPTION_USAGE_TOOLS: ApplicationToolDefinition[] = [
         meterId,
         patch,
       );
-      return { ok: true, meter, status: meter.status, href: "/collections" };
+      return {
+        ok: true,
+        meter,
+        status: meter.isActive ? "active" : "inactive",
+        href: "/collections",
+      };
     },
   }),
   mutationTool({
@@ -221,7 +226,7 @@ export const SUBSCRIPTION_USAGE_TOOLS: ApplicationToolDefinition[] = [
         context.authz.user.id,
         input.meterId,
       );
-      return { ok: true, meter, status: meter.status, href: "/collections" };
+      return { ok: true, meter, status: "inactive", href: "/collections" };
     },
   }),
   mutationTool({
@@ -238,7 +243,7 @@ export const SUBSCRIPTION_USAGE_TOOLS: ApplicationToolDefinition[] = [
         context.authz.user.id,
         input.meterId,
       );
-      return { ok: true, meter, status: meter.status, href: "/collections" };
+      return { ok: true, meter, status: "active", href: "/collections" };
     },
   }),
   readTool({
@@ -471,7 +476,12 @@ export const SUBSCRIPTION_USAGE_TOOLS: ApplicationToolDefinition[] = [
         body,
         context.authz.allowedSubsidiaryIds,
       );
-      return { ok: true, link, status: link.status, href: "/collections" };
+      return {
+        ok: true,
+        link,
+        status: link.effectiveTo === null ? "active" : "closed",
+        href: "/collections",
+      };
     },
   }),
   mutationTool({
@@ -491,7 +501,7 @@ export const SUBSCRIPTION_USAGE_TOOLS: ApplicationToolDefinition[] = [
         input.effectiveTo,
         context.authz.allowedSubsidiaryIds,
       );
-      return { ok: true, link, status: link.status, href: "/collections" };
+      return { ok: true, link, status: "closed", href: "/collections" };
     },
   }),
   readTool({
@@ -563,7 +573,7 @@ export const SUBSCRIPTION_USAGE_TOOLS: ApplicationToolDefinition[] = [
         input.occurredOn,
         context.authz.allowedSubsidiaryIds,
       );
-      return { ok: true, record, status: record.status, href: "/collections" };
+      return { ok: true, record, status: "reversed", href: "/collections" };
     },
   }),
   readTool({
@@ -790,7 +800,7 @@ export const SUBSCRIPTION_USAGE_TOOLS: ApplicationToolDefinition[] = [
         body,
         context.authz.allowedSubsidiaryIds,
       );
-      return { ok: true, grant, status: grant.status, href: "/collections" };
+      return { ok: true, grant, status: "active", href: "/collections" };
     },
   }),
   mutationTool({

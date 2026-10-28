@@ -21,6 +21,9 @@ import {
   listAccountMaps,
   listCatalogQueue,
   listChannelLocations,
+  listChannelOrderEvents,
+  listChannelExceptions,
+  listChannelEventExceptions,
   listInboundEvents,
   listInventoryConflicts,
   listItemInventoryPolicies,
@@ -220,7 +223,6 @@ export const SUBSCRIPTION_CHANNEL_TOOLS: ApplicationToolDefinition[] = [
       perPage: z.number().int().min(5).max(100).optional().describe("Rows per page."),
     }),
     execute: async (context, input) => ({
-      ok: true,
       ...entityRead(
         await readEntityListPage({
           recordType: "channel_order",
@@ -560,7 +562,6 @@ export const SUBSCRIPTION_CHANNEL_TOOLS: ApplicationToolDefinition[] = [
       ensureShopifyAdapterRegistered();
       const adapter = channelAdapter("shopify");
       return {
-        ok: true,
         ...(await adapter.testConnection(
           { orgId: context.authz.user.orgId, actorId: context.authz.user.id },
           input.channelId,

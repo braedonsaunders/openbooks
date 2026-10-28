@@ -205,7 +205,7 @@ export const SUBSCRIPTION_REVENUE_TOOLS: ApplicationToolDefinition[] = [
           ...(result.field ? { field: result.field } : {}),
         });
       }
-      return { ok: true, ...result, href: "/revenue/contract-costs?view=assets" };
+      return { ...result, href: "/revenue/contract-costs?view=assets" };
     },
   }),
   readTool({
@@ -570,7 +570,7 @@ export const SUBSCRIPTION_REVENUE_TOOLS: ApplicationToolDefinition[] = [
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
     execute: async (context, input) => {
-      const { contractId, idempotencyKey: _key, ...modification } = input;
+      const { contractId, ...modification } = input;
       assertSubsidiaryAccess(context, modification.subsidiaryId);
       const normalizedModification = {
         ...modification,

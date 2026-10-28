@@ -1,5 +1,5 @@
 import "server-only";
-import { z, type ZodTypeAny } from "zod";
+import { z } from "zod";
 import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import { isFeatureEnabled } from "@/lib/features";
 import { can } from "../authz";
@@ -73,7 +73,7 @@ export function settleDomainRefusal(error: unknown): never {
   throw error;
 }
 
-export function readTool<T extends ZodTypeAny>(args: {
+export function readTool<T extends z.ZodType>(args: {
   name: string;
   title: string;
   description: string;
@@ -107,7 +107,7 @@ export function readTool<T extends ZodTypeAny>(args: {
   });
 }
 
-export function mutationTool<T extends ZodTypeAny>(args: {
+export function mutationTool<T extends z.ZodType>(args: {
   name: string;
   title: string;
   description: string;

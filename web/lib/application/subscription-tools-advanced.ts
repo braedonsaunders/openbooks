@@ -298,7 +298,7 @@ const renewalAcceptInput = z.object({
   idempotencyKey: IDEMPOTENCY_KEY,
 });
 
-function actionTool<T extends z.ZodTypeAny>(args: {
+function actionTool<T extends z.ZodType>(args: {
   name: string;
   title: string;
   description: string;
@@ -440,7 +440,8 @@ export const SUBSCRIPTION_ADVANCED_TOOLS: ApplicationToolDefinition[] = [
       "Apply an effective-dated component, term, timing, renewal, coterm or plan amendment under the subscription lifecycle rules. Find the subscription and plan-version ids with get_subscription and get_advanced_subscription_workspace.",
     inputSchema: amendInput,
     href: "/collections",
-    execute: (authz, input) => executeAdvancedSubscriptionAction(authz, input),
+    execute: (authz, input) =>
+      executeAdvancedSubscriptionAction(authz, input as z.infer<typeof POSTBodySchema1>),
   }),
   actionTool({
     name: "save_plan_version_entitlements",
