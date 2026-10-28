@@ -14,6 +14,7 @@ import {
   isStatementKind,
 } from "../../../lib/report-authz";
 import { savedReportPathVisible } from "../../../lib/report-feature-gates";
+import { listSavedReportShortcuts } from "../../../lib/saved-report-write";
 import "../../../lib/resourcing/report-facts";
 import type { HubCard, HubGroup, PaperForm } from "./ReportsHub";
 
@@ -103,13 +104,7 @@ export async function reportsHubFor(
     warehousingEnabled,
     resourcingEnabled,
   ] = await Promise.all([
-    orgId
-      ? (db.execute(
-          sql`select id, name, path, params from saved_reports where org_id = ${orgId} order by created_at desc limit 12`,
-        ) as Promise<{
-          rows: { id: string; name: string; path: string; params: Record<string, string> }[];
-        }>)
-      : emptySaved,
+    orgId ? listSavedReportShortcuts(orgId).then((rows) => ({ rows })) : emptySaved,
     orgId
       ? (db.execute(
           // No LIMIT. The catalog is the point of this page: a cap ordered by

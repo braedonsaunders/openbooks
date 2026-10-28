@@ -1,13 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { apiErrorResponse } from "@/lib/api/error-response";
-import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { mutateInsight } from "@/lib/insight-mutations";
-import { UNTITLED_CARD_NAME } from "@/lib/insight-untitled";
-import { InsightValidationError, validateInsightQuery } from "@openbooks/analytics";
+import { setInsightPublication } from "@/lib/insight-mutations";
 import { isUuid } from "../../../../../../lib/list-params";
-import { loadCard } from "../../../_lib";
 import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.strictObject({
   publish: z.boolean().optional(),
@@ -22,19 +16,6 @@ const postBodySchema0 = z.strictObject({
 export const runtime = "nodejs";
 
 /**
- * A stored card query that no longer validates refuses publish at 422 with
- * the validation message intact. The sanitizer only carries messages on
- * named refusals, so the message rides in one.
- */
-class InsightPublishValidationRefusal extends Error {
-  readonly status = 422;
-  constructor(message: string) {
-    super(`The query is incomplete: ${message}`);
-    this.name = "InsightPublishValidationRefusal";
-  }
-}
-
-/**
  * Publish (or unpublish) a card. Publishing gates on insights.publish, requires
  * a real name and a query that compiles — a published card must render for every
  * reader. `{ publish: false }` returns it to draft.
@@ -47,60 +28,14 @@ export const POST = defineRoute({
   params: z.object({ id: z.string() }),
   body: postBodySchema0,
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
-    const user = gate.user;
     const { id } = await params;
     if (!isUuid(id)) return notFound("record");
-
-    const card = await loadCard(id, user.orgId);
-    if (!card) return notFound("record");
-
-    const body = routeBody;
-    const publish = body.publish !== false;
-
-    return mutateInsight(gate, "insight_cards", id, "update", async (tx, before, revision) => {
-      if (typeof body.expectedUpdatedAt !== "string" || body.expectedUpdatedAt !== revision) {
-        return NextResponse.json(
-          {
-            error: "The record changed; reload and review the latest revision before publishing.",
-          },
-          { status: 409 },
-        );
-      }
-      const card = before!;
-      if (publish) {
-        if (
-          typeof card.name !== "string" ||
-          card.name.trim() === "" ||
-          card.name === UNTITLED_CARD_NAME
-        ) {
-          return NextResponse.json(
-            { error: "Give the card a real name before publishing." },
-            { status: 422 },
-          );
-        }
-        try {
-          validateInsightQuery(card.query);
-        } catch (e) {
-          // Query defects are typed at the validator with their message;
-          // the refusal keeps this route's 422 prefix, and anything else
-          // answers through the shared mapping.
-          if (e instanceof InsightValidationError)
-            return apiErrorResponse(new InsightPublishValidationRefusal(e.message));
-          return apiErrorResponse(e);
-        }
-      }
-
-      await tx.execute(sql`
-    update insight_cards
-       set status = ${publish ? "published" : "draft"}, updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
-     where id = ${id} and org_id = ${user.orgId}
-  `);
-
-      const updated = await tx.execute(
-        sql`select *, to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at from insight_cards where id = ${id} and org_id = ${user.orgId}`,
-        "objects",
-      );
-      return NextResponse.json(updated[0]);
-    });
+    return setInsightPublication(
+      gate,
+      "card",
+      id,
+      routeBody.publish !== false,
+      routeBody.expectedUpdatedAt,
+    );
   },
 });

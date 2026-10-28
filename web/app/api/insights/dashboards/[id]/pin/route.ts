@@ -1,12 +1,9 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/platform/db";
-import { insightDashboardPins } from "@openbooks/schema/src/insights.ts";
 import { isUuid } from "../../../../../../lib/list-params";
-import { loadDashboard } from "../../../_lib";
 import { notFound } from "@/lib/api/responses";
+import { setInsightDashboardPin } from "../../../../../../lib/insight-dashboard-pin";
 const postBodySchema0 = z.strictObject({ pin: z.boolean() });
 
 export const runtime = "nodejs";
@@ -23,43 +20,12 @@ export const POST = defineRoute({
   params: z.object({ id: z.string() }),
   body: postBodySchema0,
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
-    const user = gate.user;
     const { id } = await params;
     if (!isUuid(id)) return notFound("record");
 
-    const dashboard = await loadDashboard(id, user.orgId);
-    if (!dashboard) return notFound("record");
-
     const { pin } = routeBody;
-
-    if (!pin) {
-      await db.execute(sql`
-      delete from insight_dashboard_pins
-       where org_id = ${user.orgId} and user_id = ${user.id} and dashboard_id = ${id}
-    `);
-      return NextResponse.json({ pinned: false });
-    }
-
-    const next = await db.execute<{ n: number }>(
-      sql`
-    select coalesce(max(sort_order), -1) + 1 as n
-      from insight_dashboard_pins
-     where org_id = ${user.orgId} and user_id = ${user.id}
-  `,
-      "objects",
-    );
-
-    await db
-      .insert(insightDashboardPins)
-      .values({
-        orgId: user.orgId,
-        userId: user.id,
-        dashboardId: id,
-        sortOrder: Number(next[0]?.n ?? 0),
-      })
-      // An identical user-dashboard pin already expresses the requested pinned state.
-      .onConflictDoNothing();
-
-    return NextResponse.json({ pinned: true });
+    const pinned = await setInsightDashboardPin(gate, id, pin);
+    if (pinned === null) return notFound("record");
+    return NextResponse.json({ pinned });
   },
 });

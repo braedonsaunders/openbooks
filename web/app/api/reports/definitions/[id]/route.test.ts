@@ -94,6 +94,7 @@ const mockSources = new Map<string, string>([
       export async function guardRootSubsidiaryScope() { return null }
       export function guardSubsidiaryScope() { return null }
       export function subsidiariesInScope() { return [] }
+      export function can() { return true }
     `,
   ],
   [
@@ -125,13 +126,18 @@ const selfUrl = new URL(import.meta.url).href;
 const mockUrl = (name: string) => `${selfUrl}?report-definition-mock=${name}`;
 const mockUrls = new Map<string, string>([
   ["@/lib/custom-record-report-catalog", mockUrl("catalog")],
+  ["./custom-record-report-catalog", mockUrl("catalog")],
   ["@openbooks/engine/platform/db", mockUrl("db")],
   ["../../../../../lib/authz", mockUrl("authz")],
+  ["./authz", mockUrl("authz")],
   ["@/lib/authz", mockUrl("authz")],
   ["@/lib/feature-gates", mockUrl("authz")],
   ["../../../../../lib/report-authz", mockUrl("reports-authz")],
   ["../../../../../lib/report-execution-context", mockUrl("reports-authz")],
   ["../../../../../lib/custom-reports", mockUrl("custom-reports")],
+  ["./custom-reports", mockUrl("custom-reports")],
+  ["./report-authz", mockUrl("reports-authz")],
+  ["./report-execution-context", mockUrl("reports-authz")],
 ]);
 
 registerHooks({

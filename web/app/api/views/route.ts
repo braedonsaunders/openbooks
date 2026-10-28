@@ -2,17 +2,13 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@openbooks/engine/platform/db";
 import { REPORT_ENTITY_MAP, defaultRowsQuery, validateReportLayout } from "@openbooks/reports";
 import { validateOrgReportQuery } from "@/lib/custom-record-report-catalog";
 import type { Authz } from "@/lib/authz";
 import { isUuid } from "@/lib/list-params";
 import { canRunReportEntity, guardReportEntity } from "@/lib/report-authz";
-import { claimIdempotentCreate, resolveIdempotentReplay } from "@/lib/api/idempotency";
-import { auditSetupChange } from "@/lib/setup/audit";
-import { loadViews, slugifyViewName, uniqueViewSlug, type ViewScope } from "@/lib/views";
+import { createView, loadViews, type ViewScope } from "@/lib/views";
 
 const createViewBodySchema = z.object({
   name: z.string().trim().min(1).max(200),
@@ -106,104 +102,27 @@ export const POST = defineRoute({
       allowedRoles = roles.length ? roles : null;
     }
 
-    const slug = await uniqueViewSlug(user.orgId, slugifyViewName(name));
-
-    const snapshot = {
-      id: requestId,
-      org_id: user.orgId,
-      slug,
-      name,
-      description,
-      query,
-      layout,
-      scope,
-      owner_id: user.id,
-      allowed_roles: allowedRoles,
-    };
-    const match = {
-      name,
-      description,
-      query,
-      layout,
-      scope,
-      owner_id: user.id,
-      allowed_roles: allowedRoles,
-    };
-
-    const outcome = await db.transaction(async (tx) => {
-      const claim = await claimIdempotentCreate(tx, {
+    try {
+      const created = await createView({
         orgId: user.orgId,
-        table: "saved_views",
-        key: requestId,
+        userId: user.id,
+        idempotencyKey: requestId,
+        name,
+        description,
+        query,
+        layout,
+        scope,
+        allowedRoles,
       });
-      if (claim === "exists") {
-        return {
-          kind: "replay" as const,
-          result: await resolveIdempotentReplay(tx, {
-            orgId: user.orgId,
-            table: "saved_views",
-            key: requestId,
-            match,
-          }),
-        };
-      }
-      const inserted = await tx.execute<{ id: string; slug: string }>(
-        sql`
-        insert into saved_views
-          (id, org_id, slug, name, description, query, layout, scope, owner_id,
-           allowed_roles, created_by, updated_by)
-        values (${requestId}, ${user.orgId}, ${slug}, ${name}, ${description},
-                ${JSON.stringify(query)}::jsonb, ${layout ? JSON.stringify(layout) : null}::jsonb,
-                ${scope}, ${user.id},
-                ${allowedRoles ? JSON.stringify(allowedRoles) : null}::jsonb,
-                ${user.id}, ${user.id})
-        -- A retry resolves the existing audited payload below; conflicting input is refused.
-        on conflict (id) do nothing
-        returning id, slug
-      `,
-        "objects",
+      return NextResponse.json(
+        { id: created.id, slug: created.slug },
+        { status: created.replayed ? 200 : 201 },
       );
-      if (!inserted[0]) {
-        return {
-          kind: "replay" as const,
-          result: await resolveIdempotentReplay(tx, {
-            orgId: user.orgId,
-            table: "saved_views",
-            key: requestId,
-            match,
-          }),
-        };
-      }
-      await auditSetupChange(
-        {
-          orgId: user.orgId,
-          table: "saved_views",
-          rowId: requestId,
-          action: "insert",
-          changes: { before: null, after: snapshot },
-          actorId: user.id,
-          requestId,
-        },
-        tx,
-      );
-      return { kind: "created" as const, result: inserted[0] };
-    });
-    if (outcome.kind === "replay") {
-      if (outcome.result === "conflict") {
+    } catch (error) {
+      if (error instanceof Error && error.message === "invalid_idempotency_key") {
         return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 409 });
       }
-      const existing = await db.execute<{ id: string; slug: string }>(
-        sql`
-        select id, slug from saved_views
-         where id = ${requestId} and org_id = ${user.orgId}
-      `,
-        "objects",
-      );
-      if (!existing[0]) {
-        return NextResponse.json({ error: "invalid_idempotency_key" }, { status: 409 });
-      }
-      return NextResponse.json({ id: existing[0].id, slug: existing[0].slug }, { status: 200 });
+      throw error;
     }
-    return NextResponse.json({ id: outcome.result.id, slug: outcome.result.slug }, { status: 201 });
   },
 });

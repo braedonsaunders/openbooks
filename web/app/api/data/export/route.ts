@@ -1,18 +1,12 @@
-import { notFound } from "@/lib/api/responses";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { can } from "@/lib/authz";
-import { getResource } from "@/lib/data-io/resources";
-import { ExportRowLimitError } from "@/lib/data-io/resource-core";
-import type { CellValue } from "@/lib/data-io/types";
 import { toCsv, toJson, toXlsx } from "@/lib/data-io/serialize";
 import { csvResponse, safeName, xlsxResponse } from "@/lib/export";
 import { EXPORT_FORMATS, requestedExportFormat, type ExportFormat } from "@/lib/data-io/types";
-import { selectExportColumns } from "@/lib/data-io/export-selection";
-import { customFieldViewerFor } from "@/lib/custom-fields";
+import { readDataExport } from "../../../../lib/data-io/export-data";
 
 export const runtime = "nodejs";
 
@@ -43,47 +37,16 @@ export const POST = defineRoute({
       return NextResponse.json({ error: "format must be csv, xlsx or json" }, { status: 400 });
     }
 
-    // Bind the role-derived subsidiary fence before any resource read. The
-    // generic registry otherwise defaults to an org-only adapter, which would
-    // let a restricted AP/AR/GL reader export another subsidiary's documents.
-    const viewer = customFieldViewerFor(authz);
-    const resource = await getResource(
-      authz.user.orgId,
-      resourceKey,
-      authz.allowedSubsidiaryIds,
-      viewer,
-    );
-    if (!resource) return notFound("record");
-    if (!can(authz, resource.descriptor.readPermission)) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    }
-
-    // An over-cap resource refuses instead of streaming a truncated file as
-    // complete: the client already checks res.ok before reading the body and
-    // surfaces err.error, so the refusal reaches the operator by name.
-    let columns: { key: string; label: string }[];
-    let rows: Record<string, CellValue>[];
+    let exportData: Awaited<ReturnType<typeof readDataExport>>;
     try {
-      const result = await resource.read({
-        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-        actorId: authz.user.id,
-        customFieldViewer: viewer,
-      });
-      columns = result.columns;
-      rows = result.rows;
+      exportData = await readDataExport(authz, resourceKey, body.columns);
     } catch (error) {
-      if (error instanceof ExportRowLimitError) {
-        return apiErrorResponse(error, { safeStatus: 413 });
-      }
-      throw error;
+      return apiErrorResponse(error, { request: _req });
     }
-    const selection = selectExportColumns(columns, body.columns);
-    if (!selection.ok) {
-      return NextResponse.json({ error: selection.error }, { status: 400 });
-    }
-    const cols = selection.columns;
+    const cols = exportData.columns;
+    const rows = exportData.rows;
 
-    const title = safeName(resource.descriptor.label || resource.descriptor.key);
+    const title = safeName(exportData.descriptor.label || exportData.descriptor.key);
     const stamp = await businessToday(authz.user.orgId);
     const filename = `${title}-${stamp}`;
 

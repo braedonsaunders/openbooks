@@ -1,8 +1,10 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { permissionSetCovers } from "./permissions";
 import { auditSetupChange } from "./setup/audit";
+import { claimIdempotentCreate, resolveIdempotentReplay } from "./api/idempotency";
 import {
   REPORT_ENTITY_MAP,
   defaultRowsQuery,
@@ -163,21 +165,105 @@ async function assertCanMutate(
 export async function createView(args: {
   orgId: string;
   userId: string;
+  idempotencyKey?: string;
   name?: string;
-}): Promise<{ id: string; slug: string }> {
+  description?: string | null;
+  query?: ReportCustomQuery;
+  layout?: Record<string, unknown> | null;
+  scope?: ViewScope;
+  allowedRoles?: string[] | null;
+}): Promise<{ id: string; slug: string; replayed: boolean }> {
   const name = args.name?.trim() || "Untitled view";
   const slug = await uniqueViewSlug(args.orgId, slugifyViewName(name));
-  const query = defaultRowsQuery(REPORT_ENTITY_MAP.ledger_lines!);
-  const r = await db.execute<{ id: string; slug: string }>(
-    sql`
-    insert into saved_views (org_id, slug, name, query, scope, owner_id, created_by, updated_by)
-    values (${args.orgId}, ${slug}, ${name}, ${query as unknown as Record<string, unknown>}, 'private',
-            ${args.userId}, ${args.userId}, ${args.userId})
-    returning id, slug
-  `,
-    "objects",
-  );
-  return r[0]!;
+  const id = args.idempotencyKey ?? randomUUID();
+  const description = args.description?.trim() || null;
+  const query = args.query ?? defaultRowsQuery(REPORT_ENTITY_MAP.ledger_lines!);
+  const layout = args.layout ?? null;
+  const scope = args.scope ?? "private";
+  const allowedRoles = args.allowedRoles?.length ? args.allowedRoles : null;
+  const match = {
+    name,
+    description,
+    query,
+    layout,
+    scope,
+    owner_id: args.userId,
+    allowed_roles: allowedRoles,
+  };
+  const snapshot = {
+    id,
+    org_id: args.orgId,
+    slug,
+    name,
+    description,
+    query,
+    layout,
+    scope,
+    owner_id: args.userId,
+    allowed_roles: allowedRoles,
+  };
+  const outcome = await db.transaction(async (tx) => {
+    const claim = await claimIdempotentCreate(tx, {
+      orgId: args.orgId,
+      table: "saved_views",
+      key: id,
+    });
+    if (claim === "exists") {
+      return resolveIdempotentReplay(tx, {
+        orgId: args.orgId,
+        table: "saved_views",
+        key: id,
+        match,
+      });
+    }
+    const inserted = await tx.execute<{ id: string; slug: string }>(
+      sql`
+        insert into saved_views
+          (id, org_id, slug, name, description, query, layout, scope, owner_id,
+           allowed_roles, created_by, updated_by)
+        values (${id}, ${args.orgId}, ${slug}, ${name}, ${description},
+                ${JSON.stringify(query)}::jsonb, ${layout ? JSON.stringify(layout) : null}::jsonb,
+                ${scope}, ${args.userId},
+                ${allowedRoles ? JSON.stringify(allowedRoles) : null}::jsonb,
+                ${args.userId}, ${args.userId})
+        -- A concurrent retry can win this id; the stored request image is re-resolved before success.
+        on conflict (id) do nothing
+        returning id, slug
+      `,
+      "objects",
+    );
+    if (!inserted[0]) {
+      return resolveIdempotentReplay(tx, {
+        orgId: args.orgId,
+        table: "saved_views",
+        key: id,
+        match,
+      });
+    }
+    await auditSetupChange(
+      {
+        orgId: args.orgId,
+        table: "saved_views",
+        rowId: id,
+        action: "insert",
+        changes: { before: null, after: snapshot },
+        actorId: args.userId,
+        requestId: id,
+      },
+      tx,
+    );
+    return { id: inserted[0].id, slug: inserted[0].slug, replayed: false } as const;
+  });
+  if (outcome === "conflict") throw new Error("invalid_idempotency_key");
+  if (outcome === "replay") {
+    const existing = await db.execute<{ id: string; slug: string }>(
+      sql`select id, slug from saved_views where org_id = ${args.orgId} and id = ${id}`,
+      "objects",
+    );
+    if (!existing[0]) throw new Error("invalid_idempotency_key");
+    return { ...existing[0], replayed: true };
+  }
+  return outcome;
 }
 
 export async function updateView(

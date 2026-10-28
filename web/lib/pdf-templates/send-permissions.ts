@@ -1,0 +1,30 @@
+import "server-only";
+
+/** Write authority required to send each record family as an external email. */
+export const RECORD_TYPE_SEND_PERMISSION: Record<string, string> = {
+  customer_invoice: "ar.create",
+  customer_credit: "ar.create",
+  quote: "ar.create",
+  sales_order: "ar.create",
+  cash_sale: "cash_sales.create",
+  cash_refund: "cash_sales.create",
+  customer_payment: "ar.pay",
+  purchase_order: "purchase_orders.create",
+  vendor_bill: "ap.create",
+  vendor_credit: "ap.create",
+  vendor_payment: "ap.pay",
+  check: "ap.create",
+  card_charge: "ap.create",
+  card_refund: "ap.create",
+  deposit: "gl.post",
+  transfer: "gl.post",
+  expense_report: "expenses.create",
+  field_ticket: "time.manage",
+  shipment: "ar.create",
+  shipment_carton_label: "ar.create",
+  shipment_shipping_label: "ar.create",
+  journal: "gl.post",
+  journal_entry: "gl.post",
+  pay_stub: "payroll.run",
+  payroll_cheque: "payroll.manage",
+};

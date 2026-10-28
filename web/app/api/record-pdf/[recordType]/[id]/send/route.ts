@@ -12,6 +12,7 @@ import { resolveRecordRecipient, sendRecordPdfEmail } from "@/lib/pdf-templates/
 import { loadRecordSubsidiaryScope } from "../../../lib";
 import { notFound } from "@/lib/api/responses";
 import { defineRoute } from "@/lib/api/route";
+import { RECORD_TYPE_SEND_PERMISSION } from "@/lib/pdf-templates/send-permissions";
 
 export const runtime = "nodejs";
 
@@ -22,51 +23,6 @@ const sendRecordBody = z
     template: z.string().optional(),
   })
   .strict();
-
-/**
- * Outbound-send authority per PDF record type — the write-side twin of the
- * catalog's readPermission. Emailing a record to any recipient discloses and
- * acts on it, so sending requires the record family's own write/post/run
- * authority and is never authorized by read access alone. Keys mirror
- * PDF_RECORD_TYPE_BY_KEY (an unmapped type fails closed below); each value
- * reuses the family's existing gate: document/order creates (ar.create,
- * ap.create), payment drafts (ar.pay / ap.pay), journals and bank deposits
- * and transfers post (gl.post, their document create grant),
- * expense submit (expenses.create), field-ticket manage (time.manage),
- * payroll run delivery (payroll.run) for pay stubs and payroll administration
- * (payroll.manage) for issued cheques, whose print already needs payroll.run
- * and whose image carries the bank encoding, the cash_sales create grant for sales
- * and refund receipts (cash_sales.create), and the sales-order create grant
- * for a shipment's packing slip (ar.create): sending is customer
- * correspondence, stronger than the fulfilment grant that reads it.
- */
-const RECORD_TYPE_SEND_PERMISSION: Record<string, string> = {
-  customer_invoice: "ar.create",
-  customer_credit: "ar.create",
-  quote: "ar.create",
-  sales_order: "ar.create",
-  cash_sale: "cash_sales.create",
-  cash_refund: "cash_sales.create",
-  customer_payment: "ar.pay",
-  purchase_order: "purchase_orders.create",
-  vendor_bill: "ap.create",
-  vendor_credit: "ap.create",
-  vendor_payment: "ap.pay",
-  check: "ap.create",
-  card_charge: "ap.create",
-  card_refund: "ap.create",
-  deposit: "gl.post",
-  transfer: "gl.post",
-  expense_report: "expenses.create",
-  field_ticket: "time.manage",
-  shipment: "ar.create",
-  shipment_carton_label: "ar.create",
-  shipment_shipping_label: "ar.create",
-  journal: "gl.post",
-  journal_entry: "gl.post",
-  pay_stub: "payroll.run",
-  payroll_cheque: "payroll.manage",
-};
 
 /** GET — default recipient + labels to prefill the send dialog. */
 async function getSendOptions(params: { recordType: string; id: string }, gate: Authz) {

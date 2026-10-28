@@ -184,7 +184,7 @@ export async function listApplicationFolders(context: ApplicationContext) {
  * web/app/api/file-cabinet/lib.ts (same precedent as assistantFileViewer in
  * web/lib/assistant/tools-files.ts — keep in sync).
  */
-function cabinetViewer(authz: Authz): FileViewer {
+export function cabinetViewer(authz: Authz): FileViewer {
   const baseline: AccessLevel = can(authz, "documents.manage")
     ? "manager"
     : can(authz, "documents.read")

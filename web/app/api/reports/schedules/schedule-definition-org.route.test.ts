@@ -57,6 +57,7 @@ const mockSources = new Map<string, string>([
             state.inserts.push(text)
             return inMode({ rows: [{ id: '00000000-0000-4000-8000-00000000b003' }] })
           }
+          if (text.includes('insert into audit_log')) return inMode({ rows: [{ row_id: 'schedule' }] })
           return inMode({ rows: [] })
         },
       }
@@ -103,6 +104,7 @@ const mockSources = new Map<string, string>([
       }
       export async function canAccessReportDefinition() { return true }
       export async function canAccessReportArtifact() { return true }
+      export async function reportArtifactAccessDetail() { return { ok: true, missingPermissions: [] } }
       export function snapshotReportAuthorization() {
         return { version: 1, userId: '${USER_ID}', allowedSubsidiaryIds: null, definition: {} }
       }
@@ -118,6 +120,9 @@ const mockUrls = new Map<string, string>([
   ["@/lib/feature-gates", "mock:authz"],
   ["../../../../lib/custom-reports", "mock:reports"],
   ["../../../../lib/report-execution-context", "mock:reports"],
+  ["./custom-reports", "mock:reports"],
+  ["./report-execution-context", "mock:reports"],
+  ["./authz", "mock:authz"],
 ]);
 
 registerHooks({

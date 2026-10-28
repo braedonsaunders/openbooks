@@ -75,6 +75,7 @@ const mockSources = new Map<string, string>([
           const inMode = (result) => (mode === 'objects' ? result.rows : result)
           state.queries.push(query)
           const text = sqlText(query)
+          if (text.includes('insert into saved_reports')) return inMode({ rows: [{ id: '00000000-0000-4000-8000-0000000000b1' }] })
           if (text.includes('delete from saved_reports')) return inMode({ rows: state.deleteRows })
           return inMode({ rows: [] })
         },
@@ -170,6 +171,7 @@ test("reports.create can create a saved report and records its owner", async () 
   });
 
   assert.equal(response.status, 200);
+  assert.equal((await response.json()).id, "00000000-0000-4000-8000-0000000000b1");
   assert.equal(state.queries.length, 1, "authorized creation reaches the database exactly once");
   assert.match(sqlText(state.queries[0]), /insert into saved_reports/);
   assert.match(sqlText(state.queries[0]), /created_by_user_id/);

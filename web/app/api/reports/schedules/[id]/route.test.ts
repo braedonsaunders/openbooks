@@ -188,6 +188,13 @@ stubModules({
         return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
       }
     `,
+    "./authz": `export function can() { return true }`,
+    "./custom-reports": `export async function loadReportDefinition() { return { report_type: 'query', query: { entity: 'documents' } } }`,
+    "./report-execution-context": `
+      export async function canAccessReportDefinition() { return true }
+      export async function reportArtifactAccessDetail() { return { ok: true, missingPermissions: [] } }
+      export function snapshotReportAuthorization() { return { version: 1, userId: '${USER_ID}', allowedSubsidiaryIds: null } }
+    `,
   },
 });
 
@@ -205,6 +212,8 @@ function reset(): void {
   state.respond = (text) => {
     if (text.includes("select * from report_schedules")) return { rows: [existingSchedule] };
     if (text.includes("update report_schedules")) return { rows: [updatedSchedule] };
+    if (text.includes("delete from report_schedules")) return { rows: [{ id: SCHEDULE_ID }] };
+    if (text.includes("insert into audit_log")) return { rows: [{ row_id: SCHEDULE_ID }] };
     return { rows: [] };
   };
 }
@@ -248,6 +257,7 @@ test("PATCH hour/active keeps the stored authorization_snapshot and does not per
   state.respond = (text) => {
     if (text.includes("select * from report_schedules")) return { rows: [pinned] };
     if (text.includes("update report_schedules")) return { rows: [{ ...pinned, hour: 8 }] };
+    if (text.includes("insert into audit_log")) return { rows: [{ row_id: SCHEDULE_ID }] };
     return { rows: [] };
   };
 

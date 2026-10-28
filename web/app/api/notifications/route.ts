@@ -4,10 +4,10 @@ import { uuidString } from "@openbooks/engine/platform/identifiers";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { markNotificationsRead } from "@openbooks/engine/inbox/adapters/notification";
 import { db } from "@openbooks/engine/platform/db";
 import { getAuthz } from "../../../lib/authz";
 import { isUuid } from "../../../lib/list-params";
+import { markNotificationsReadForRoute } from "../../../lib/notification-mutations";
 const PATCHBodySchema1 = z
   .object({
     ids: z.array(uuidString()).min(1).optional(),
@@ -67,9 +67,7 @@ export const PATCH = defineRoute({
 
     const body = routeBody as { ids?: string[]; all?: boolean };
     if (body.all === true) {
-      await db.execute(sql`
-          update notifications set read_at = now(), updated_at = now()
-           where org_id = ${orgId} and user_id = ${userId} and read_at is null`);
+      await markNotificationsReadForRoute({ orgId, userId, all: true });
       return NextResponse.json({ ok: true });
     }
     const requested = Array.isArray(body.ids) ? body.ids.filter((id) => isUuid(id)) : [];
@@ -77,7 +75,7 @@ export const PATCH = defineRoute({
     if (ids.length === 0) {
       return NextResponse.json({ error: "ids or all required" }, { status: 400 });
     }
-    const { own } = await markNotificationsRead(db, { orgId, userId, ids });
+    const { own } = await markNotificationsReadForRoute({ orgId, userId, ids });
     if (own < ids.length) {
       return notFound("record");
     }
