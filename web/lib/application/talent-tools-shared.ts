@@ -104,7 +104,8 @@ function inputSchemaFor(schema: CoreZodType, propertyName?: string): z.ZodType {
     return z.string().regex(dateTimePattern).max(MAX_TOOL_STRING_LENGTH);
   }
   if (schema instanceof z.ZodString) return schema.max(MAX_TOOL_STRING_LENGTH);
-  return schema;
+  if (schema instanceof z.ZodType) return schema;
+  throw new TypeError("Talent command inputs must use classic Zod schemas.");
 }
 
 function arrayBounds(schema: z.ZodArray): { minimum: number; maximum: number } {
