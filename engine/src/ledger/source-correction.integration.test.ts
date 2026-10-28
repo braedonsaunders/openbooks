@@ -579,26 +579,27 @@ test(
   },
 );
 
-test(
-  "authenticated connector replay stays append-only in a preserved closed period and fails atomically without proof",
-  { skip: !DB },
-  async () => {
-    const org = await createScratchOrg();
-    const actorId = await createScratchUser(org.orgId, "Connector Replay Controller", "admin");
-    const documentId = randomUUID();
-    const ordinaryDocumentId = randomUUID();
-    const connectionId = randomUUID();
-    const requestId = randomUUID();
-    const deps: PostingDeps = {
-      migration: true,
-      control: {
-        ar: org.accounts.ar,
-        ap: org.accounts.ap,
-        bank: org.accounts.bank,
-      },
-    };
-    try {
-      await db.execute(sql`
+for (const closeReason of ["Controller-completed month close", "close.importedPeriodLockReason"]) {
+  test(
+    `authenticated connector replay preserves ${closeReason} and fails atomically without proof`,
+    { skip: !DB },
+    async () => {
+      const org = await createScratchOrg();
+      const actorId = await createScratchUser(org.orgId, "Connector Replay Controller", "admin");
+      const documentId = randomUUID();
+      const ordinaryDocumentId = randomUUID();
+      const connectionId = randomUUID();
+      const requestId = randomUUID();
+      const deps: PostingDeps = {
+        migration: true,
+        control: {
+          ar: org.accounts.ar,
+          ap: org.accounts.ap,
+          bank: org.accounts.bank,
+        },
+      };
+      try {
+        await db.execute(sql`
         insert into connections
           (id, org_id, source, display_name, status, config, mirror_enabled,
            mirror_schedule, posted_change_policy,
@@ -610,7 +611,7 @@ test(
           ${actorId}, now() - interval '1 minute', ${actorId}, ${actorId}
         )
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into sync_runs
           (id, org_id, connection_id, source, kind, status, triggered_by)
         values (
@@ -618,7 +619,7 @@ test(
           'incremental', 'running', ${actorId}
         )
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, subsidiary_id,
            document_date, posting_date, posting_period_id, currency, fx_rate,
@@ -631,7 +632,7 @@ test(
           ${actorId}, ${actorId}
         )
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, account_id, quantity, unit_price,
            amount, tax_amount, custom, created_by, updated_by)
@@ -640,74 +641,74 @@ test(
           100, 0, '{}'::jsonb, ${actorId}, ${actorId}
         )
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         update documents set status = 'approved'
          where id = ${documentId} and org_id = ${org.orgId}
       `);
-      const originalEntryId = await postDocument(documentId, deps, {
-        audit: { actorId, source: "test" },
-      });
+        const originalEntryId = await postDocument(documentId, deps, {
+          audit: { actorId, source: "test" },
+        });
 
-      await db.execute(sql`
+        await db.execute(sql`
         insert into period_locks
           (org_id, period_id, book_id, subsidiary_id, module, state,
            locked_at, locked_by, reason, created_by, updated_by)
         values
           (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'ap', 'closed',
-           now(), ${actorId}, 'Controller-completed month close', ${actorId}, ${actorId}),
+           now(), ${actorId}, ${closeReason}, ${actorId}, ${actorId}),
           (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl', 'closed',
-           now(), ${actorId}, 'Controller-completed month close', ${actorId}, ${actorId})
+           now(), ${actorId}, ${closeReason}, ${actorId}, ${actorId})
         on conflict (org_id, period_id, book_id, subsidiary_id, module)
         do update set state = 'closed', locked_at = now(), locked_by = excluded.locked_by,
           reason = excluded.reason, updated_at = now(), updated_by = excluded.updated_by
       `);
 
-      const corrected = await db.transaction(async (tx) => {
-        await tx.execute(sql`select set_config('app.current_org', ${org.orgId}, true)`);
-        await tx.execute(sql`set local openbooks.amend = on`);
-        await tx.execute(sql`set local openbooks.migration = on`);
-        await tx.execute(sql`
+        const corrected = await db.transaction(async (tx) => {
+          await tx.execute(sql`select set_config('app.current_org', ${org.orgId}, true)`);
+          await tx.execute(sql`set local openbooks.amend = on`);
+          await tx.execute(sql`set local openbooks.migration = on`);
+          await tx.execute(sql`
           update documents set subtotal = 120, total = 120, updated_at = now()
            where id = ${documentId}
         `);
-        await tx.execute(sql`
+          await tx.execute(sql`
           update document_lines set unit_price = 120, amount = 120, updated_at = now()
            where document_id = ${documentId}
         `);
-        return regenerateGlImpactTx(tx, documentId, deps, actorId, {
-          actorId,
-          requestId,
-          reason: "Controller-authorized historical connector replay",
-          replayMode: "authenticated_connector_historical_replay",
+          return regenerateGlImpactTx(tx, documentId, deps, actorId, {
+            actorId,
+            requestId,
+            reason: "Controller-authorized historical connector replay",
+            replayMode: "authenticated_connector_historical_replay",
+          });
         });
-      });
-      assert.equal(corrected.changed, true);
-      assert.ok(corrected.entryId);
+        assert.equal(corrected.changed, true);
+        assert.ok(corrected.entryId);
 
-      const locks = await db.execute<{ module: string; state: string; reason: string }>(
-        sql`
+        const locks = await db.execute<{ module: string; state: string; reason: string }>(
+          sql`
         select module, state, reason
           from period_locks
          where org_id = ${org.orgId} and period_id = ${org.periodId}
            and book_id = ${org.bookId} and module in ('ap', 'gl')
          order by module
       `,
-        "objects",
-      );
-      assert.deepEqual(locks, [
-        {
-          module: "ap",
-          state: "closed",
-          reason: "Controller-completed month close",
-        },
-        {
-          module: "gl",
-          state: "closed",
-          reason: "Controller-completed month close",
-        },
-      ]);
-      const replayAudit = await db.execute<{ mode: string; locks_preserved: boolean }>(
-        sql`
+          "objects",
+        );
+        assert.deepEqual(locks, [
+          {
+            module: "ap",
+            state: "closed",
+            reason: closeReason,
+          },
+          {
+            module: "gl",
+            state: "closed",
+            reason: closeReason,
+          },
+        ]);
+        const replayAudit = await db.execute<{ mode: string; locks_preserved: boolean }>(
+          sql`
         select changes->'historicalReplay'->>'mode' as mode,
                (changes->'historicalReplay'->>'periodLocksPreserved')::boolean
                  as locks_preserved
@@ -715,21 +716,21 @@ test(
          where org_id = ${org.orgId} and row_id = ${documentId}
            and changes->>'mode' = 'append_only_source_correction'
       `,
-        "objects",
-      );
-      assert.deepEqual(replayAudit, [
-        {
-          mode: "authenticated_connector_historical_replay",
-          locks_preserved: true,
-        },
-      ]);
+          "objects",
+        );
+        assert.deepEqual(replayAudit, [
+          {
+            mode: "authenticated_connector_historical_replay",
+            locks_preserved: true,
+          },
+        ]);
 
-      const beforeFailedReplay = await db.execute<{
-        amount: string;
-        entries: number;
-        cogs_total: string;
-      }>(
-        sql`
+        const beforeFailedReplay = await db.execute<{
+          amount: string;
+          entries: number;
+          cogs_total: string;
+        }>(
+          sql`
         select line.amount::text as amount,
                (select count(*)::int from journal_entries
                  where source_document_id = ${documentId}) as entries,
@@ -742,78 +743,78 @@ test(
           from document_lines line
          where line.document_id = ${documentId}
       `,
-        "objects",
-      );
-      await assert.rejects(
-        db.transaction(async (tx) => {
+          "objects",
+        );
+        await assert.rejects(
+          db.transaction(async (tx) => {
+            await tx.execute(sql`select set_config('app.current_org', ${org.orgId}, true)`);
+            await tx.execute(sql`set local openbooks.amend = on`);
+            await tx.execute(sql`set local openbooks.migration = on`);
+            await tx.execute(sql`
+            update documents set subtotal = 130, total = 130, updated_at = now()
+             where id = ${documentId}
+          `);
+            await tx.execute(sql`
+            update document_lines set unit_price = 130, amount = 130, updated_at = now()
+             where document_id = ${documentId}
+          `);
+            return regenerateGlImpactTx(tx, documentId, deps, actorId, {
+              actorId,
+              requestId: randomUUID(),
+              reason: "Unproven historical connector replay must roll back",
+              replayMode: "authenticated_connector_historical_replay",
+            });
+          }),
+          /not authorized by the active sync run/,
+        );
+        const afterFailedReplay = await db.execute<{
+          amount: string;
+          entries: number;
+          cogs_total: string;
+        }>(
+          sql`
+        select line.amount::text as amount,
+               (select count(*)::int from journal_entries
+                 where source_document_id = ${documentId}) as entries,
+               (select coalesce(sum(journal_line.amount), 0)::text
+                  from journal_lines journal_line
+                  join journal_entries journal_entry
+                    on journal_entry.id = journal_line.entry_id
+                 where journal_entry.source_document_id = ${documentId}
+                   and journal_line.account_id = ${org.accounts.cogs}) as cogs_total
+          from document_lines line
+         where line.document_id = ${documentId}
+      `,
+          "objects",
+        );
+        assert.deepEqual(afterFailedReplay, beforeFailedReplay);
+
+        const convergedRetry = await db.transaction(async (tx) => {
           await tx.execute(sql`select set_config('app.current_org', ${org.orgId}, true)`);
           await tx.execute(sql`set local openbooks.amend = on`);
           await tx.execute(sql`set local openbooks.migration = on`);
           await tx.execute(sql`
-            update documents set subtotal = 130, total = 130, updated_at = now()
-             where id = ${documentId}
-          `);
-          await tx.execute(sql`
-            update document_lines set unit_price = 130, amount = 130, updated_at = now()
-             where document_id = ${documentId}
-          `);
-          return regenerateGlImpactTx(tx, documentId, deps, actorId, {
-            actorId,
-            requestId: randomUUID(),
-            reason: "Unproven historical connector replay must roll back",
-            replayMode: "authenticated_connector_historical_replay",
-          });
-        }),
-        /not authorized by the active sync run/,
-      );
-      const afterFailedReplay = await db.execute<{
-        amount: string;
-        entries: number;
-        cogs_total: string;
-      }>(
-        sql`
-        select line.amount::text as amount,
-               (select count(*)::int from journal_entries
-                 where source_document_id = ${documentId}) as entries,
-               (select coalesce(sum(journal_line.amount), 0)::text
-                  from journal_lines journal_line
-                  join journal_entries journal_entry
-                    on journal_entry.id = journal_line.entry_id
-                 where journal_entry.source_document_id = ${documentId}
-                   and journal_line.account_id = ${org.accounts.cogs}) as cogs_total
-          from document_lines line
-         where line.document_id = ${documentId}
-      `,
-        "objects",
-      );
-      assert.deepEqual(afterFailedReplay, beforeFailedReplay);
-
-      const convergedRetry = await db.transaction(async (tx) => {
-        await tx.execute(sql`select set_config('app.current_org', ${org.orgId}, true)`);
-        await tx.execute(sql`set local openbooks.amend = on`);
-        await tx.execute(sql`set local openbooks.migration = on`);
-        await tx.execute(sql`
           update documents set subtotal = 130, total = 130, updated_at = now()
            where id = ${documentId}
         `);
-        await tx.execute(sql`
+          await tx.execute(sql`
           update document_lines set unit_price = 130, amount = 130, updated_at = now()
            where document_id = ${documentId}
         `);
-        return regenerateGlImpactTx(tx, documentId, deps, actorId, {
-          actorId,
-          requestId,
-          reason: "Authorized retry after an atomic connector replay failure",
-          replayMode: "authenticated_connector_historical_replay",
+          return regenerateGlImpactTx(tx, documentId, deps, actorId, {
+            actorId,
+            requestId,
+            reason: "Authorized retry after an atomic connector replay failure",
+            replayMode: "authenticated_connector_historical_replay",
+          });
         });
-      });
-      assert.equal(convergedRetry.changed, true);
-      const afterConvergedRetry = await db.execute<{
-        amount: string;
-        entries: number;
-        cogs_total: string;
-      }>(
-        sql`
+        assert.equal(convergedRetry.changed, true);
+        const afterConvergedRetry = await db.execute<{
+          amount: string;
+          entries: number;
+          cogs_total: string;
+        }>(
+          sql`
         select line.amount::text as amount,
                (select count(*)::int from journal_entries
                  where source_document_id = ${documentId}) as entries,
@@ -826,13 +827,13 @@ test(
           from document_lines line
          where line.document_id = ${documentId}
       `,
-        "objects",
-      );
-      assert.deepEqual(afterConvergedRetry, [
-        { amount: "130.0000", entries: 5, cogs_total: "130.0000" },
-      ]);
+          "objects",
+        );
+        assert.deepEqual(afterConvergedRetry, [
+          { amount: "130.0000", entries: 5, cogs_total: "130.0000" },
+        ]);
 
-      await db.execute(sql`
+        await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, subsidiary_id,
            document_date, posting_date, posting_period_id, currency, fx_rate,
@@ -844,7 +845,7 @@ test(
           ${actorId}, ${actorId}
         )
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         insert into document_lines
           (org_id, document_id, line_number, account_id, quantity, unit_price,
            amount, tax_amount, custom, created_by, updated_by)
@@ -853,33 +854,34 @@ test(
           50, 0, '{}'::jsonb, ${actorId}, ${actorId}
         )
       `);
-      await db.execute(sql`
+        await db.execute(sql`
         update documents set status = 'approved'
          where id = ${ordinaryDocumentId} and org_id = ${org.orgId}
       `);
-      await assert.rejects(
-        postDocument(
-          ordinaryDocumentId,
-          {
-            control: deps.control,
-          },
-          { audit: { actorId, source: "test" } },
-        ),
-        /closed for this period/,
-      );
+        await assert.rejects(
+          postDocument(
+            ordinaryDocumentId,
+            {
+              control: deps.control,
+            },
+            { audit: { actorId, source: "test" } },
+          ),
+          /closed for this period/,
+        );
 
-      const chain = await db.execute(
-        sql`
+        const chain = await db.execute(
+          sql`
         select count(*)::int as entries
           from journal_entries
          where source_document_id = ${documentId}
       `,
-        "objects",
-      );
-      assert.equal((chain[0] as { entries: number }).entries, 5);
-      assert.notEqual(corrected.entryId, originalEntryId);
-    } finally {
-      await dropScratchOrg(org.orgId);
-    }
-  },
-);
+          "objects",
+        );
+        assert.equal((chain[0] as { entries: number }).entries, 5);
+        assert.notEqual(corrected.entryId, originalEntryId);
+      } finally {
+        await dropScratchOrg(org.orgId);
+      }
+    },
+  );
+}

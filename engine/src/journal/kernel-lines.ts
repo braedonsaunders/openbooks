@@ -56,8 +56,16 @@ export async function insertEntryLines(
       ${line.custom === undefined ? "{}" : JSON.stringify(line.custom)}::jsonb,
       ${line.contributorKind ?? null}, ${line.contributorRef ?? null})`,
   );
-  // The storage guard admits inactive accounts only inside this transaction-local bracket.
+  // Preserve an enclosing migration's authority for the entry's posted transition.
+  // Standalone callers admit inactive accounts only inside this local bracket.
+  let priorMigration: string | null = null;
   if (options.admitInactiveAccounts) {
+    const [context] = await executor.execute<{ migration: string | null }>(
+      sql`select current_setting('openbooks.migration', true) as migration`,
+      "objects",
+    );
+    if (!context) throw new Error("The journal's migration context could not be read");
+    priorMigration = context.migration;
     await executor.execute(sql`select set_config('openbooks.migration', 'on', true)`);
   }
   const inserted = await executor.execute<{ id: string; line_number: number }>(
@@ -71,7 +79,9 @@ export async function insertEntryLines(
     "objects",
   );
   if (options.admitInactiveAccounts) {
-    await executor.execute(sql`select set_config('openbooks.migration', 'off', true)`);
+    await executor.execute(
+      sql`select set_config('openbooks.migration', ${priorMigration ?? ""}, true)`,
+    );
   }
   if (inserted.length !== lines.length) throw options.refusal(inserted.length);
   return inserted.map((row) => ({ id: row.id, lineNumber: row.line_number }));

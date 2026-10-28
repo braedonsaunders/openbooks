@@ -11,13 +11,14 @@ const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")
 const dialect = new PgDialect();
 
 /** The database boundary: records each statement and answers with scripted rows. */
-function scriptedDatabase(answer: (statement: string) => unknown[]) {
+function scriptedDatabase(answer: (statement: string, params: unknown[]) => unknown[]) {
   const statements: string[] = [];
   const executor = {
     execute: async (query: SQL) => {
-      const statement = dialect.sqlToQuery(query).sql.replace(/\s+/g, " ").trim();
+      const compiled = dialect.sqlToQuery(query);
+      const statement = compiled.sql.replace(/\s+/g, " ").trim();
       statements.push(statement);
-      return answer(statement);
+      return answer(statement, compiled.params);
     },
   } as unknown as SqlExecutor;
   return { executor, statements };
@@ -123,17 +124,25 @@ test("every line of an entry is one statement, bracketed only for historical ina
   ]);
   assert.equal(native.statements.length, 1);
 
-  const historical = scriptedDatabase(answer);
-  await insertEntryLines(historical.executor, { orgId: id(1), entryId: id(7) }, lines, {
-    admitInactiveAccounts: true,
-    refusal: () => new Refused("lines"),
-  });
-  assert.deepEqual(
-    historical.statements.map((statement) =>
-      statement.startsWith("insert into journal_lines")
-        ? "insert"
-        : statement.match(/'(on|off)'/)?.[1],
-    ),
-    ["on", "insert", "off"],
-  );
+  for (const initial of [null, "", "off", "on"]) {
+    let migration = initial;
+    const historical = scriptedDatabase((statement, params) => {
+      if (statement.startsWith("select current_setting")) return [{ migration }];
+      if (statement.startsWith("select set_config")) {
+        migration = statement.includes("'on'") ? "on" : (params[0] as string);
+        return [];
+      }
+      assert.equal(migration, "on", "inactive accounts are admitted while inserting lines");
+      return answer(statement);
+    });
+    await insertEntryLines(historical.executor, { orgId: id(1), entryId: id(7) }, lines, {
+      admitInactiveAccounts: true,
+      refusal: () => new Refused("lines"),
+    });
+    assert.equal(migration, initial ?? "", "the caller's migration context is restored");
+    assert.equal(
+      historical.statements.filter((statement) => statement.startsWith("insert")).length,
+      1,
+    );
+  }
 });
