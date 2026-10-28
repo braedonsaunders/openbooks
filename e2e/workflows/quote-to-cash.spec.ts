@@ -393,7 +393,9 @@ async function uiSubmitAndPost(
   const submitted = page.waitForResponse(
     (r) => r.url().endsWith("/api/documents/actions") && r.request().method() === "POST",
   );
-  await page.locator("button", { hasText: "Submit for approval" }).click();
+  // The drawer names the submit action "Approve" when no approval Flow applies
+  // to the document, and "Submit for approval" when one will route it.
+  await page.locator("button", { hasText: /^(Approve|Submit for approval)$/ }).click();
   const resSubmit = await submitted;
   expect(resSubmit.status(), await resSubmit.text()).toBe(200);
   await expect(drawer.getByText("Approved")).toBeVisible({ timeout: 15000 });
