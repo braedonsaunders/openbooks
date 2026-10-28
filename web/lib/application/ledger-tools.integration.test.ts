@@ -215,7 +215,7 @@ test(
       );
       await assert.rejects(
         run("save_close_blueprint", closeContext, blueprintDraft),
-        /needs advancedClose feature/i,
+        /needs the advancedClose feature/,
       );
       await withBypassContext(() =>
         db.execute(sql`
@@ -635,7 +635,12 @@ test(
             (${liability}, ${org.orgId}, 'LEDGER-PROV-LIAB', 'Provision liability', 'liability_current_other')
         `);
         await grantScratchPermissions(org.orgId, actors.submitterId, ["gl.manage", "gl.read"]);
-        await grantScratchPermissions(org.orgId, actors.approver1Id, ["flows.approve", "gl.post"]);
+        // A provision decision needs the provision domain authority (gl.manage); applying it posts.
+        await grantScratchPermissions(org.orgId, actors.approver1Id, [
+          "flows.approve",
+          "gl.manage",
+          "gl.post",
+        ]);
         await grantScratchPermissions(foreign.orgId, foreignActors.adminId, ["gl.read"]);
         await seedApprovalFlow(org.orgId, {
           subjectKind: "financial_change",
