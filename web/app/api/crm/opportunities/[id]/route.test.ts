@@ -269,6 +269,7 @@ stubModules({
     "@/lib/crm": `
     const state = globalThis[Symbol.for('openbooks.opportunity-contact-route-test')]
     export async function loadOpportunity() { return state.loaded }
+    export async function loadOpportunityInCurrentTransaction() { return state.loaded }
   `,
     "@/lib/crm-scope": `
     export function crmOpportunityScope() { return '' }

@@ -15,7 +15,7 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("@openbooks/engine/testing/fixtures");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
-const { loadActivity, loadCrmAccount } = await import("../crm");
+const { loadActivity, loadCrmAccount, loadOpportunity } = await import("../crm");
 const { executeAssistantTool } = await import("../assistant/registry");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 
@@ -62,6 +62,19 @@ async function setServiceEnabled(orgId: string, enabled: boolean): Promise<void>
   );
 }
 
+async function setCrmEnabled(orgId: string, enabled: boolean): Promise<void> {
+  await withBypassContext(() =>
+    db.execute(sql`
+      update orgs set settings = jsonb_set(
+        coalesce(settings, '{}'::jsonb),
+        '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify({ crm: enabled })}::jsonb,
+        true
+      ) where id = ${orgId}
+    `),
+  );
+}
+
 async function activateScratchCustomer(orgId: string, partyId: string): Promise<void> {
   const rows = await withBypassContext(() =>
     db.execute(
@@ -84,6 +97,7 @@ test(
     try {
       const actors = await withBypassContext(() => seedFlowActors(org.orgId));
       await setServiceEnabled(org.orgId, true);
+      await setCrmEnabled(org.orgId, true);
       await activateScratchCustomer(org.orgId, org.customerId);
       const permissions = [
         "crm.accounts.create",
@@ -91,6 +105,7 @@ test(
         "crm.activities.manage",
         "crm.forecasts.manage",
         "crm.forecasts.read",
+        "crm.opportunities.manage",
         "crm.setup.manage",
         "assistant.use",
         "parties.read",
@@ -117,16 +132,77 @@ test(
       const leadBefore = await withOrgContext(org.orgId, () =>
         loadCrmAccount(lead.partyId, org.orgId, null),
       );
-      assert.equal((leadBefore?.profile as Record<string, unknown>).lifecycle_stage, "lead");
+      const leadProfile = leadBefore?.profile as Record<string, unknown>;
+      assert.equal(leadProfile.lifecycle_stage, "lead");
       await run("convert_crm_lead", {
         partyId: lead.partyId,
         reason: "Qualified for customer service",
+        expectedUpdatedAt: String(leadProfile.updated_at),
         idempotencyKey: "crm-lead-convert-0001",
       });
       const converted = await withOrgContext(org.orgId, () =>
         loadCrmAccount(lead.partyId, org.orgId, null),
       );
       assert.equal((converted?.profile as Record<string, unknown>).lifecycle_stage, "customer");
+      const accountUpdateInput = {
+        partyId: lead.partyId,
+        expectedUpdatedAt: String((converted?.profile as Record<string, unknown>).updated_at),
+        industry: "Education",
+        idempotencyKey: "crm-account-update-0001",
+      };
+      const accountUpdate = (await run("update_crm_account", accountUpdateInput)) as {
+        replayed: boolean;
+      };
+      assert.equal(accountUpdate.replayed, false);
+      const accountUpdateReplay = (await run("update_crm_account", accountUpdateInput)) as {
+        replayed: boolean;
+      };
+      assert.equal(accountUpdateReplay.replayed, true);
+      const accountAfterUpdate = await withOrgContext(org.orgId, () =>
+        loadCrmAccount(lead.partyId, org.orgId, null),
+      );
+      assert.equal((accountAfterUpdate?.profile as Record<string, unknown>).industry, "Education");
+
+      const opportunity = (await run("create_crm_opportunity", {
+        partyId: org.customerId,
+        idempotencyKey: "crm-opportunity-create-0001",
+      })) as { opportunityId: string };
+      const opportunityBefore = await withOrgContext(org.orgId, () =>
+        loadOpportunity(opportunity.opportunityId, org.orgId, null),
+      );
+      assert.ok(opportunityBefore);
+      const opportunityHead = opportunityBefore.opportunity as Record<string, unknown>;
+      const stageInput = {
+        opportunityId: opportunity.opportunityId,
+        statusId: String(opportunityHead.status_id),
+        expectedUpdatedAt: String(opportunityHead.updated_at),
+        idempotencyKey: "crm-opportunity-stage-0001",
+      };
+      const moved = (await run("move_crm_opportunity_stage", stageInput)) as {
+        replayed: boolean;
+      };
+      assert.equal(moved.replayed, false);
+      const movedReplay = (await run("move_crm_opportunity_stage", stageInput)) as {
+        replayed: boolean;
+      };
+      assert.equal(movedReplay.replayed, true);
+      const opportunityAfter = await withOrgContext(org.orgId, () =>
+        loadOpportunity(opportunity.opportunityId, org.orgId, null),
+      );
+      assert.equal(
+        (opportunityAfter?.opportunity as Record<string, unknown>).status_id,
+        opportunityHead.status_id,
+      );
+      await run("delete_crm_opportunity", {
+        opportunityId: opportunity.opportunityId,
+        idempotencyKey: "crm-opportunity-delete-0001",
+      });
+      assert.equal(
+        await withOrgContext(org.orgId, () =>
+          loadOpportunity(opportunity.opportunityId, org.orgId, null),
+        ),
+        null,
+      );
 
       const activity = (await run("create_crm_activity", {
         kind: "task",
@@ -250,6 +326,89 @@ test(
       assert.equal(partyAfter.addresses[0]?.line1, "12 Main Street");
       assert.equal(partyAfter.contacts[0]?.email, "morgan@example.test");
 
+      const bankCreate = (await run("create_party_bank_account", {
+        partyId: org.customerId,
+        bankName: "North Bank",
+        country: "CA",
+        accountNumber: "000012345678",
+        idempotencyKey: "party-bank-create-0001",
+      })) as { replayed: boolean; bankAccountId: string };
+      assert.equal(bankCreate.replayed, false);
+      const bankRead = (await run("get_party_bank_accounts", {
+        partyId: org.customerId,
+      })) as { bankAccounts: Array<Record<string, unknown>> };
+      const bankRow = bankRead.bankAccounts.find((row) => row.id === bankCreate.bankAccountId);
+      assert.ok(bankRow);
+      assert.equal(bankRow.account_last_four, "5678");
+      assert.equal(JSON.stringify(bankRead).includes("000012345678"), false);
+
+      const bankUpdateInput = {
+        partyId: org.customerId,
+        accountId: bankCreate.bankAccountId,
+        expectedUpdatedAt: String(bankRow.updated_at),
+        bankName: "North Bank Commercial",
+        changeReason: "Corrected account label",
+        idempotencyKey: "party-bank-update-0001",
+      };
+      const bankUpdate = (await run("update_party_bank_account", bankUpdateInput)) as {
+        replayed: boolean;
+      };
+      assert.equal(bankUpdate.replayed, false);
+      const bankUpdateReplay = (await run("update_party_bank_account", bankUpdateInput)) as {
+        replayed: boolean;
+      };
+      assert.equal(bankUpdateReplay.replayed, true);
+      const pendingFixture = await withOrgContext(org.orgId, () =>
+        db.execute(sql`
+          update party_bank_accounts
+             set approval_status = 'pending', is_active = false,
+                 approved_at = null, approved_by = null, updated_at = now(), updated_by = ${actors.adminId}
+           where id = ${bankCreate.bankAccountId} and party_id = ${org.customerId} and org_id = ${org.orgId}
+        `),
+      );
+      assert.equal(pendingFixture.rowCount, 1);
+      const pendingRead = (await run("get_party_bank_accounts", {
+        partyId: org.customerId,
+      })) as { bankAccounts: Array<Record<string, unknown>> };
+      const pendingRow = pendingRead.bankAccounts.find(
+        (row) => row.id === bankCreate.bankAccountId,
+      );
+      assert.equal(pendingRow?.approval_status, "pending");
+      const submitted = (await run("submit_party_bank_account_for_approval", {
+        partyId: org.customerId,
+        accountId: bankCreate.bankAccountId,
+        idempotencyKey: "party-bank-submit-0001",
+      })) as { replayed: boolean };
+      assert.equal(submitted.replayed, false);
+      const submittedReplay = (await run("submit_party_bank_account_for_approval", {
+        partyId: org.customerId,
+        accountId: bankCreate.bankAccountId,
+        idempotencyKey: "party-bank-submit-0001",
+      })) as { replayed: boolean };
+      assert.equal(submittedReplay.replayed, true);
+      const approvedRead = (await run("get_party_bank_accounts", {
+        partyId: org.customerId,
+      })) as { bankAccounts: Array<Record<string, unknown>> };
+      const approvedRow = approvedRead.bankAccounts.find(
+        (row) => row.id === bankCreate.bankAccountId,
+      );
+      assert.equal(approvedRow?.approval_status, "approved");
+      assert.equal(approvedRow?.is_active, true);
+      await run("retire_party_bank_account", {
+        partyId: org.customerId,
+        accountId: bankCreate.bankAccountId,
+        expectedUpdatedAt: String(approvedRow?.updated_at),
+        retirementReason: "Account closed by customer",
+        idempotencyKey: "party-bank-retire-0001",
+      });
+      const retiredRead = (await run("get_party_bank_accounts", {
+        partyId: org.customerId,
+      })) as { bankAccounts: Array<Record<string, unknown>> };
+      const retiredRow = retiredRead.bankAccounts.find(
+        (row) => row.id === bankCreate.bankAccountId,
+      );
+      assert.ok(retiredRow?.retired_at);
+
       const requestId = randomUUID();
       const requestInput = {
         id: requestId,
@@ -297,6 +456,8 @@ test(
       const secondActors = await withBypassContext(() => seedFlowActors(second.orgId));
       await setServiceEnabled(first.orgId, true);
       await setServiceEnabled(second.orgId, true);
+      await setCrmEnabled(first.orgId, true);
+      await setCrmEnabled(second.orgId, true);
       await activateScratchCustomer(first.orgId, first.customerId);
       await activateScratchCustomer(second.orgId, second.customerId);
       const full = ctxFor(first.orgId, firstActors.adminId, ["service.manage", "service.read"]);
@@ -324,6 +485,64 @@ test(
       const created = (await withOrgContext(first.orgId, () =>
         executeApplicationTool(applicationTool("create_service_request")!, full, input),
       )) as { id: string };
+      const crmStageTool = applicationTool("move_crm_opportunity_stage")!;
+      const crmWithoutPermissions = ctxFor(first.orgId, firstActors.adminId, []);
+      assert.equal(crmStageTool.visibleTo(crmWithoutPermissions.authz), false);
+      assert.equal(
+        applicationTool("create_party_bank_account")!.visibleTo(crmWithoutPermissions.authz),
+        false,
+      );
+      await assert.rejects(
+        withOrgContext(first.orgId, () =>
+          executeApplicationTool(crmStageTool, crmWithoutPermissions, {
+            opportunityId: randomUUID(),
+            statusId: randomUUID(),
+            expectedUpdatedAt: "000001",
+            idempotencyKey: "crm-stage-no-permission-0001",
+          }),
+        ),
+        /forbidden/,
+      );
+
+      const crmFull = ctxFor(first.orgId, firstActors.adminId, ["crm.opportunities.manage"]);
+      const foreignOpportunityId = randomUUID();
+      const foreignCreate = (await withOrgContext(first.orgId, () =>
+        executeApplicationTool(applicationTool("create_crm_opportunity")!, crmFull, {
+          partyId: first.customerId,
+          idempotencyKey: "crm-cross-org-create-0001",
+        }),
+      )) as { opportunityId: string };
+      await assert.rejects(
+        withOrgContext(second.orgId, () =>
+          executeApplicationTool(
+            crmStageTool,
+            ctxFor(second.orgId, secondActors.adminId, ["crm.opportunities.manage"]),
+            {
+              opportunityId: foreignCreate.opportunityId,
+              statusId: foreignOpportunityId,
+              expectedUpdatedAt: "000001",
+              idempotencyKey: "crm-cross-org-stage-0001",
+            },
+          ),
+        ),
+        /not_found|not found/,
+      );
+      await setCrmEnabled(first.orgId, false);
+      try {
+        await assert.rejects(
+          withOrgContext(first.orgId, () =>
+            executeApplicationTool(crmStageTool, crmFull, {
+              opportunityId: foreignCreate.opportunityId,
+              statusId: foreignOpportunityId,
+              expectedUpdatedAt: "000001",
+              idempotencyKey: "crm-stage-feature-off-0001",
+            }),
+          ),
+          /crm record not found/,
+        );
+      } finally {
+        await setCrmEnabled(first.orgId, true);
+      }
       await setServiceEnabled(first.orgId, false);
       try {
         await assert.rejects(

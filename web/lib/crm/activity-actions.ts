@@ -102,7 +102,8 @@ export const requestBodySchema = z.strictObject({
 });
 
 /** Provider-safe input form; the native parser applies the route's duration normalization. */
-export const activityToolUpdateSchema = requestBodySchema.safeExtend({
+export const activityToolUpdateSchema = z.strictObject({
+  ...requestBodySchema.shape,
   custom: z
     .record(z.string().max(100), z.unknown())
     .optional()

@@ -22,8 +22,17 @@ export const authorizePartyBankWrite = async ({
 }) => {
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (can(authz, "parties.manage")) return authz;
   const partyId = (params as { id?: string } | undefined)?.id ?? "";
+  const denied = await authorizePartyBankWriteWithAuthz(authz, partyId);
+  return denied ?? authz;
+};
+
+/** Resolve the route's party-bank authority for session and API-key callers. */
+export async function authorizePartyBankWriteWithAuthz(
+  authz: Authz,
+  partyId: string,
+): Promise<NextResponse | null> {
+  if (can(authz, "parties.manage")) return null;
   if (
     isUuid(partyId) &&
     (can(authz, "hrm.employment.manage") || can(authz, "payroll.manage")) &&
@@ -34,10 +43,10 @@ export const authorizePartyBankWrite = async ({
       )
     ).length > 0
   ) {
-    return authz;
+    return null;
   }
   return NextResponse.json({ error: "missing permission: parties.manage" }, { status: 403 });
-};
+}
 
 /** Party record boundary shared by every bank-account verb here (null-subsidiary parties are org-wide). */
 export async function denyOutsidePartyScope(

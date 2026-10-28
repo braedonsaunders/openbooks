@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { documentRevisionSql } from "@openbooks/engine/records/revision";
 import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
+import { loadPartyBankAccountsInCurrentTransaction } from "../../../lib/party-bank-accounts";
 import {
   loadCustomFieldAccessDefs,
   redactHiddenCustomValues,
@@ -184,13 +185,7 @@ async function loadPartyRecord(
         from contacts where party_id = ${id} and org_id = ${orgId}
        order by is_primary desc, name
     `);
-    const bankAccounts = await db.execute<Record<string, unknown>>(sql`
-      select id, bank_name, country, currency, routing, account_last_four,
-             approval_status, approved_at, approved_by, submitted_by,
-             submitted_at, retired_at, retired_by, retirement_reason,
-             is_active, ${documentRevisionSql(sql`updated_at`)} as updated_at
-        from party_bank_accounts where party_id = ${id} and org_id = ${orgId} order by created_at
-    `);
+    const bankAccounts = await loadPartyBankAccountsInCurrentTransaction(id, orgId);
     const partySubs = await db.execute<Record<string, unknown>>(sql`
       select subsidiary_id from party_subsidiaries where party_id = ${id} and org_id = ${orgId}
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)} order by created_at

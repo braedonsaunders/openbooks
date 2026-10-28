@@ -1,0 +1,509 @@
+import { routeSalesAccount } from "@openbooks/engine/crm/sales";
+import { z } from "zod";
+import { uuidString } from "@openbooks/engine/platform/identifiers";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { crmSharedScope } from "@/lib/crm-scope";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/platform/db";
+import {
+  CrmLifecycleRefusalError,
+  promoteCrmAccount,
+  transitionCrmAccountStage,
+} from "@openbooks/engine/crm/crm";
+import { normalizeMoney } from "@openbooks/engine/money/money";
+import { isUuid } from "@/lib/list-params";
+import { loadCrmAccount, loadCrmAccountInCurrentTransaction } from "@/lib/crm";
+import {
+  findUnownedCustomReferences,
+  loadFieldDefs,
+  unknownCustomFieldKey,
+  validateCustomValues,
+} from "@/lib/custom-fields";
+import { isIsoTimestamp } from "@/lib/crm-dates";
+import { canonicalDecimal, compareDecimal } from "@/lib/exact-decimal";
+import { documentRevisionSql, isDocumentRevisionToken } from "@openbooks/engine/records/revision";
+import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
+import { notFound } from "@/lib/api/responses";
+
+const nullableUuid = z.preprocess(
+  (value) => (value === "" ? null : value),
+  uuidString().nullable(),
+);
+const optionalCount = z.union([z.number(), z.string()]).nullable().optional();
+export const requestBodySchema = z
+  .strictObject({
+    annualRevenue: z.string().nullable().optional(),
+    assignmentReason: z.string().nullable().optional(),
+    category: z.string().nullable().optional(),
+    custom: z.record(z.string(), z.json()).optional(),
+    employeeCount: optionalCount,
+    expectedUpdatedAt: z.string().optional(),
+    industry: z.string().nullable().optional(),
+    isActive: z.boolean().optional(),
+    leadSourceId: nullableUuid.optional(),
+    lifecycleStage: z.enum(["lead", "prospect", "customer"]).optional(),
+    nextActionAt: z
+      .string()
+      .refine(
+        (value) => value === "" || isIsoTimestamp(value),
+        "nextActionAt must be an ISO date or date-time",
+      )
+      .nullable()
+      .optional(),
+    ownerUserId: nullableUuid.optional(),
+    qualification: z.record(z.string(), z.json()).nullable().optional(),
+    qualificationScore: optionalCount,
+    route: z.boolean().optional(),
+    stageReason: z.string().nullable().optional(),
+    statusId: nullableUuid.optional(),
+    territoryId: nullableUuid.optional(),
+  })
+  .superRefine((body, context) => {
+    if (body.annualRevenue == null || body.annualRevenue === "") return;
+    const amount = canonicalDecimal(body.annualRevenue, 4);
+    if (amount === null) {
+      context.addIssue({
+        code: "custom",
+        path: ["annualRevenue"],
+        message: moneyRefusal("Annual revenue", body.annualRevenue),
+      });
+    } else if (compareDecimal(amount, "0") < 0) {
+      context.addIssue({
+        code: "custom",
+        path: ["annualRevenue"],
+        message: "annual revenue must be a non-negative amount",
+      });
+    } else if (amount.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15) {
+      context.addIssue({
+        code: "custom",
+        path: ["annualRevenue"],
+        message: "annual revenue must fit the ledger (at most 15 whole digits)",
+      });
+    }
+  });
+
+const STAGES = ["lead", "prospect", "customer"] as const;
+type Stage = (typeof STAGES)[number];
+
+function textOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function uuidOrNull(value: unknown): string | null | "invalid" {
+  const valueText = textOrNull(value);
+  return valueText === null ? null : isUuid(valueText) ? valueText : "invalid";
+}
+
+// Free-text columns clear on null/'' but must actually be text: a number or
+// object would otherwise sail through textOrNull as a silent clear.
+function textOrInvalid(value: unknown): string | null | "invalid" {
+  if (value === null) return null;
+  if (typeof value !== "string") return "invalid";
+  return value.trim() ? value.trim() : null;
+}
+
+/**
+ * The relationship record for one party, plus the pickers its editor needs.
+ *
+ * `options` rides along because the editor is a TAB of the party flyout, not
+ * a page with its own server loader: one round trip has to answer both "what
+ * is this relationship" and "what may it become", or the tab renders selects
+ * with no choices in them. `account: null` is a 200, not a 404 — a customer
+ * created outside CRM simply has no profile yet, and the tab offers to start
+ * one (see POST).
+ */
+import { validateJsonBody } from "@/lib/api/json";
+import type { Authz } from "@/lib/authz";
+
+export async function patchCrmAccount(
+  gate: Authz,
+  id: string,
+  rawBody: Record<string, unknown>,
+  readInCurrentTransaction = false,
+): Promise<NextResponse> {
+  const parsedBody = validateJsonBody(rawBody, requestBodySchema, { status: 422 });
+  if (!parsedBody.ok) return parsedBody.response;
+  const body = parsedBody.data;
+  const { user } = gate;
+  if (!isUuid(id)) return notFound("record");
+  const current = await db.execute<{
+    id: string;
+    lifecycle_stage: string;
+    owner_user_id: string | null;
+    territory_id: string | null;
+    revision: string;
+  }>(
+    sql`
+      select cp.*, ${documentRevisionSql(sql`cp.updated_at`)} as revision, p.display_name, p.is_active as party_active
+        from crm_account_profiles cp join parties p on p.id = cp.party_id and p.org_id = cp.org_id
+       where cp.party_id = ${id} and cp.org_id = ${user.orgId}${crmSharedScope(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`,
+    "objects",
+  );
+  const row = current[0];
+  if (!row) return notFound("record");
+  // Mandatory optimistic-concurrency evidence (same contract as the party,
+  // bank-account, and opportunity saves): the relationship tab holds its
+  // fields in local state, so two tabs must 409 instead of silently
+  // replacing each other. Checked after the existence gate so a missing
+  // token never leaks relationship existence.
+  if (!isDocumentRevisionToken(body.expectedUpdatedAt) || body.expectedUpdatedAt !== row.revision) {
+    return NextResponse.json(
+      { error: "This relationship changed after you opened it; reload and reapply your changes" },
+      { status: 409 },
+    );
+  }
+
+  const stage =
+    body.lifecycleStage === undefined ? undefined : (String(body.lifecycleStage) as Stage);
+  if (stage !== undefined && !STAGES.includes(stage))
+    return NextResponse.json({ error: "invalid lifecycle stage" }, { status: 422 });
+  const statusId = body.statusId === undefined ? undefined : uuidOrNull(body.statusId);
+  if (statusId === "invalid")
+    return NextResponse.json({ error: "invalid statusId: expected a UUID" }, { status: 422 });
+  const ownerUserId = body.ownerUserId === undefined ? undefined : uuidOrNull(body.ownerUserId);
+  if (ownerUserId === "invalid")
+    return NextResponse.json({ error: "invalid ownerUserId: expected a UUID" }, { status: 422 });
+  const territoryId = body.territoryId === undefined ? undefined : uuidOrNull(body.territoryId);
+  if (territoryId === "invalid")
+    return NextResponse.json({ error: "invalid territoryId: expected a UUID" }, { status: 422 });
+  const leadSourceId = body.leadSourceId === undefined ? undefined : uuidOrNull(body.leadSourceId);
+  if (leadSourceId === "invalid")
+    return NextResponse.json({ error: "invalid leadSourceId: expected a UUID" }, { status: 422 });
+  // Number() coerces booleans and single-element arrays (true -> 1), so the
+  // type gate comes first: only numbers and numeric strings reach it.
+  if (
+    body.qualificationScore !== undefined &&
+    body.qualificationScore !== null &&
+    body.qualificationScore !== "" &&
+    typeof body.qualificationScore !== "number" &&
+    typeof body.qualificationScore !== "string"
+  ) {
+    return NextResponse.json(
+      { error: "qualification score must be from 0 to 100" },
+      { status: 422 },
+    );
+  }
+  const score =
+    body.qualificationScore === undefined ||
+    body.qualificationScore === null ||
+    body.qualificationScore === ""
+      ? null
+      : Number(body.qualificationScore);
+  if (score !== null && (!Number.isInteger(score) || score < 0 || score > 100))
+    return NextResponse.json(
+      { error: "qualification score must be from 0 to 100" },
+      { status: 422 },
+    );
+  if (
+    body.employeeCount !== undefined &&
+    body.employeeCount !== null &&
+    body.employeeCount !== "" &&
+    typeof body.employeeCount !== "number" &&
+    typeof body.employeeCount !== "string"
+  ) {
+    return NextResponse.json(
+      { error: "employee count must be a whole number from 0 to 2147483647" },
+      { status: 422 },
+    );
+  }
+  const employeeCount =
+    body.employeeCount === undefined || body.employeeCount === null || body.employeeCount === ""
+      ? null
+      : Number(body.employeeCount);
+  if (
+    employeeCount !== null &&
+    (!Number.isInteger(employeeCount) || employeeCount < 0 || employeeCount > 2147483647)
+  )
+    return NextResponse.json(
+      { error: "employee count must be a whole number from 0 to 2147483647" },
+      { status: 422 },
+    );
+  // A present isActive that is not a boolean used to deactivate the account:
+  // null, "true" and 1 all compared unequal to true and wrote false.
+  const isActive =
+    body.isActive === undefined
+      ? undefined
+      : typeof body.isActive === "boolean"
+        ? body.isActive
+        : ("invalid" as const);
+  if (isActive === "invalid")
+    return NextResponse.json({ error: "isActive must be a boolean" }, { status: 422 });
+  const industry = body.industry === undefined ? undefined : textOrInvalid(body.industry);
+  if (industry === "invalid")
+    return NextResponse.json({ error: "industry must be a string" }, { status: 422 });
+  const category = body.category === undefined ? undefined : textOrInvalid(body.category);
+  if (category === "invalid")
+    return NextResponse.json({ error: "category must be a string" }, { status: 422 });
+  const stageReason = body.stageReason === undefined ? undefined : textOrInvalid(body.stageReason);
+  if (stageReason === "invalid")
+    return NextResponse.json({ error: "stage reason must be a string" }, { status: 422 });
+  const assignmentReason =
+    body.assignmentReason === undefined ? undefined : textOrInvalid(body.assignmentReason);
+  if (assignmentReason === "invalid")
+    return NextResponse.json({ error: "assignment reason must be a string" }, { status: 422 });
+  const annualRevenueRaw =
+    body.annualRevenue === undefined || body.annualRevenue === null || body.annualRevenue === ""
+      ? null
+      : canonicalDecimal(body.annualRevenue, 4);
+  if (
+    body.annualRevenue !== undefined &&
+    body.annualRevenue !== null &&
+    body.annualRevenue !== "" &&
+    annualRevenueRaw === null
+  ) {
+    return NextResponse.json(
+      { error: moneyRefusal("Annual revenue", body.annualRevenue) },
+      { status: 422 },
+    );
+  }
+  if (
+    body.annualRevenue !== undefined &&
+    body.annualRevenue !== null &&
+    body.annualRevenue !== "" &&
+    annualRevenueRaw !== null &&
+    compareDecimal(annualRevenueRaw, "0") < 0
+  ) {
+    return NextResponse.json(
+      { error: "annual revenue must be a non-negative amount" },
+      { status: 422 },
+    );
+  }
+  // annual_revenue is numeric(19,4): refuse wider figures here instead of
+  // dying in Postgres as a raw overflow (HTTP 500 — this verb has no catch).
+  if (
+    annualRevenueRaw !== null &&
+    annualRevenueRaw.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length > 15
+  ) {
+    return NextResponse.json(
+      { error: "annual revenue must fit the ledger (at most 15 whole digits)" },
+      { status: 422 },
+    );
+  }
+  const annualRevenue = annualRevenueRaw === null ? null : normalizeMoney(annualRevenueRaw);
+  if (body.nextActionAt != null && body.nextActionAt !== "" && !isIsoTimestamp(body.nextActionAt)) {
+    return NextResponse.json(
+      { error: "invalid nextActionAt: expected an ISO date or date-time" },
+      { status: 422 },
+    );
+  }
+  const qualification = body.qualification === undefined ? undefined : body.qualification;
+  if (
+    qualification !== undefined &&
+    (qualification === null || typeof qualification !== "object" || Array.isArray(qualification))
+  ) {
+    return NextResponse.json({ error: "qualification must be an object" }, { status: 422 });
+  }
+
+  let statusStage: string | null = null;
+  if (statusId && typeof statusId === "string") {
+    const owner = await db.execute<{ lifecycle_stage: string }>(
+      sql`
+        select lifecycle_stage from crm_account_statuses where id = ${statusId} and org_id = ${user.orgId} and is_active`,
+      "objects",
+    );
+    statusStage = owner[0]?.lifecycle_stage ?? null;
+    // Unknown or inactive statuses always fail closed. A stage change can
+    // explain a known status from the old stage because the drawer submits
+    // its whole form, including that now-stale value.
+    if (statusStage === null)
+      return NextResponse.json({ error: "status does not belong to this stage" }, { status: 422 });
+    if (statusStage !== (stage ?? row.lifecycle_stage) && !stage) {
+      return NextResponse.json({ error: "status does not belong to this stage" }, { status: 422 });
+    }
+  }
+  // A whole-form drawer save can carry a status from the old stage. Ignore
+  // it so the stage transition can use the target stage's active default;
+  // an explicit status for the new stage is preserved.
+  const statusWrite = stage && statusStage !== stage ? undefined : statusId;
+  const referenceChecks = await Promise.all([
+    ownerUserId && ownerUserId !== "invalid"
+      ? db.execute(sql`select 1 from users where id = ${ownerUserId} and org_id = ${user.orgId}`)
+      : null,
+    territoryId && territoryId !== "invalid"
+      ? db.execute(
+          sql`select 1 from crm_sales_territories where id = ${territoryId} and org_id = ${user.orgId}`,
+        )
+      : null,
+    leadSourceId && leadSourceId !== "invalid"
+      ? db.execute(
+          sql`select 1 from crm_lead_sources where id = ${leadSourceId} and org_id = ${user.orgId}`,
+        )
+      : null,
+  ]);
+  if (
+    referenceChecks.some((result) => result && !(result as unknown as { rows: unknown[] }).rows[0])
+  ) {
+    return NextResponse.json(
+      { error: "reference belongs to another organization" },
+      { status: 422 },
+    );
+  }
+  if (
+    stage &&
+    { lead: 0, prospect: 1, customer: 2 }[stage] <
+      { lead: 0, prospect: 1, customer: 2 }[row.lifecycle_stage as Stage] &&
+    !stageReason
+  ) {
+    return NextResponse.json(
+      { error: "a reason is required to move an account backward" },
+      { status: 422 },
+    );
+  }
+
+  const denied = await db.transaction(async (tx) => {
+    const visible = await tx.execute(
+      sql`select id from parties where id=${id} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`, gate.allowedSubsidiaryIds)} for update`,
+      "objects",
+    );
+    if (!visible.length) return notFound("record");
+    // Re-check the token under the profile lock: the pre-transaction
+    // comparison raced this lock's acquisition, and the stage transitions
+    // below bump updated_at (so the field update cannot pin the token
+    // itself) — the lock plus this re-check is what serializes two tabs.
+    const locked = await tx.execute<{ revision: string; custom: Record<string, unknown> | null }>(
+      sql`
+        select ${documentRevisionSql(sql`updated_at`)} as revision, custom from crm_account_profiles
+         where id = ${row.id} and org_id = ${user.orgId} for update`,
+      "objects",
+    );
+    if (!locked[0] || locked[0].revision !== body.expectedUpdatedAt) {
+      return NextResponse.json(
+        {
+          error: "This relationship changed after you opened it; reload and reapply your changes",
+        },
+        { status: 409 },
+      );
+    }
+    // Custom values merge into the locked profile's bag (same contract as the
+    // opportunity route): the effective bag is validated, supplied references
+    // must belong to this organization, and a cleared value drops out.
+    let mergedCustom: Record<string, unknown> | undefined;
+    if (body.custom !== undefined) {
+      const defs = await loadFieldDefs("crm_account_profiles");
+      const unknownKey = unknownCustomFieldKey(defs, body.custom);
+      if (unknownKey)
+        return NextResponse.json({ error: `unknown custom field: ${unknownKey}` }, { status: 422 });
+      const existingCustom = locked[0]!.custom ?? {};
+      const result = validateCustomValues(defs, { ...existingCustom, ...body.custom });
+      if (!result.ok)
+        return NextResponse.json(
+          { error: Object.values(result.errors)[0], fieldErrors: result.errors },
+          { status: 422 },
+        );
+      const suppliedCustom: Record<string, unknown> = {};
+      for (const key of Object.keys(body.custom)) {
+        if (result.cleaned[key] !== undefined) suppliedCustom[key] = result.cleaned[key];
+      }
+      const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom);
+      if (unowned.length > 0)
+        return NextResponse.json(
+          { error: `${unowned[0]!.label} not found in this organization` },
+          { status: 422 },
+        );
+      mergedCustom = { ...existingCustom };
+      for (const def of defs) delete mergedCustom[def.key];
+      Object.assign(mergedCustom, result.cleaned);
+    }
+    // A demotion owns the stage, the status and the stage event through the
+    // transition helper; the field update below must not re-own the status
+    // it just wrote. (Promotion keeps the existing split: the helper assigns
+    // the default status and the field update applies an explicit one.)
+    let statusOwnedByTransition = false;
+    if (stage && stage !== row.lifecycle_stage) {
+      const rank = { lead: 0, prospect: 1, customer: 2 };
+      if (rank[stage] > rank[row.lifecycle_stage as Stage]) {
+        const promotion = await promoteCrmAccount(tx, {
+          orgId: user.orgId,
+          partyId: id,
+          actorId: user.id,
+          toStage: stage,
+          sourceKind: "manual",
+          reason: stageReason ?? null,
+        });
+        // This route is CRM-gated, so lifecycle bookkeeping must land; a
+        // customer promotion additionally requires the AR role.
+        if (!promotion.lifecycleApplied) {
+          throw new Error("CRM lifecycle transition was not applied");
+        }
+        if (stage === "customer" && !promotion.customerRoleActive) {
+          throw new Error("customer role was not established while promoting the account");
+        }
+      } else {
+        try {
+          const demotion = await transitionCrmAccountStage(tx, {
+            orgId: user.orgId,
+            partyId: id,
+            actorId: user.id,
+            toStage: stage,
+            sourceKind: "manual",
+            reason: stageReason ?? null,
+            statusId: statusWrite,
+          });
+          if (!demotion.lifecycleApplied) {
+            throw new Error("CRM lifecycle transition was not applied");
+          }
+        } catch (error) {
+          // An unsafe demotion is an operator-actionable refusal, not a
+          // server fault: answer 422 with the message that names the remedy.
+          if (error instanceof CrmLifecycleRefusalError) {
+            return apiErrorResponse(error, { safeStatus: 422 });
+          }
+          throw error;
+        }
+        statusOwnedByTransition = true;
+      }
+    }
+    await tx.execute(sql`
+        update crm_account_profiles set
+          status_id = ${statusOwnedByTransition ? sql`status_id` : statusWrite !== undefined ? statusWrite : sql`status_id`},
+          owner_user_id = ${ownerUserId !== undefined ? ownerUserId : sql`owner_user_id`},
+          territory_id = ${territoryId !== undefined ? territoryId : sql`territory_id`},
+          lead_source_id = ${leadSourceId !== undefined ? leadSourceId : sql`lead_source_id`},
+          industry = ${industry !== undefined ? industry : sql`industry`},
+          category = ${category !== undefined ? category : sql`category`},
+          annual_revenue = ${body.annualRevenue !== undefined ? annualRevenue : sql`annual_revenue`},
+          employee_count = ${body.employeeCount !== undefined ? employeeCount : sql`employee_count`},
+          qualification_score = ${body.qualificationScore !== undefined ? score : sql`qualification_score`},
+          qualification = ${qualification !== undefined ? JSON.stringify(qualification) : sql`qualification`}::jsonb,
+          next_action_at = ${body.nextActionAt !== undefined ? textOrNull(body.nextActionAt) : sql`next_action_at`},
+          is_active = ${isActive !== undefined ? isActive : sql`is_active`},
+          custom = ${mergedCustom !== undefined ? sql`${JSON.stringify(mergedCustom)}::jsonb` : sql`custom`},
+          updated_at = now(), updated_by = ${user.id}
+        where id = ${row.id} and org_id = ${user.orgId}`);
+    if (
+      (ownerUserId !== undefined && ownerUserId !== row.owner_user_id) ||
+      (territoryId !== undefined && territoryId !== row.territory_id)
+    ) {
+      await tx.execute(sql`
+          insert into crm_account_assignment_events
+            (org_id, account_profile_id, from_owner_user_id, to_owner_user_id, from_territory_id, to_territory_id,
+             source, reason, created_by, updated_by)
+          values (${user.orgId}, ${row.id}, ${row.owner_user_id}, ${ownerUserId === undefined ? row.owner_user_id : ownerUserId},
+                  ${row.territory_id}, ${territoryId === undefined ? row.territory_id : territoryId},
+                  'manual', ${assignmentReason ?? null}, ${user.id}, ${user.id})`);
+    }
+    // The audit records the profile row actually written, re-read in this
+    // transaction — not the request body, which may name fields the write
+    // ignored and values the validators normalized.
+    const after = (
+      await tx.execute(
+        sql`
+        select cp.*, p.display_name, p.is_active as party_active
+          from crm_account_profiles cp join parties p on p.id = cp.party_id and p.org_id = cp.org_id
+         where cp.id = ${row.id} and cp.org_id = ${user.orgId}`,
+        "objects",
+      )
+    )[0];
+    if (body.route === true) await routeSalesAccount(tx, user.orgId, row.id, user.id);
+    await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${user.orgId}, 'crm_account_profiles', ${row.id}, 'update',
+                ${JSON.stringify({ before: row, after })}::jsonb, ${user.id})`);
+  });
+  if (denied) return denied;
+  const result = readInCurrentTransaction
+    ? await loadCrmAccountInCurrentTransaction(id, user.orgId, gate.allowedSubsidiaryIds)
+    : await loadCrmAccount(id, user.orgId, gate.allowedSubsidiaryIds);
+  return NextResponse.json(result);
+}

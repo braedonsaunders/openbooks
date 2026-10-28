@@ -6,11 +6,6 @@ import { db } from "@openbooks/engine/platform/db";
 import { documentRevisionSql } from "@openbooks/engine/records/revision";
 import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import { QuoteToCashError } from "@openbooks/engine/billing/quote-to-cash";
-import {
-  CrmLifecycleRefusalError,
-  promoteCrmAccount,
-  transitionCrmAccountStage,
-} from "@openbooks/engine/crm/crm";
 import { SalesError, previewTerritory, writeSalesCommand } from "@openbooks/engine/crm/sales";
 import { hasGeographicCoverage } from "@openbooks/engine/crm/sales/contracts";
 import { can } from "../authz";
@@ -26,6 +21,7 @@ import {
   crmOpportunityEstimateKey,
   createCrmOpportunityEstimate,
 } from "../crm/opportunity-estimate";
+import { deleteCrmOpportunity, patchCrmOpportunity } from "../crm/opportunity-actions";
 import {
   createCrmAccountDraft,
   createCrmActivityDraft,
@@ -33,14 +29,29 @@ import {
   startCrmAccountTracking,
   type CrmActionResponse,
 } from "../crm/actions";
+import { patchCrmAccount } from "../crm/account-actions";
 import { isFeatureEnabled, featureEnabled, resolvedFeatureState } from "../features";
 import { salesCommandSchema, salesTerritorySchema } from "../crm/sales-schema";
-import { ApplicationError, invalidInput, notFound } from "./errors";
+import { ApplicationError, notFound } from "./errors";
 import { assertApplicationPermission, type ApplicationContext } from "./context";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 import { CRM_SERVICE_APPLICATION_TOOLS } from "./crm-tools-service";
 import { assignPartyRolesInSlice, removePartyRoleFromParty } from "../party-role-actions";
 import { sendPartyStatement } from "../party-statement";
+import { loadPartyBankAccounts } from "../party-bank-accounts";
+import {
+  createPartyBankAccount,
+  bankAccountCreateBody,
+  bankAccountPatchBody,
+  bankAccountRetirementBody,
+  retirePartyBankAccount,
+  submitPartyBankAccount,
+  updatePartyBankAccount,
+} from "../party-bank-account-actions";
+import {
+  authorizePartyBankWriteWithAuthz,
+  denyOutsidePartyScope,
+} from "@/app/api/parties/[id]/bank-accounts/party-scope";
 import { createCrmForecastSnapshot, crmForecastSnapshotSchema } from "../crm/forecasts";
 import {
   crmAccountStatusBody,
@@ -67,6 +78,80 @@ const IDEMPOTENCY_KEY = z
   .regex(/^[A-Za-z0-9._:-]{8,200}$/)
   .describe("Unique retry key for this exact mutation.");
 
+const crmAccountUpdateBody = z.strictObject({
+  annualRevenue: z
+    .string()
+    .max(100)
+    .nullable()
+    .optional()
+    .describe("Annual revenue as an exact decimal string, or null to clear it."),
+  assignmentReason: z
+    .string()
+    .max(2000)
+    .nullable()
+    .optional()
+    .describe("Reason recorded when changing the account owner or territory."),
+  category: z.string().max(2000).nullable().optional().describe("CRM account category."),
+  custom: z
+    .record(z.string().max(100), z.json())
+    .optional()
+    .describe("Custom CRM account fields keyed by configured field name."),
+  employeeCount: z
+    .union([z.number().int().min(0).max(2147483647), z.string().max(20)])
+    .nullable()
+    .optional()
+    .describe("Employee count as an integer or digit string, or null to clear it."),
+  expectedUpdatedAt: z
+    .string()
+    .min(1)
+    .max(100)
+    .describe("Exact current revision from get_crm_account."),
+  industry: z.string().max(2000).nullable().optional().describe("Industry description."),
+  isActive: z.boolean().optional().describe("Whether the CRM account remains active."),
+  leadSourceId: UUID.nullable()
+    .optional()
+    .describe("Lead-source UUID from get_crm_pipeline_setup, or null to clear it."),
+  lifecycleStage: z
+    .enum(["lead", "prospect", "customer"])
+    .optional()
+    .describe("CRM lifecycle stage; customer promotion also establishes the customer role."),
+  nextActionAt: z
+    .string()
+    .max(100)
+    .nullable()
+    .optional()
+    .describe("Next action date or timestamp in ISO format, or null to clear it."),
+  ownerUserId: UUID.nullable()
+    .optional()
+    .describe("Organization user UUID to assign as owner, or null to clear the owner."),
+  qualification: z
+    .record(z.string().max(100), z.json())
+    .nullable()
+    .optional()
+    .describe("Qualification answers as a JSON object, or null to clear them."),
+  qualificationScore: z
+    .union([z.number().int().min(0).max(100), z.string().max(20)])
+    .nullable()
+    .optional()
+    .describe("Qualification score from 0 to 100, or null to clear it."),
+  route: z
+    .boolean()
+    .optional()
+    .describe("Whether to route the account through its configured territory rules."),
+  stageReason: z
+    .string()
+    .max(2000)
+    .nullable()
+    .optional()
+    .describe("Reason recorded for a lifecycle stage change."),
+  statusId: UUID.nullable()
+    .optional()
+    .describe("Active account status UUID for the selected lifecycle stage, or null to clear it."),
+  territoryId: UUID.nullable()
+    .optional()
+    .describe("Sales territory UUID from get_crm_pipeline_setup, or null to clear it."),
+});
+
 async function requireFeature(context: ApplicationContext, feature: string): Promise<void> {
   const state = await resolvedFeatureState(context.authz.user.orgId);
   if (!featureEnabled(state, feature)) throw notFound(`${feature} record`);
@@ -74,6 +159,47 @@ async function requireFeature(context: ApplicationContext, feature: string): Pro
 
 function crmPermission(context: ApplicationContext, permission: string): void {
   assertApplicationPermission(context, permission);
+}
+
+async function requireCrmAccountVisible(
+  context: ApplicationContext,
+  partyId: string,
+): Promise<void> {
+  const visible = await db.execute(
+    sql`select p.id from parties p join crm_account_profiles cp on cp.org_id=p.org_id and cp.party_id=p.id
+      where p.id=${partyId} and p.org_id=${context.authz.user.orgId}${crmSharedScope(sql`p.subsidiary_id`, context.authz.allowedSubsidiaryIds)}`,
+    "objects",
+  );
+  if (!visible.length) throw notFound("CRM account");
+}
+
+const PARTY_BANK_PERMISSIONS = [
+  "parties.manage",
+  "hrm.employment.manage",
+  "payroll.manage",
+] as const;
+
+function assertPartyBankPermission(context: ApplicationContext): void {
+  const permission = PARTY_BANK_PERMISSIONS.find((candidate) => can(context.authz, candidate));
+  assertApplicationPermission(context, permission ?? "parties.manage");
+}
+
+function partyBankRequest(
+  context: ApplicationContext,
+  partyId: string,
+  accountId?: string,
+): Request {
+  const url = new URL(`/api/parties/${partyId}/bank-accounts`, "http://openbooks.local");
+  if (accountId) url.searchParams.set("accountId", accountId);
+  return new Request(url, { headers: { "X-Request-Id": context.requestId } });
+}
+
+async function authorizePartyBankTool(context: ApplicationContext, partyId: string): Promise<void> {
+  assertPartyBankPermission(context);
+  const denied = await authorizePartyBankWriteWithAuthz(context.authz, partyId);
+  if (denied) await settleNativeResponse(denied);
+  const scopeDenied = await denyOutsidePartyScope(context.authz, partyId);
+  if (scopeDenied) await settleNativeResponse(scopeDenied);
 }
 
 function settleCrmRefusal(error: unknown): never {
@@ -87,9 +213,6 @@ function settleCrmRefusal(error: unknown): never {
             ? "conflict"
             : "invalid_input";
     throw new ApplicationError(code, error.message, error.status);
-  }
-  if (error instanceof CrmLifecycleRefusalError) {
-    throw invalidInput(error.message);
   }
   if (error instanceof SalesError) {
     const code =
@@ -168,6 +291,7 @@ type CrmMutationArgs<T extends z.ZodType> = {
   feature: string;
   destructive?: boolean;
   openWorld?: boolean;
+  authorizeReplay?: (context: ApplicationContext, input: z.output<NoInfer<T>>) => Promise<void>;
   execute: (
     context: ApplicationContext,
     input: z.output<NoInfer<T>>,
@@ -186,6 +310,7 @@ function crmMutation<T extends z.ZodType>(args: CrmMutationArgs<T>) {
     assistantConfirmation: "always",
     visibleTo: (authz) => can(authz, args.permission),
     featureKey: args.feature,
+    authorizeReplay: args.authorizeReplay,
     execute: async (context, input) => {
       crmPermission(context, args.permission);
       await requireFeature(context, args.feature);
@@ -339,6 +464,32 @@ export const CRM_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     },
   }),
   crmMutation({
+    name: "update_crm_account",
+    title: "Update CRM Account",
+    description:
+      "Update CRM lifecycle, account status, ownership, territory, lead source, qualification and profile fields using the current revision. Read the account with get_crm_account and available setup ids with get_crm_pipeline_setup.",
+    inputSchema: crmAccountUpdateBody.extend({
+      partyId: UUID.describe("Tracked party UUID returned by search_crm_accounts."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    permission: "crm.accounts.manage",
+    feature: "crm",
+    authorizeReplay: async (context, input) => requireCrmAccountVisible(context, input.partyId),
+    execute: async (context, input) => {
+      const { idempotencyKey: _key, partyId, ...body } = input;
+      const response = await patchCrmAccount(context.authz, partyId, body, true);
+      const result = await settleNativeResponse(response);
+      const profile = result.profile as Record<string, unknown> | undefined;
+      return {
+        ok: true,
+        ...result,
+        partyId,
+        status: profile?.lifecycle_stage,
+        href: `/crm/accounts?party=${partyId}`,
+      };
+    },
+  }),
+  crmMutation({
     name: "create_crm_opportunity",
     title: "Create CRM Opportunity",
     description:
@@ -359,6 +510,116 @@ export const CRM_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
         ok: true,
         opportunityId: body.id,
         href: `/crm/opportunities?opportunity=${body.id}`,
+      };
+    },
+  }),
+  definition({
+    name: "move_crm_opportunity_stage",
+    title: "Move CRM Opportunity Stage",
+    description:
+      "Move an opportunity to a configured stage, including won or lost outcomes. Read the current revision with get_opportunity and stage ids with get_crm_pipeline_setup; closed stages also require the close permission and may enforce configured entry requirements.",
+    inputSchema: z.strictObject({
+      opportunityId: UUID.describe("Opportunity UUID returned by get_opportunity."),
+      statusId: UUID.describe("Target stage UUID from get_crm_pipeline_setup."),
+      expectedUpdatedAt: z
+        .string()
+        .min(1)
+        .max(100)
+        .describe("Current exact revision token from get_opportunity.updated_at."),
+      probability: z
+        .number()
+        .int()
+        .min(0)
+        .max(100)
+        .optional()
+        .describe(
+          "Optional probability percentage; defaults to the target stage's configured value.",
+        ),
+      forecastCategory: z
+        .enum(["omitted", "worst_case", "most_likely", "upside"])
+        .optional()
+        .describe("Optional forecast category; defaults to the target stage's configured value."),
+      stageReason: z
+        .string()
+        .max(2000)
+        .nullable()
+        .optional()
+        .describe("Optional reason recorded for the stage transition."),
+      winLossReason: z
+        .string()
+        .max(2000)
+        .nullable()
+        .optional()
+        .describe("Win or loss reason required when the configured target stage requires it."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => can(authz, "crm.opportunities.manage"),
+    featureKey: "crm",
+    authorizeReplay: async (context, input) => {
+      crmPermission(context, "crm.opportunities.manage");
+      await requireFeature(context, "crm");
+      const target = await db.execute<{ is_closed: boolean }>(
+        sql`select is_closed from crm_opportunity_statuses where id = ${input.statusId} and org_id = ${context.authz.user.orgId} and is_active`,
+        "objects",
+      );
+      if (target[0]?.is_closed) crmPermission(context, "crm.opportunities.close");
+    },
+    execute: async (context, input) => {
+      crmPermission(context, "crm.opportunities.manage");
+      await requireFeature(context, "crm");
+      const response = await patchCrmOpportunity(
+        context.authz,
+        input.opportunityId,
+        {
+          statusId: input.statusId,
+          expectedUpdatedAt: input.expectedUpdatedAt,
+          ...(input.probability === undefined ? {} : { probability: input.probability }),
+          ...(input.forecastCategory === undefined
+            ? {}
+            : { forecastCategory: input.forecastCategory }),
+          ...(input.stageReason === undefined ? {} : { stageReason: input.stageReason }),
+          ...(input.winLossReason === undefined ? {} : { winLossReason: input.winLossReason }),
+        },
+        async () => {
+          crmPermission(context, "crm.opportunities.close");
+          return null;
+        },
+        true,
+      );
+      const opportunity = await settleNativeResponse(response);
+      return {
+        ok: true,
+        opportunityId: input.opportunityId,
+        ...opportunity,
+        status: opportunity.status_name,
+        href: `/crm/opportunities?opportunity=${input.opportunityId}`,
+      };
+    },
+  }),
+  crmMutation({
+    name: "delete_crm_opportunity",
+    title: "Delete CRM Opportunity",
+    description:
+      "Delete an unlinked opportunity and its CRM-only lines, team, stage history and activity links. Use get_opportunity to confirm the id; opportunities with linked sales documents must be closed instead.",
+    inputSchema: z.strictObject({
+      opportunityId: UUID.describe("Opportunity UUID returned by get_opportunity."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    permission: "crm.opportunities.manage",
+    feature: "crm",
+    destructive: true,
+    execute: async (context, input) => {
+      const response = await deleteCrmOpportunity(context.authz, input.opportunityId);
+      await settleNativeResponse(response);
+      return {
+        ok: true,
+        opportunityId: input.opportunityId,
+        status: "deleted",
+        href: "/crm/opportunities",
       };
     },
   }),
@@ -486,50 +747,43 @@ export const CRM_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     name: "move_crm_account_stage",
     title: "Move CRM Account Stage",
     description:
-      "Move a tracked account to lead, prospect or customer and record a reason. Find the party id and current lifecycle stage with search_crm_accounts; moving backward requires a reason.",
-    inputSchema: z.object({
-      partyId: UUID,
+      "Move a tracked account to lead, prospect or customer through the account editor's lifecycle rules. Read the current account revision with get_crm_account and stage ids with get_crm_pipeline_setup; moving backward requires a reason.",
+    inputSchema: z.strictObject({
+      partyId: UUID.describe("Tracked party UUID returned by search_crm_accounts."),
       toStage: z.enum(["lead", "prospect", "customer"]).describe("Target CRM lifecycle stage."),
       statusId: UUID.nullable()
         .optional()
         .describe("Active status in the target stage; omit to use its configured default."),
       reason: z.string().trim().min(1).max(2000).describe("Why the lifecycle stage is changing."),
+      expectedUpdatedAt: z
+        .string()
+        .min(1)
+        .max(100)
+        .describe("Exact current revision from get_crm_account."),
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
     permission: "crm.accounts.manage",
     feature: "crm",
+    authorizeReplay: async (context, input) => requireCrmAccountVisible(context, input.partyId),
     execute: async (context, input) => {
-      const orgId = context.authz.user.orgId;
-      const visible = await db.execute(
-        sql`select p.id from parties p join crm_account_profiles cp on cp.org_id=p.org_id and cp.party_id=p.id
-          where p.id=${input.partyId} and p.org_id=${orgId}${crmSharedScope(sql`p.subsidiary_id`, context.authz.allowedSubsidiaryIds)}`,
-        "objects",
+      const response = await patchCrmAccount(
+        context.authz,
+        input.partyId,
+        {
+          lifecycleStage: input.toStage,
+          statusId: input.statusId,
+          stageReason: input.reason,
+          expectedUpdatedAt: input.expectedUpdatedAt,
+        },
+        true,
       );
-      if (!visible.length) throw notFound("CRM account");
-      const result = await db.transaction((tx) =>
-        input.toStage === "customer"
-          ? promoteCrmAccount(tx, {
-              orgId,
-              partyId: input.partyId,
-              actorId: context.authz.user.id,
-              toStage: "customer",
-              sourceKind: "manual",
-              reason: input.reason,
-            })
-          : transitionCrmAccountStage(tx, {
-              orgId,
-              partyId: input.partyId,
-              actorId: context.authz.user.id,
-              toStage: input.toStage,
-              sourceKind: "manual",
-              reason: input.reason,
-              statusId: input.statusId,
-            }),
-      );
+      const result = await settleNativeResponse(response);
+      const profile = result.profile as Record<string, unknown> | undefined;
       return {
         ok: true,
         partyId: input.partyId,
         ...result,
+        status: profile?.lifecycle_stage,
         href: `/crm/accounts?party=${input.partyId}`,
       };
     },
@@ -538,41 +792,43 @@ export const CRM_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
     name: "convert_crm_lead",
     title: "Convert CRM Lead",
     description:
-      "Convert a lead or prospect to an active customer through the CRM lifecycle, including the customer role and stage evidence. Find the party id with search_crm_accounts.",
-    inputSchema: z.object({
-      partyId: UUID,
+      "Convert a lead or prospect to an active customer through the account editor's lifecycle rules, including the customer role and stage evidence. Read the current revision with get_crm_account first.",
+    inputSchema: z.strictObject({
+      partyId: UUID.describe("Tracked party UUID returned by search_crm_accounts."),
       reason: z
         .string()
         .trim()
         .min(1)
         .max(2000)
         .describe("Reason for converting the lead to a customer."),
+      expectedUpdatedAt: z
+        .string()
+        .min(1)
+        .max(100)
+        .describe("Exact current revision from get_crm_account."),
       idempotencyKey: IDEMPOTENCY_KEY,
     }),
     permission: "crm.accounts.manage",
     feature: "crm",
+    authorizeReplay: async (context, input) => requireCrmAccountVisible(context, input.partyId),
     execute: async (context, input) => {
-      const orgId = context.authz.user.orgId;
-      const visible = await db.execute(
-        sql`select p.id from parties p join crm_account_profiles cp on cp.org_id=p.org_id and cp.party_id=p.id
-          where p.id=${input.partyId} and p.org_id=${orgId}${crmSharedScope(sql`p.subsidiary_id`, context.authz.allowedSubsidiaryIds)}`,
-        "objects",
+      const response = await patchCrmAccount(
+        context.authz,
+        input.partyId,
+        {
+          lifecycleStage: "customer",
+          stageReason: input.reason,
+          expectedUpdatedAt: input.expectedUpdatedAt,
+        },
+        true,
       );
-      if (!visible.length) throw notFound("CRM account");
-      const result = await db.transaction((tx) =>
-        promoteCrmAccount(tx, {
-          orgId,
-          partyId: input.partyId,
-          actorId: context.authz.user.id,
-          toStage: "customer",
-          sourceKind: "manual",
-          reason: input.reason,
-        }),
-      );
+      const result = await settleNativeResponse(response);
+      const profile = result.profile as Record<string, unknown> | undefined;
       return {
         ok: true,
         partyId: input.partyId,
         ...result,
+        status: profile?.lifecycle_stage,
         href: `/crm/accounts?party=${input.partyId}`,
       };
     },
@@ -862,6 +1118,179 @@ export const CRM_APPLICATION_TOOLS: ApplicationToolDefinition[] = [
         addresses,
         contacts,
         href: `/parties?party=${party.id}`,
+      };
+    },
+  }),
+  definition({
+    name: "get_party_bank_accounts",
+    title: "Get Party Bank Accounts",
+    description:
+      "Read the party drawer's bank-detail rows, approval state, masked last four digits and exact revision token. Find the party id with search_parties; account numbers are never returned in plaintext.",
+    inputSchema: z.strictObject({
+      partyId: UUID.describe("Party UUID returned by search_parties."),
+    }),
+    readOnly: true,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "never",
+    visibleTo: (authz) => can(authz, "parties.read"),
+    execute: async (context, input) => {
+      assertApplicationPermission(context, "parties.read");
+      const bankAccountRead = await loadPartyBankAccounts(
+        input.partyId,
+        context.authz.user.orgId,
+        context.authz.allowedSubsidiaryIds,
+      );
+      if (!bankAccountRead) throw notFound("party");
+      return {
+        partyId: input.partyId,
+        bankAccounts: bankAccountRead.rows,
+        href: `/parties?party=${input.partyId}`,
+      };
+    },
+  }),
+  definition({
+    name: "create_party_bank_account",
+    title: "Create Party Bank Account",
+    description:
+      "Record new party bank details; the account number is encrypted and approval flow rules determine whether the account remains pending or activates. Find the party id with search_parties, and read masked details with get_party_bank_accounts.",
+    inputSchema: bankAccountCreateBody.extend({
+      partyId: UUID.describe("Party UUID returned by search_parties."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => PARTY_BANK_PERMISSIONS.some((permission) => can(authz, permission)),
+    authorizeReplay: async (context, input) => authorizePartyBankTool(context, input.partyId),
+    execute: async (context, input) => {
+      await authorizePartyBankTool(context, input.partyId);
+      const { idempotencyKey: _key, partyId, ...body } = input;
+      const result = await settleNativeResponse(
+        await createPartyBankAccount({
+          request: partyBankRequest(context, partyId),
+          authz: context.authz,
+          params: { id: partyId },
+          body,
+        }),
+      );
+      return {
+        ok: true,
+        ...result,
+        bankAccountId: result.id,
+        partyId,
+        status: result.approvalStatus,
+        href: `/parties?party=${partyId}`,
+      };
+    },
+  }),
+  definition({
+    name: "update_party_bank_account",
+    title: "Update Party Bank Account",
+    description:
+      "Replace material bank details using the current exact revision and a reason; every material edit re-enters approval and may cancel stale approval gates. Read account ids and revisions with get_party_bank_accounts.",
+    inputSchema: bankAccountPatchBody.extend({
+      partyId: UUID.describe("Party UUID returned by search_parties."),
+      accountId: UUID.describe("Bank-account UUID from get_party_bank_accounts."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => PARTY_BANK_PERMISSIONS.some((permission) => can(authz, permission)),
+    authorizeReplay: async (context, input) => authorizePartyBankTool(context, input.partyId),
+    execute: async (context, input) => {
+      await authorizePartyBankTool(context, input.partyId);
+      const { idempotencyKey: _key, partyId, accountId, ...body } = input;
+      const result = await settleNativeResponse(
+        await updatePartyBankAccount({
+          request: partyBankRequest(context, partyId, accountId),
+          authz: context.authz,
+          params: { id: partyId },
+          body,
+        }),
+      );
+      return {
+        ok: true,
+        ...result,
+        bankAccountId: accountId,
+        partyId,
+        status: result.approvalStatus,
+        href: `/parties?party=${partyId}`,
+      };
+    },
+  }),
+  definition({
+    name: "retire_party_bank_account",
+    title: "Retire Party Bank Account",
+    description:
+      "Retire bank details with the current exact revision and a reason after cancelling in-flight payment instructions and revoking live mandates. Read account ids and revisions with get_party_bank_accounts.",
+    inputSchema: bankAccountRetirementBody.extend({
+      partyId: UUID.describe("Party UUID returned by search_parties."),
+      accountId: UUID.describe("Bank-account UUID from get_party_bank_accounts."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: true,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => PARTY_BANK_PERMISSIONS.some((permission) => can(authz, permission)),
+    authorizeReplay: async (context, input) => authorizePartyBankTool(context, input.partyId),
+    execute: async (context, input) => {
+      await authorizePartyBankTool(context, input.partyId);
+      const { idempotencyKey: _key, partyId, accountId, ...body } = input;
+      const result = await settleNativeResponse(
+        await retirePartyBankAccount({
+          request: partyBankRequest(context, partyId, accountId),
+          authz: context.authz,
+          params: { id: partyId },
+          body,
+        }),
+      );
+      return {
+        ok: true,
+        ...result,
+        bankAccountId: accountId,
+        partyId,
+        status: "retired",
+        href: `/parties?party=${partyId}`,
+      };
+    },
+  }),
+  definition({
+    name: "submit_party_bank_account_for_approval",
+    title: "Submit Party Bank Account for Approval",
+    description:
+      "Submit pending party bank details to the configured approval flow, or apply them directly when no flow governs the record. Read pending account ids and statuses with get_party_bank_accounts.",
+    inputSchema: z.strictObject({
+      partyId: UUID.describe("Party UUID returned by search_parties."),
+      accountId: UUID.describe("Pending bank-account UUID from get_party_bank_accounts."),
+      idempotencyKey: IDEMPOTENCY_KEY,
+    }),
+    readOnly: false,
+    destructive: false,
+    openWorld: false,
+    assistantConfirmation: "always",
+    visibleTo: (authz) => PARTY_BANK_PERMISSIONS.some((permission) => can(authz, permission)),
+    authorizeReplay: async (context, input) => authorizePartyBankTool(context, input.partyId),
+    execute: async (context, input) => {
+      await authorizePartyBankTool(context, input.partyId);
+      const result = await settleNativeResponse(
+        await submitPartyBankAccount({
+          request: partyBankRequest(context, input.partyId, input.accountId),
+          authz: context.authz,
+          params: { id: input.partyId },
+        }),
+      );
+      return {
+        ok: true,
+        ...result,
+        bankAccountId: input.accountId,
+        partyId: input.partyId,
+        status: result.approvalStatus,
+        href: `/parties?party=${input.partyId}`,
       };
     },
   }),

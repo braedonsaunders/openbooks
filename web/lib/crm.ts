@@ -20,6 +20,15 @@ export function loadCrmAccount(
   return withScopeSnapshot(orgId, () => loadCrmAccountSnapshot(partyId, orgId, allowed));
 }
 
+/** Read an account through its native loader inside an existing transaction. */
+export function loadCrmAccountInCurrentTransaction(
+  partyId: string,
+  orgId: string,
+  allowed?: ReadonlySet<string> | null,
+) {
+  return loadCrmAccountSnapshot(partyId, orgId, allowed);
+}
+
 async function loadCrmAccountSnapshot(
   partyId: string,
   orgId: string,
@@ -111,6 +120,15 @@ async function loadCrmAccountSnapshot(
 
 export function loadOpportunity(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
   return withScopeSnapshot(orgId, () => loadOpportunitySnapshot(id, orgId, allowed));
+}
+
+/** Read an opportunity through its native loader inside an existing transaction. */
+export function loadOpportunityInCurrentTransaction(
+  id: string,
+  orgId: string,
+  allowed?: ReadonlySet<string> | null,
+) {
+  return loadOpportunitySnapshot(id, orgId, allowed);
 }
 
 async function loadOpportunitySnapshot(

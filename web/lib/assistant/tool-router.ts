@@ -324,10 +324,15 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
 
   // CRM and service commands.
   assign_party_roles: "crm",
+  create_party_bank_account: "crm",
+  get_party_bank_accounts: "crm",
   get_party_relationships: "crm",
+  retire_party_bank_account: "crm",
   remove_party_role: "crm",
   replace_party_relationships: "crm",
   send_party_statement: "crm",
+  submit_party_bank_account_for_approval: "crm",
+  update_party_bank_account: "crm",
 
   // Administration commands.
   list_transaction_forms: "admin",
