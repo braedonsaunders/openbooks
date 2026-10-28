@@ -20,7 +20,7 @@ import {
   generateBillingRequestBackup,
 } from "../billing-request-actions";
 import { assertApplicationPermission } from "./context";
-import { ApplicationError, conflict, invalidInput, notFound } from "./errors";
+import { ApplicationError, invalidInput, notFound } from "./errors";
 import { definition, type ApplicationToolDefinition } from "./tool-definition";
 import { listRecordDrawerHref } from "../cross-module-drawer-links";
 
@@ -71,7 +71,6 @@ function settleBillingRequest(error: unknown): never {
             ? 403
             : 422;
     if (status === 404) throw notFound(error.message);
-    if (status === 409) throw conflict(error.message);
     if (status === 403) throw new ApplicationError("forbidden", error.message, 403);
     throw invalidInput(error.message);
   }
