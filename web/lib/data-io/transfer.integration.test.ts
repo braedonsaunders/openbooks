@@ -20,9 +20,11 @@ test(
   { skip: !env.OPENBOOKS_DB_URL, timeout: 180_000 },
   async (t) => {
     const org = await withBypassContext(() => createScratchOrg());
-    const other = await withBypassContext(() => createScratchOrg());
-    const actor = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+    let otherOrgId: string | undefined;
     try {
+      const other = await withBypassContext(() => createScratchOrg());
+      otherOrgId = other.orgId;
+      const actor = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
       await withOrgTransaction(org.orgId, () =>
         db.execute(
           sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`,
@@ -369,30 +371,50 @@ test(
       await t.test(
         "exports pass the legacy row ceiling with a complete bounded cursor and checksum",
         async () => {
-          await withOrgTransaction(org.orgId, () =>
-            db.execute(sql`insert into items (org_id,code,name,kind,custom)
-        select ${org.orgId},'EXPORT-'||n,'Export item '||n,'service','{}'::jsonb from generate_series(1,50001) n`),
-          );
-          const job = await withOrgTransaction(org.orgId, () =>
-            createTransfer(authz, {
-              requestKey: randomUUID(),
-              kind: "export",
-              resource: "items",
-              format: "csv",
-              filename: "items.csv",
-              bytes: 0,
-              options: { columns: ["code", "name"] },
-            }),
-          );
-          const complete = await run(job);
-          assert.equal(complete.state, "completed", complete.error ?? "");
-          assert.ok(complete.totalRows > 50_000);
-          const parts = [];
-          for await (const part of transferBytes(org.orgId, job.id, "output")) parts.push(part);
-          const output = Buffer.concat(parts);
-          assert.equal(output.length, complete.bytes);
-          assert.match(output.toString(), /EXPORT-50001,Export item 50001/);
-          assert.equal(output.toString().split("\r\n").length - 2, complete.totalRows);
+          let seeded = false;
+          const exportPrefix = `EXPORT-${randomUUID().slice(0, 8)}`;
+          try {
+            await withOrgTransaction(org.orgId, () =>
+              db.execute(
+                sql`
+                  insert into items (org_id, code, name, kind, custom)
+                  select ${org.orgId}, ${exportPrefix} || '-' || n,
+                         'Export item ' || n, 'service', '{}'::jsonb
+                    from generate_series(1, 50001) n
+                `,
+              ),
+            );
+            seeded = true;
+            const job = await withOrgTransaction(org.orgId, () =>
+              createTransfer(authz, {
+                requestKey: randomUUID(),
+                kind: "export",
+                resource: "items",
+                format: "csv",
+                filename: "items.csv",
+                bytes: 0,
+                options: { columns: ["code", "name"] },
+              }),
+            );
+            const complete = await run(job);
+            assert.equal(complete.state, "completed", complete.error ?? "");
+            assert.ok(complete.totalRows > 50_000);
+            const parts = [];
+            for await (const part of transferBytes(org.orgId, job.id, "output")) parts.push(part);
+            const output = Buffer.concat(parts);
+            assert.equal(output.length, complete.bytes);
+            assert.match(output.toString(), new RegExp(`${exportPrefix}-50001,Export item 50001`));
+            assert.equal(output.toString().split("\r\n").length - 2, complete.totalRows);
+          } finally {
+            const exportCodePrefix = `${exportPrefix}-%`;
+            const removed = await withOrgTransaction(org.orgId, () =>
+              db.execute(sql`delete from items
+                where org_id=${org.orgId} and code like ${exportCodePrefix}`),
+            );
+            if (seeded) {
+              assert.equal(removed.rowCount, 50_001, "the export fixture rows must be removed");
+            }
+          }
         },
       );
 
@@ -482,8 +504,11 @@ test(
         },
       );
     } finally {
-      await dropScratchOrgReporting(org.orgId);
-      await dropScratchOrgReporting(other.orgId);
+      try {
+        await dropScratchOrgReporting(org.orgId);
+      } finally {
+        if (otherOrgId) await dropScratchOrgReporting(otherOrgId);
+      }
     }
   },
 );
