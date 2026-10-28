@@ -39,7 +39,9 @@ for (const profile of SAMPLE_COMPANY_PROFILES) {
   let prepared: Awaited<ReturnType<typeof prepareIndustryDemo>> | undefined;
   test(
     `${profile.industryKey} simulator template prepares verified native scenarios`,
-    { skip: !DB },
+    // Preparing a whole industry's native history is the heaviest fixture in
+    // the suite; the largest catalogs need more than the default bound.
+    { skip: !DB, timeout: 420_000 },
     async () => {
       prepared = await prepareIndustryDemo(profile.industryKey);
       assert.equal(prepared.industryKey, profile.industryKey);
